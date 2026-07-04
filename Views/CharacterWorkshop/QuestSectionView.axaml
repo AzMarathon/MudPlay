@@ -1,0 +1,188 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
+             xmlns:views="using:FujinTerm.Views.CharacterWorkshop"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="620"
+             x:Class="FujinTerm.Views.CharacterWorkshop.QuestSectionView"
+             x:DataType="vm:QuestSectionViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+        </Style>
+        <Style Selector="TextBlock.FieldValue">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+        </Style>
+        <Style Selector="Border.Box">
+            <Setter Property="Background" Value="{StaticResource ChromeBgElevBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="12"/>
+        </Style>
+        <!-- Flat, transparent header so the title row reads as a clickable disclosure. -->
+        <Style Selector="Button.QuestHeader">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+        <Style Selector="Button.QuestHeader /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <!-- Inline map/room walk-to link inside a step line: flat accent hot-text
+             the user clicks to start a walk to that coordinate. -->
+        <Style Selector="Button.MapLink">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="3,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.MapLink /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="TextBlock.MapLinkText">
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Margin="22" RowDefinitions="Auto,*">
+
+        <!-- Header strip: launch the modeless name / show-hide / step editor. -->
+        <Button Grid.Row="0" Content="Edit Quests…"
+                Command="{Binding EditQuestsCommand}"
+                HorizontalAlignment="Right" Margin="0,0,0,10"/>
+
+        <!-- Empty-state: no visible quest resolved from the active set / character. -->
+        <TextBlock Grid.Row="1"
+                   IsVisible="{Binding !HasQuests}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   Text="Load a character and game-data set to list its quests. Mark a quest complete (or tick every step of a followable quest) to fold its permanent bonus into Character Info. Use “Edit Quests…” to name, hide, or annotate them."/>
+
+        <ScrollViewer Grid.Row="1"
+                      IsVisible="{Binding HasQuests}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Quests}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="10"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:QuestCardViewModel">
+                        <Border Classes="Box">
+                            <StackPanel Spacing="4">
+
+                                <!-- Compact header: click the title row to expand its detail;
+                                     the manual Complete toggle stays separate on the right. -->
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Button Grid.Column="0" Classes="QuestHeader"
+                                            Command="{Binding ToggleExpandCommand}"
+                                            HorizontalAlignment="Stretch">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding ExpandGlyph}"
+                                                       IsVisible="{Binding CanExpand}"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       FontSize="{StaticResource FontSizeMd}"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Title}"
+                                                       Foreground="{StaticResource ChromeFgBrush}"
+                                                       FontSize="{StaticResource FontSizeMd}"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Classes="FieldLabel"
+                                                       VerticalAlignment="Center"
+                                                       Text="{Binding RequiredLevelText}"/>
+                                            <!-- Hard eligibility flag: the character's class/race
+                                                 is excluded from this quest (hover shows what it
+                                                 requires). Open quests / unknown class/race omit it. -->
+                                            <TextBlock Text="Cannot complete"
+                                                       IsVisible="{Binding Ineligible}"
+                                                       Foreground="{StaticResource AccentRedBrush}"
+                                                       FontSize="{StaticResource FontSizeMd}"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"
+                                                       ToolTip.Tip="{Binding RequirementsText}"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <CheckBox Grid.Column="1" Content="Complete"
+                                              IsChecked="{Binding IsComplete, Mode=TwoWay}"
+                                              Foreground="{StaticResource ChromeFgBrush}"/>
+                                </Grid>
+
+                                <!-- Detail pane: revealed only when the card is expanded. -->
+                                <StackPanel Spacing="4" IsVisible="{Binding IsExpanded}">
+
+                                    <!-- Class / race restriction the crawl found (informational —
+                                         not a hard eligibility gate; quests are no longer hidden). -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasRequirements}">
+                                        <TextBlock Classes="FieldLabel" Text="Requires:"/>
+                                        <TextBlock Text="{Binding RequirementsText}" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                   FontSize="{StaticResource FontSizeMd}"/>
+                                    </StackPanel>
+
+                                    <!-- Class-resolved permanent stat bonus. -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasBonus}">
+                                        <TextBlock Classes="FieldLabel" Text="Bonus:"/>
+                                        <TextBlock Text="{Binding BonusText}" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource AccentAmberBrush}"
+                                                   FontFamily="{StaticResource FontMono}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="{StaticResource FontSizeMd}"/>
+                                    </StackPanel>
+
+                                    <!-- Keeper-item award(s). -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasAward}">
+                                        <TextBlock Classes="FieldLabel" Text="Award:"/>
+                                        <TextBlock Classes="FieldValue" Text="{Binding AwardText}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <!-- Followable checklist parsed from the quest's step markdown:
+                                         `[]`-marked lines render as tickable checkboxes, plain lines
+                                         as context labels. Ticking every checkbox flips the quest
+                                         complete. -->
+                                    <ItemsControl ItemsSource="{Binding Steps}" IsVisible="{Binding HasSteps}"
+                                                  Margin="0,4,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="vm:QuestStepRowViewModel">
+                                                <Panel>
+                                                    <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                              IsVisible="{Binding IsCheckable}"
+                                                              Margin="0,1,0,1" VerticalAlignment="Top">
+                                                        <TextBlock Classes="FieldLabel"
+                                                                   views:QuestStepInlines.Segments="{Binding Segments}"
+                                                                   TextWrapping="Wrap"/>
+                                                    </CheckBox>
+                                                    <TextBlock Classes="FieldLabel"
+                                                               IsVisible="{Binding !IsCheckable}"
+                                                               views:QuestStepInlines.Segments="{Binding Segments}"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,1,0,1"/>
+                                                </Panel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

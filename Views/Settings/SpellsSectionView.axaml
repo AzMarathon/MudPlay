@@ -1,0 +1,289 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FujinTerm.ViewModels.Settings"
+             xmlns:settings="using:FujinTerm.Views.Settings"
+             xmlns:spells="using:FujinTerm.Game.Spells"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="900"
+             x:Class="FujinTerm.Views.Settings.SpellsSectionView"
+             x:DataType="vm:SpellsSectionViewModel">
+
+    <UserControl.Resources>
+        <!-- Dropdown row: "code — name". The box commits the Short cast-code
+             (ValueMemberBinding); this template only shapes the list display. -->
+        <DataTemplate x:Key="SpellPickItem" x:DataType="spells:SpellPick">
+            <TextBlock Text="{Binding Display}"/>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.SectionHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,16,0,6"/>
+        </Style>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+        <Grid>
+            <!-- No-profile banner. -->
+            <Border IsVisible="{Binding !HasProfile}" Padding="22"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Top">
+                <StackPanel Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
+                    <TextBlock Text="Spells"
+                               Foreground="{StaticResource ChromeFgBrush}"
+                               FontSize="{StaticResource FontSizeLg}"
+                               FontWeight="SemiBold"/>
+                    <TextBlock Text="Load or create a character profile to edit spell picks."
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeMd}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel IsVisible="{Binding HasProfile}"
+                        Margin="22" Spacing="4"
+                        MaxWidth="700" HorizontalAlignment="Left">
+
+
+
+                <!-- ============ Spell type priority ============ -->
+                <TextBlock Classes="SectionHeader" Text="Spell type priority (between-round casting order)"/>
+                <TextBlock Text="Use the arrows to reorder. Higher in the list = cast earlier. CastingDirector evaluates categories top-to-bottom each tick."
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           FontStyle="Italic"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,4"/>
+                <settings:PriorityRankingView DataContext="{Binding Priority}"
+                                              HorizontalAlignment="Left"/>
+
+                <!-- ============ Healing / regeneration ============ -->
+                <TextBlock Classes="SectionHeader" Text="Healing / regeneration"/>
+                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Minor heal"/>
+                    <AutoCompleteBox Grid.Row="0" Grid.Column="1"
+                                     Text="{Binding MinorHealSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cheap self-heal — fires when Health → Minor heal (combat) threshold trips, or Health → Heal (rest) during rest. Suggestions come from this class's known spells."/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Major heal"/>
+                    <AutoCompleteBox Grid.Row="1" Grid.Column="1"
+                                     Text="{Binding MajorHealSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Expensive self-heal — fires when Health → Major heal (combat) threshold trips."/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="HP Regen"/>
+                    <AutoCompleteBox Grid.Row="2" Grid.Column="1"
+                                     Text="{Binding HpRegenSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="HP-regen HoT (e.g. regeneration) used as assisted healing: when the Minor heal threshold trips, this is cast FIRST — ahead of the single-target minor heal — unless HP is already in life-threat range or the HoT is still ticking. Want it kept always-up instead? Put it in a Bless slot."/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Mana Regen"/>
+                    <AutoCompleteBox Grid.Row="3" Grid.Column="1"
+                                     Text="{Binding MaRegenSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Auto-regen utility for the mana pool."/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="When HP full"/>
+                    <AutoCompleteBox Grid.Row="4" Grid.Column="1"
+                                     Text="{Binding WhenHpFullSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cast when HP is full and we're between actions (room spell, debuff, etc.)."/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="When Mana full"/>
+                    <AutoCompleteBox Grid.Row="5" Grid.Column="1"
+                                     Text="{Binding WhenMaFullSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cast when MA is full and we're between actions."/>
+                </Grid>
+
+                <!-- ============ Mana-regen reroll (Paradigm roll spells) ============ -->
+                <!-- Nature tap / mana flux (ability 145, roll value) land a fresh
+                     ± mana-regen-rate modifier each cast; a bad roll is worth
+                     recasting. After the buff lands the engine reads the rolled
+                     value off `abil 145` and recasts until it meets the
+                     threshold, up to the cap, stopping early at the mana floor.
+                     Empty threshold = rerolling off (recast on expiry only).
+                     Paradigm-only — Stock has no abil breakdown to read. -->
+                <TextBlock Classes="SectionHeader" Text="Mana-regen reroll (Paradigm roll spells)"/>
+                <TextBlock Text="{Binding ManaRegenRerollHint}"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           FontStyle="Italic"
+                           TextWrapping="Wrap"
+                           MaxWidth="440" HorizontalAlignment="Left"
+                           Margin="0,0,0,6"/>
+                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Reroll if roll below"/>
+                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                   Value="{Binding ManaRegenRerollThreshold, Mode=TwoWay}"
+                                   Minimum="-9999" Maximum="9999" Increment="1" FormatString="0"
+                                   Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Recast the mana-regen roll spell when its rolled contribution lands below this. Leave empty to disable rerolling — the spell then just recasts on expiry. Paradigm only."/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Max rerolls"/>
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Value="{Binding ManaRegenRerollCap, Mode=TwoWay}"
+                                   Minimum="1" Maximum="20" Increment="1" FormatString="0"
+                                   Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Hard ceiling on consecutive rerolls per cast cycle before accepting whatever landed. Rerolling also stops early if paying for the next cast would drop mana below the buff floor."/>
+                </Grid>
+
+                <!-- ============ Other spells ============ -->
+                <TextBlock Classes="SectionHeader" Text="Other spells"/>
+                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Cure Holds"/>
+                    <AutoCompleteBox Grid.Row="0" Grid.Column="1"
+                                     Text="{Binding CureHoldsSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cure-paralyze / cure-hold spell — canonically `freedom` in stock MajorMUD."/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Cure poison"/>
+                    <AutoCompleteBox Grid.Row="1" Grid.Column="1"
+                                     Text="{Binding CurePoisonSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cure-poison spell."/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Cure disease"/>
+                    <AutoCompleteBox Grid.Row="2" Grid.Column="1"
+                                     Text="{Binding CureDiseaseSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cure-disease spell."/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Cure blindness"/>
+                    <AutoCompleteBox Grid.Row="3" Grid.Column="1"
+                                     Text="{Binding CureBlindnessSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cure-blindness spell."/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Room light"/>
+                    <AutoCompleteBox Grid.Row="4" Grid.Column="1"
+                                     Text="{Binding RoomLightSpell, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cast when entering a dark room."/>
+                </Grid>
+
+                <!-- ============ Bless spells ============ -->
+                <!-- Self-buff slots the CastingDirector recasts when not
+                     active. Row order is cast priority. The active realm sets
+                     how many rows show — Stock 10, ParaMud 15 — rebuilt on a
+                     game-data set swap; picks beyond a narrower realm's count
+                     are preserved (stashed off-screen), not lost. -->
+                <TextBlock Classes="SectionHeader" Text="Bless spells"/>
+                <TextBlock Text="Self-buff slots — CastingDirector recasts when not active."
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           FontStyle="Italic"
+                           Margin="0,0,0,4"/>
+                <ItemsControl ItemsSource="{Binding BlessSlots}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SelfBlessSlotViewModel">
+                            <Grid ColumnDefinitions="80,260" Margin="0,0,0,4">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"/>
+                                <AutoCompleteBox Grid.Column="1"
+                                                 Text="{Binding Spell, Mode=TwoWay}"
+                                                 ItemsSource="{Binding $parent[ItemsControl].((vm:SpellsSectionViewModel)DataContext).SpellSuggestions}"
+                                                 ValueMemberBinding="{ReflectionBinding Short}"
+                                                 ItemFilter="{Binding $parent[ItemsControl].((vm:SpellsSectionViewModel)DataContext).SpellSuggestionFilter}"
+                                                 ItemTemplate="{StaticResource SpellPickItem}"
+                                                 PlaceholderText="Type code or name…"
+                                                 Width="260" HorizontalAlignment="Left"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- ============ Ailment handling / coordination ============ -->
+                <!-- Each ailment pairs its Ignore* (gates the @wait) with the
+                     matching Don't-announce* (gates the ".@poisoned" say
+                     broadcast that lets other FujinTerm clients mirror our
+                     ailment on their party window). The two are independent —
+                     one suppresses the pause, the other the broadcast. Sits on
+                     the Spells tab next to the cure-spell picks it coordinates
+                     with; AilmentSyncEngine reads these from SpellsSettings. -->
+                <TextBlock Classes="SectionHeader" Text="Ailment handling / coordination"/>
+                <CheckBox Content="Ignore poison"    IsChecked="{Binding IgnorePoison, Mode=TwoWay}"
+                          ToolTip.Tip="When checked: poison ticks don't trigger @wait. Always-on triggers (over-encumbered, MovementPrevented, Stunned) still pause regardless."/>
+                <CheckBox Content="Don't announce poison"    IsChecked="{Binding DoNotAnnouncePoison, Mode=TwoWay}"
+                          ToolTip.Tip="When checked: catching poison doesn't send `.@poisoned` on say. The @wait (if any) is unaffected — that's gated by 'Ignore poison'."/>
+                <CheckBox Content="Ignore blindness" IsChecked="{Binding IgnoreBlindness, Mode=TwoWay}"
+                          ToolTip.Tip="When checked: being blinded doesn't trigger @wait."/>
+                <CheckBox Content="Don't announce blindness" IsChecked="{Binding DoNotAnnounceBlindness, Mode=TwoWay}"
+                          ToolTip.Tip="When checked: being blinded doesn't send `.@blind` on say."/>
+                <CheckBox Content="Ignore confusion" IsChecked="{Binding IgnoreConfusion, Mode=TwoWay}"
+                          ToolTip.Tip="When checked: being confused doesn't trigger @wait. Caster parties often want to leave this UNCHECKED — confusion makes our cast fail randomly."/>
+                <CheckBox Content="Don't announce confusion" IsChecked="{Binding DoNotAnnounceConfusion, Mode=TwoWay}"
+                          ToolTip.Tip="When checked: being confused doesn't send `.@confused` on say."/>
+                <CheckBox Content="Ignore diseased"  IsChecked="{Binding IgnoreDiseased, Mode=TwoWay}"
+                          ToolTip.Tip="When checked: being diseased doesn't trigger @wait."/>
+                <CheckBox Content="Don't announce diseased"  IsChecked="{Binding DoNotAnnounceDiseased, Mode=TwoWay}"
+                          ToolTip.Tip="When checked: being diseased doesn't send `.@diseased` on say."/>
+
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,252 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FujinTerm.ViewModels.Settings"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="440"
+             x:Class="FujinTerm.Views.Settings.GeneralSectionView"
+             x:DataType="vm:GeneralSectionViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.SectionHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,12,0,6"/>
+        </Style>
+        <Style Selector="TextBlock.ColumnHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+        <Grid>
+
+            <!-- "No profile loaded" banner — shows when HasProfile is false. -->
+            <Border IsVisible="{Binding !HasProfile}"
+                    Padding="22"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Top">
+                <StackPanel Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
+                    <TextBlock Text="General"
+                               Foreground="{StaticResource ChromeFgBrush}"
+                               FontSize="{StaticResource FontSizeLg}"
+                               FontWeight="SemiBold"/>
+                    <TextBlock Text="Load or create a character profile to edit General settings — every settings tab lives on the active character."
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeMd}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Editor — visible when a profile is loaded. -->
+            <StackPanel IsVisible="{Binding HasProfile}"
+                        Margin="22"
+                        Spacing="6"
+                        MaxWidth="640"
+                        HorizontalAlignment="Left">
+
+                <TextBlock Classes="SectionHeader" Text="Directories"/>
+
+                <Grid ColumnDefinitions="120,*,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="Data files:"
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeMd}"
+                               VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1"
+                             Text="{Binding DataFilesPath, Mode=OneWay}"
+                             IsReadOnly="True"
+                             FontFamily="{StaticResource FontMono}"
+                             FontSize="{StaticResource FontSizeSm}"
+                             VerticalAlignment="Center"
+                             ToolTip.Tip="Defaults to the platform user-data path (XDG on Linux, %AppData% on Windows, Application Support on macOS). Use Change… to move the folder elsewhere — a tiny pointer file at the platform-config location remembers the new path on next launch."/>
+                    <Button Grid.Column="2"
+                            Content="Open Data folder…"
+                            Command="{Binding OpenDataFolderCommand}"
+                            Margin="8,0,0,0"/>
+                    <Button Grid.Column="3"
+                            Content="Change…"
+                            Command="{Binding ChangeDataFolderCommand}"
+                            Margin="8,0,0,0"
+                            ToolTip.Tip="Move every file under the data folder to a different location; the app restarts at the new path."/>
+                </Grid>
+
+                <TextBlock Classes="SectionHeader" Text="Initial"/>
+
+                <Grid ColumnDefinitions="120,*">
+                    <TextBlock Grid.Column="0" Text="Default task:"
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeMd}"
+                               VerticalAlignment="Top" Margin="0,2,0,0"/>
+
+                    <!-- Shared-column inner Grid so the two pickers line up at the
+                         same X regardless of radio-label width. Column 0 sizes to
+                         the widest radio + label across all three rows. -->
+                    <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto"
+                                          ColumnDefinitions="Auto,*">
+                        <RadioButton Grid.Row="0" Grid.Column="0"
+                                     GroupName="DefaultTask"
+                                     IsChecked="{Binding IsTaskDoNothing, Mode=TwoWay}"
+                                     Content="Do nothing"
+                                     IsEnabled="False"
+                                     ToolTip.Tip="Startup task action lands with Phase 7."
+                                     Margin="0,0,8,4"/>
+
+                        <RadioButton Grid.Row="1" Grid.Column="0"
+                                     GroupName="DefaultTask"
+                                     IsChecked="{Binding IsTaskBeginLoop, Mode=TwoWay}"
+                                     Content="Begin looping"
+                                     IsEnabled="False"
+                                     ToolTip.Tip="Loop start lands with Phase 7."
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,8,4"/>
+                        <ComboBox Grid.Row="1" Grid.Column="1"
+                                  Width="220"
+                                  HorizontalAlignment="Left"
+                                  ItemsSource="{Binding LoopNames}"
+                                  SelectedItem="{Binding DefaultLoopName, Mode=TwoWay}"
+                                  PlaceholderText="Pick a saved loop"
+                                  IsEnabled="False"
+                                  ToolTip.Tip="Lists saved loop files from this character profile (Phase 7)."
+                                  Margin="0,0,0,4"/>
+
+                        <RadioButton Grid.Row="2" Grid.Column="0"
+                                     GroupName="DefaultTask"
+                                     IsChecked="{Binding IsTaskBeginAutoLair, Mode=TwoWay}"
+                                     Content="Begin Auto-Lair"
+                                     IsEnabled="False"
+                                     ToolTip.Tip="Auto-Lair scheduler lands with Phase 7."
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,8,0"/>
+                        <ComboBox Grid.Row="2" Grid.Column="1"
+                                  Width="220"
+                                  HorizontalAlignment="Left"
+                                  ItemsSource="{Binding AutoLairNames}"
+                                  SelectedItem="{Binding DefaultAutoLairName, Mode=TwoWay}"
+                                  PlaceholderText="Pick a saved Auto-Lair"
+                                  IsEnabled="False"
+                                  ToolTip.Tip="Lists saved Auto-Lair files from this character profile (Phase 7)."/>
+                    </Grid>
+                </Grid>
+
+                <CheckBox Margin="0,8,0,0"
+                          IsChecked="{Binding AutoConnect, Mode=TwoWay}"
+                          Content="Auto-connect when profile loads"
+                          ToolTip.Tip="When checked, FujinTerm dials the profile's pinned BBS immediately after the profile loads (skipped if you're already connected or there's no BBS pinned yet)."/>
+
+                <CheckBox IsChecked="{Binding BackupOnSave, Mode=TwoWay}"
+                          Content="Backup profile when making changes"
+                          ToolTip.Tip="Copy the existing profile JSON to {name}.json.bak before each save."/>
+
+                <!-- Player auto-delete window moved to Settings → Other per user direction. -->
+
+                <!-- Auto-engine master switches. Each checkbox is the
+                     master on/off for one Phase 9+ engine. Disabled
+                     checkboxes are surface-only — their engine hasn't
+                     landed yet; the IsXxxWired flag on the VM flips
+                     true as each engine ships. -->
+                <StackPanel Margin="0,16,0,0" Spacing="2">
+                    <TextBlock Classes="ColumnHeader" Text="Auto-Engines enabled on start"/>
+                    <CheckBox IsChecked="{Binding AmAutoCombat,   Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoCombatWired}"
+                              Content="Auto-Combat"
+                              ToolTip.Tip="Gates CombatManager — auto-attack, target picking, AttackTiming re-fire. PR 9.A."/>
+                    <CheckBox IsChecked="{Binding AmAutoNuke,     Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoNukeWired}"
+                              Content="Auto-Nuke"
+                              ToolTip.Tip="Combat damage spells. Wires in PR 9.D (CastingDirector)."/>
+                    <CheckBox IsChecked="{Binding AmAutoHealRest, Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoHealRestWired}"
+                              Content="Auto-Heal / Rest"
+                              ToolTip.Tip="Gates HealthManager — HP/MA thresholds, rest/stand cycle, flee. PR 9.B."/>
+                    <CheckBox IsChecked="{Binding AmAutoBless,    Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoBlessWired}"
+                              Content="Auto-Bless"
+                              ToolTip.Tip="Buff casts. Wires in PR 9.D (CastingDirector)."/>
+                    <CheckBox IsChecked="{Binding AmAutoLight,    Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoLightWired}"
+                              Content="Auto-Light"
+                              ToolTip.Tip="Auto-cast room-light on dark room entry. Wires in PR 9.D."/>
+                    <CheckBox IsChecked="{Binding AmAutoGetItems, Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoGetItemsWired}"
+                              Content="Auto-Get Items"
+                              ToolTip.Tip="Auto-collect loot on the ground. Wires in PR 9.E."/>
+                    <CheckBox IsChecked="{Binding AmAutoGetCash,  Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoGetCashWired}"
+                              Content="Auto-Get Cash"
+                              ToolTip.Tip="Gates CashManager — runic/coin pickup, deposit reroute. Wires in PR 9.E."/>
+                    <CheckBox IsChecked="{Binding AmAutoSneak,    Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoSneakWired}"
+                              Content="Auto-Sneak"
+                              ToolTip.Tip="Auto-sneak between moves. Wires in PR 9.F (StealthManager)."/>
+                    <CheckBox IsChecked="{Binding AmAutoHide,     Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoHideWired}"
+                              Content="Auto-Hide"
+                              ToolTip.Tip="Auto-hide while stationary. Wires in PR 9.F (StealthManager)."/>
+                    <CheckBox IsChecked="{Binding AmAutoSearch,   Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoSearchWired}"
+                              Content="Auto-Search"
+                              ToolTip.Tip="Walker auto-search for hidden exits. Wires in a future PR."/>
+                </StackPanel>
+
+                <!-- Emergency hangup carve-out for fully-manual mode. When
+                     every auto-engine above is off, HealthManager normally
+                     does nothing; this opt-in keeps just the HP-below-hangup-
+                     threshold hangup branch live so a manual character still
+                     drops the line at the edge of death. Consumed live via
+                     GeneralSettings.AllowHangupInAllOffMode. -->
+                <CheckBox Margin="0,12,0,0"
+                          IsChecked="{Binding AllowHangupInAllOffMode, Mode=TwoWay}"
+                          Content="Allow hangup in all-off mode"
+                          ToolTip.Tip="When checked: even with every Auto-* engine off, FujinTerm still drops the line if your HP falls to the Health → 'hang up if below' threshold. Default off — opt-in safety net for fully-manual play."/>
+
+                <!-- Re-enable auto-actions on reconnect. One checkbox per
+                     auto-action (1-to-1 with the auto-engine switches above).
+                     On a reconnect — a TCP connect that follows a prior
+                     in-session disconnect — each ticked action is flipped
+                     back ON. Default all unchecked: the redial respects
+                     whatever state the engines were left in unless the user
+                     opts a specific action into auto-revival. First connect
+                     of an app session is never a reconnect. -->
+                <StackPanel Margin="0,16,0,0" Spacing="2">
+                    <TextBlock Classes="ColumnHeader" Text="Re-enable on reconnect"/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoCombatOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Combat"
+                              ToolTip.Tip="When checked: if you disabled Auto-Combat during a session and then reconnect, it's flipped back on automatically."/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoNukeOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Nuke"
+                              ToolTip.Tip="When checked: Auto-Nuke is re-enabled on reconnect if it was disabled during the session."/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoHealRestOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Heal/Rest"
+                              ToolTip.Tip="When checked: Auto-Heal/Rest is re-enabled on reconnect if it was disabled during the session."/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoBlessOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Bless"
+                              ToolTip.Tip="When checked: Auto-Bless is re-enabled on reconnect if it was disabled during the session."/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoLightOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Light"
+                              ToolTip.Tip="When checked: Auto-Light is re-enabled on reconnect if it was disabled during the session."/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoGetItemsOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Get-Items"
+                              ToolTip.Tip="When checked: Auto-Get-Items is re-enabled on reconnect if it was disabled during the session."/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoGetCashOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Get-Cash"
+                              ToolTip.Tip="When checked: Auto-Get-Cash is re-enabled on reconnect if it was disabled during the session."/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoSneakOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Sneak"
+                              ToolTip.Tip="When checked: Auto-Sneak is re-enabled on reconnect if it was disabled during the session."/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoHideOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Hide"
+                              ToolTip.Tip="When checked: Auto-Hide is re-enabled on reconnect if it was disabled during the session."/>
+                    <CheckBox IsChecked="{Binding ReEnableAutoSearchOnReconnect, Mode=TwoWay}"
+                              Content="Auto-Search"
+                              ToolTip.Tip="When checked: Auto-Search is re-enabled on reconnect if it was disabled during the session."/>
+                </StackPanel>
+            </StackPanel>
+
+        </Grid>
+    </ScrollViewer>
+</UserControl>

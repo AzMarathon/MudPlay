@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
+        x:Class="FujinTerm.Views.CharacterWorkshop.CharacterWorkshopWindow"
+        x:DataType="vm:CharacterWorkshopViewModel"
+        Title="{Binding WindowTitle}"
+        Width="900" Height="600"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource ChromeBgBrush}">
+
+    <!-- Flat tab strip across the six Phase-10 tabs (mirrors MudProxy's
+         Character Status dialog). Each tab's content is the section's own
+         view; the live DeathSection sits at index 2. -->
+    <TabControl ItemsSource="{Binding Sections}"
+                SelectedItem="{Binding SelectedSection, Mode=TwoWay}"
+                Background="{StaticResource ChromeBgBrush}"
+                Padding="0">
+        <TabControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:WorkshopSectionViewModel">
+                <TextBlock Text="{Binding Title}"
+                           FontSize="{StaticResource FontSizeMd}"/>
+            </DataTemplate>
+        </TabControl.ItemTemplate>
+        <TabControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:WorkshopSectionViewModel">
+                <ContentControl Content="{Binding View}"/>
+            </DataTemplate>
+        </TabControl.ContentTemplate>
+    </TabControl>
+</Window>

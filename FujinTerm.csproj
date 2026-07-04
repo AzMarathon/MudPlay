@@ -1,0 +1,98 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Build a desktop GUI executable; no console window opens on Windows. -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>FujinTerm</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- Windows-only assembly manifest; harmless on Linux. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Avalonia: bind XAML to view-model properties at compile time so
+         typos and bad bindings show up as build errors instead of silent
+         no-ops at runtime. -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- Single source of truth for the app's version number. MSBuild
+         expands this into AssemblyVersion / AssemblyFileVersion /
+         AssemblyInformationalVersion attributes baked into the
+         compiled DLL; AppInfo.Version reads it back at runtime so the
+         @version remote-command reply tracks every release without a
+         hand-edit. Bump this here and the @version pong updates with
+         the next build. Semver policy (post-1.0): MAJOR = whole-program
+         refactor, MINOR = a large PR, PATCH = a small / bugfix PR. -->
+    <Version>1.0.0</Version>
+
+    <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
+         the Server GC (a heap + background thread per core), which on a
+         many-core box inflates committed memory for a desktop client that
+         never needs that allocation throughput. Keep concurrent/background
+         collection on so gen2 sweeps don't stall the UI thread. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Embed everything under Assets/ (fonts) into the assembly so it can
+         be loaded at runtime via avares:// URIs. -->
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Defaults/ ships app-default seed data alongside the executable
+         (Messages catalogues per game-data set, the trigger seed list,
+         and any future per-tab defaults). Copied to bin/ on every
+         build so MessageStore / TriggerEngine can load them on first
+         launch when the per-character / per-set file doesn't exist
+         yet. NOT embedded as a resource — kept as loose files so
+         users can hand-edit them outside the build. -->
+    <Content Include="Defaults\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FujinTerm.Tests lives at the repo root as a sibling project. Without
+         these exclusions the SDK's default Compile glob would pull every
+         test file into the app assembly. -->
+    <Compile Remove="FujinTerm.Tests\**" />
+    <None Remove="FujinTerm.Tests\**" />
+    <EmbeddedResource Remove="FujinTerm.Tests\**" />
+    <AvaloniaResource Remove="FujinTerm.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FujinTerm.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.2" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.2" />
+    <!-- DataGrid widget — first-party Avalonia control shipped as a
+         separate package; powers the Game Data Browser tables. -->
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.0.0" />
+    <!-- Diagnostics overlay (F12 dev tools) — only pulled in for Debug
+         builds so Release ships without it. -->
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.1">
+      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+    </PackageReference>
+    <!-- Source-generated MVVM helpers ([ObservableProperty], [RelayCommand]). -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1" />
+    <!-- Pure-managed Jet (.mdb / .accdb) reader for the Phase 5 MdbImporter.
+         Vendored in Vendor/JetDatabaseReader/ rather than pulled from the
+         NuGet so we can patch a false-positive encryption-flag check that
+         rejects MajorMUD-distribution MDBs. See that folder's README for
+         the patch detail. The vendored source's only runtime dep is
+         System.Text.Encoding.CodePages — bundled in .NET 10's framework,
+         so no PackageReference needed. -->
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,104 @@
+namespace FujinTerm.Models.Profile;
+
+// Per-character "General" settings — what to do on logon and the master on/off
+// state for every auto-engine. Stored as the "General" entry in
+// CharacterProfile.Settings.
+//
+// AutoMode is the single source of truth for whether each auto-engine fires.
+// The earlier ManualMode column (mirroring MegaMUD's manual-vs-auto preset
+// pair) is gone — engines either run or they don't; the per-character preset
+// story belongs on the engines themselves, not on a duplicate column here.
+public sealed class GeneralSettings
+{
+    // What to do once logon completes.
+    public InitialTask DefaultTask { get; set; } = InitialTask.DoNothing;
+
+    // Loop name to start when DefaultTask is BeginLoop.
+    public string? DefaultLoopName { get; set; }
+
+    // Named Auto-Lair configuration to start when DefaultTask is BeginAutoLair.
+    public string? DefaultAutoLairName { get; set; }
+
+    // Connect to the configured BBS as soon as the profile loads.
+    public bool AutoConnect { get; set; }
+
+    // Before persisting changes, copy the existing profile JSON to
+    // {name}.json.bak. Off by default; users who want a safety net for
+    // hand-edits or settings churn can flip it on.
+    public bool BackupOnSave { get; set; }
+
+    // Master on/off state for every auto-engine. Each flag gates whether the
+    // matching engine actually fires: AutoActionDefaults.AutoCombat gates
+    // Game.Combat.CombatManager + the Game.Combat.CombatStateTracker's
+    // Combat-gate assertion; AutoActionDefaults.AutoHealRest gates
+    // Game.Health.HealthManager; the others gate their own engines. Loading the
+    // profile, manual edit in Settings → General, and the toolbar Toggle*
+    // commands all write the same field.
+    public AutoActionDefaults AutoMode { get; set; } = new();
+
+    // ----- Emergency hangup carve-out --------------------------------
+
+    // When true, the Game.Health.HealthManager emergency-hangup branch (HP below
+    // HealthSettings.HangIfBelowHp → send the configured Game-Exit command)
+    // still fires even when Auto-Heal/Rest — and every other auto-engine — is
+    // off. The rest of the health engine stays disabled; only the
+    // kill-the-connection safety net runs. Default false: hanging up is a
+    // deliberate last resort, so an all-engines-off character won't
+    // auto-disconnect unless the user opts in. Char-tier; surfaced in Settings →
+    // General next to the auto-engine switches.
+    public bool AllowHangupInAllOffMode { get; set; }
+
+    // ----- Master hangup kill-switch ---------------------------------
+
+    // When true, NO automatic hangup mechanic may drop the carrier — the client
+    // disconnects only when the user explicitly asks (hotkey / toolbar / menu).
+    // Suppresses all four automatic paths: the @hangup and @relog remote
+    // commands, the Game.Health.HealthManager low-HP emergency hangup, and the
+    // Game.CleanupLogoutOrchestrator nightly-cleanup log-off. Hard-overrides
+    // AllowHangupInAllOffMode — if the user has explicitly disabled hangups, the
+    // emergency carve-out stays silenced too. Default false. Char-tier; surfaced
+    // as the "Disable hangups" toolbar toggle whose pressed state is remembered
+    // per character, like the auto-mode toggles.
+    public bool DisableHangups { get; set; }
+
+    // ----- Re-enable auto-actions on reconnect -----------------------
+    // One flag per auto-action (1-to-1 with AutoMode above). When a
+    // reconnect happens (a TCP connect following a prior in-session
+    // disconnect), each auto-action whose flag here is on gets flipped
+    // back ON in AutoMode — covering the common case where the user
+    // manually disabled an engine mid-session, dropped, and wants it live
+    // again on the redial without re-toggling by hand. Default OFF for
+    // every action: re-enabling automatically is an opt-in convenience,
+    // never the surprise. First connect of an app session is NOT a
+    // reconnect and never triggers these.
+
+    // Re-enable Auto-Combat on reconnect. Default off.
+    public bool ReEnableAutoCombatOnReconnect   { get; set; }
+
+    // Re-enable Auto-Nuke on reconnect. Default off.
+    public bool ReEnableAutoNukeOnReconnect     { get; set; }
+
+    // Re-enable Auto-Heal/Rest on reconnect. Default off.
+    public bool ReEnableAutoHealRestOnReconnect { get; set; }
+
+    // Re-enable Auto-Bless on reconnect. Default off.
+    public bool ReEnableAutoBlessOnReconnect    { get; set; }
+
+    // Re-enable Auto-Light on reconnect. Default off.
+    public bool ReEnableAutoLightOnReconnect    { get; set; }
+
+    // Re-enable Auto-Get-Items on reconnect. Default off.
+    public bool ReEnableAutoGetItemsOnReconnect { get; set; }
+
+    // Re-enable Auto-Get-Cash on reconnect. Default off.
+    public bool ReEnableAutoGetCashOnReconnect  { get; set; }
+
+    // Re-enable Auto-Sneak on reconnect. Default off.
+    public bool ReEnableAutoSneakOnReconnect    { get; set; }
+
+    // Re-enable Auto-Hide on reconnect. Default off.
+    public bool ReEnableAutoHideOnReconnect     { get; set; }
+
+    // Re-enable Auto-Search on reconnect. Default off.
+    public bool ReEnableAutoSearchOnReconnect   { get; set; }
+}

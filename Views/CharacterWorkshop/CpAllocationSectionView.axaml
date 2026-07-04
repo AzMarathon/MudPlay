@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="560"
+             x:Class="FujinTerm.Views.CharacterWorkshop.CpAllocationSectionView"
+             x:DataType="vm:CpAllocationSectionViewModel">
+
+    <Grid Margin="22" RowDefinitions="Auto,Auto,*">
+
+        <!-- Plan actions. Train now is the manual trigger to walk to the
+             nearest allowed, level-appropriate trainer and train (+ apply the
+             plan); the auto-train toggles live on the Settings → Auto-Trainer
+             tab. "Can train now" lights when this level has an affordable raise. -->
+        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
+            <Button Content="Add level" Margin="0,0,6,6" Command="{Binding AddLevelCommand}"/>
+            <Button Content="Remove row" Margin="0,0,6,6" Command="{Binding RemoveRowCommand}"
+                    ToolTip.Tip="Remove the selected row — only the top or bottom row of the plan."/>
+            <Button Content="Reset" Margin="0,0,18,6" Command="{Binding ResetCommand}"
+                    ToolTip.Tip="Clear the plan. Changes save automatically as you edit."/>
+            <Button Content="Train now" Margin="0,0,12,6" Command="{Binding TrainNowCommand}"
+                    IsVisible="{Binding HasCharacter}"
+                    ToolTip.Tip="Walk to the nearest allowed, level-appropriate trainer and train, applying the plan."/>
+            <TextBlock Text="● Can train now" VerticalAlignment="Center" Margin="0,0,0,6"
+                       IsVisible="{Binding CanTrainNow}"
+                       Foreground="{StaticResource AccentAmberBrush}"/>
+            <TextBlock Text="Training…" VerticalAlignment="Center" Margin="0,0,0,6" FontStyle="Italic"
+                       IsVisible="{Binding AutoTrainBusy}"
+                       Foreground="{StaticResource ChromeFgSecBrush}"/>
+        </WrapPanel>
+
+        <!-- Row-removal error (own line so it doesn't crowd the action row). -->
+        <TextBlock Grid.Row="1" Text="{Binding RemoveError}" Margin="0,0,0,8"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding HasRemoveError}"
+                   Foreground="{StaticResource AccentAmberBrush}"/>
+
+        <!-- Editable per-level grid. Stat cells are editable; CP columns recompute.
+             A stat that would overspend is auto-clamped to the highest affordable
+             value, so CP Left never drops below 0. -->
+        <DataGrid Grid.Row="2"
+                  ItemsSource="{Binding Rows}"
+                  SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                  IsVisible="{Binding HasCharacter}"
+                  Background="{StaticResource ChromeBgSunkenBrush}"
+                  BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"
+                  IsReadOnly="False"
+                  AutoGenerateColumns="False"
+                  CanUserSortColumns="False"
+                  CanUserResizeColumns="True"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+            <!-- ReflectionBinding (not compiled {Binding}) on every column:
+                 DataGridTextColumn.Binding lives on the column object, which
+                 isn't in the visual/logical tree and so doesn't inherit the
+                 grid's x:DataType. Compiled bindings can't resolve the row-item
+                 (CpAllocationRow) members at compile time here, so these resolve
+                 by reflection against the row item at runtime. -->
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Lvl" Binding="{ReflectionBinding Level}" IsReadOnly="True"
+                                    Width="55" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <!-- UpdateSourceTrigger=LostFocus so the cell commits (and the
+                     grid re-totals + clamps) only on Enter / focus-out — not on
+                     every keystroke, which would clamp a half-typed value. -->
+                <DataGridTextColumn Header="STR" Binding="{ReflectionBinding Strength, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="64" FontFamily="{StaticResource FontMono}"/>
+                <DataGridTextColumn Header="INT" Binding="{ReflectionBinding Intellect, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="64" FontFamily="{StaticResource FontMono}"/>
+                <DataGridTextColumn Header="WIL" Binding="{ReflectionBinding Willpower, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="64" FontFamily="{StaticResource FontMono}"/>
+                <DataGridTextColumn Header="AGL" Binding="{ReflectionBinding Agility, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="64" FontFamily="{StaticResource FontMono}"/>
+                <DataGridTextColumn Header="HEA" Binding="{ReflectionBinding Health, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="64" FontFamily="{StaticResource FontMono}"/>
+                <DataGridTextColumn Header="CHM" Binding="{ReflectionBinding Charm, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="64" FontFamily="{StaticResource FontMono}"/>
+                <DataGridTextColumn Header="Total CP earned" Binding="{ReflectionBinding CpEarnedTotal}" IsReadOnly="True"
+                                    Width="120" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="CP Left" Binding="{ReflectionBinding CpLeft}" IsReadOnly="True"
+                                    Width="90" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgBrush}"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Empty-state. -->
+        <TextBlock Grid.Row="2"
+                   IsVisible="{Binding !HasCharacter}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   TextWrapping="Wrap" MaxWidth="380" TextAlignment="Center"
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   Text="Load a character and game-data set, then use Add level to plan CP spending per level."/>
+    </Grid>
+</UserControl>

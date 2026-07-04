@@ -1,0 +1,369 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FujinTerm.ViewModels.Settings"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="420"
+             x:Class="FujinTerm.Views.Settings.BbsSectionView"
+             x:DataType="vm:BbsSectionViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.GroupHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,16,0,6"/>
+        </Style>
+        <Style Selector="TextBlock.CredHint">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.CredHint.HintWarning">
+            <Setter Property="Foreground" Value="#E55353"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid ColumnDefinitions="220,1,*">
+
+        <!-- ============ Left rail: BBS list ============ -->
+        <DockPanel Grid.Column="0" Margin="12,12,8,12" LastChildFill="True">
+            <StackPanel DockPanel.Dock="Top" Spacing="6">
+                <TextBlock Text="Saved BBSes"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="11" FontWeight="SemiBold"/>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                    <Button Grid.Column="0" Content="Add" Command="{Binding AddBbsCommand}"/>
+                    <Button Grid.Column="1" Content="Delete"
+                            Command="{Binding DeleteBbsCommand}"
+                            IsEnabled="{Binding HasSelection}"/>
+                </Grid>
+            </StackPanel>
+
+            <ListBox ItemsSource="{Binding AvailableBbsNames}"
+                     SelectedItem="{Binding SelectedBbsName, Mode=TwoWay}"
+                     Margin="0,8,0,0"
+                     Background="{StaticResource ChromeBgSunkenBrush}"
+                     BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                     BorderThickness="1"/>
+        </DockPanel>
+
+        <Border Grid.Column="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
+
+        <!-- ============ Right pane: field editor ============ -->
+        <ScrollViewer Grid.Column="2"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <!-- "Select or add a BBS" banner. -->
+                <Border IsVisible="{Binding !HasSelection}" Padding="22"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Top">
+                    <StackPanel Spacing="10" MaxWidth="420" HorizontalAlignment="Left">
+                        <TextBlock Text="BBS"
+                                   Foreground="{StaticResource ChromeFgBrush}"
+                                   FontSize="{StaticResource FontSizeLg}"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="Add a BBS entry on the left to start filling in connection details."
+                                   Foreground="{StaticResource ChromeFgSecBrush}"
+                                   FontSize="{StaticResource FontSizeMd}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel IsVisible="{Binding HasSelection}"
+                            Margin="22" Spacing="4"
+                            MaxWidth="620" HorizontalAlignment="Left">
+
+                    <TextBlock Classes="GroupHeader" Text="Connection"/>
+
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Name:"/>
+                        <TextBox   Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                   PlaceholderText="My BBS" Width="280"
+                                   HorizontalAlignment="Left"
+                                   ToolTip.Tip="Display name and on-disk filename. Renames the file when applied."/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Host:"/>
+                        <TextBox   Grid.Row="1" Grid.Column="1"
+                                   Text="{Binding Host, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                   PlaceholderText="bbs.example.com" Width="280"
+                                   HorizontalAlignment="Left"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Port:"/>
+                        <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                       Value="{Binding Port, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="1" Maximum="65535" Increment="1"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"/>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Website:"/>
+                        <TextBox   Grid.Row="3" Grid.Column="1"
+                                   Text="{Binding WebsiteUrl, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                   PlaceholderText="https://… (optional)" Width="280"
+                                   HorizontalAlignment="Left"/>
+                    </Grid>
+
+                    <TextBlock Classes="GroupHeader" Text="Retry behaviour"/>
+
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Max redials:"/>
+                        <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                       Value="{Binding MaxRedials, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="1" Maximum="9999" Increment="1"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Redial pause (s):"/>
+                        <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                       Value="{Binding RedialPauseSeconds, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="1" Maximum="300" Increment="1"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Cleanup wait (m):"/>
+                        <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                       Value="{Binding CleanupPeriodMinutes, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="0" Maximum="600" Increment="1"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"
+                                       ToolTip.Tip="Minutes the BBS is offline during its nightly auto-cleanup. After a cleanup-warning disconnect we re-dial at warning_observed + N + this. 0 = dial back as soon as shutdown time passes."/>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="No-response (s):"/>
+                        <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                       Value="{Binding NoResponseTimeoutSeconds, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="0" Maximum="3600" Increment="10"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"
+                                       ToolTip.Tip="Seconds of wire silence before the OS starts TCP keepalive probes. The kernel declares the socket dead about 30s after probes start. 0 disables keepalive (the OS default of ~2h idle is too long for a BBS)."/>
+                    </Grid>
+
+                    <TextBlock Classes="GroupHeader" Text="Reconnect when"/>
+
+                    <StackPanel Spacing="2" Margin="0,0,0,4">
+                        <CheckBox IsChecked="{Binding ReconnectOnFailedConnect, Mode=TwoWay}" Content="Connect attempt fails"/>
+                        <CheckBox IsChecked="{Binding ReconnectOnCarrierLost,   Mode=TwoWay}" Content="Carrier is lost mid-session"/>
+                        <CheckBox IsChecked="{Binding ReconnectOnNoResponse,    Mode=TwoWay}" Content="Server stops responding"/>
+                        <CheckBox IsChecked="{Binding ReconnectAfterCleanup,    Mode=TwoWay}" Content="After Cleanup"/>
+                    </StackPanel>
+
+                    <TextBlock Classes="GroupHeader" Text="Display"/>
+
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Columns:"/>
+                        <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                       Value="{Binding TerminalCols, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="40" Maximum="200" Increment="1"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Rows:"/>
+                        <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                       Value="{Binding TerminalRows, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="20" Maximum="100" Increment="1"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Font size:"/>
+                        <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                       Value="{Binding FontSize, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="8" Maximum="32" Increment="1"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"
+                                       ToolTip.Tip="Live-previews on the terminal canvas while you tweak."/>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Scrollback (lines):"/>
+                        <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                       Value="{Binding ScrollbackLines, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="100" Maximum="100000" Increment="500"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"
+                                       ToolTip.Tip="Applies on next launch — the live ring stays its current size."/>
+                    </Grid>
+
+                    <TextBlock Margin="0,4,0,0"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               FontSize="{StaticResource FontSizeSm}"
+                               TextWrapping="Wrap"
+                               Text="Columns / rows are advertised via Telnet NAWS. MajorMUD renders against a fixed 80×25 grid and won't reflow if you push higher; non-game BBS doors usually do reflow."/>
+
+                    <TextBlock Classes="GroupHeader"
+                               Text="Credentials  —  The settings shown below are saved per character profile"/>
+
+                    <TextBlock Classes="CredHint"
+                               Classes.HintWarning="{Binding IsCredentialsHintWarning}"
+                               FontSize="{StaticResource FontSizeSm}"
+                               TextWrapping="Wrap"
+                               Text="{Binding CredentialsHint}"/>
+
+                    <Grid Margin="0,6,0,0" IsEnabled="{Binding HasProfile}"
+                          ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Username:"/>
+                        <TextBox   Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding Username, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                   Width="280" HorizontalAlignment="Left"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Password:"/>
+                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="280,6,Auto"
+                              HorizontalAlignment="Left">
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding Password, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                     PasswordChar="{Binding ShowPassword, Converter={x:Static vm:PasswordCharConverter.Instance}}"
+                                     PlaceholderText="(leave empty to keep the existing password)"/>
+                            <ToggleButton Grid.Column="2"
+                                          IsChecked="{Binding ShowPassword, Mode=TwoWay}"
+                                          Content="Show"
+                                          MinWidth="60"/>
+                        </Grid>
+
+                        <!-- Suicide password — read-only display.
+                             The value is captured passively by
+                             SuicidePasswordTracker when the user runs
+                             `set suicide` in-game; this row just
+                             exposes the stored value so the user can
+                             confirm what we have. Hidden when nothing
+                             is stored (per user spec: "show only if
+                             one is set"). -->
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel"
+                                   Text="Suicide Password:"
+                                   IsVisible="{Binding HasSuicidePassword}"/>
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="280,6,Auto"
+                              HorizontalAlignment="Left"
+                              IsVisible="{Binding HasSuicidePassword}">
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding SuicidePassword, Mode=OneWay}"
+                                     IsReadOnly="True"
+                                     PasswordChar="{Binding ShowSuicidePassword, Converter={x:Static vm:PasswordCharConverter.Instance}}"
+                                     ToolTip.Tip="Captured from in-game `set suicide` flow. Run `set suicide` again to change; run `pro` and observe 'You do not have a suicide password set.' to wipe."/>
+                            <ToggleButton Grid.Column="2"
+                                          IsChecked="{Binding ShowSuicidePassword, Mode=TwoWay}"
+                                          Content="Show"
+                                          MinWidth="60"/>
+                        </Grid>
+                    </Grid>
+
+                    <CheckBox IsChecked="{Binding HasSysopPowers, Mode=TwoWay}"
+                              IsEnabled="{Binding HasProfile}"
+                              Margin="0,12,0,0"
+                              Content="I have sysop / goto powers on this BBS"
+                              ToolTip.Tip="Per-character. Consumed by Phase 13 RemoteCommandManager (e.g. lets @goto run without a per-player permission check)."/>
+
+                    <TextBlock Classes="GroupHeader" Text="Automated Logon Menu Navigation"/>
+
+                    <StackPanel IsEnabled="{Binding HasProfile}" Spacing="4" Margin="0,6,0,0">
+                        <Grid ColumnDefinitions="*,140,Auto,Auto,Auto" Margin="0,0,0,2">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Message"/>
+                            <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Response" Margin="6,0,0,0"/>
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{Binding MenuNavSteps}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MenuStepEditorViewModel">
+                                    <Grid ColumnDefinitions="*,140,Auto,Auto,Auto" Margin="0,0,0,4">
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding WaitForPattern, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 PlaceholderText="Main Menu:"/>
+                                        <TextBox Grid.Column="1" Margin="6,0,0,0"
+                                                 Text="{Binding Send, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 PlaceholderText="G"/>
+                                        <Button Grid.Column="2" Margin="6,0,0,0" Content="↑"
+                                                Command="{Binding $parent[ItemsControl].((vm:BbsSectionViewModel)DataContext).MoveMenuStepUpCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="Move step up"/>
+                                        <Button Grid.Column="3" Margin="2,0,0,0" Content="↓"
+                                                Command="{Binding $parent[ItemsControl].((vm:BbsSectionViewModel)DataContext).MoveMenuStepDownCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="Move step down"/>
+                                        <Button Grid.Column="4" Margin="6,0,0,0" Content="Remove"
+                                                Command="{Binding $parent[ItemsControl].((vm:BbsSectionViewModel)DataContext).RemoveMenuStepCommand}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button Content="Add step" Command="{Binding AddMenuStepCommand}"
+                                HorizontalAlignment="Left" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <!-- ===== Game-menu commands (per-BBS) =====
+                         The two main-menu picks for entering / leaving the
+                         realm. Stored on the BbsProfile because the menu key
+                         bindings belong to the realm / front-end, not the
+                         character — every character on the same BBS uses the
+                         same picks. Bind directly (no HasProfile gate): these
+                         live on the selected BBS, not the loaded character. -->
+                    <TextBlock Classes="GroupHeader" Text="Game-menu commands"/>
+
+                    <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
+                          Margin="0,6,0,0" ColumnSpacing="8" RowSpacing="4">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Game entry command"/>
+                        <TextBox   Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding GameEntryCommand, Mode=TwoWay}"
+                                   Width="120" FontFamily="{StaticResource FontMono}"
+                                   ToolTip.Tip="Sent at the MajorMUD main menu to enter the realm. Default 'E'."/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Game exit command"/>
+                        <TextBox   Grid.Row="1" Grid.Column="1"
+                                   Text="{Binding GameExitCommand, Mode=TwoWay}"
+                                   Width="120" FontFamily="{StaticResource FontMono}"
+                                   ToolTip.Tip="Sent at the MajorMUD main menu to log off. Default '=x'. Fires immediately when a permitted player telepaths @hangup; full cleanup-warning automation ships in a follow-up PR."/>
+                    </Grid>
+
+                    <!-- ===== Confirmations =====
+                         Show-information / Show-data-being-sent /
+                         Show-reason-for-running were removed entirely —
+                         the system log covers what they would have
+                         exposed and we have no plans to surface them
+                         on the terminal canvas. Show-combat-round-totals
+                         moved to Settings → Combat. The "Display" group
+                         label was dropped — the bold "Show confirmations"
+                         header below already names what this group is.
+                         These four toggles persist at Global tier; the
+                         live mirror is ConfirmService. -->
+                    <StackPanel Spacing="2" Margin="0,18,0,0">
+                        <TextBlock Text="Show confirmations"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <CheckBox Content="Confirm exit"
+                                  IsChecked="{Binding ConfirmExit, Mode=TwoWay}"
+                                  ToolTip.Tip="Prompt 'Are you sure?' when closing FujinTerm (window X / File → Quit / hotkey)."/>
+                        <CheckBox Content="Confirm hangup"
+                                  IsChecked="{Binding ConfirmHangup, Mode=TwoWay}"
+                                  ToolTip.Tip="Prompt before user-initiated disconnects (toolbar / hotkey / menu). App-initiated disconnects (carrier-lost, @hangup, health drops) bypass the prompt."/>
+                        <CheckBox Content="Confirm save settings"
+                                  IsChecked="{Binding ConfirmSaveSettings, Mode=TwoWay}"
+                                  ToolTip.Tip="Prompt before Settings → OK / Apply and other JSON-write saves. 'No' returns to the editor without saving or closing."/>
+                        <CheckBox Content="Confirm deletes"
+                                  IsChecked="{Binding ConfirmDeletes, Mode=TwoWay}"
+                                  ToolTip.Tip="Prompt before destructive list-row removes (toolbar rows, BBS profiles, future game-data records)."/>
+                    </StackPanel>
+
+                    <!-- ===== Realm-specific naming (Phase 4 PR 4.8 stub) =====
+                         Per-BBS / per-realm label. Default is "runic"; users
+                         edit when they're playing on a realm that relabels
+                         the runic currency. Wires alongside the Phase 13
+                         CashManager bits that consume the name. -->
+                    <TextBlock Classes="GroupHeader" Text="Realm naming"
+                               Margin="0,18,0,4"/>
+
+                    <Grid ColumnDefinitions="220,*" Margin="0,4,0,0">
+                        <TextBlock Grid.Column="0" Text="Name of runic currency"
+                                   Foreground="{StaticResource ChromeFgSecBrush}"
+                                   FontSize="{StaticResource FontSizeMd}"
+                                   VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="1" IsEnabled="False"
+                                 Text="runic"
+                                 Width="220" HorizontalAlignment="Left"
+                                 ToolTip.Tip="Stub (Phase 4 PR 4.8). Saved to the BBS settings — different realms relabel the runic currency, so this is per-BBS, not per-character."/>
+                    </Grid>
+
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+    </Grid>
+</UserControl>

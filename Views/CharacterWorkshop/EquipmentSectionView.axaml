@@ -1,0 +1,252 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="860" d:DesignHeight="620"
+             x:Class="FujinTerm.Views.CharacterWorkshop.EquipmentSectionView"
+             x:DataType="vm:EquipmentSectionViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.ColHead">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.Field">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.Heading">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Border.Box">
+            <Setter Property="Background" Value="{StaticResource ChromeBgElevBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="12"/>
+        </Style>
+        <!-- Enabled set rows get an amber badge; disabled rows stay muted. -->
+        <Style Selector="TextBlock.badge.on">
+            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.badge.off">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <!-- Bonus values read neutral grey; only a penalty (negative) shows red. -->
+        <Style Selector="TextBlock.bonusValue">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.bonusValue.negative">
+            <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Margin="22" ColumnDefinitions="220,*">
+
+        <!-- ===== Left: the fixed trigger-set list ===== -->
+        <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,16,0">
+
+            <!-- Enable / Disable act on the selected set. -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                <Button Content="Enable" Command="{Binding EnableCommand}"
+                        ToolTip.Tip="Enable the selected set so automation may equip it at its trigger."/>
+                <Button Content="Disable" Command="{Binding DisableCommand}"
+                        ToolTip.Tip="Disable the selected set — automation leaves it alone."/>
+            </StackPanel>
+
+            <Border Grid.Row="1"
+                    Background="{StaticResource ChromeBgSunkenBrush}"
+                    BorderBrush="{StaticResource ChromeBorderBrush}"
+                    BorderThickness="1" CornerRadius="4">
+                <ListBox ItemsSource="{Binding SetRows}"
+                         SelectedItem="{Binding SelectedSetRow, Mode=TwoWay}"
+                         Background="Transparent" BorderThickness="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:EquipmentSetRowViewModel">
+                            <Grid ColumnDefinitions="*,Auto" Margin="2,3">
+                                <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                           Foreground="{StaticResource ChromeFgBrush}"
+                                           FontSize="{StaticResource FontSizeMd}"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{Binding StatusText}"
+                                           Classes="badge"
+                                           Classes.on="{Binding Enabled}"
+                                           Classes.off="{Binding !Enabled}"
+                                           FontSize="{StaticResource FontSizeSm}"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </Grid>
+
+        <!-- ===== Right: the selected set's slot grid ===== -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
+
+            <!-- Per-set actions. Update from live fills the slots from the worn
+                 loadout; Equip Now hands the set to the equip engine. -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6"
+                        Margin="0,0,0,8" IsVisible="{Binding HasSet}">
+                <Button Content="Update from live" Command="{Binding SnapshotCurrentCommand}"
+                        ToolTip.Tip="Fill the slots from the items you're wearing right now."/>
+                <Button Content="Equip Now" Command="{Binding ApplyNowCommand}"
+                        ToolTip.Tip="Wear this set now; blank ({no change}) slots are left untouched."/>
+                <Button Content="Item Finder" Command="{Binding OpenItemFinderCommand}"
+                        ToolTip.Tip="Browse every equippable item in the game data, filtered by class, level, alignment, and stats."/>
+            </StackPanel>
+
+            <!-- Apply result (own line so it doesn't reflow the action row). -->
+            <TextBlock Grid.Row="1" Text="{Binding ApplyStatus}" Margin="0,0,0,8"
+                       IsVisible="{Binding HasApplyStatus}"
+                       Foreground="{StaticResource AccentAmberBrush}"/>
+
+            <!-- Slot grid (left) + equipment bonuses (right). -->
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto" IsVisible="{Binding HasSet}">
+
+                <Border Grid.Column="0"
+                        Background="{StaticResource ChromeBgSunkenBrush}"
+                        BorderBrush="{StaticResource ChromeBorderBrush}"
+                        BorderThickness="1" CornerRadius="4">
+                    <Grid RowDefinitions="Auto,*">
+                        <Grid Grid.Row="0" ColumnDefinitions="128,*" Margin="10,8,10,4">
+                            <TextBlock Grid.Column="0" Classes="ColHead" Text="Slot"/>
+                            <TextBlock Grid.Column="1" Classes="ColHead" Text="Item"/>
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding Rows}" Margin="10,0,10,8">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:EquipmentSlotRowViewModel">
+                                        <Grid ColumnDefinitions="128,*" Margin="0,1"
+                                              IsVisible="{Binding Applies}">
+                                            <TextBlock Grid.Column="0" Classes="Field" Text="{Binding Label}"/>
+                                            <!-- Blank = {no change}: the slot is skipped on apply. -->
+                                            <AutoCompleteBox Grid.Column="1"
+                                                             ItemsSource="{Binding AvailableItems}"
+                                                             FilterMode="ContainsOrdinal"
+                                                             MinimumPrefixLength="1"
+                                                             PlaceholderText="{}{no change}"
+                                                             Text="{Binding ItemName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- Equipment Bonuses — the set's physical-slot items' summed
+                     bonuses, with a per-item hover breakdown on each row. -->
+                <Border Grid.Column="1" Classes="Box" Width="220" Margin="14,0,0,0">
+                    <Grid RowDefinitions="Auto,Auto,*">
+                        <TextBlock Grid.Row="0" Classes="Heading" Text="Equipment Bonuses" Margin="0,0,0,6"/>
+
+                        <TextBlock Grid.Row="1" Classes="Field"
+                                   Text="No slot contributes a bonus yet."
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding !HasBonuses}"/>
+
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      IsVisible="{Binding HasBonuses}">
+                            <ItemsControl ItemsSource="{Binding BonusRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:EquipBonusRow">
+                                        <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding Tooltip}">
+                                            <TextBlock Grid.Column="0" Classes="Field"
+                                                       Text="{Binding Stat}" Margin="0,0,12,2"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                                       Classes="bonusValue"
+                                                       Classes.negative="{Binding IsNegative}"
+                                                       FontFamily="{StaticResource FontMono}"
+                                                       FontWeight="SemiBold"
+                                                       FontSize="{StaticResource FontSizeMd}"
+                                                       Margin="0,0,0,2"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Inventory view — the live carried-item list with per-item weight
+                 and the three loot-automation toggles. -->
+            <Border Grid.Row="2" IsVisible="{Binding IsInventory}"
+                    Background="{StaticResource ChromeBgSunkenBrush}"
+                    BorderBrush="{StaticResource ChromeBorderBrush}"
+                    BorderThickness="1" CornerRadius="4">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,64,64,64,64" Margin="10,8,10,4">
+                        <TextBlock Grid.Column="0" Classes="ColHead" Text="Item"/>
+                        <TextBlock Grid.Column="1" Classes="ColHead" Text="Weight"
+                                   HorizontalAlignment="Right"/>
+                        <TextBlock Grid.Column="2" Classes="ColHead" Text="Stash"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Grid.Column="3" Classes="ColHead" Text="Collect"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Grid.Column="4" Classes="ColHead" Text="Discard"
+                                   HorizontalAlignment="Center"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  IsVisible="{Binding HasInventoryItems}">
+                        <ItemsControl ItemsSource="{Binding InventoryRows}" Margin="10,0,10,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="vm:InventoryItemRowViewModel">
+                                    <Grid ColumnDefinitions="*,64,64,64,64" Margin="0,2">
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Classes="Field" Text="{Binding Name}"/>
+                                            <TextBlock Text="{Binding CountText}"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                       FontSize="{StaticResource FontSizeSm}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Classes="Field" Text="{Binding Weight}"
+                                                   FontFamily="{StaticResource FontMono}"
+                                                   HorizontalAlignment="Right"/>
+                                        <CheckBox Grid.Column="2" IsChecked="{Binding AutoStash, Mode=TwoWay}"
+                                                  IsEnabled="{Binding CanToggle}"
+                                                  HorizontalAlignment="Center"
+                                                  ToolTip.Tip="Auto-stash this item at the stash room."/>
+                                        <CheckBox Grid.Column="3" IsChecked="{Binding AutoCollect, Mode=TwoWay}"
+                                                  IsEnabled="{Binding CanToggle}"
+                                                  HorizontalAlignment="Center"
+                                                  ToolTip.Tip="Auto-collect this item from rooms while walking."/>
+                                        <CheckBox Grid.Column="4" IsChecked="{Binding AutoDiscard, Mode=TwoWay}"
+                                                  IsEnabled="{Binding CanToggle}"
+                                                  HorizontalAlignment="Center"
+                                                  ToolTip.Tip="Auto-discard this item when picked up."/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <TextBlock Grid.Row="1" IsVisible="{Binding !HasInventoryItems}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextWrapping="Wrap" MaxWidth="380" TextAlignment="Center"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               Text="No carried items. Type 'i' in-game to pull your inventory and populate this list."/>
+                </Grid>
+            </Border>
+
+            <!-- Empty state — no character loaded (so no sets to edit). -->
+            <TextBlock Grid.Row="2"
+                       IsVisible="{Binding ShowEmptyState}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextWrapping="Wrap" MaxWidth="400" TextAlignment="Center"
+                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                       Text="Load a character to edit its gear sets, then pick a set on the left and fill each slot's item. Leave a slot blank for {no change}."/>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,511 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FujinTerm.ViewModels"
+        xmlns:ctl="using:FujinTerm.Controls"
+        xmlns:svc="using:FujinTerm.Services"
+        xmlns:conv="using:Avalonia.Data.Converters"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="560"
+        x:Class="FujinTerm.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding WindowTitle, FallbackValue=FujinTerm}"
+        Width="660" Height="560">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Window.Styles>
+        <!-- Engine-state chip — same colour-code rules as the Navigation
+             window's badge (idle grey / walking + looping green / lair
+             amber). Living here keeps the two windows in visual sync
+             without dragging a shared theme file in. -->
+        <Style Selector="Border.EngineBadge">
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="6,1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Border.EngineBadge TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.WalkingState">
+            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.WalkingState TextBlock">
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.LoopingState">
+            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.LoopingState TextBlock">
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.LairState">
+            <Setter Property="Background" Value="{StaticResource AccentAmberBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.LairState TextBlock">
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
+        <!-- Tier overlays — engine-recovery gate state. Border-only;
+             fill stays the engine colour. Tier 2 = gate watching for
+             1-of-1 recovery (yellow); Tier 3 = backtrack recovery
+             active (red). Declared after engine classes so the
+             BorderBrush setter precedence lands here. -->
+        <Style Selector="Border.EngineBadge.Tier2State">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentYellowBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.Tier3State">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+    </Window.Styles>
+
+    <!-- KeyBindings are wired in code-behind from KeybindingStore so the
+         per-character rebind UI takes effect at runtime — see
+         GlobalHotkeys.AttachMain in MainWindow.axaml.cs. -->
+
+
+    <DockPanel LastChildFill="True">
+
+        <!-- ============ Menu bar (chrome-styled, unchanged surface) ============ -->
+        <Menu DockPanel.Dock="Top" Classes="Chrome">
+
+            <MenuItem Header="_File">
+                <MenuItem Header="{Binding ConnectionLabel}"
+                          Command="{Binding ToggleConnectionCommand}"
+                          InputGesture="{Binding ToggleConnectionGesture}"/>
+                <MenuItem Header="_Quick Connect…" Command="{Binding OpenQuickConnectCommand}"/>
+                <MenuItem Header="BBS list"      Command="{Binding OpenBbsSettingsCommand}"/>
+                <MenuItem Header="Disable hangups"
+                          ToggleType="CheckBox"
+                          IsChecked="{Binding IsDisableHangupsActive, Mode=TwoWay}"
+                          ToolTip.Tip="Block every automatic disconnect — only you can hang up (hotkey / toolbar / menu)"/>
+                <Separator/>
+                <MenuItem Header="_New profile…"  InputGesture="{Binding NewProfileGesture}"       Command="{Binding NewProfileCommand}"/>
+                <MenuItem Header="_Open profile…" InputGesture="{Binding OpenProfileGesture}"       Command="{Binding OpenProfileCommand}"/>
+                <MenuItem Header="{Binding SaveProfileLabel}"  InputGesture="{Binding SaveProfileGesture}"
+                          Command="{Binding SaveProfileCommand}"/>
+                <MenuItem Header="Save profile as…" InputGesture="{Binding SaveProfileAsGesture}"
+                          Command="{Binding SaveProfileAsCommand}"/>
+                <Separator IsVisible="{Binding HasRecents}"/>
+                <!-- Recent profiles. Header shows "<profile> - <BBS>"
+                     when the profile has a pinned BBS, else just the
+                     profile name. CommandParameter binds to the RAW
+                     profile name (ProfileNameN) so OpenRecentProfile
+                     gets the on-disk identifier regardless of how the
+                     menu label renders. -->
+                <MenuItem Header="{Binding Recent0, StringFormat='_1)  {0}'}"
+                          IsVisible="{Binding Recent0, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName0}"/>
+                <MenuItem Header="{Binding Recent1, StringFormat='_2)  {0}'}"
+                          IsVisible="{Binding Recent1, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName1}"/>
+                <MenuItem Header="{Binding Recent2, StringFormat='_3)  {0}'}"
+                          IsVisible="{Binding Recent2, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName2}"/>
+                <MenuItem Header="{Binding Recent3, StringFormat='_4)  {0}'}"
+                          IsVisible="{Binding Recent3, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName3}"/>
+                <MenuItem Header="{Binding Recent4, StringFormat='_5)  {0}'}"
+                          IsVisible="{Binding Recent4, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName4}"/>
+                <Separator/>
+                <MenuItem Header="_Quit" Command="{Binding QuitCommand}" InputGesture="{Binding QuitGesture}"/>
+            </MenuItem>
+
+            <MenuItem Header="_View">
+                <MenuItem Header="Settings…"     InputGesture="{Binding SettingsGesture}" Command="{Binding OpenSettingsCommand}"/>
+                <MenuItem Header="Backscroll"    InputGesture="{Binding BackscrollGesture}" Command="{Binding OpenBackscrollCommand}"/>
+                <Separator/>
+                <MenuItem Header="Conversation"  InputGesture="{Binding ConversationGesture}"  Command="{Binding OpenConversationCommand}"/>
+                <MenuItem Header="Party"         InputGesture="{Binding PartyGesture}"  Command="{Binding OpenPartyCommand}"/>
+                <MenuItem Header="Player Workshop" InputGesture="{Binding WorkshopGesture}" Command="{Binding OpenWorkshopCommand}"/>
+                <MenuItem Header="Navigation"      InputGesture="{Binding NavigationGesture}" Command="{Binding OpenNavigationCommand}"/>
+                <MenuItem Header="Spell Book"    InputGesture="{Binding SpellBookGesture}"  Command="{Binding OpenSpellBookCommand}"/>
+                <MenuItem Header="Session Stats" InputGesture="{Binding SessionStatsGesture}" Command="{Binding OpenSessionStatsCommand}"/>
+                <Separator/>
+                <MenuItem Header="Players"  Command="{Binding OpenGameDataPlayersCommand}"/>
+                <MenuItem Header="Macros"   Command="{Binding OpenGameDataMacrosCommand}"/>
+                <MenuItem Header="Triggers" Command="{Binding OpenGameDataTriggersCommand}"/>
+                <MenuItem Header="Aliases"  Command="{Binding OpenGameDataAliasesCommand}"/>
+                <MenuItem Header="Events"   Command="{Binding OpenEventsCommand}"/>
+                <Separator/>
+                <MenuItem Header="Reset layout" Command="{Binding ResetLayoutCommand}"/>
+            </MenuItem>
+
+            <MenuItem Header="_Action">
+                <!-- Bulk one-shot commands. Local twins of the @get-all /
+                     @drop-all / @deposit-all remote commands and the Default
+                     gear set; the toolbar Get/Drop/Equip/Deposit buttons drive
+                     the same commands via the catalogue. -->
+                <MenuItem Header="Get All"     Command="{Binding GetAllCommand}"     ToolTip.Tip="Pick up every item on the room floor"/>
+                <MenuItem Header="Drop All"    Command="{Binding DropAllCommand}"    ToolTip.Tip="Drop every carried (unworn) item"/>
+                <MenuItem Header="Equip All"   Command="{Binding EquipAllCommand}"   ToolTip.Tip="Wear the Default gear set"/>
+                <MenuItem Header="Deposit All" Command="{Binding DepositAllCommand}" ToolTip.Tip="Bank wealth down to the keep-on-hand floor"/>
+                <Separator/>
+
+                <!-- Master auto-responses switch. Snapshot logic lives in
+                     AutoModeController, so this drives a Command (not a
+                     two-way bool). Checked = auto-engines run; unchecked =
+                     every engine off (and auto-entry gated), hence the
+                     inverted IsAllAutoOff binding. -->
+                <MenuItem Header="All auto-responses"
+                          ToggleType="CheckBox"
+                          IsChecked="{Binding IsAllAutoOff, Mode=OneWay, Converter={x:Static conv:BoolConverters.Not}}"
+                          Command="{Binding AllAutoOffCommand}"
+                          ToolTip.Tip="Off kills every auto-engine and auto-entry (snapshots what was on); on restores them"/>
+                <Separator/>
+
+                <!-- Master auto-engine toggles. Per-item / per-spell tuning
+                     for these lives in the matching Settings tab; the menu
+                     is the on / off surface during play. -->
+                <MenuItem Header="Auto Combat"      ToggleType="CheckBox" IsChecked="{Binding IsAutoCombatActive,   Mode=TwoWay}"/>
+                <MenuItem Header="Auto Nuke"        ToggleType="CheckBox" IsChecked="{Binding IsAutoNukeActive,     Mode=TwoWay}"/>
+                <MenuItem Header="Auto Rest / Heal" ToggleType="CheckBox" IsChecked="{Binding IsAutoHealRestActive, Mode=TwoWay}"/>
+                <MenuItem Header="Auto Bless"       ToggleType="CheckBox" IsChecked="{Binding IsAutoBlessActive,    Mode=TwoWay}"/>
+                <MenuItem Header="Auto Light"       ToggleType="CheckBox" IsChecked="{Binding IsAutoLightActive,    Mode=TwoWay}"/>
+                <MenuItem Header="Auto Get Items"   ToggleType="CheckBox" IsChecked="{Binding IsAutoGetItemsActive, Mode=TwoWay}"/>
+                <MenuItem Header="Auto Get Cash"    ToggleType="CheckBox" IsChecked="{Binding IsAutoGetCashActive,  Mode=TwoWay}"/>
+                <MenuItem Header="Auto Sneak"       ToggleType="CheckBox" IsChecked="{Binding IsAutoSneakActive,    Mode=TwoWay}"/>
+                <MenuItem Header="Auto Hide"        ToggleType="CheckBox" IsChecked="{Binding IsAutoHideActive,     Mode=TwoWay}"/>
+                <MenuItem Header="Auto Search"      ToggleType="CheckBox" IsEnabled="False" ToolTip.Tip="Wired in Phase 7 (AutoWalkManager) — search rooms while running"/>
+
+                <!-- Corpse-recovery actions land here when Phase 9 DEATH ships. -->
+            </MenuItem>
+
+            <!-- Game Data: dynamic set list at the top (rebuilt from
+                 code-behind whenever GameDataSets changes), then the
+                 static actions. Inline sets + inline static items can't
+                 coexist via XAML binding on a single MenuItem, so the
+                 items collection is composed in code. -->
+            <MenuItem x:Name="GameDataMenu" Header="_Game Data"/>
+
+            <MenuItem Header="_Tools">
+                <MenuItem Header="{Binding CaptureMenuLabel}"  Command="{Binding ToggleDumpCommand}"/>
+                <Separator/>
+                <MenuItem Header="Program Log…" InputGesture="{Binding LogPaneGesture}" Command="{Binding OpenLogPaneCommand}"/>
+                <MenuItem Header="Wire Inspector…"             Command="{Binding OpenWireInspectorCommand}"/>
+                <Separator/>
+                <MenuItem Header="Export chatlog…"             Command="{Binding ExportChatlogCommand}"/>
+                <MenuItem Header="Clear chatlog"               Command="{Binding ClearChatlogCommand}"/>
+                <MenuItem Header="Open Logs folder…"           Command="{Binding OpenLogsFolderCommand}"/>
+            </MenuItem>
+
+            <MenuItem Header="_Help">
+                <MenuItem Header="Help topics…"
+                          IsEnabled="False"
+                          ToolTip.Tip="Old-school help browser lands in a later phase."/>
+                <Separator/>
+                <MenuItem Header="MajorMUD wiki ↗"     Command="{Binding OpenMajorMudWikiCommand}"/>
+                <MenuItem Header="MajorMUD subreddit ↗" Command="{Binding OpenMajorMudRedditCommand}"/>
+                <MenuItem Header="MudInfo.net ↗"        Command="{Binding OpenMudInfoCommand}"/>
+                <MenuItem Header="BBS site ↗"
+                          Command="{Binding OpenBbsWebsiteCommand}"
+                          IsEnabled="{Binding HasBbsWebsite}"
+                          ToolTip.Tip="{Binding BbsWebsiteUrl, FallbackValue='Set a Website URL on the active BBS (Settings → BBS) to enable.', TargetNullValue='Set a Website URL on the active BBS (Settings → BBS) to enable.'}"/>
+                <Separator/>
+                <MenuItem Header="Report an issue…"    Command="{Binding ReportIssueCommand}"/>
+                <Separator/>
+                <MenuItem Header="About FujinTerm"     Command="{Binding OpenAboutCommand}"/>
+            </MenuItem>
+
+            <!-- Standalone action, no dropdown — clicking fires the capture
+                 directly (freeze client state + recent output into a Markdown
+                 report on the Desktop). -->
+            <MenuItem Header="Bug Report" Command="{Binding ReportBugCommand}"
+                      ToolTip.Tip="Capture current client state and recent output to a report file on your Desktop"/>
+        </Menu>
+
+        <!-- ============ Toolbar (dynamic — built from ToolbarItems) ============ -->
+        <!-- Layout comes from the active character's ToolbarSettings.Layout
+             via the catalogue. The four Borders mount at top / bottom / left /
+             right; IsVisible on each is driven by ToolbarConfig's derived
+             ShowTop / ShowBottom / ShowLeft / ShowRight flags so toggling the
+             Settings → Toolbar Show / Position controls re-docks
+             without a window rebuild. Item templates are inlined per-
+             orientation because StackPanel orientation lives on the
+             ItemsPanel, not the items themselves. -->
+
+        <!-- Top (horizontal) -->
+        <Border DockPanel.Dock="Top" Classes="Toolbar"
+                IsVisible="{Binding Toolbar.ShowTop}">
+            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                <ItemsControl Grid.Column="0"
+                              ItemsSource="{Binding ToolbarItems}"
+                              VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="4"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="svc:ToolbarButtonItem">
+                            <Panel>
+                                <Border Classes="ToolbarSeparator"
+                                        IsVisible="{Binding IsSeparator}"/>
+                                <Button Classes="ToolbarBtn"
+                                        Classes.Active="{Binding IsActive}"
+                                        Classes.Danger="{Binding IsDanger}"
+                                        IsVisible="{Binding IsButton}" IsEnabled="{Binding IsActionEnabled}"
+                                        Command="{Binding Command}"
+                                        ToolTip.Tip="{Binding Tooltip}">
+                                    <Panel>
+                                        <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                              IsVisible="{Binding !ShowAlternate}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                              Width="16" Height="16" Stretch="Uniform"/>
+                                        <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                              IsVisible="{Binding ShowAlternate}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                              Width="16" Height="16" Stretch="Uniform"/>
+                                    </Panel>
+                                </Button>
+                            </Panel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+        </Border>
+
+        <!-- Left (vertical) -->
+        <Border DockPanel.Dock="Left" Classes="ToolbarV"
+                IsVisible="{Binding Toolbar.ShowLeft}">
+            <ItemsControl ItemsSource="{Binding ToolbarItems}"
+                          HorizontalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Vertical" Spacing="4"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="svc:ToolbarButtonItem">
+                        <Panel>
+                            <Border Classes="ToolbarSeparatorV"
+                                    IsVisible="{Binding IsSeparator}"/>
+                            <Button Classes="ToolbarBtn"
+                                    Classes.Active="{Binding IsActive}"
+                                    Classes.Danger="{Binding IsDanger}"
+                                    IsVisible="{Binding IsButton}" IsEnabled="{Binding IsActionEnabled}"
+                                    Command="{Binding Command}"
+                                    ToolTip.Tip="{Binding Tooltip}">
+                                <Panel>
+                                    <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                          IsVisible="{Binding !ShowAlternate}"
+                                          Stroke="{Binding $parent[Button].Foreground}"
+                                          StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                          Width="16" Height="16" Stretch="Uniform"/>
+                                    <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                          IsVisible="{Binding ShowAlternate}"
+                                          Stroke="{Binding $parent[Button].Foreground}"
+                                          StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                          Width="16" Height="16" Stretch="Uniform"/>
+                                </Panel>
+                            </Button>
+                        </Panel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+
+        <!-- Right (vertical) -->
+        <Border DockPanel.Dock="Right" Classes="ToolbarV"
+                IsVisible="{Binding Toolbar.ShowRight}">
+            <ItemsControl ItemsSource="{Binding ToolbarItems}"
+                          HorizontalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Vertical" Spacing="4"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="svc:ToolbarButtonItem">
+                        <Panel>
+                            <Border Classes="ToolbarSeparatorV"
+                                    IsVisible="{Binding IsSeparator}"/>
+                            <Button Classes="ToolbarBtn"
+                                    Classes.Active="{Binding IsActive}"
+                                    Classes.Danger="{Binding IsDanger}"
+                                    IsVisible="{Binding IsButton}" IsEnabled="{Binding IsActionEnabled}"
+                                    Command="{Binding Command}"
+                                    ToolTip.Tip="{Binding Tooltip}">
+                                <Panel>
+                                    <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                          IsVisible="{Binding !ShowAlternate}"
+                                          Stroke="{Binding $parent[Button].Foreground}"
+                                          StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                          Width="16" Height="16" Stretch="Uniform"/>
+                                    <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                          IsVisible="{Binding ShowAlternate}"
+                                          Stroke="{Binding $parent[Button].Foreground}"
+                                          StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                          Width="16" Height="16" Stretch="Uniform"/>
+                                </Panel>
+                            </Button>
+                        </Panel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+
+        <!-- ============ Status bar (two slots) ============ -->
+        <!-- Left  : room + confidence dot (Phase 7 wires the live values).
+             Mid   : tick countdowns — combat tick + HP (natural / rest) +
+                     MA (natural / medi). Source-of-truth: TickEngine +
+                     RegenTracker. -->
+        <Border DockPanel.Dock="Bottom" Classes="StatusBar">
+            <!-- Layout (left → right):
+                 [chip] [room name, flex] [ticks] [connection] -->
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                  VerticalAlignment="Center"
+                  ColumnSpacing="14">
+
+                <!-- Engine-state chip — mirrors the Navigation badge.
+                     Tier overlays paint the border yellow when the
+                     engine-recovery gate is in tier 2, red in tier 3. -->
+                <Border Grid.Column="0"
+                        Classes="EngineBadge"
+                        Classes.WalkingState="{Binding EngineActionIsWalking}"
+                        Classes.LoopingState="{Binding EngineActionIsLooping}"
+                        Classes.LairState="{Binding EngineActionIsLair}"
+                        Classes.Tier2State="{Binding IsTier2}"
+                        Classes.Tier3State="{Binding IsTier3}">
+                    <TextBlock Text="{Binding EngineActionBadge}"/>
+                </Border>
+
+                <!-- Current room. VM already abbreviates long names;
+                     TextTrimming covers narrow-window resizes too. -->
+                <TextBlock Grid.Column="1"
+                           Classes="StatusSlot"
+                           Text="{Binding LocationText}"
+                           TextTrimming="CharacterEllipsis"/>
+
+                <!-- Cycle countdowns. Natural HP / MA are always visible
+                     once observed; rest / medi append while resting / meditating. -->
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal" Spacing="14"
+                            VerticalAlignment="Center">
+                    <TextBlock x:Name="CombatTickLabel"
+                               Classes="StatusSlot StatusMono"
+                               Text="{Binding CombatTickText}"/>
+                    <TextBlock Classes="StatusSlot StatusMono" Text="{Binding HpTickText}"/>
+                    <TextBlock Classes="StatusSlot StatusMono" Text="{Binding MaTickText}"/>
+                </StackPanel>
+
+                <!-- Connection stoplight: red idle · yellow connecting · green connected.
+                     Live reconnect countdown shown beside the status text
+                     when a long-delay reconnect is armed (eg cleanup-mode
+                     backoff). Hides itself when the timer fires or the
+                     user cancels. -->
+                <StackPanel Grid.Column="3"
+                            Orientation="Horizontal" Spacing="6"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{StaticResource AccentRedBrush}"
+                             IsVisible="{Binding IsIdle}"/>
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{StaticResource AccentYellowBrush}"
+                             IsVisible="{Binding IsConnecting}"/>
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{StaticResource AccentGreenBrush}"
+                             IsVisible="{Binding IsConnected}"/>
+                    <TextBlock Classes="StatusSlot"
+                               Foreground="{StaticResource AccentAmberBrush}"
+                               Text="{Binding ReconnectCountdownText}"
+                               IsVisible="{Binding IsReconnectCountdownVisible}"/>
+                    <TextBlock Classes="StatusSlot" Text="{Binding ConnectionStatusText}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Bottom (horizontal). Docked after the status bar so the status
+             bar keeps the very-bottom edge and this toolbar sits directly
+             above it. Mirrors the Top border; ShowBottom drives visibility. -->
+        <Border DockPanel.Dock="Bottom" Classes="Toolbar"
+                IsVisible="{Binding Toolbar.ShowBottom}">
+            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                <ItemsControl Grid.Column="0"
+                              ItemsSource="{Binding ToolbarItems}"
+                              VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="4"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="svc:ToolbarButtonItem">
+                            <Panel>
+                                <Border Classes="ToolbarSeparator"
+                                        IsVisible="{Binding IsSeparator}"/>
+                                <Button Classes="ToolbarBtn"
+                                        Classes.Active="{Binding IsActive}"
+                                        Classes.Danger="{Binding IsDanger}"
+                                        IsVisible="{Binding IsButton}" IsEnabled="{Binding IsActionEnabled}"
+                                        Command="{Binding Command}"
+                                        ToolTip.Tip="{Binding Tooltip}">
+                                    <Panel>
+                                        <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                              IsVisible="{Binding !ShowAlternate}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                              Width="16" Height="16" Stretch="Uniform"/>
+                                        <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                              IsVisible="{Binding ShowAlternate}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                              Width="16" Height="16" Stretch="Uniform"/>
+                                    </Panel>
+                                </Button>
+                            </Panel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+        </Border>
+
+        <!-- ============ Terminal canvas ============ -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                      Background="{StaticResource ChromeBgSunkenBrush}">
+            <ctl:TerminalControl x:Name="Terminal"
+                                 Emulator="{Binding Emulator}"
+                                 FontSize="{Binding TerminalFontSize}"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center">
+                <ctl:TerminalControl.ContextMenu>
+                    <ContextMenu>
+                        <!-- Panel quick-opens — the windows most useful to reach
+                             from a right-click on the canvas. -->
+                        <MenuItem Header="Open Backscroll"      InputGesture="{Binding BackscrollGesture}"   Command="{Binding OpenBackscrollCommand}"/>
+                        <MenuItem Header="Open Player Workshop" InputGesture="{Binding WorkshopGesture}"     Command="{Binding OpenWorkshopCommand}"/>
+                        <MenuItem Header="Open Conversation"    InputGesture="{Binding ConversationGesture}" Command="{Binding OpenConversationCommand}"/>
+                        <MenuItem Header="Open Navigation"      InputGesture="{Binding NavigationGesture}"   Command="{Binding OpenNavigationCommand}"/>
+                        <Separator/>
+                        <!-- Diagnostics — freeze current client state + recent
+                             output into a Markdown report on the Desktop. -->
+                        <MenuItem Header="Bug report…" Command="{Binding ReportBugCommand}"
+                                  ToolTip.Tip="Capture current client state and recent output to a report file on your Desktop"/>
+                    </ContextMenu>
+                </ctl:TerminalControl.ContextMenu>
+            </ctl:TerminalControl>
+        </ScrollViewer>
+
+    </DockPanel>
+
+</Window>
