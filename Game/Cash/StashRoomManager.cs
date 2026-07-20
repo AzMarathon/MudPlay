@@ -8,8 +8,9 @@ namespace FujinTerm.Game.Cash;
 
 // Stash dispatch for user-marked stash rooms. Decomposes the coin held above
 // the single raw CashSettings.KeepOnHandWealth floor into one `hide N <coin>`
-// command per denomination (largest-first), then one `hide <item>` per carried
-// item flagged ItemOverlay.AutoStash.
+// command per denomination (lowest denomination first, so the coins left on
+// hand are the fewest possible), then one `hide <item>` per carried item
+// flagged ItemOverlay.AutoStash.
 //
 // Two triggers. A stash fires either as a step of an auto-deposit reroute (when
 // the wealth / coin gate trips while a Loop or Auto-Lair is running and the
@@ -96,10 +97,10 @@ public sealed class StashRoomManager : IDisposable
 
     // Called by AutoDepositManager on arrival at a stash destination during an
     // auto-deposit reroute. Decomposes the coin held above the raw keep-on-hand
-    // floor into one `hide N <coin>` per denomination (largest-first). Guarded by
-    // the cash master toggle and a defensive stash-room membership check (the
-    // caller only routes here for stash destinations, but the guard keeps the
-    // contract local).
+    // floor into one `hide N <coin>` per denomination (lowest denomination first,
+    // leaving the fewest coins on hand). Guarded by the cash master toggle and a
+    // defensive stash-room membership check (the caller only routes here for
+    // stash destinations, but the guard keeps the contract local).
     public void ExecuteStash(RoomKey enteredRoom)
     {
         if (!_isEnabled()) return;

@@ -40,16 +40,22 @@ public readonly record struct CurrencyHoldings(
         };
 
     // Decompose the coin above a raw copper-farthing keep floor into a set of
-    // per-denomination offload commands (largest denomination first). Used by
-    // the stash path, where `hide N <coin>` names a specific denomination and
-    // so needs the raw floor converted back into concrete coins to dump.
+    // per-denomination offload commands. Hides the LOWEST denominations first
+    // (copper → runic), so the coins left on hand are the fewest possible: for a
+    // fixed value to shed, cheap coins are the most numerous per unit of value,
+    // so dumping them first leaves the highest-value coins behind. The result
+    // sits at the keep floor (or just above it, when discrete coins can't split
+    // to land exactly) with the minimum coin count. Used by the stash path,
+    // where `hide N <coin>` names a specific denomination and so needs the raw
+    // floor converted back into concrete coins to dump.
     //
     // Wealth is summed from the per-coin counts here (not TotalCopperValue) so
     // the plan is realizable coin-by-coin: we only ever offload denominations we
-    // actually hold. excess = held - max(0, keepCopper); greedy largest-first is
-    // exact because each MajorMUD denomination divides the next. Returns the
-    // canonical "runic" name — callers map it to the board-specific word at send
-    // time. Empty when nothing sits above the floor.
+    // actually hold. excess = held - max(0, keepCopper); each step hides as many
+    // of the current denomination as fit inside the remaining excess without
+    // dropping below the floor. Returns the canonical "runic" name — callers map
+    // it to the board-specific word at send time. Empty when nothing sits above
+    // the floor.
     public IReadOnlyList<(string Currency, long Count)> PlanOffloadAboveKeep(long keepCopper)
     {
         long held =
@@ -66,11 +72,11 @@ public readonly record struct CurrencyHoldings(
         List<(string Currency, long Count)> plan = new();
         foreach ((string name, long unit, long available) in new[]
         {
-            ("runic", 1_000_000L, (long)Runic),
-            ("platinum", 10_000L, (long)Platinum),
-            ("gold", 100L, (long)Gold),
-            ("silver", 10L, (long)Silver),
             ("copper", 1L, (long)Copper),
+            ("silver", 10L, (long)Silver),
+            ("gold", 100L, (long)Gold),
+            ("platinum", 10_000L, (long)Platinum),
+            ("runic", 1_000_000L, (long)Runic),
         })
         {
             if (excess <= 0)

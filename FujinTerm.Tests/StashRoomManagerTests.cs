@@ -11,10 +11,10 @@ namespace FujinTerm.Tests;
 // StashRoomManager on-entry stash dispatch driven by user-marked rooms from
 // CharacterProfile.StashRooms + the single raw KeepOnHandWealth floor on
 // CashSettings. The manager decomposes coin held above that copper-farthing
-// floor into largest-denomination-first `hide N <coin>` commands. Held amounts
-// come from the authoritative InventorySnapshot (the `i`-seeded, delta-tracked
-// holdings) — not a local pickup tally, which would undercount the starting
-// balance.
+// floor into lowest-denomination-first `hide N <coin>` commands, so the coins
+// left on hand are the fewest possible. Held amounts come from the authoritative
+// InventorySnapshot (the `i`-seeded, delta-tracked holdings) — not a local
+// pickup tally, which would undercount the starting balance.
 public sealed class StashRoomManagerTests
 {
     private sealed class Harness : IDisposable
@@ -132,8 +132,9 @@ public sealed class StashRoomManagerTests
     public void Enter_MultipleCurrencies_DispatchesEach()
     {
         // Held = 50 silver (500) + 250 gold (25,000) + 12 platinum (120,000) =
-        // 145,500 copper. Keep 100,000 → 45,500 excess. Greedy largest-first:
-        // 4 platinum (40,000) leaves 5,500 → 55 gold (5,500) leaves 0.
+        // 145,500 copper. Keep 100,000 → 45,500 excess. Greedy lowest-first sheds
+        // the cheap coins to leave the fewest on hand: 50 silver (500) leaves
+        // 45,000 → 250 gold (25,000) leaves 20,000 → 2 platinum (20,000) leaves 0.
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
         h.CashSettings.KeepOnHandWealth = 100_000;
@@ -141,18 +142,19 @@ public sealed class StashRoomManagerTests
 
         h.Stash.ExecuteStash(new RoomKey(1, 42));
 
-        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal(3, h.Sent.Count);
         List<string> lines = h.SentLines().ToList();
-        Assert.Contains("hide 4 platinum", lines);
-        Assert.Contains("hide 55 gold", lines);
-        Assert.Equal(2, h.Executed[0].Currencies.Count);
+        Assert.Equal("hide 50 silver", lines[0]);
+        Assert.Equal("hide 250 gold", lines[1]);
+        Assert.Equal("hide 2 platinum", lines[2]);
+        Assert.Equal(3, h.Executed[0].Currencies.Count);
     }
 
     [Fact]
     public void AllDenominations_NoKeep_HidesEach()
     {
         // With no keep floor every held denomination is offloaded whole, one
-        // `hide N <coin>` apiece, largest-first.
+        // `hide N <coin>` apiece, lowest denomination first.
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
         h.Snapshot = Coins(copper: 7, silver: 6, gold: 5, platinum: 4, runic: 3);
@@ -161,11 +163,11 @@ public sealed class StashRoomManagerTests
 
         List<string> lines = h.SentLines().ToList();
         Assert.Equal(5, lines.Count);
-        Assert.Equal("hide 3 runic", lines[0]);
-        Assert.Equal("hide 4 platinum", lines[1]);
+        Assert.Equal("hide 7 copper", lines[0]);
+        Assert.Equal("hide 6 silver", lines[1]);
         Assert.Equal("hide 5 gold", lines[2]);
-        Assert.Equal("hide 6 silver", lines[3]);
-        Assert.Equal("hide 7 copper", lines[4]);
+        Assert.Equal("hide 4 platinum", lines[3]);
+        Assert.Equal("hide 3 runic", lines[4]);
     }
 
     [Fact]
@@ -184,15 +186,19 @@ public sealed class StashRoomManagerTests
         Assert.Empty(h.Sent);
 
         // Now add platinum to clear the floor: held = 120,000 + 4,000 + 9,000 +
-        // 8,000 = 141,000. Keep 100,000 → 41,000 excess: 4 platinum (40,000)
-        // then 10 gold (1,000).
+        // 8,000 = 141,000. Keep 100,000 → 41,000 excess. Lowest-first sheds the
+        // cheap coins whole: 8,000 copper (8,000) leaves 33,000 → 900 silver
+        // (9,000) leaves 24,000 → 40 gold (4,000) leaves 20,000 → 2 platinum
+        // (20,000) leaves 0, keeping the remaining platinum on hand.
         h.Snapshot = Coins(copper: 8_000, silver: 900, gold: 40, platinum: 12);
         h.Stash.ExecuteStash(new RoomKey(1, 42));
 
         List<string> lines = h.SentLines().ToList();
-        Assert.Equal(2, lines.Count);
-        Assert.Equal("hide 4 platinum", lines[0]);
-        Assert.Equal("hide 10 gold", lines[1]);
+        Assert.Equal(4, lines.Count);
+        Assert.Equal("hide 8000 copper", lines[0]);
+        Assert.Equal("hide 900 silver", lines[1]);
+        Assert.Equal("hide 40 gold", lines[2]);
+        Assert.Equal("hide 2 platinum", lines[3]);
     }
 
     [Fact]
