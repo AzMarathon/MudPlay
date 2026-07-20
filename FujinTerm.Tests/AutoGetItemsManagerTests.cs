@@ -113,6 +113,18 @@ public sealed class AutoGetItemsManagerTests
                     break;
                 }
             }
+            // Mirror ItemNameStore.Normalize: also drop a leading count token so a
+            // stacked pile ("5 piece of amber") resolves to the same item as the
+            // singular ("piece of amber").
+            int sp = s.IndexOf(' ');
+            if (sp > 0)
+            {
+                string first = s[..sp];
+                bool digits = first.Length > 0 && first.All(char.IsDigit);
+                bool spelled = first is "one" or "two" or "three" or "four" or "five"
+                    or "six" or "seven" or "eight" or "nine" or "ten";
+                if (digits || spelled) s = s[(sp + 1)..].TrimStart();
+            }
             return s.Trim();
         }
 
@@ -373,6 +385,81 @@ public sealed class AutoGetItemsManagerTests
         h.Items.OnRoomObserved();               // combat clears — flush
 
         Assert.Empty(h.Sent);
+    }
+
+    // ----- Stacked ground pile (leading count) ---------------------
+
+    [Fact]
+    public void StackedPile_SendsOneGetPerCountedUnit()
+    {
+        // "You notice 5 piece of amber here." — an unlimited-get stackable; each
+        // get grabs one unit, so all five must be requested this pass.
+        using Harness h = new();
+        h.Flags["piece of amber"] = true;
+
+        h.Feed("You notice 5 piece of amber here.");
+
+        Assert.Equal(
+            new[] { "get piece of amber", "get piece of amber", "get piece of amber",
+                    "get piece of amber", "get piece of amber" },
+            h.SentText);
+    }
+
+    [Fact]
+    public void StackedPile_SpelledCount_SendsPerUnit()
+    {
+        using Harness h = new();
+        h.Flags["emerald"] = true;
+
+        h.Feed("You notice three emerald here.");
+
+        Assert.Equal(new[] { "get emerald", "get emerald", "get emerald" }, h.SentText);
+    }
+
+    [Fact]
+    public void StackedPile_MaxToGetCap_StopsPartway()
+    {
+        // Ground pile of five, cap of two, holding none → grab exactly two.
+        using Harness h = new();
+        h.NumberFor("piece of amber");
+        h.Flags["piece of amber"] = true;
+        h.Caps["piece of amber"] = 2;
+
+        h.Feed("You notice 5 piece of amber here.");
+
+        Assert.Equal(new[] { "get piece of amber", "get piece of amber" }, h.SentText);
+    }
+
+    [Fact]
+    public void StackedPile_Encumbrance_StopsPartway()
+    {
+        // Five units at weight 30; 40/100 carried leaves room for two before the
+        // hard capacity cap refuses the third (40+30+30=100, +30=130 > 100).
+        using Harness h = new();
+        h.Flags["ingot"] = true;
+        h.Weights["ingot"] = 30;
+        h.Enc = Reading(40, 100);
+
+        h.Feed("You notice 5 ingot here.");
+
+        Assert.Equal(new[] { "get ingot", "get ingot" }, h.SentText);
+    }
+
+    [Fact]
+    public void StackedPile_DefersEachUnit_UntilCombatClears()
+    {
+        using Harness h = new() { CollectAfterCombat = true, HasHostiles = true };
+        h.Flags["piece of amber"] = true;
+
+        h.Feed("You notice 3 piece of amber here.");
+        Assert.Empty(h.Sent);                 // deferred — still fighting
+
+        h.HasHostiles = false;
+        h.Items.OnRoomObserved();             // combat clears — flush all three
+
+        Assert.Equal(
+            new[] { "get piece of amber", "get piece of amber", "get piece of amber" },
+            h.SentText);
     }
 
     [Theory]

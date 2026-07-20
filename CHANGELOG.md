@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.89.1
+
+- Auto-collect now grabs an entire stacked ground pile: a survey count ("You notice 5 piece of amber here") sends one `get` per unit instead of one item per room re-display
+- The MaxToGet cap and encumbrance ceiling still apply per unit, so a stack is taken only up to the cap or carry limit
+- bug reports addressed: paradigm-20260720-153216
+
 ## 1.89.0
 
 - Navigation can now route through sea-captain boats: a walk whose goal is cheaper (or only) reachable by a `secure passage` sailing walks to the dock, sails, then walks from the arrival port
