@@ -2319,6 +2319,10 @@ public partial class MainWindowViewModel : ObservableObject
                 // latch. The actual Logon fire happens on the first
                 // PromptObserved, not here.
                 AppServices.Current.EventScheduler.NotifyConnected();
+                // Same lifecycle signal to the default-task runner — it resets its
+                // per-connection latches and fires the configured startup task on
+                // the first in-game prompt with a known room.
+                AppServices.Current.DefaultTaskRunner.NotifyConnected();
                 // Reconcile the statline to the editor on EVERY connect —
                 // unconditional, unlike the auto-login-gated engines. Resets
                 // the Synced latch + retry counter; the actual resend (if any)
@@ -2367,6 +2371,10 @@ public partial class MainWindowViewModel : ObservableObject
                 // Stop the event scheduler's timers and latch the Re-log
                 // flag (only if we were in-game).
                 AppServices.Current.EventScheduler.NotifyDisconnected();
+                // Latch the default-task runner's reconnect / was-in-a-party
+                // state so the next game entry can decide whether to hold for a
+                // party reform before starting the task.
+                AppServices.Current.DefaultTaskRunner.NotifyDisconnected();
                 // Stop statline reconciliation until the next connect re-arms.
                 AppServices.Current.StatlineReconcile.Disarm();
                 // Pause Time Analysis accrual: we're no longer in-game, so

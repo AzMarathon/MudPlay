@@ -1,7 +1,9 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FujinTerm.Game.Map;
 using FujinTerm.Models.Profile;
 using FujinTerm.Services;
 using FujinTerm.Views.Settings;
@@ -94,12 +96,16 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // GlobalSettings.PlayerCleanupDays remains the canonical store —
     // OtherSectionViewModel now owns the edit surface.
 
-    // Names of saved loop files available for the "Begin looping" picker. The
-    // dropdown stays disabled while empty.
-    public IReadOnlyList<string> LoopNames { get; } = Array.Empty<string>();
+    // Saved loop names for the "Begin looping" picker, snapshotted from the
+    // active game-data set's LoopManager. Loops are set-scoped, not per-character,
+    // so this reflects whichever set is active when the tab loads. Refreshed on
+    // profile reload (LoadFromProfile); like every other dropdown in the app, new
+    // loops created elsewhere appear after a Settings close + reopen.
+    public ObservableCollection<string> LoopNames { get; } = new();
 
-    // Names of saved Auto-Lair files available for the "Begin Auto-Lair" picker.
-    public IReadOnlyList<string> AutoLairNames { get; } = Array.Empty<string>();
+    // Saved Auto-Lair names for the "Begin Auto-Lair" picker — same set-scoped
+    // snapshot semantics as LoopNames.
+    public ObservableCollection<string> AutoLairNames { get; } = new();
 
     // ----- Terminal font (char-tier) -----
     // Font family + size the terminal canvas renders with. Both used to live in
@@ -324,6 +330,12 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     {
         GeneralSettings dto = ReadOrDefault();
 
+        // Populate the pickers BEFORE assigning the saved selections, and keep
+        // the saved names in the lists even when they aren't in the active set —
+        // otherwise the ComboBox coerces a not-in-list selection back to null and
+        // silently drops the character's default on the next Save.
+        PopulateTaskNameLists(dto.DefaultLoopName, dto.DefaultAutoLairName);
+
         IsTaskDoNothing      = dto.DefaultTask == InitialTask.DoNothing;
         IsTaskBeginLoop      = dto.DefaultTask == InitialTask.BeginLoop;
         IsTaskBeginAutoLair  = dto.DefaultTask == InitialTask.BeginAutoLair;
@@ -364,6 +376,25 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         ReEnableAutoHideOnReconnect     = dto.ReEnableAutoHideOnReconnect;
         ReEnableAutoSearchOnReconnect   = dto.ReEnableAutoSearchOnReconnect;
         ReEnableAutoTrainOnReconnect    = dto.ReEnableAutoTrainOnReconnect;
+    }
+
+    // Rebuild the loop / Auto-Lair picker lists from the active game-data set,
+    // then guarantee the passed-in saved selections are present so the ComboBox
+    // can hold a reference that outlives the active set (a per-character default
+    // may point at a loop from a set that isn't currently loaded).
+    private void PopulateTaskNameLists(string? loopSelection, string? autoLairSelection)
+    {
+        LoopNames.Clear();
+        foreach (Loop l in AppServices.Current.Loops.Loops)
+            LoopNames.Add(l.Name);
+        if (!string.IsNullOrWhiteSpace(loopSelection) && !LoopNames.Contains(loopSelection))
+            LoopNames.Add(loopSelection);
+
+        AutoLairNames.Clear();
+        foreach (LairSetup s in AppServices.Current.Lairs.Setups)
+            AutoLairNames.Add(s.Name);
+        if (!string.IsNullOrWhiteSpace(autoLairSelection) && !AutoLairNames.Contains(autoLairSelection))
+            AutoLairNames.Add(autoLairSelection);
     }
 
     private GeneralSettings ReadOrDefault()
