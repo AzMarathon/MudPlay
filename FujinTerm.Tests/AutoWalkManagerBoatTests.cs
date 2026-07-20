@@ -64,9 +64,14 @@ public sealed class AutoWalkManagerBoatTests : IDisposable
         ]
         """;
 
+    // A trip leg (Dur 20 spell rounds) that EndCasts to an instantaneous disembark
+    // (Abil 140 → room 10) — so the voyage's summed transit duration is 20 rounds,
+    // which the walker times as 20*3 + 3-buffer = 63 wall-clock seconds.
     private const string Spells = """
         [
-          { "Number": 600, "Name": "disembark isle a", "MinBase": 0, "MaxBase": 0,
+          { "Number": 600, "Name": "isle trip", "MinBase": 0, "MaxBase": 0, "Dur": 20,
+            "Abil-0": 151, "AbilVal-0": 601 },
+          { "Number": 601, "Name": "disembark isle a", "MinBase": 0, "MaxBase": 0,
             "Abil-0": 140, "AbilVal-0": 10 }
         ]
         """;
@@ -79,7 +84,21 @@ public sealed class AutoWalkManagerBoatTests : IDisposable
         public List<byte[]> Sent { get; } = new();
         public List<WalkEvent> Events { get; } = new();
         public string Wire => string.Concat(Sent.Select(b => Encoding.Latin1.GetString(b)));
+
+        // Fake voyage scheduler: captures the armed deadline + its delay so the
+        // test drives the wall-clock backstop by hand (FireBoatDeadline) instead
+        // of waiting real seconds. A cancelled timer (walk reset / early arrival)
+        // drops the pending callback so a later fire is a no-op.
+        public Action? PendingDeadline;
+        public TimeSpan LastVoyageDelay;
+        public void FireBoatDeadline() => PendingDeadline?.Invoke();
+
         public void Dispose() { }
+
+        public sealed class FakeTimerHandle(Action onDispose) : IDisposable
+        {
+            public void Dispose() => onDispose();
+        }
     }
 
     private Harness NewHarness(bool leaderWithFollowers = false)
@@ -104,6 +123,15 @@ public sealed class AutoWalkManagerBoatTests : IDisposable
         Harness h = new() { Tracker = tracker, Coordinator = coord, Walker = walker };
         walker.SetWireSender(b => h.Sent.Add(b));
         walker.Event += evt => h.Events.Add(evt);
+        walker.SetVoyageScheduler((delay, cb) =>
+        {
+            h.LastVoyageDelay = delay;
+            h.PendingDeadline = cb;
+            return new Harness.FakeTimerHandle(() =>
+            {
+                if (ReferenceEquals(h.PendingDeadline, cb)) h.PendingDeadline = null;
+            });
+        });
         tracker.StateChanged += _ => { };   // ensure the event has a live invocation list
 
         if (leaderWithFollowers)
@@ -169,26 +197,69 @@ public sealed class AutoWalkManagerBoatTests : IDisposable
     }
 
     [Fact]
-    public void BoatVoyage_ArrivalNeverMatches_FailsOutAtTransitCap()
+    public void BoatVoyage_ArrivalNeverMatches_FailsOutAtDeadline()
     {
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Walker.WalkTo(new RoomKey(1, 11));
         h.Tracker.NoteRoomObserved(Obs("Pier", Direction.S));   // at dock; boat sent
 
-        // Drive a stream of non-arrival observations (alternating two known
-        // mainland rooms so each produces a fresh Confirmed re-anchor / event and
-        // dodges the tracker's repeat-redisplay suppression). None is the arrival
-        // port, so the transit-hop cap eventually fails the voyage out — the
-        // event-driven walker's only backstop against a port that never comes.
-        for (int i = 0; i < 40 && h.Walker.State == WalkState.Walking; i++)
-        {
-            if (i % 2 == 0) h.Tracker.NoteRoomObserved(Obs("Home", Direction.N));
-            else h.Tracker.NoteRoomObserved(Obs("Pier", Direction.S));
-        }
+        // Transit churn never matches the port — the voyage keeps waiting, no
+        // fail. Then the wall-clock backstop fires from where we're still NOT at
+        // the arrival room, so the deadline fails the voyage out (captain refused
+        // boarding, or arrival mismatch) — the event-driven walker's only backstop
+        // against a port that never comes.
+        h.Tracker.NoteRoomObserved(Obs("Home", Direction.N));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+
+        h.FireBoatDeadline();
 
         Assert.Equal(WalkState.Idle, h.Walker.State);
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    [Fact]
+    public void BoatVoyage_DeadlineFiresAfterLanding_CompletesRatherThanFails()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 11));
+        h.Tracker.NoteRoomObserved(Obs("Pier", Direction.S));   // at dock; boat sent
+
+        // The arrival observation already completed the step (and cancelled the
+        // timer). A stray deadline fire afterward must be a harmless no-op, never a
+        // spurious failure or a double-advance.
+        h.Tracker.NoteRoomObserved(Obs("Isle Port", Direction.N));
+        h.FireBoatDeadline();                                   // cancelled — no-op
+        h.Tracker.NoteRoomObserved(Obs("Isle Town", Direction.S));
+
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    [Fact]
+    public void BoatStep_Sizes_VoyageDelay_FromTransitRounds_And_ExposesSailingState()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 11));
+        h.Tracker.NoteRoomObserved(Obs("Pier", Direction.S));   // at dock; boat sent
+
+        // 20 transit rounds * 3s + 3s buffer = 63 wall-clock seconds.
+        Assert.Equal(TimeSpan.FromSeconds(63), h.LastVoyageDelay);
+
+        // Mid-sail state feeds the nav "Sailing the high seas…" countdown label.
+        Assert.True(h.Walker.IsSailing);
+        Assert.Equal("islea", h.Walker.SailingDestinationName);
+        Assert.True(h.Walker.SailingArrivalEta > DateTimeOffset.UtcNow);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Sailing);
+
+        // Landing clears the sailing state so the label reverts to walk status.
+        h.Tracker.NoteRoomObserved(Obs("Isle Port", Direction.N));
+        Assert.False(h.Walker.IsSailing);
+        Assert.Null(h.Walker.SailingDestinationName);
     }
 
     [Fact]

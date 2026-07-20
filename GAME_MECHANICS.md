@@ -14,6 +14,20 @@ it isn't here and you're unsure, ask.
 
 ---
 
+## Timing & rounds
+
+**Two round lengths** *([CONFIRMED])*
+- **Combat round = 5 seconds** (precisely ~5.04s; the client surfaces it as a round "5" for
+  human input). This is the cadence of combat lines, and a between-round spell can be cast
+  **once per combat round**.
+- **Spell round = 3 seconds.** Buff/debuff durations on a player, item durations, and spell
+  durations (e.g. a teleport / boat-transit spell) are all counted in **spell rounds** — so a
+  duration of `N` rounds lasts `N × 3` seconds. A debuff falls off on the same 3s cadence.
+- A spell record's `Dur` field is therefore **spell rounds**: real seconds = `Dur × 3`.
+  Boat-voyage length is the sum of the transit spells' `Dur` along the disembark chain, × 3s.
+- If a specific duration's unit is ever ambiguous, **ask the user** — they can give the correct
+  value rather than us guessing.
+
 ## Equipment & gear
 
 **Equip / remove verbs** *(all [CONFIRMED])*

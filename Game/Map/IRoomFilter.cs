@@ -58,6 +58,14 @@ public interface IRoomFilter
     // sailing the way BFS skips a blocked exit.
     bool IsBoatPassable(in BoatPassage passage) => true;
 
+    // Classifies WHY a sailing is non-boardable — the union of the per-member gate
+    // kinds (Level when the lowest member falls under the fare's level floor, Fare
+    // when the poorest can't cover the copper). Mirrors IsBoatPassable: a sailing
+    // blocks iff this returns non-None. The router uses it to warn on — and, when
+    // it's the sole crossing, still offer — a gated sail rather than hiding the
+    // only route. Default never blocks; only Services.MovementFilter overrides.
+    ExitBlockReason DescribeBoatBlock(in BoatPassage passage) => ExitBlockReason.None;
+
     // Warm any party-scoped wealth / level readings a chosen fare- or
     // level-gated sailing needs before boarding — the walker calls this only
     // once it commits to a boat route whose passage is actually gated, mirroring

@@ -117,14 +117,19 @@ public sealed class BoatRoutePlannerTests : IDisposable
     }
 
     // Toggleable filter double: avoids a set of rooms, and gates each sailing by a
-    // predicate — mirrors what MovementFilter's IsBoatPassable does for the planner
-    // without wiring the profile layer.
+    // predicate — mirrors what MovementFilter's DescribeBoatBlock does for the
+    // planner without wiring the profile layer. BoatGate returns true when the
+    // sailing IS boardable; the planner gates via DescribeBoatBlock, so a false
+    // verdict maps to a Fare block (any non-None reason gates identically).
     private sealed class StubFilter : IRoomFilter
     {
         public HashSet<RoomKey> Avoided { get; } = new();
         public Func<BoatPassage, bool>? BoatGate { get; set; }
         public bool IsAvoided(RoomKey key) => Avoided.Contains(key);
-        public bool IsBoatPassable(in BoatPassage passage) => BoatGate?.Invoke(passage) ?? true;
+        public ExitBlockReason DescribeBoatBlock(in BoatPassage passage) =>
+            (BoatGate?.Invoke(passage) ?? true) ? ExitBlockReason.None : ExitBlockReason.Fare;
+        public bool IsBoatPassable(in BoatPassage passage) =>
+            DescribeBoatBlock(in passage) == ExitBlockReason.None;
     }
 
     [Fact]
@@ -178,6 +183,42 @@ public sealed class BoatRoutePlannerTests : IDisposable
         var filter = new StubFilter { BoatGate = _ => false };
 
         Assert.Null(planner.TryPlan(new RoomKey(1, 1), new RoomKey(1, 11), filter));
+    }
+
+    [Fact]
+    public void TryPlan_AllowGated_SurfacesSoleGatedSailing_AsGatedPlan()
+    {
+        var (planner, _, _) = NewPlanner();
+        var filter = new StubFilter { BoatGate = _ => false };   // every sailing gated
+
+        // allowGated: a member can't board any sailing, but with no land route the
+        // captain's refusal is the user's to make — surface the fewest-hop gated
+        // sailing (islea, 3 hops) rather than vanishing into a bare "no path".
+        BoatRoutePlan? plan = planner.TryPlan(
+            new RoomKey(1, 1), new RoomKey(1, 11), filter, allowGated: true);
+
+        Assert.NotNull(plan);
+        Assert.Equal("secure passage to islea", plan!.Value.Passage.Keyword);
+        Assert.True(plan.Value.IsGated);
+        Assert.Equal(ExitBlockReason.Fare, plan.Value.Block);
+        Assert.Equal(3, plan.Value.LandHops);
+    }
+
+    [Fact]
+    public void TryPlan_AllowGated_PrefersBoardableSailing_OverShorterGatedOne()
+    {
+        var (planner, _, _) = NewPlanner();
+        // Gate the shorter route (islea, 3 hops); leave the longer isleb (4 hops)
+        // boardable. A boardable sailing must beat a gated one even when longer.
+        var filter = new StubFilter { BoatGate = p => p.Place != "islea" };
+
+        BoatRoutePlan? plan = planner.TryPlan(
+            new RoomKey(1, 1), new RoomKey(1, 11), filter, allowGated: true);
+
+        Assert.NotNull(plan);
+        Assert.Equal("secure passage to isleb", plan!.Value.Passage.Keyword);
+        Assert.False(plan.Value.IsGated);
+        Assert.Equal(4, plan.Value.LandHops);
     }
 
     [Fact]

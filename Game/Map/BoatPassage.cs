@@ -20,6 +20,12 @@ namespace FujinTerm.Game.Map;
 // FareCopper is in copper farthings (the base coin unit), so it folds into the
 // same on-hand-wealth gate as a (Toll: N) exit — unlike a toll's N*100
 // copper-from-gold, a boat fare is already copper.
+//
+// VoyageRounds is the summed duration of the transit spells along the disembark
+// chain, in SPELL ROUNDS (3 seconds each — see GAME_MECHANICS "Timing & rounds").
+// The walker turns it into a wall-clock wait (rounds*3s + a small buffer) so it
+// knows how long the sail takes from boarding in the captain's room to landing at
+// the arrival port, then resumes walking. 0 when the chain carries no duration.
 public readonly record struct BoatPassage(
     RoomKey DockRoom,
     string Place,
@@ -27,4 +33,5 @@ public readonly record struct BoatPassage(
     RoomKey ArrivalRoom,
     int MinLevel,
     long FareCopper,
-    bool RequiresCheckability);
+    bool RequiresCheckability,
+    int VoyageRounds = 0);

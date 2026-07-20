@@ -122,6 +122,35 @@ public sealed class BoatPassageResolverTests : IDisposable
     }
 
     [Fact]
+    public void TransitChain_SumsSpellDur_AsVoyageRounds()
+    {
+        // Board (random, resolves nothing) then two trip legs (Dur 20 + 10) that
+        // EndCast to an instantaneous disembark (Dur 0). The voyage length is the
+        // summed transit-spell duration in spell rounds (30), which the walker
+        // later turns into a wall-clock wait (rounds*3 + buffer).
+        const string tb = """
+            [
+              { "Number": 100, "LinkTo": 0,
+                "Action": "secure passage to isle:minlevel 1 0:price 1 0:random 200:text 0\n",
+                "Called From": "Room 14/759" },
+              { "Number": 200, "LinkTo": 0, "Action": "100:cast 500:cast 600\n", "Called From": "rndm" }
+            ]
+            """;
+        const string spells = """
+            [
+              { "Number": 500, "Name": "board", "MinBase": 715, "MaxBase": 723,
+                "Abil-0": 140, "AbilVal-0": 0, "Abil-1": 141, "AbilVal-1": 14 },
+              { "Number": 600, "Name": "trip 1", "Dur": 20, "Abil-0": 151, "AbilVal-0": 601 },
+              { "Number": 601, "Name": "trip 2", "Dur": 10, "Abil-0": 151, "AbilVal-0": 602 },
+              { "Number": 602, "Name": "disembark", "Dur": 0, "Abil-0": 140, "AbilVal-0": 42 }
+            ]
+            """;
+        BoatPassage p = Assert.Single(Resolve(tb, spells));
+        Assert.Equal(new RoomKey(14, 42), p.ArrivalRoom);
+        Assert.Equal(30, p.VoyageRounds);
+    }
+
+    [Fact]
     public void DisembarkWithoutTeleportMap_FallsBackToDockMap()
     {
         // Trip chain whose disembark carries no Abil 141 — arrival map falls back

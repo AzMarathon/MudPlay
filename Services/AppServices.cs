@@ -3537,6 +3537,19 @@ public sealed class AppServices
         // pulls its candidate sailings from RoomGraph's data-driven boat index, so
         // it no-ops on realms without docks.
         Walker.SetBoatPlanner(new Game.Map.BoatRoutePlanner(RoomGraph, Bfs, Log));
+        // Voyage timer: the boat step waits out the sail — from boarding in the
+        // captain's room, through the buff-locked transit legs, to landing at the
+        // arrival shore — on a wall-clock deadline it sizes from the passage's
+        // transit-spell rounds. Wire a UI-thread one-shot so OnBoatDeadline runs on
+        // the same thread the walker's tracker events do; the injected shape keeps
+        // the Game/Map layer UI-free (tests drive a fake clock instead).
+        Walker.SetVoyageScheduler((delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+            return new DispatcherTimerHandle(timer);
+        });
         // While a maze solve is Active the tracker legitimately churns Lost/Suspect
         // between same-named teleport landings — relocalizing that is the solver's
         // job. On Paradigm the solver drives its OWN `rm` after each landing (see
@@ -5463,5 +5476,12 @@ public sealed class AppServices
 
         Settings.Current.LastUsedProfile = loaded;
         Settings.Save();
+    }
+
+    // Cancels a one-shot voyage DispatcherTimer when the sail completes early (or
+    // the walk resets) — the walker cancels its armed deadline through this handle.
+    private sealed class DispatcherTimerHandle(Avalonia.Threading.DispatcherTimer timer) : IDisposable
+    {
+        public void Dispose() => timer.Stop();
     }
 }

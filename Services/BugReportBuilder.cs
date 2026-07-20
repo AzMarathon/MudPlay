@@ -455,6 +455,12 @@ public static class BugReportBuilder
         Kv(sb, "Destination", walker.Destination is { } dest ? $"{dest.Map}/{dest.Room}" : "(none)");
         if (walker.StepCount > 0)
             Kv(sb, "Progress", $"step {Math.Min(walker.CurrentStepIndex + 1, walker.StepCount)}/{walker.StepCount}");
+        // A voyage in flight is the state most likely to hang (captain refused
+        // boarding, arrival mismatch) — surface the sailing target + ETA so a
+        // report captured mid-sail pins down which crossing stalled.
+        if (walker.IsSailing)
+            Kv(sb, "Sailing", $"to {walker.SailingDestinationName ?? "(port)"}, arriving in "
+                + $"{Math.Max(0, (walker.SailingArrivalEta - DateTimeOffset.UtcNow).TotalSeconds):F0}s");
         Kv(sb, "Journey origin (flee anchor)",
             walker.JourneyOrigin is { } origin ? $"{origin.Map}/{origin.Room}" : "(none)");
         Kv(sb, "Next planned direction",

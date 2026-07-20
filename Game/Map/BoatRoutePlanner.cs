@@ -12,9 +12,16 @@ namespace FujinTerm.Game.Map;
 public readonly record struct BoatRoutePlan(
     BoatPassage Passage,
     IReadOnlyList<Direction> ToDock,
-    IReadOnlyList<Direction> FromArrival)
+    IReadOnlyList<Direction> FromArrival,
+    ExitBlockReason Block = ExitBlockReason.None)
 {
     public int LandHops => ToDock.Count + FromArrival.Count;
+
+    // A gated plan is one the crosser can't currently board (a member falls under
+    // the level floor or can't cover the fare). It's only ever returned when the
+    // sail is the SOLE crossing — the walker warns and lets the captain refuse,
+    // which is more useful than hiding the only route behind a bare "no path".
+    public bool IsGated => Block != ExitBlockReason.None;
 }
 
 // Stitches a two-land-leg route around a single boat hop. A boat is a CMD
@@ -40,26 +47,34 @@ public sealed class BoatRoutePlanner
         _log = log;
     }
 
-    // Best passable boat route from source to destination, or null when no dock
-    // sailing helps. The caller compares LandHops against the pure land route
-    // and picks the boat only when it's shorter (or the only way across). filter
-    // gates each land leg (avoided rooms, level / toll / class / item gates) AND
-    // — through IsBoatPassable — the sailing's per-member level + fare; an
-    // un-passable or unreachable sailing is skipped rather than offered.
-    public BoatRoutePlan? TryPlan(RoomKey source, RoomKey destination, IRoomFilter? filter)
+    // Best boat route from source to destination, or null when no dock sailing
+    // helps. The caller compares LandHops against the pure land route and picks
+    // the boat only when it's shorter (or the only way across). filter gates each
+    // land leg (avoided rooms, level / toll / class / item gates) AND — through
+    // DescribeBoatBlock — the sailing's per-member level + fare.
+    //
+    // A boardable sailing always wins over a gated one. allowGated lets the caller
+    // still accept a gated sailing (a member under-level / too-poor to board) when
+    // it's the ONLY crossing — the walker warns and lets the captain refuse rather
+    // than the route vanishing into a bare "no path". With allowGated false a gated
+    // sailing is skipped, so a land route (or a boardable boat) is preferred.
+    public BoatRoutePlan? TryPlan(
+        RoomKey source, RoomKey destination, IRoomFilter? filter, bool allowGated = false)
     {
         if (_graph.GetRoom(source) is null || _graph.GetRoom(destination) is null)
             return null;
 
         BoatRoutePlan? best = null;
-        int bestHops = int.MaxValue;
+        (int Gated, int Hops) bestRank = (int.MaxValue, int.MaxValue);
 
         foreach (BoatPassage passage in _graph.AllBoatPassages)
         {
             // Per-member level / fare gate. A null filter (test / no-profile)
             // leaves the boat ungated — same "don't refuse on what we can't
             // evaluate" rule the land gates use.
-            if (filter is not null && !filter.IsBoatPassable(passage)) continue;
+            ExitBlockReason block = filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
+            bool gated = block != ExitBlockReason.None;
+            if (gated && !allowGated) continue;
 
             IReadOnlyList<Direction>? toDock = LegTo(source, passage.DockRoom, filter);
             if (toDock is null) continue;
@@ -67,11 +82,14 @@ public sealed class BoatRoutePlanner
             IReadOnlyList<Direction>? fromArrival = LegTo(passage.ArrivalRoom, destination, filter);
             if (fromArrival is null) continue;
 
-            int hops = toDock.Count + fromArrival.Count;
-            if (hops < bestHops)
+            // Rank boardable-before-gated, then fewest total land hops — so a
+            // boardable sailing always beats a gated one even if it's a touch
+            // longer, and a gated sailing only surfaces when nothing boardable does.
+            (int Gated, int Hops) rank = (gated ? 1 : 0, toDock.Count + fromArrival.Count);
+            if (rank.CompareTo(bestRank) < 0)
             {
-                bestHops = hops;
-                best = new BoatRoutePlan(passage, toDock, fromArrival);
+                bestRank = rank;
+                best = new BoatRoutePlan(passage, toDock, fromArrival, block);
             }
         }
 
@@ -79,7 +97,8 @@ public sealed class BoatRoutePlanner
             _log?.Log(LogSeverity.Info, "BoatRoute",
                 $"Boat route {source}→{destination} via '{plan.Passage.Keyword}' "
                 + $"(dock {plan.Passage.DockRoom}, arrive {plan.Passage.ArrivalRoom}): "
-                + $"{plan.ToDock.Count} hop(s) to dock + {plan.FromArrival.Count} from port.");
+                + $"{plan.ToDock.Count} hop(s) to dock + {plan.FromArrival.Count} from port"
+                + (plan.IsGated ? $"; GATED ({plan.Block}) — sole crossing, will warn." : "."));
         return best;
     }
 

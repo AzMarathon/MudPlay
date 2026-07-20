@@ -96,21 +96,27 @@ public static class BoatPassageResolver
             }
 
             if (randomTbId <= 0) continue;
-            if (!TryResolveArrivalRoom(store, catalog, randomTbId, dockRoom.Map, out RoomKey arrival))
+            if (!TryResolveArrivalRoom(store, catalog, randomTbId, dockRoom.Map,
+                    out RoomKey arrival, out int voyageRounds))
                 continue;
 
             yield return new BoatPassage(
-                dockRoom, place, keyword, arrival, minLevel, fareCopper, requiresCheckability);
+                dockRoom, place, keyword, arrival, minLevel, fareCopper,
+                requiresCheckability, voyageRounds);
         }
     }
 
     // Follow `random <tbId>` → weighted-random table `<roll>:cast <board>:cast
     // <trip>` → the transit spell chain to the disembark room. Returns the first
     // arrival room any cast on any table line resolves to; false when none does.
+    // voyageRounds carries the summed transit-spell duration of the winning chain
+    // (spell rounds — see TryResolveDisembark) so the walker can time the sail.
     private static bool TryResolveArrivalRoom(
-        TBInfoStore store, KnownSpellCatalog catalog, int randomTbId, int sourceMap, out RoomKey arrival)
+        TBInfoStore store, KnownSpellCatalog catalog, int randomTbId, int sourceMap,
+        out RoomKey arrival, out int voyageRounds)
     {
         arrival = default;
+        voyageRounds = 0;
         TBInfoEntry? table = store.GetEntry(randomTbId);
         while (table is not null && string.IsNullOrWhiteSpace(table.Action) && table.LinkTo > 0)
             table = store.GetEntry(table.LinkTo);
@@ -130,7 +136,8 @@ public static class BoatPassageResolver
                 if (!tok.StartsWith("cast ", StringComparison.OrdinalIgnoreCase)) continue;
                 int spellNumber = FirstInt(tok["cast ".Length..]);
                 if (spellNumber <= 0) continue;
-                if (TryResolveDisembark(catalog, spellNumber, sourceMap, out arrival)) return true;
+                if (TryResolveDisembark(catalog, spellNumber, sourceMap, out arrival, out voyageRounds))
+                    return true;
             }
         }
         return false;
@@ -141,17 +148,24 @@ public static class BoatPassageResolver
     // — its room + TeleportMap (Abil 141, or sourceMap when unset) is the arrival.
     // A random teleport (Abil 140 value 0, the board spell) is not a fixed
     // landing, so the walk continues past / falls off it. Cycle-guarded + depth-
-    // capped against a malformed chain.
+    // capped against a malformed chain. voyageRounds accumulates each visited
+    // spell's Dur (in spell rounds — the trip legs' buff durations); the disembark
+    // itself is instantaneous (Dur 0), so summing through it is harmless and the
+    // total is the boarding-to-landing wait the walker times.
     private static bool TryResolveDisembark(
-        KnownSpellCatalog catalog, int spellNumber, int sourceMap, out RoomKey arrival)
+        KnownSpellCatalog catalog, int spellNumber, int sourceMap,
+        out RoomKey arrival, out int voyageRounds)
     {
         arrival = default;
+        voyageRounds = 0;
         HashSet<int> visited = new();
         int cur = spellNumber;
         for (int depth = 0; cur > 0 && depth < MaxChainDepth; depth++)
         {
             if (!visited.Add(cur)) return false;
             if (catalog.GetFormulaByNumber(cur) is not { } spell) return false;
+
+            voyageRounds += Math.Max(0, spell.Dur);
 
             int? teleRoom = null;
             int? teleMap = null;

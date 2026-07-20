@@ -7,6 +7,9 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Navigation can now route through sea-captain boats: a walk whose goal is cheaper (or only) reachable by a `secure passage` sailing walks to the dock, sails, then walks from the arrival port
 - Boat sailings are discovered from each realm's room-command data (never hardcoded), gated on every party member's level and copper fare
 - The sail is one party-split step (same relay as a chime teleport); the voyage fails out if the captain refuses boarding an under-level, too-poor, or un-attuned member
+- A sea-captain dock now shows the teleport glyph on the map — a `secure passage` is a delayed teleport to a distant shore
+- A boat that's the only crossing is no longer hidden behind a bare "no path" when a member can't cover its level or fare: the walker plans it anyway and warns the captain may leave a member behind
+- The sail is timed from its transit-spell rounds; while sailing, the Navigation top bar reads "Sailing the high seas, reaching <place> in mm:ss" and reverts to normal walk status once you land
 
 ## 1.88.0
 

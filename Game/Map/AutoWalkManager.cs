@@ -55,6 +55,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Func<int, string?>? _itemNameResolver;
     private IMazeSolver? _mazeSolver;
     private BoatRoutePlanner? _boatPlanner;
+    private Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private readonly LogService? _log;
 
     private List<WalkStep>? _path;
@@ -72,15 +73,25 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // Boat voyage in flight: the BoatStep is on the wire and we're waiting for
     // the arrival port to confirm. The sail spans intermediate ship / transit
     // rooms that aren't in the graph, so the tracker churns until it re-anchors
-    // at the port. _boatTransitHops counts those intermediate observations; a
-    // captain who silently refused boarding — or an arrival the data never
-    // matches — fails out at the cap rather than hanging (the walker is purely
-    // event-driven, so a never-arriving voyage that still emits observations
-    // needs this backstop; one that emits none halts like any stuck step and
-    // the user stops the walk).
+    // at the port. Because the walker is otherwise purely event-driven — and a
+    // captain who silently refuses boarding emits NO further observation — the
+    // voyage carries a wall-clock deadline: SendBoatStep sizes it from the
+    // passage's transit-spell rounds (VoyageRounds * 3s + a small landing buffer)
+    // and arms OnBoatDeadline through the injected scheduler. Whichever fires
+    // first wins — an early arrival observation completes the step and cancels the
+    // timer; the deadline is the authoritative backstop that completes-if-landed
+    // or fails-out otherwise. _sailingEta / _sailingPlace feed the nav bar's
+    // "Sailing the high seas…" countdown while the voyage is in flight.
     private bool _awaitingBoatArrival;
-    private int _boatTransitHops;
-    private const int MaxBoatTransitHops = 24;
+    private IDisposable? _boatTimer;
+    private DateTimeOffset _sailingEta;
+    private string? _sailingPlace;
+
+    // A spell round is 3 real seconds (see GAME_MECHANICS "Timing & rounds"), so a
+    // voyage's summed transit-spell rounds convert to wall-clock at this rate; the
+    // buffer covers the board-cast + landing-render slop past that summed duration.
+    private const int SpellRoundSeconds = 3;
+    private const int BoatArrivalBufferSeconds = 3;
 
     // A boat hop weighs this many land hops when the planner's stitched route is
     // compared against a pure land route — the sail itself is one party-split
@@ -113,6 +124,19 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     // Current walk's destination room (null when Idle).
     public RoomKey? Destination => _destination;
+
+    // True while a sea-captain sailing is between boarding and landing. The nav
+    // bar reads it to swap the walk status line for the "Sailing the high seas…"
+    // countdown; false the instant the arrival port confirms (or the voyage fails).
+    public bool IsSailing => _awaitingBoatArrival;
+
+    // Wall-clock instant the in-flight sail is expected to land — the nav bar
+    // counts down to it. Meaningful only while IsSailing; default otherwise.
+    public DateTimeOffset SailingArrivalEta => _sailingEta;
+
+    // The `secure passage to <place>` destination of the in-flight sail, for the
+    // nav countdown label. Null when not sailing.
+    public string? SailingDestinationName => _sailingPlace;
 
     // Total steps in the current expanded path (0 when Idle).
     public int StepCount => _path?.Count ?? 0;
@@ -315,6 +339,20 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(planner);
         _boatPlanner = planner;
+    }
+
+    // Bind the voyage scheduler — a one-shot wall-clock timer the boat step uses
+    // to time the sail from boarding to landing (see the _boatTimer field). It's
+    // injected rather than a raw timer so the Game/Map layer stays UI-free:
+    // production wires a UI-thread one-shot (DispatcherTimer), tests a fake clock
+    // they fire by hand. The callback must land on the same thread the walker runs
+    // on (the UI thread in production). Left unset on realms with no docks — a
+    // voyage then relies purely on the arrival observation, which is fine for the
+    // tests that never sail without wiring a scheduler.
+    public void SetVoyageScheduler(Func<TimeSpan, Action, IDisposable> scheduler)
+    {
+        ArgumentNullException.ThrowIfNull(scheduler);
+        _scheduleDelay = scheduler;
     }
 
     // The maze solver's failure channel — it can't reach the goal, so raise the
@@ -857,7 +895,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private BoatRoutePlan? ChooseBoatRoute(RoomKey source, RoomKey destination, int? landHops)
     {
         if (_boatPlanner is null) return null;
-        if (_boatPlanner.TryPlan(source, destination, _filter) is not { } plan) return null;
+
+        // Accept a fare- / level-gated sailing ONLY when there's no land route —
+        // the sail is then the sole crossing, so surfacing it (and warning the
+        // user a member may be refused at the dock) beats a bare "no path". With a
+        // land route in hand, a gated boat is skipped so we never split the party
+        // for a crossing a member can't make.
+        if (_boatPlanner.TryPlan(source, destination, _filter, allowGated: landHops is null)
+            is not { } plan)
+            return null;
 
         // A land route exists — the boat must beat it by the overhead margin.
         if (landHops is { } hops && plan.LandHops + BoatHopWeight >= hops)
@@ -1395,13 +1441,33 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         _stepInFlight = true;
         _awaitingBoatArrival = true;
-        _boatTransitHops = 0;
 
         BoatPassage passage = step.Passage;
+
+        // Size the sail from its transit-spell rounds — each round is 3s (see the
+        // SpellRoundSeconds const) — plus a buffer for the board cast + landing
+        // render past the summed transit duration. The nav bar counts down to this
+        // ETA; OnBoatDeadline is the backstop that completes (if landed) or fails
+        // the voyage out (captain refused boarding) when it fires.
+        int voyageSeconds = passage.VoyageRounds * SpellRoundSeconds + BoatArrivalBufferSeconds;
+        _sailingPlace = passage.Place;
+        _sailingEta = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(voyageSeconds);
+
+        // A gated sole-crossing sail still boards — the captain refuses only the
+        // under-level / too-poor members at the dock and leaves them behind. Warn
+        // so the user knows a member may not make the crossing, rather than the
+        // walk silently splitting the party a head short.
+        ExitBlockReason gate = _filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
+        if (gate != ExitBlockReason.None)
+            _log?.Warn("Walker",
+                $"boat '{passage.Keyword}' is gated ({gate}) — a member may be refused "
+                + "boarding at the dock and left behind; sailing anyway (sole crossing).");
+
         bool leaderRelay = _isLeaderWithFollowers?.Invoke() == true;
         _log?.Info("Walker",
             $"step {_index + 1}/{_path!.Count}: boat '{passage.Keyword}' "
-            + $"(dock {passage.DockRoom} → arrive {passage.ArrivalRoom})"
+            + $"(dock {passage.DockRoom} → arrive {passage.ArrivalRoom}); "
+            + $"sail ~{voyageSeconds}s ({passage.VoyageRounds} spell-round(s))"
             + (leaderRelay ? " [party relay]" : ""));
 
         if (leaderRelay)
@@ -1411,6 +1477,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
         EmitMoveBytes(Encoding.Latin1.GetBytes(passage.Keyword + "\r"), $"boat '{passage.Keyword}'");
 
         if (leaderRelay) _onLeaderPartySplit?.Invoke();
+
+        // Arm the wall-clock backstop last, so the sail bytes are already out. An
+        // early arrival observation disposes this in HandleBoatTransition; the one
+        // that fires first wins.
+        _boatTimer?.Dispose();
+        _boatTimer = _scheduleDelay?.Invoke(TimeSpan.FromSeconds(voyageSeconds), OnBoatDeadline);
+
+        Raise(new WalkEvent(WalkEventKind.Sailing,
+            $"sailing to {passage.Place} (~{voyageSeconds}s)", _destination));
     }
 
     // Emit a move (cardinal direction, text-exit command, or teleport
@@ -1593,10 +1668,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // A tracker transition arrived while a boat voyage is in flight. The sail
     // crosses intermediate ship / transit rooms that aren't in the graph, so the
     // tracker churns (Suspect, a passive dock redisplay) until it re-anchors at
-    // the arrival port. Complete the step the moment it lands Confirmed there;
-    // otherwise count the observation toward MaxBoatTransitHops so a voyage that
-    // keeps emitting observations without ever matching the port fails out
-    // instead of looping forever.
+    // the arrival port. Complete the step the moment it lands Confirmed there and
+    // cancel the wall-clock backstop; every other observation is transit churn we
+    // simply keep waiting through — OnBoatDeadline is the fail-out, not a hop cap,
+    // so a captain who silently refuses boarding (no arrival, no further
+    // observation) still ends the voyage when the deadline fires.
     private void HandleBoatTransition(RoomTransition transition, BoatStep boat)
     {
         RoomKey arrival = boat.Passage.ArrivalRoom;
@@ -1606,8 +1682,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
             && landed.Equals(arrival))
         {
             _log?.Info("Walker", $"boat '{boat.Passage.Keyword}' arrived at {arrival}.");
+            _boatTimer?.Dispose();
+            _boatTimer = null;
             _awaitingBoatArrival = false;
-            _boatTransitHops = 0;
+            _sailingPlace = null;
             _stepInFlight = false;
             _retryCount = 0;
             _replanCount = 0;
@@ -1615,18 +1693,44 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
-        if (++_boatTransitHops > MaxBoatTransitHops)
+        _log?.Info("Walker",
+            $"boat '{boat.Passage.Keyword}' transit (tracker {transition.NewConfidence}); "
+            + $"awaiting {arrival}.");
+    }
+
+    // The voyage's wall-clock backstop fired. If the tracker has re-anchored at
+    // the arrival port by now, an arrival observation may just not have matched
+    // yet (a late render) — complete the step. Otherwise the captain refused the
+    // boarding (an under-level / too-poor / un-attuned member never left the dock)
+    // or the arrival data never matched, so fail the voyage out rather than leave
+    // the walk wedged on an arrival that won't come.
+    private void OnBoatDeadline()
+    {
+        _boatTimer?.Dispose();
+        _boatTimer = null;
+
+        if (!_awaitingBoatArrival) return;                 // already completed early
+        if (_path is null || _index >= _path.Count) return;
+        if (_path[_index] is not BoatStep boat) return;
+
+        RoomKey arrival = boat.Passage.ArrivalRoom;
+        if (_tracker.State.CurrentRoom?.Key is { } here && here.Equals(arrival))
         {
-            Raise(new WalkEvent(WalkEventKind.Failed,
-                $"boat '{boat.Passage.Keyword}' never reached {arrival} "
-                + "(captain refused boarding, or arrival mismatch)", _destination));
-            Reset();
+            _log?.Info("Walker",
+                $"boat '{boat.Passage.Keyword}' deadline: already at {arrival}; completing step.");
+            _awaitingBoatArrival = false;
+            _sailingPlace = null;
+            _stepInFlight = false;
+            _retryCount = 0;
+            _replanCount = 0;
+            AdvanceStep();
             return;
         }
 
-        _log?.Info("Walker",
-            $"boat '{boat.Passage.Keyword}' transit {_boatTransitHops}/{MaxBoatTransitHops} "
-            + $"(tracker {transition.NewConfidence}); awaiting {arrival}.");
+        Raise(new WalkEvent(WalkEventKind.Failed,
+            $"boat '{boat.Passage.Keyword}' never reached {arrival} "
+            + "(captain refused boarding, or arrival mismatch)", _destination));
+        Reset();
     }
 
     private void OnPromptObserved(PromptObservation _) => OnPromptObservedCore();
@@ -1716,8 +1820,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     && _tracker.State.CurrentRoom?.Key is { } here && here.Equals(port))
                 {
                     _log?.Info("Walker", "resume: boat already arrived while paused; completing step.");
+                    _boatTimer?.Dispose();
+                    _boatTimer = null;
                     _awaitingBoatArrival = false;
-                    _boatTransitHops = 0;
+                    _sailingPlace = null;
                     _stepInFlight = false;
                     AdvanceStep();
                 }
@@ -1849,8 +1955,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _awaitingTrapDisarm = false;
         _awaitingDoorOpen = false;
         _awaitingHiddenReveal = false;
+        _boatTimer?.Dispose();
+        _boatTimer = null;
         _awaitingBoatArrival = false;
-        _boatTransitHops = 0;
+        _sailingPlace = null;
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
@@ -1911,6 +2019,7 @@ public enum WalkEventKind
     Finished = 6,
     Failed = 7,
     DisarmingTrap = 8,
+    Sailing = 9,
 }
 
 public readonly record struct WalkEvent(WalkEventKind Kind, string Detail, RoomKey? Destination);
