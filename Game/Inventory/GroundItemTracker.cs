@@ -152,14 +152,22 @@ public sealed class GroundItemTracker : IDisposable
         }
     }
 
-    // Cash entries in the survey are either a counted coin ("5 gold crowns",
-    // "50 gold sovereigns") or the stock singular ("a gold piece"). We must
-    // NOT swallow items whose material adjective happens to be a denomination
-    // word ("a silver ring", "a copper key"), so the two forms are gated
-    // differently: a bare count + denomination is unambiguously cash (ground
-    // items always carry an article, never a leading count); the singular "a
-    // <denom> ..." only counts as cash when it ends in the canonical coin noun
-    // "piece(s)", leaving material-adjective items intact.
+    // Cash entries in the survey are either a counted coin ("50 gold sovereigns",
+    // "56 silver nobles") or the singular "a gold piece". Cash always carries its
+    // count + denomination; an item shows just its name when a lone copy is on the
+    // floor and gains a leading count only when 2+ are stacked ("5 piece of
+    // amber"). So a leading count no longer implies cash — both forms are gated on
+    // the word right after the count: cash names a denomination there
+    // (copper/silver/gold/platinum/runic), a stacked item names its own noun
+    // ("piece", "torch"), so "5 piece of amber" stays an item. The singular
+    // "a <denom> ..." form is tighter still — cash only when it ends in the coin
+    // noun "piece(s)", leaving material-adjective items ("a silver ring", "a
+    // copper key") intact.
+    //
+    // Blind spot (shared with CashManager.TryParseCashEntry, the same heuristic):
+    // a stacked item whose name *starts* with a denomination word ("2 gold key")
+    // would read as cash. Left as-is — whether such items stack with a count in
+    // the survey is unverified, and the fix belongs on the shared cash parser.
     private bool IsCashEntry(string entry)
     {
         string[] words = entry.Split(' ', StringSplitOptions.RemoveEmptyEntries);
