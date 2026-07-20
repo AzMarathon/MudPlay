@@ -3151,7 +3151,11 @@ public sealed class AppServices
         // Room-floor loot snapshot from the "You notice <list> here." survey,
         // cash filtered out. Feeds @what (read) and @get-all (get each).
         // LineExtractor attached + OnRoomChanged wired below (and in MainWindowVM).
-        GroundItems = new Game.Inventory.GroundItemTracker(Router, Currency);
+        // isKnownItem gives the cash filter an authoritative item-table
+        // tiebreaker so a stacked denomination-named item ("2 gold key") isn't
+        // mistaken for coin (see IsCashEntry).
+        GroundItems = new Game.Inventory.GroundItemTracker(Router, Currency,
+            isKnownItem: IsKnownGroundItem);
 
         // Read-only inventory queries — @wealth / @enc / @have report off the
         // InventoryManager snapshot; @what reports the GroundItems survey. No
@@ -3259,7 +3263,10 @@ public sealed class AppServices
             getSnapshot: () => Inventory.Snapshot,
             isPeekSuppressed: () => RoomTracker.IsPeekSuppressed(),
             log: Log,
-            naming: Currency);
+            naming: Currency,
+            // Same item-table tiebreaker the ground tracker uses — a stacked
+            // denomination-named item ("2 gold key") isn't collected as coin.
+            isKnownItem: IsKnownGroundItem);
         // Reset held tallies on profile swap — prior character's
         // counts aren't relevant to the new one.
         Profile.ProfileLoaded += _ => Cash.ResetTallies();
@@ -4945,6 +4952,14 @@ public sealed class AppServices
                 result.Add(new Game.Map.MonsterDropSpawn(room, d.MonsterId, d.MonsterName, d.DropPercent));
         return result;
     }
+
+    // True when a room "You notice ..." entry resolves to a real item in the
+    // active set. The cash filters (GroundItemTracker.IsCashEntry /
+    // CashManager.TryParseCashEntry) use this as an authoritative tiebreaker so a
+    // stacked denomination-named item ("2 gold key") isn't mistaken for a coin
+    // pile — currency records aren't in Items.json, so a true coin pile never
+    // resolves here.
+    private bool IsKnownGroundItem(string entry) => ItemNames.FindByName(entry) is not null;
 
     // Resolve a single room "You notice ..." entry for
     // AutoGetItems: map the loose wording to an item

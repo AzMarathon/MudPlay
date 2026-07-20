@@ -62,6 +62,7 @@ public sealed class CashManager : IDisposable
     private readonly Func<bool> _isPeekSuppressed;
     private readonly LogService? _log;
     private readonly CurrencyNaming _naming;
+    private readonly Func<string, bool>? _isKnownItem;
     private readonly IDisposable _groundSub;
     private readonly IDisposable _pickedUpSub;
     private readonly IDisposable _droppedSub;
@@ -182,7 +183,8 @@ public sealed class CashManager : IDisposable
         Func<InventorySnapshot>? getSnapshot = null,
         Func<bool>? isPeekSuppressed = null,
         LogService? log = null,
-        CurrencyNaming? naming = null)
+        CurrencyNaming? naming = null,
+        Func<string, bool>? isKnownItem = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(readSettings);
@@ -202,6 +204,11 @@ public sealed class CashManager : IDisposable
         // Null when unbound (tests) → never a peek. A `look <dir>` peek renders
         // a full room display, so gate the "You notice" collect path on it.
         _isPeekSuppressed = isPeekSuppressed ?? (static () => false);
+        // Resolves a survey entry against the active item table (true when it's a
+        // real Items.json record). Injected so TryParseCashEntry can settle the
+        // "2 gold key" ambiguity; null (tests / no game data) leaves the
+        // count+denomination heuristic standing alone.
+        _isKnownItem = isKnownItem;
         _log = log;
 
         _groundSub   = router.Subscribe(KnownPatterns.CashOnGround,  OnCashOnGround);
@@ -847,12 +854,22 @@ public sealed class CashManager : IDisposable
     // Recognise "N {denomination} ..." as cash — requires a leading integer + the
     // second word being a CashDenominations entry. Singular form "a gold piece"
     // is also tolerated (count = 1).
+    //
+    // The count+denomination shape alone can't separate a stacked item whose name
+    // *starts* with a denomination word ("2 gold key") from a coin pile ("2 gold
+    // crowns"). The item-table tiebreaker settles it (shared with
+    // GroundItemTracker.IsCashEntry, the same fix): an entry that resolves to a
+    // real Items.json record is never cash. Currency isn't in the item table, so a
+    // true coin pile won't resolve. Unwired (tests) the heuristic stands alone.
     private bool TryParseCashEntry(string raw, out string? currency, out int count)
     {
         currency = null;
         count = 0;
         string[] words = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length < 2) return false;
+
+        // Authoritative item-table override — a known item is never cash.
+        if (_isKnownItem is not null && _isKnownItem(raw)) return false;
 
         // "a <denomination> ..." singular variant
         if (string.Equals(words[0], "a", StringComparison.OrdinalIgnoreCase)

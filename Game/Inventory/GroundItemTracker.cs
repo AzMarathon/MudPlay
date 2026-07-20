@@ -34,16 +34,23 @@ public sealed class GroundItemTracker : IDisposable
     private readonly IDisposable _noticeSub;
     private readonly List<string> _items = new();
     private readonly CurrencyNaming _naming;
+    private readonly Func<string, bool>? _isKnownItem;
 
     private Terminal.LineExtractor? _lines;
     private string? _noticeBuffer;            // multi-line continuation
     private bool _disposed;
 
-    public GroundItemTracker(MessageRouter router, CurrencyNaming naming)
+    // isKnownItem resolves a survey entry against the active item table (true
+    // when it names a real Items.json record). Injected so the cash filter can
+    // settle the "2 gold key" ambiguity below; null when no game data is wired
+    // (tests), where the count+denomination heuristic stands alone.
+    public GroundItemTracker(MessageRouter router, CurrencyNaming naming,
+        Func<string, bool>? isKnownItem = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(naming);
         _naming = naming;
+        _isKnownItem = isKnownItem;
         _noticeSub = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
     }
 
@@ -164,15 +171,21 @@ public sealed class GroundItemTracker : IDisposable
     // noun "piece(s)", leaving material-adjective items ("a silver ring", "a
     // copper key") intact.
     //
-    // Blind spot (shared with CashManager.TryParseCashEntry, the same heuristic):
-    // items stack with a leading count exactly like cash, so a stacked item whose
-    // name *starts* with a denomination word ("2 gold key") reads as cash here.
-    // Telling it apart needs the board's coin nouns or an item-table lookup rather
-    // than another local guess, so the real fix belongs on the shared cash parser.
+    // The count+denomination heuristic can't tell a stacked item whose name
+    // *starts* with a denomination word ("2 gold key") from a coin pile ("2 gold
+    // crowns") on its own — both read as "N <denom> ...". The item-table
+    // tiebreaker settles it (shared with CashManager.TryParseCashEntry, the same
+    // heuristic + the same fix): an entry that resolves to a real Items.json
+    // record is never cash. Currency isn't in the item table, so a genuine coin
+    // pile won't resolve and still reads as cash. Unwired (tests without game
+    // data) the heuristic stands alone and the "2 gold key" ambiguity resurfaces.
     private bool IsCashEntry(string entry)
     {
         string[] words = entry.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length < 2) return false;
+
+        // Authoritative item-table override — a known item is never cash.
+        if (_isKnownItem is not null && _isKnownItem(entry)) return false;
 
         if (int.TryParse(words[0], out _))
             return IsCashWord(words[1]);

@@ -4,6 +4,7 @@
 > **Version 1.89.1**
 > - Auto-collect now grabs an entire stacked ground pile: a survey count ("You notice 5 piece of amber here") sends one `get` per unit instead of one item per room re-display
 > - The MaxToGet cap and encumbrance ceiling still apply per unit, so a stack is taken only up to the cap or carry limit
+> - A stacked item whose name starts with a denomination word ("2 gold key") is no longer mistaken for coin: it's looted instead of skipped as cash
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
