@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.89.0
+
+- Navigation can now route through sea-captain boats: a walk whose goal is cheaper (or only) reachable by a `secure passage` sailing walks to the dock, sails, then walks from the arrival port
+- Boat sailings are discovered from each realm's room-command data (never hardcoded), gated on every party member's level and copper fare
+- The sail is one party-split step (same relay as a chime teleport); the voyage fails out if the captain refuses boarding an under-level, too-poor, or un-attuned member
+
 ## 1.88.0
 
 - Party-impassable level-gate routing is now always-on (the opt-in Settings → Other checkbox is gone); a following party still routes around a `(Level: MIN to MAX)` gate it can't clear rather than stranding a member

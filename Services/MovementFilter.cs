@@ -76,10 +76,11 @@ public sealed class MovementFilter : IRoomFilter
     public Func<int?>? ClassNumberProvider { get; set; }
 
     // Fires the party @wealth round-trip. Wired by AppServices to
-    // PartyWealthTracker.Probe. Invoked only from WarmForRoute, and only when
-    // the tolls-permitted shortest route actually crosses a toll — so an
-    // off-path toll edge inside the BFS frontier never triggers a poll.
-    public Action? TollWealthProbe { get; set; }
+    // PartyWealthTracker.Probe. Invoked from WarmForRoute (only when the
+    // tolls-permitted shortest route actually crosses a toll, so an off-path
+    // toll edge inside the BFS frontier never triggers a poll) and from
+    // WarmForBoat (when a chosen route boards a fare-gated boat).
+    public Action? WealthWarmProbe { get; set; }
 
     // Fires the party @level freshness round-trip. Wired by AppServices to
     // PartyLevelTracker.WarmStaleLevels. Invoked only from WarmForRoute, and
@@ -329,27 +330,32 @@ public sealed class MovementFilter : IRoomFilter
     private bool IsLevelGateBlocked(in RoomExit exit)
     {
         if (!exit.HasLevelGate) return false;
+        return IsLevelExcluded(exit.MinLevel, exit.MaxLevel);
+    }
 
-        // Party branch: when leading a party, route around a gate the
-        // whole party can't clear so no member is left behind. The bounds
-        // fold in the leader's own level, so this also covers the leader.
-        // Falls through to the self-only branch when no bounds are known
-        // (solo, not leading, or nobody's level parsed yet) or while the
-        // party level gate is suspended for the freshness-warm planning pass.
+    // Party-or-self level-window exclusion: true when the crosser's level (or,
+    // when leading a party, any member's) falls outside [minLevel, maxLevel]
+    // (0 in either slot = no bound on that side; the MDB's 0/999 sentinels are
+    // normalised to 0 at parse time). Party branch routes around a gate that
+    // would leave a member behind — the bounds fold in the leader's own level —
+    // and falls through to the self level when solo / not leading / nobody's
+    // level parsed, or while the party gate is suspended for the freshness-warm
+    // planning pass. Unknown level never blocks. Shared by the cardinal level
+    // gate and the boat sailing's minlevel floor.
+    private bool IsLevelExcluded(int minLevel, int maxLevel)
+    {
+        if (minLevel <= 0 && maxLevel <= 0) return false;
+
         if (!_partyLevelGateSuspended && PartyLevelBoundsProvider?.Invoke() is { } bounds)
         {
-            if (exit.MinLevel > 0 && bounds.Low < exit.MinLevel) return true;
-            if (exit.MaxLevel > 0 && bounds.High > exit.MaxLevel) return true;
+            if (minLevel > 0 && bounds.Low < minLevel) return true;
+            if (maxLevel > 0 && bounds.High > maxLevel) return true;
             return false;
         }
 
         if (LevelProvider?.Invoke() is not { } level) return false;  // level unknown → don't gate
-
-        // Form-A window: MinLevel>0 is a floor, MaxLevel>0 is a cap.
-        // 0 in either slot means "no bound on that side" (the MDB's
-        // 0/999 sentinels are normalised to 0 at parse time).
-        if (exit.MinLevel > 0 && level < exit.MinLevel) return true;
-        if (exit.MaxLevel > 0 && level > exit.MaxLevel) return true;
+        if (minLevel > 0 && level < minLevel) return true;
+        if (maxLevel > 0 && level > maxLevel) return true;
         return false;
     }
 
@@ -360,20 +366,68 @@ public sealed class MovementFilter : IRoomFilter
     {
         if (exit.Hint != RoomExitHint.Toll || exit.TollGold <= 0) return false;
         if (_tollGateSuspended) return false;   // planning the tolls-permitted route (see WarmForRoute)
-        long cost = (long)exit.TollGold * 100;
+        // A toll is phrased in gold crowns but any coin mix totalling N*100
+        // copper passes — so the fold-to-copper conversion is here, not in the
+        // shared wallet check.
+        return CannotAfford((long)exit.TollGold * 100);
+    }
 
-        // Party branch: a toll is per-crosser, so when leading a party route
-        // around one a member can't afford rather than stranding them at the
-        // gate. The provider (PartyWealthTracker.MinWealth) folds in our own
-        // wallet too, and returns null — falling through to the self-only
-        // branch — when solo, not leading, or our own wallet is unknown. It's
-        // the demand trigger for the @wealth probe: invoked here only for a toll
-        // exit, so nothing polls unless a toll is actually in play.
-        if (PartyWealthProvider?.Invoke() is { } partyMin)
-            return partyMin < cost;
-
+    // Party-or-self affordability: true when the crosser can't cover `cost`
+    // copper. Party branch (PartyWealthTracker.MinWealth folds in our own wallet
+    // too) routes around a cost a member can't meet rather than stranding them
+    // at the gate; a member who hasn't reported fresh wealth counts as
+    // unaffordable. Returns false (don't gate) when solo / not leading / own
+    // wallet unknown — same "don't refuse on what we can't evaluate" rule as an
+    // unknown level. Demand-driven: invoked only for a toll exit or a boat fare,
+    // so nothing polls unless one is actually in play. Shared by the toll gate
+    // and the boat fare gate.
+    private bool CannotAfford(long cost)
+    {
+        if (cost <= 0) return false;
+        if (PartyWealthProvider?.Invoke() is { } partyMin) return partyMin < cost;
         if (WealthProvider?.Invoke() is not { } wealth) return false;
         return wealth < cost;
+    }
+
+    // ----- Boat sailing gates (per-member minlevel + copper fare) -----------
+    // A `secure passage` boarding gates every member individually on BOTH a
+    // level floor and a copper fare (the captain leaves an under-level or
+    // too-poor member at the dock), so both fold into the same party-or-self
+    // checks the land gates use. RequiresCheckability is NOT gated: the client
+    // can't read the quest-attunement flag, so it's the user's responsibility —
+    // an un-attuned member simply never boards and the voyage fails out on the
+    // arrival timeout.
+
+    // A sailing is routable only when every crosser clears both its gates.
+    public bool IsBoatPassable(in BoatPassage passage) =>
+        DescribeBoatBlock(in passage) == ExitBlockReason.None;
+
+    // Which per-member gates keep the crosser off this sailing, for a "boat not
+    // taken" diagnostic. Mirrors DescribeExitBlock over the two boat gates. The
+    // fare is already copper (a boat charges the base coin unit directly, unlike
+    // a toll's gold*100), so it feeds the wallet check unscaled.
+    public ExitBlockReason DescribeBoatBlock(in BoatPassage passage)
+    {
+        ExitBlockReason reasons = ExitBlockReason.None;
+        if (IsLevelExcluded(passage.MinLevel, 0)) reasons |= ExitBlockReason.Level;
+        if (CannotAfford(passage.FareCopper)) reasons |= ExitBlockReason.Fare;
+        return reasons;
+    }
+
+    // Warm the party @wealth + @level readings for a boat the router has chosen
+    // to board. A sailing gates every member individually on fare and minlevel,
+    // so — like a toll on a land route — the planner probes fresh party wealth +
+    // level before committing, so a stale/unknown member isn't waved onto (or
+    // wrongly kept off) the boat. Unconditional (unlike WarmForRoute's per-gate
+    // BFS test) because the caller invokes it only once a fare-gated boat is on
+    // the chosen route. No-op when solo / not leading — a lone crosser gates on
+    // its own live wallet/level, no round-trip needed.
+    public void WarmForBoat()
+    {
+        if (WealthWarmProbe is { } wealthProbe && PartyWealthProvider?.Invoke() is not null)
+            wealthProbe();
+        if (LevelWarmProbe is { } levelProbe && PartyLevelBoundsProvider?.Invoke() is not null)
+            levelProbe();
     }
 
     // Warm the party @wealth reading and @level freshness before a walk, but
@@ -390,7 +444,7 @@ public sealed class MovementFilter : IRoomFilter
         ArgumentNullException.ThrowIfNull(bfs);
 
         // Toll wealth warm — only when the party toll gate is actually in play.
-        if (TollWealthProbe is { } tollProbe && PartyWealthProvider?.Invoke() is not null)
+        if (WealthWarmProbe is { } tollProbe && PartyWealthProvider?.Invoke() is not null)
         {
             _tollGateSuspended = true;
             try

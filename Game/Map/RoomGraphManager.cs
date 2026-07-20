@@ -56,6 +56,14 @@ public sealed class RoomGraphManager
     // would otherwise show nothing. Keyed by the lever's host room.
     private readonly Dictionary<RoomKey, List<RemoteLeverRef>> _leversByRoom = new();
 
+    // Sea-captain docks and the sailings each offers, keyed by dock room. Built
+    // from every room's CMD `secure passage to <place>` TBInfo lines (see
+    // BuildBoatEdges). Distinct from the Direction.Teleport slot: a dock can offer
+    // several sailings at once, so they live in this side index the boat router
+    // consults rather than being minted as cardinal teleport edges. Empty without
+    // a TBInfo source + spell catalog (parameterless / test construction).
+    private readonly Dictionary<RoomKey, IReadOnlyList<BoatPassage>> _boatPassages = new();
+
     // Live predicate identifying rooms a normal player can never stand in (dev /
     // orphan rooms flagged CannotBeReached in the room blacklist). When set,
     // FindCandidates drops matching keys so the RoomTracker never resolves the
@@ -272,6 +280,19 @@ public sealed class RoomGraphManager
     // half-connector glyphs without rescanning every room.
     public IEnumerable<Room> TrappedRooms => _rooms.Values.Where(r => r.HasTrappedExits);
 
+    // Sailings a sea-captain dock at `room` offers, empty when the room is not a
+    // dock. The boat router reads this to decide whether a `secure passage`
+    // hop can shortcut a cross-realm route from here.
+    public IReadOnlyList<BoatPassage> BoatPassagesAt(RoomKey room) =>
+        _boatPassages.TryGetValue(room, out IReadOnlyList<BoatPassage>? list)
+            ? list
+            : Array.Empty<BoatPassage>();
+
+    // Every sailing discovered across every dock in the active set, in dock load
+    // order. The boat router enumerates this to find a passage whose dock/arrival
+    // brackets a long land route.
+    public IEnumerable<BoatPassage> AllBoatPassages => _boatPassages.Values.SelectMany(p => p);
+
     // True when the active set contains exactly one room with this room's
     // (Name, ExitMask) tuple. False for ambiguous tuples and for rooms not in
     // the active graph.
@@ -439,6 +460,7 @@ public sealed class RoomGraphManager
         PromoteCastTeleportExits();
         MarkCastPocketEntrances();
         BuildTeleportEdges();
+        BuildBoatEdges();
         BuildSecondaryIndexes();
 
         // Free the raw JSON; the typed graph is the source of truth now.
@@ -457,6 +479,7 @@ public sealed class RoomGraphManager
         _byName.Clear();
         _byNameAndExits.Clear();
         _leversByRoom.Clear();
+        _boatPassages.Clear();
     }
 
     // Recognise placed guardian monsters whose greet dialogue opens a door on
@@ -863,6 +886,39 @@ public sealed class RoomGraphManager
         public int MinLevel;
         public bool SawNonFixed;
         public bool SawDisagree;
+    }
+
+    // Index every sea-captain dock's `secure passage to <place>` sailings off its
+    // CMD chain into the boat side-table. Unlike BuildTeleportEdges, a boat is NOT
+    // minted as a Direction.Teleport cardinal: a dock offers several sailings at
+    // once and the single Teleport slot holds only one, so they live in
+    // _boatPassages for the boat router to stitch a land → boat → land route.
+    // BoatPassageResolver walks each sailing's random-table + transit-spell chain
+    // to land the arrival RoomKey; a sailing whose arrival it can't resolve is
+    // dropped (not routable). No-op without both a TBInfo source and a spell
+    // catalog — a boat's arrival can't be resolved without the transit spells.
+    private void BuildBoatEdges()
+    {
+        if (_tbinfo is null || _spellCatalog is null) return;
+
+        foreach (RoomKey key in _rooms.Keys.ToArray())
+        {
+            Room room = _rooms[key];
+            if (room.Cmd <= 0) continue;
+
+            List<BoatPassage>? passages = null;
+            foreach (BoatPassage passage in
+                     BoatPassageResolver.EnumerateBoatPassages(_tbinfo, key, room.Cmd, _spellCatalog))
+                (passages ??= new()).Add(passage);
+            if (passages is null) continue;
+
+            _boatPassages[key] = passages;
+            foreach (BoatPassage p in passages)
+                _log?.Log(LogSeverity.Info, "RoomGraph",
+                    $"Dock {key}: '{p.Keyword}' → {p.ArrivalRoom} (Level {p.MinLevel}+, "
+                    + $"fare {p.FareCopper} copper"
+                    + (p.RequiresCheckability ? ", quest-attunement required)." : ")."));
+        }
     }
 
     private void BuildSecondaryIndexes()

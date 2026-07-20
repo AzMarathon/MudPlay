@@ -3493,7 +3493,7 @@ public sealed class AppServices
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Movement.PartyWealthProvider = PartyWealth.MinWealth;
-        Movement.TollWealthProbe = PartyWealth.Probe;
+        Movement.WealthWarmProbe = PartyWealth.Probe;
 
         // Base auto-search — a bare `sea` on each genuine room entry reveals
         // hidden items for the auto-get engines. Armed by the persisted
@@ -3531,6 +3531,12 @@ public sealed class AppServices
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             paradigmResolver: ParadigmResync);
         Walker.SetMazeSolver(MazeSolver);
+        // Data-driven boat routing. When a walk's goal is cheaper (or only)
+        // reachable by a sea-captain sailing, the planner stitches the two land
+        // legs around the boat hop and the walker inserts a BoatStep. The planner
+        // pulls its candidate sailings from RoomGraph's data-driven boat index, so
+        // it no-ops on realms without docks.
+        Walker.SetBoatPlanner(new Game.Map.BoatRoutePlanner(RoomGraph, Bfs, Log));
         // While a maze solve is Active the tracker legitimately churns Lost/Suspect
         // between same-named teleport landings — relocalizing that is the solver's
         // job. On Paradigm the solver drives its OWN `rm` after each landing (see

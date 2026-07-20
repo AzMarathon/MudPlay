@@ -1,11 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.88.0**
-> - Party-impassable level-gate routing is now always-on (the opt-in Settings → Other checkbox is gone); a following party still routes around a `(Level: MIN to MAX)` gate it can't clear rather than stranding a member
-> - A member's exact level (from `@level`) is now timestamped; readings older than 24h are treated as stale
-> - When a planned walk actually crosses a level gate, `@level` is re-probed for any unknown or stale member (route-scoped + debounced, mirroring the toll `@wealth` warm)
-> - Bug report now lists each party member's level estimate (exact + age, or title band) and the folded party level window
+> **Version 1.89.0**
+> - Navigation can now route through sea-captain boats: a walk whose goal is cheaper (or only) reachable by a `secure passage` sailing walks to the dock, sails, then walks from the arrival port
+> - Boat sailings are discovered from each realm's room-command data (never hardcoded), gated on every party member's level and copper fare
+> - The sail is one party-split step (same relay as a chime teleport); the voyage fails out if the captain refuses boarding an under-level, too-poor, or un-attuned member
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
