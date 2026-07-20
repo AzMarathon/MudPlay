@@ -148,12 +148,12 @@ public sealed class InventoryActionHandler : IDisposable
         return $"dropping {carried.Count} carried item{(carried.Count == 1 ? "" : "s")}";
     }
 
-    // @deposit-all — level the character's wealth to the per-denomination
-    // keep-on-hand floors. Over the floor → dep <excess>; under it →
-    // with <shortfall>; exactly on it → no-op reply. The amount is the
-    // consolidated copper-farthing value (same figure @wealth reports); the game
-    // re-consolidates held coin to the highest denomination after the transaction,
-    // so we never have to name individual coins.
+    // @deposit-all — level the character's wealth to the raw keep-on-hand floor.
+    // Over the floor → dep <excess>; under it → with <shortfall>; exactly on it →
+    // no-op reply. The amount is the consolidated copper-farthing value (same
+    // figure @wealth reports); the game re-consolidates held coin to the highest
+    // denomination after the transaction, so we never have to name individual
+    // coins.
     private void OnDepositAll(RemoteCommandContext ctx) => ctx.Reply(DepositAll());
 
     // Level held coin to the keep-on-hand floor and return the status line. Shared
@@ -162,7 +162,7 @@ public sealed class InventoryActionHandler : IDisposable
     public string DepositAll()
     {
         if (!_inventory.IsLoaded) return "wealth unknown - parse inventory first (type i)";
-        long keep = _readCash().KeepOnHandCopper();
+        long keep = _readCash().KeepOnHandWealth;
         long held = _inventory.Snapshot.Currency.TotalCopperValue;
         long delta = held - keep;
         if (delta > 0)

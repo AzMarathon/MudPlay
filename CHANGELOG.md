@@ -2,6 +2,20 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.87.0
+
+- Settings → Cash + Items "Keep on hand" is now a single raw wealth value (copper farthings) instead of five per-currency fields
+- Depositing sends the excess as `dep <copper>`; stashing decomposes it into lowest-denomination-first `hide N <coin>` commands, leaving the fewest coins on hand
+- Settings → Health: HP and Mana / Kai thresholds stack vertically so the tab no longer opens with a horizontal scrollbar
+- Settings → Health: pre/post-rest command boxes are left-aligned at a sensible width instead of stretched to the pane's right edge
+
+## 1.86.0
+
+- Settings → General "Default task" enabled: pick Begin looping / Begin Auto-Lair to auto-start a saved loop or lair on game entry (Do nothing keeps today's idle behaviour)
+- Startup task routes to the nearest waypoint first, just like Run in the Navigation window; starts even with all auto-engines off
+- On a reconnect where you had a party, the startup task waits your "if leading, wait" window first so the party can reform
+- Loop / Auto-Lair pickers list the active game-data set's saved names and keep a saved reference even if it isn't in the current set
+
 ## 1.85.0
 
 - Settings → General: Auto-Train now listed in the "Auto-Engines enabled on start" section (mirrors the Auto-Trainer tab's master toggle)

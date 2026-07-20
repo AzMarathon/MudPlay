@@ -88,7 +88,7 @@
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
                                    Value="{Binding AutoDepositIfWealthExceeds, Mode=TwoWay}"
                                    Minimum="0" Maximum="100000000" Width="200" HorizontalAlignment="Left"
-                                   ToolTip.Tip="0 = disabled. Gate on total wealth VALUE (gold-equivalent). Either this or the coin-count gate firing triggers a deposit; re-arms only when both drop back below."/>
+                                   ToolTip.Tip="0 = disabled. Gate on total wealth VALUE in copper farthings (1 silver = 10, gold = 100, platinum = 10,000, runic = 1,000,000). Either this or the coin-count gate firing triggers a deposit; re-arms only when both drop back below."/>
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel"
                                Text="Auto-deposit if coins exceed"/>
@@ -108,46 +108,23 @@
                               ToolTip.Tip="Populated from the active game-data Shops table where ShopType == 7 (banks), plus every room you've toggled as a stash on the Navigation map."/>
                 </Grid>
 
-                <!-- Per-currency keep-on-hand floor — honoured by BOTH the
-                     auto-deposit reroute and stash-room `hide N <coin>`. -->
+                <!-- Single raw keep-on-hand floor (copper farthings) — honoured
+                     by BOTH the auto-deposit reroute (dep <excess>) and the
+                     stash-room path, which decomposes the excess into
+                     lowest-denomination-first `hide N <coin>` commands so the
+                     fewest coins are left on hand. -->
                 <TextBlock Classes="FieldLabel" Margin="0,8,0,2"
                            Text="Keep on hand (applies to depositing and stashing)"/>
 
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Keep copper"/>
+                <Grid ColumnDefinitions="220,*" RowDefinitions="Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel"
+                               Text="Keep wealth (copper)"/>
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                   Value="{Binding KeepCopperOnHand, Mode=TwoWay}"
+                                   Value="{Binding KeepOnHandWealth, Mode=TwoWay}"
                                    Minimum="0" Maximum="100000000" Increment="1"
                                    FormatString="0" ParsingNumberStyle="Integer"
-                                   Width="180" HorizontalAlignment="Left"/>
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Keep silver"/>
-                    <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                   Value="{Binding KeepSilverOnHand, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100000000" Increment="1"
-                                   FormatString="0" ParsingNumberStyle="Integer"
-                                   Width="180" HorizontalAlignment="Left"/>
-
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Keep gold"/>
-                    <NumericUpDown Grid.Row="2" Grid.Column="1"
-                                   Value="{Binding KeepGoldOnHand, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100000000" Increment="1"
-                                   FormatString="0" ParsingNumberStyle="Integer"
-                                   Width="180" HorizontalAlignment="Left"/>
-
-                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Keep platinum"/>
-                    <NumericUpDown Grid.Row="3" Grid.Column="1"
-                                   Value="{Binding KeepPlatinumOnHand, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100000000" Increment="1"
-                                   FormatString="0" ParsingNumberStyle="Integer"
-                                   Width="180" HorizontalAlignment="Left"/>
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Keep runic"/>
-                    <NumericUpDown Grid.Row="4" Grid.Column="1"
-                                   Value="{Binding KeepRunicOnHand, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100000000" Increment="1"
-                                   FormatString="0" ParsingNumberStyle="Integer"
-                                   Width="180" HorizontalAlignment="Left"/>
+                                   Width="200" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Raw wealth to keep, in copper farthings (same unit as Wealth and the auto-deposit threshold; 1 silver = 10, gold = 100, platinum = 10,000, runic = 1,000,000). 0 = offload everything. Depositing sends the excess as dep &lt;copper&gt;; stashing decomposes the excess into lowest-denomination-first hide commands, leaving the fewest coins on hand."/>
                 </Grid>
 
                 <!-- ============ Collection Rules ============ -->

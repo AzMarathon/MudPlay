@@ -135,16 +135,14 @@
                                      GroupName="DefaultTask"
                                      IsChecked="{Binding IsTaskDoNothing, Mode=TwoWay}"
                                      Content="Do nothing"
-                                     IsEnabled="False"
-                                     ToolTip.Tip="Startup task action lands with Phase 7."
+                                     ToolTip.Tip="Leave the client idle once you enter the game — the classic behaviour. Nothing starts automatically."
                                      Margin="0,0,8,4"/>
 
                         <RadioButton Grid.Row="1" Grid.Column="0"
                                      GroupName="DefaultTask"
                                      IsChecked="{Binding IsTaskBeginLoop, Mode=TwoWay}"
                                      Content="Begin looping"
-                                     IsEnabled="False"
-                                     ToolTip.Tip="Loop start lands with Phase 7."
+                                     ToolTip.Tip="On entering the game, start the selected loop — same as hitting Run on it in the Navigation window (it routes to the nearest waypoint first if you're not already on the loop). If you were in a party before a reconnect, it waits your &quot;if leading, wait&quot; window first to give the party time to reform."
                                      VerticalAlignment="Center"
                                      Margin="0,0,8,4"/>
                         <ComboBox Grid.Row="1" Grid.Column="1"
@@ -153,16 +151,15 @@
                                   ItemsSource="{Binding LoopNames}"
                                   SelectedItem="{Binding DefaultLoopName, Mode=TwoWay}"
                                   PlaceholderText="Pick a saved loop"
-                                  IsEnabled="False"
-                                  ToolTip.Tip="Lists saved loop files from this character profile (Phase 7)."
+                                  IsEnabled="{Binding IsTaskBeginLoop}"
+                                  ToolTip.Tip="Saved loops from the active game-data set. Loops are shared across characters on the set; the one picked here starts on game entry."
                                   Margin="0,0,0,4"/>
 
                         <RadioButton Grid.Row="2" Grid.Column="0"
                                      GroupName="DefaultTask"
                                      IsChecked="{Binding IsTaskBeginAutoLair, Mode=TwoWay}"
                                      Content="Begin Auto-Lair"
-                                     IsEnabled="False"
-                                     ToolTip.Tip="Auto-Lair scheduler lands with Phase 7."
+                                     ToolTip.Tip="On entering the game, start the selected Auto-Lair setup — same as Run on it in the Navigation window. Honours the same party-reform wait on a reconnect as Begin looping."
                                      VerticalAlignment="Center"
                                      Margin="0,0,8,0"/>
                         <ComboBox Grid.Row="2" Grid.Column="1"
@@ -171,8 +168,8 @@
                                   ItemsSource="{Binding AutoLairNames}"
                                   SelectedItem="{Binding DefaultAutoLairName, Mode=TwoWay}"
                                   PlaceholderText="Pick a saved Auto-Lair"
-                                  IsEnabled="False"
-                                  ToolTip.Tip="Lists saved Auto-Lair files from this character profile (Phase 7)."/>
+                                  IsEnabled="{Binding IsTaskBeginAutoLair}"
+                                  ToolTip.Tip="Saved Auto-Lair setups from the active game-data set. The one picked here starts on game entry."/>
                     </Grid>
                 </Grid>
 

@@ -678,6 +678,12 @@ public sealed class AppServices
     // directly from the user-initiated disconnect path.
     public Game.Events.EventScheduler EventScheduler { get; private set; } = null!;
 
+    // Runs the character's Settings → General "Default task" (Begin looping /
+    // Begin Auto-Lair) once per game entry. Like EventScheduler it's app-scoped
+    // and driven by MainWindowVM's NotifyConnected / NotifyDisconnected plus the
+    // stable WirePromptScanner + RoomTracker singletons.
+    public Game.DefaultTaskRunner DefaultTaskRunner { get; private set; } = null!;
+
     // Per-character keybindings for built-in app actions (toolbar +
     // menu shortcuts). Sister service to Macros — both
     // contribute to the unified conflict-detection check so a chord
@@ -4121,6 +4127,13 @@ public sealed class AppServices
         // the TelnetClient itself is per-connection.
         EventScheduler = new Game.Events.EventScheduler(
             Events, PromptScanner, Cleanup, Profile, Log);
+
+        // DefaultTaskRunner. Starts the character's configured "Default task"
+        // (loop / Auto-Lair) on the first in-game prompt with a known room,
+        // holding for the party-reform window on a party-session reconnect.
+        DefaultTaskRunner = new Game.DefaultTaskRunner(
+            PromptScanner, RoomTracker, Profile, Loops, Lairs,
+            LoopRunner, AutoLair, PartyState, Party, Log);
 
         // Always start with a blank draft. Auto-loading the most recently used
         // profile is a deliberate opt-in feature that ships in a later PR

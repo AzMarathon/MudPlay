@@ -6,9 +6,11 @@ using FujinTerm.Services;
 
 namespace FujinTerm.Game.Cash;
 
-// Stash dispatch for user-marked stash rooms. Dispatches one `hide N <coin>`
-// command per currency whose held amount exceeds its CashSettings KeepXxxOnHand
-// floor, then one `hide <item>` per carried item flagged ItemOverlay.AutoStash.
+// Stash dispatch for user-marked stash rooms. Decomposes the coin held above
+// the single raw CashSettings.KeepOnHandWealth floor into one `hide N <coin>`
+// command per denomination (lowest denomination first, so the coins left on
+// hand are the fewest possible), then one `hide <item>` per carried item
+// flagged ItemOverlay.AutoStash.
 //
 // Two triggers. A stash fires either as a step of an auto-deposit reroute (when
 // the wealth / coin gate trips while a Loop or Auto-Lair is running and the
@@ -20,8 +22,8 @@ namespace FujinTerm.Game.Cash;
 //
 // Room set lives on CharacterProfile.StashRooms — the same list MovementFilter
 // uses, populated by the right-click "Toggle: Stash room" on the Navigation map.
-// Per-currency keep-on-hand lives on CashSettings so the rules apply uniformly
-// across every stash room (no per-room rules).
+// Keep-on-hand lives on CashSettings as a single raw wealth floor so the rule
+// applies uniformly across every stash room (no per-room rules).
 //
 // Stash rooms hold cash and items (banks are cash-only): every carried, unworn
 // item whose game-data AutoStash flag is set is hidden by its canonical name. The
@@ -94,9 +96,10 @@ public sealed class StashRoomManager : IDisposable
     }
 
     // Called by AutoDepositManager on arrival at a stash destination during an
-    // auto-deposit reroute. Dispatches one `hide N <coin>` per currency whose held
-    // amount exceeds its keep-on-hand floor. Guarded by the cash master toggle and
-    // a defensive stash-room membership check (the caller only routes here for
+    // auto-deposit reroute. Decomposes the coin held above the raw keep-on-hand
+    // floor into one `hide N <coin>` per denomination (lowest denomination first,
+    // leaving the fewest coins on hand). Guarded by the cash master toggle and a
+    // defensive stash-room membership check (the caller only routes here for
     // stash destinations, but the guard keeps the contract local).
     public void ExecuteStash(RoomKey enteredRoom)
     {
@@ -126,13 +129,15 @@ public sealed class StashRoomManager : IDisposable
             $"entered stash room map={enteredRoom.Map} room={enteredRoom.Room}");
 
         List<(string Currency, long Amount)> dispatched = new();
-        DispatchOne("copper",   held.Copper,   cash.KeepCopperOnHand,   dispatched);
-        DispatchOne("silver",   held.Silver,   cash.KeepSilverOnHand,   dispatched);
-        DispatchOne("gold",     held.Gold,     cash.KeepGoldOnHand,     dispatched);
-        DispatchOne("platinum", held.Platinum, cash.KeepPlatinumOnHand, dispatched);
-        // Wire runic word so the emitted `hide N <word>` matches what the server
-        // accepts; the StashExecuted consumer canonicalizes for value math.
-        DispatchOne(_naming.RunicName, held.Runic, cash.KeepRunicOnHand, dispatched);
+        foreach ((string denom, long count) in held.PlanOffloadAboveKeep(cash.KeepOnHandWealth))
+        {
+            // Map the canonical "runic" back to the per-BBS runic word so the
+            // emitted `hide N <word>` matches what the server accepts; the
+            // StashExecuted consumer canonicalizes for value math.
+            string wire = denom == "runic" ? _naming.RunicName : denom;
+            Send($"hide {count} {wire}");
+            dispatched.Add((wire, count));
+        }
 
         // Stash rooms hold items too (banks are cash-only). Hide every
         // carried, unworn item flagged AutoStash by its canonical name.
@@ -154,15 +159,6 @@ public sealed class StashRoomManager : IDisposable
                 + $"currencies={dispatched.Count} items={hiddenItems.Count}");
             StashExecuted?.Invoke(new StashDispatch(enteredRoom, dispatched, hiddenItems));
         }
-    }
-
-    private void DispatchOne(string currency, long held, long keep,
-                              List<(string, long)> dispatched)
-    {
-        long excess = held - keep;
-        if (excess <= 0) return;
-        Send($"hide {excess} {currency}");
-        dispatched.Add((currency, excess));
     }
 
     private void Send(string text)

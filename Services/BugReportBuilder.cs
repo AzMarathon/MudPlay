@@ -338,6 +338,12 @@ public static class BugReportBuilder
             svc.AutoLair.CurrentTarget is { } lair ? $"{lair.Map}/{lair.Room}" : "(none)");
         Kv(sb, "Auto-deposit reroute", svc.AutoDeposit.RerouteStatus);
 
+        // Default-task startup state — a "my loop / Auto-Lair didn't start on
+        // login" report needs to know whether the runner deferred the start
+        // behind the party-reform hold and whether that hold is still counting.
+        Kv(sb, "Default task party-hold armed", svc.DefaultTaskRunner.PendingPartyRebuildHold.ToString());
+        Kv(sb, "Default task holding now", svc.DefaultTaskRunner.IsHoldingForParty.ToString());
+
         // Recovery gate + Paradigm rm re-sync — a "walker got lost / stuck
         // mid-walk" report needs the tier the gate climbed to, the anchor it
         // last held, and whether an authoritative-position round-trip was

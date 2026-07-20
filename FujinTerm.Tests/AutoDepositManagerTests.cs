@@ -480,7 +480,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         h.Settings.BankRoomKey = "1/3";
         h.Banks.Add(new RoomKey(1, 3));
         h.Settings.AutoDepositIfCoinsExceed = 1;
-        h.Settings.KeepGoldOnHand = 100; // keep 100 gold = 10000 copper
+        h.Settings.KeepOnHandWealth = 10_000; // keep 100 gold worth of copper
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
         Arrive(h, new RoomKey(1, 2));
@@ -521,12 +521,12 @@ public sealed class AutoDepositManagerTests : IDisposable
     }
 
     [Fact]
-    public void Deposit_SubtractsKeepOnHandFloors()
+    public void Deposit_SubtractsKeepOnHandFloor()
     {
         using Harness h = NewHarness();
         StartLair(h);
         ArmBankGate(h);
-        h.Settings.KeepGoldOnHand = 10; // keep 10 gold = 1000 copper on hand
+        h.Settings.KeepOnHandWealth = 1_000; // keep 10 gold worth of copper
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
         Arrive(h, new RoomKey(1, 2));
@@ -547,7 +547,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         h.Settings.BankRoomKey = "1/3";
         h.Banks.Add(new RoomKey(1, 3));
         h.Settings.AutoDepositIfCoinsExceed = 1;
-        h.Settings.KeepGoldOnHand = 100; // keep 100 gold = 10000 copper
+        h.Settings.KeepOnHandWealth = 10_000; // keep 100 gold worth of copper
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
         Arrive(h, new RoomKey(1, 2));

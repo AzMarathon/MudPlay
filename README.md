@@ -1,9 +1,11 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.85.0**
-> - Settings → General: Auto-Train now listed in the "Auto-Engines enabled on start" section (mirrors the Auto-Trainer tab's master toggle)
-> - Settings → General: Auto-Train added to the "Re-enable on reconnect" section
+> **Version 1.87.0**
+> - Settings → Cash + Items "Keep on hand" is now a single raw wealth value (copper farthings) instead of five per-currency fields
+> - Depositing sends the excess as `dep <copper>`; stashing decomposes it into lowest-denomination-first `hide N <coin>` commands, leaving the fewest coins on hand
+> - Settings → Health: HP and Mana / Kai thresholds stack vertically so the tab no longer opens with a horizontal scrollbar
+> - Settings → Health: pre/post-rest command boxes are left-aligned at a sensible width instead of stretched to the pane's right edge
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
