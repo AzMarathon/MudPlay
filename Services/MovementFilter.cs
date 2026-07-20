@@ -81,6 +81,15 @@ public sealed class MovementFilter : IRoomFilter
     // off-path toll edge inside the BFS frontier never triggers a poll.
     public Action? TollWealthProbe { get; set; }
 
+    // Fires the party @level freshness round-trip. Wired by AppServices to
+    // PartyLevelTracker.WarmStaleLevels. Invoked only from WarmForRoute, and
+    // only when the levels-permitted shortest route actually crosses a level
+    // gate — so an off-path level edge inside the BFS frontier never triggers a
+    // probe. The tracker itself decides whether any member is stale/unknown
+    // enough to warrant the round-trip; this just signals "a level gate is on
+    // the planned route".
+    public Action? LevelWarmProbe { get; set; }
+
     // ----- Acquirable-gate providers (item / ticket / key-door / hazard) ----
     // These four gates share a trait the level / class / toll gates don't: the
     // thing that unblocks them (a raft, a ticket, a door key, a hazard-counter
@@ -124,6 +133,14 @@ public sealed class MovementFilter : IRoomFilter
     // genuinely on the path before deciding to poll. Single-threaded planning
     // use — set and cleared inside WarmForRoute's own try/finally.
     private bool _tollGateSuspended;
+
+    // While set, the party branch of IsLevelGateBlocked stands down (the
+    // self-only level check still applies). WarmForRoute flips this on to plan
+    // the route the party WOULD take if every level gate were passable, so it
+    // can tell whether a level gate is genuinely on the path before deciding to
+    // fire the @level freshness probe. Single-threaded planning use — set and
+    // cleared inside WarmForRoute's own try/finally.
+    private bool _partyLevelGateSuspended;
 
     // While set, the four acquirable gates (item / ticket / key-door / hazard)
     // stand down so a planning pass can compute the route the crosser WOULD
@@ -317,8 +334,9 @@ public sealed class MovementFilter : IRoomFilter
         // whole party can't clear so no member is left behind. The bounds
         // fold in the leader's own level, so this also covers the leader.
         // Falls through to the self-only branch when no bounds are known
-        // (solo, not leading, or nobody's level parsed yet).
-        if (PartyLevelBoundsProvider?.Invoke() is { } bounds)
+        // (solo, not leading, or nobody's level parsed yet) or while the
+        // party level gate is suspended for the freshness-warm planning pass.
+        if (!_partyLevelGateSuspended && PartyLevelBoundsProvider?.Invoke() is { } bounds)
         {
             if (exit.MinLevel > 0 && bounds.Low < exit.MinLevel) return true;
             if (exit.MaxLevel > 0 && bounds.High > exit.MaxLevel) return true;
@@ -358,27 +376,45 @@ public sealed class MovementFilter : IRoomFilter
         return wealth < cost;
     }
 
-    // Warm the party @wealth reading before a walk, but only when it's
-    // actually needed. BFS explores off-path toll edges (any toll exit inside
-    // the search frontier, in any direction), so probing from the per-exit
-    // gate fired an @wealth for tolls the party would never walk through. Here
-    // we plan the route ONCE with the toll gate suspended — the path the party
-    // WOULD take if every toll were affordable — and probe only when that path
-    // genuinely crosses a toll. No party gate in play (solo, not leading, or
-    // our own wallet unknown) → nothing to warm.
+    // Warm the party @wealth reading and @level freshness before a walk, but
+    // only when each is actually needed. BFS explores off-path gate edges (any
+    // toll / level exit inside the search frontier, in any direction), so
+    // probing from the per-exit gate would fire a round-trip for a gate the
+    // party would never walk through. Here we plan the route ONCE per gate kind
+    // with that gate suspended — the path the party WOULD take if every gate of
+    // that kind were passable — and probe only when that path genuinely crosses
+    // one. Each half is independent: a toll on the route warms @wealth, a level
+    // gate on the route warms @level; a route with neither warms nothing.
     public void WarmForRoute(BfsMapper bfs, RoomKey source, RoomKey destination)
     {
         ArgumentNullException.ThrowIfNull(bfs);
-        if (TollWealthProbe is null) return;
-        if (PartyWealthProvider?.Invoke() is null) return;   // party toll gate doesn't apply
 
-        _tollGateSuspended = true;
-        try
+        // Toll wealth warm — only when the party toll gate is actually in play.
+        if (TollWealthProbe is { } tollProbe && PartyWealthProvider?.Invoke() is not null)
         {
-            if (bfs.RouteUsesToll(source, destination, this))
-                TollWealthProbe();
+            _tollGateSuspended = true;
+            try
+            {
+                if (bfs.RouteUsesToll(source, destination, this))
+                    tollProbe();
+            }
+            finally { _tollGateSuspended = false; }
         }
-        finally { _tollGateSuspended = false; }
+
+        // Level freshness warm — only when the party level gate is actually in
+        // play (bounds known → we're leading a party with at least one member
+        // level to gate on). The probe fires a fresh @level for stale / unknown
+        // members so the next evaluation gates on verified levels.
+        if (LevelWarmProbe is { } levelProbe && PartyLevelBoundsProvider?.Invoke() is not null)
+        {
+            _partyLevelGateSuspended = true;
+            try
+            {
+                if (bfs.RouteUsesLevelGate(source, destination, this))
+                    levelProbe();
+            }
+            finally { _partyLevelGateSuspended = false; }
+        }
     }
 
     // True when the user has flagged this room as a stash drop-off point.

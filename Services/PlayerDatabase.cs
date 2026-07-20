@@ -278,7 +278,7 @@ public sealed class PlayerDatabase
 
         if (_observations.TryGetValue(given, out PlayerObservation? existing))
         {
-            _observations[given] = existing with { Level = level, LastSeenUtc = nowUtc };
+            _observations[given] = existing with { Level = level, LevelAt = nowUtc, LastSeenUtc = nowUtc };
         }
         else
         {
@@ -293,7 +293,8 @@ public sealed class PlayerDatabase
                 Role:         null,
                 FirstSeenUtc: nowUtc,
                 LastSeenUtc:  nowUtc,
-                Level:        level);
+                Level:        level,
+                LevelAt:      nowUtc);
         }
 
         Rebuild();
@@ -542,8 +543,10 @@ public sealed class PlayerDatabase
             // carry equipment).
             Equipment    = newer.Equipment ?? older.Equipment,
             // Level: same treatment — a probed level survives a later
-            // who-observation that carried no level.
+            // who-observation that carried no level. LevelAt rides along with
+            // whichever Level won, so the staleness stamp stays paired with it.
             Level        = newer.Level ?? older.Level,
+            LevelAt      = newer.Level is not null ? newer.LevelAt : older.LevelAt,
             // Greet time isn't ordered by LastSeen — keep the later of
             // the two so a duplicate-row collapse never re-opens a greet
             // we already sent today.

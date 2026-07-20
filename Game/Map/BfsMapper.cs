@@ -303,6 +303,32 @@ public sealed class BfsMapper
         return false;
     }
 
+    // True when the shortest route from source to destination crosses at least
+    // one (Level: MIN to MAX) exit under the supplied filter. Used at walk-start
+    // to decide whether a party @level freshness probe is worth firing: the
+    // probe only matters when a level gate is actually on the route the walker
+    // will take, not on an off-path level edge the BFS frontier happened to
+    // touch. The caller (MovementFilter.WarmForRoute) suspends its own party
+    // level gate before calling, so the returned path is the one the party WOULD
+    // walk if every level gate were passable — tolls / class gates / avoided
+    // rooms still apply.
+    public bool RouteUsesLevelGate(RoomKey source, RoomKey destination, IRoomFilter? filter = null)
+    {
+        IReadOnlyList<Direction>? path = FindPath(source, destination, filter);
+        if (path is null || path.Count == 0) return false;
+
+        RoomKey cursor = source;
+        foreach (Direction dir in path)
+        {
+            Room? room = _graph.GetRoom(cursor);
+            if (room is null) return false;
+            if (!room.Exits.TryGetValue(dir, out RoomExit exit)) return false;
+            if (exit.HasLevelGate) return true;
+            cursor = exit.Target;
+        }
+        return false;
+    }
+
     // BFS-planar layout from origin. Caches the result; OnGraphReloaded
     // evicts. The origin sits at (0, 0). Rooms whose grid position
     // collides with an already-placed room go into RoomLayout.OffGrid.

@@ -3457,8 +3457,11 @@ public sealed class AppServices
         // exact level supersedes the title band. The tracker fires it on
         // roster change and exposes the party's most-constraining level
         // window; MovementFilter reads that window to route a following
-        // party around gates a member can't clear. Both gated by the
-        // "avoid party-impassable level gates" toggle.
+        // party around gates a member can't clear. Always-on — routing a
+        // party around a gate it can't clear is never wanted OFF; the only
+        // gate is "am I leading a party". WarmStaleLevels re-probes a member
+        // whose exact level is unknown or older than a day, wired into the
+        // route-scoped MovementFilter.LevelWarmProbe below.
         PartyLevelProbe = new Game.Remote.PartyLevelProbe(
             PartyBroadcaster, Chat, PartyState,
             recordLevel: (given, level) => Players.RecordLevel(given, level, DateTime.UtcNow),
@@ -3466,10 +3469,9 @@ public sealed class AppServices
         PartyLevel = new Game.Remote.PartyLevelTracker(
             PartyState, PartyLevelProbe, Players,
             selfLevel: () => Stats.HasParsed ? PlayerStats.Level : (int?)null,
-            isEnabled: () =>
-                Resolver.Resolve<Models.Profile.OtherSettings>("Other").AvoidPartyImpassableLevelGates,
             log: Log);
         Movement.PartyLevelBoundsProvider = PartyLevel.Bounds;
+        Movement.LevelWarmProbe = PartyLevel.WarmStaleLevels;
 
         // Party-wealth probe + tracker. Unlike level, wealth isn't kept warm —
         // it drifts with loot / spend — so the tracker probes @wealth only when

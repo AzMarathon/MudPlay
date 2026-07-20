@@ -51,7 +51,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Lockpicks";
             yield return "Search rooms if item needed";
             yield return "Hide items when discarding";
-            yield return "Avoid party-impassable level gates";
             yield return "Max comeback backtrack rooms";
             yield return "@comeback";
             yield return "Utilize self or party members to disarm traps";
@@ -122,12 +121,11 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // editor — a path-enabling item is marked once and every route through it obeys
     // the mark, so there's no global toggle here anymore.
 
-    // When checked and leading a party, route around level gates the whole
-    // party can't clear instead of walking the leader through and leaving a
-    // member behind. Each member's level comes from an @level probe (exact)
-    // or, until probed, their title band. Read live by MovementFilter through
-    // PartyLevelTracker.
-    [ObservableProperty] private bool _avoidPartyImpassableLevelGates;
+    // Note: the former "Avoid party-impassable level gates" checkbox graduated
+    // to always-on built-in behaviour (see OtherSettings) — routing a following
+    // party around a gate it can't clear is never wanted OFF, so there's no
+    // toggle. PartyLevelTracker runs the check whenever this character leads a
+    // party.
 
     // Leader-side @comeback backtrack budget — how many rooms the leader walks
     // backwards along the path just taken when a stranded follower sends a bare
@@ -239,7 +237,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             PicklocksOverBash     = PicklocksOverBash,
             SearchRoomsIfItemNeeded = SearchRoomsIfItemNeeded,
             HideWhenDiscarding    = HideWhenDiscarding,
-            AvoidPartyImpassableLevelGates = AvoidPartyImpassableLevelGates,
             MaxComebackBacktrackRooms = Math.Clamp(MaxComebackBacktrackRooms, 1, 50),
             AutoRequestComebackWhenLeftBehind = AutoRequestComebackWhenLeftBehind,
         };
@@ -294,7 +291,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         PicklocksOverBash     = dto.PicklocksOverBash;
         SearchRoomsIfItemNeeded = dto.SearchRoomsIfItemNeeded;
         HideWhenDiscarding    = dto.HideWhenDiscarding;
-        AvoidPartyImpassableLevelGates = dto.AvoidPartyImpassableLevelGates;
         MaxComebackBacktrackRooms = dto.MaxComebackBacktrackRooms;
         AutoRequestComebackWhenLeftBehind = dto.AutoRequestComebackWhenLeftBehind;
         PlayerCleanupDays = _globalSettings?.Current.PlayerCleanupDays ?? 90;
@@ -355,7 +351,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnPicklocksOverBashChanged(bool value)    => MarkDirty();
     partial void OnSearchRoomsIfItemNeededChanged(bool value) => MarkDirty();
     partial void OnHideWhenDiscardingChanged(bool value) => MarkDirty();
-    partial void OnAvoidPartyImpassableLevelGatesChanged(bool value) => MarkDirty();
     partial void OnMaxComebackBacktrackRoomsChanged(int value) => MarkDirty();
     partial void OnAutoRequestComebackWhenLeftBehindChanged(bool value) => MarkDirty();
 

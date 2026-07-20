@@ -1,11 +1,11 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.87.0**
-> - Settings → Cash + Items "Keep on hand" is now a single raw wealth value (copper farthings) instead of five per-currency fields
-> - Depositing sends the excess as `dep <copper>`; stashing decomposes it into lowest-denomination-first `hide N <coin>` commands, leaving the fewest coins on hand
-> - Settings → Health: HP and Mana / Kai thresholds stack vertically so the tab no longer opens with a horizontal scrollbar
-> - Settings → Health: pre/post-rest command boxes are left-aligned at a sensible width instead of stretched to the pane's right edge
+> **Version 1.88.0**
+> - Party-impassable level-gate routing is now always-on (the opt-in Settings → Other checkbox is gone); a following party still routes around a `(Level: MIN to MAX)` gate it can't clear rather than stranding a member
+> - A member's exact level (from `@level`) is now timestamped; readings older than 24h are treated as stale
+> - When a planned walk actually crosses a level gate, `@level` is re-probed for any unknown or stale member (route-scoped + debounced, mirroring the toll `@wealth` warm)
+> - Bug report now lists each party member's level estimate (exact + age, or title band) and the folded party level window
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

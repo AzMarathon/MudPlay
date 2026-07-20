@@ -1290,7 +1290,19 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
   - **Level:** use the member level already **stored in game data** (each player's recorded level);
     only when it's suspected stale, **re-poll in the room with `@level`**. A member outside the
     exit's `(Level: MIN to MAX)` window means the party routes around that exit. (This half is
-    already implemented: `MovementFilter.IsExitBlocked` + `PartyLevelProbe` / `PartyLevelTracker`.)
+    implemented: `MovementFilter.IsExitBlocked` + `PartyLevelProbe` / `PartyLevelTracker`.
+    **Always-on** — routing a following party around a gate it can't clear is never wanted OFF
+    (the alternative strands a member), so there's no opt-in toggle; the only gate is "am I
+    leading a party". A member's exact level comes from an `@level` reply; **until they answer,
+    their `who` title's level band is used with the LOW end as the conservative floor** (they
+    could be as low as the band's minimum, so a `MinLevel` gate clears only if even that floor
+    clears it). Every client answers `@level` — formats vary by client, parsed leniently. An
+    exact reading is stamped with the time it was learned (`PlayerObservation.LevelAt`) and treated
+    as **stale after 24h** — a member could have levelled since — so `PartyLevelTracker.WarmStaleLevels`
+    re-fires `@level` for any unknown / aged member when a walk's planned route actually crosses a
+    level gate. That freshness poll is route-scoped and debounced the same way the `@wealth` toll
+    poll is: fired from `MovementFilter.WarmForRoute` only when the levels-permitted shortest route
+    genuinely uses a level gate, so an off-path level edge in the BFS frontier never triggers it.)
 - **[CONFIRMED]** The **keyword** the client keys policy/value on is the denomination-defining
   first word (`copper`/`silver`/`gold`/`platinum`/`runic`); the second word is the flavour coin
   noun (`farthings`/`nobles`/`crowns`/`pieces`/`coins`). Some lines carry only the keyword,

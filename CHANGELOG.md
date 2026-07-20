@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.88.0
+
+- Party-impassable level-gate routing is now always-on (the opt-in Settings → Other checkbox is gone); a following party still routes around a `(Level: MIN to MAX)` gate it can't clear rather than stranding a member
+- A member's exact level (from `@level`) is now timestamped; readings older than 24h are treated as stale
+- When a planned walk actually crosses a level gate, `@level` is re-probed for any unknown or stale member (route-scoped + debounced, mirroring the toll `@wealth` warm)
+- Bug report now lists each party member's level estimate (exact + age, or title band) and the folded party level window
+
 ## 1.87.0
 
 - Settings → Cash + Items "Keep on hand" is now a single raw wealth value (copper farthings) instead of five per-currency fields

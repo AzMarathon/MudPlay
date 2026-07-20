@@ -31,8 +31,8 @@ public sealed class PartyLevelTrackerTests
         public readonly PartyLevelProbe Probe;
         public readonly PartyLevelTracker Tracker;
 
-        public bool Enabled = true;
         public int? SelfLevel;
+        public DateTime Now = DateTime.UnixEpoch;
 
         public Harness()
         {
@@ -44,12 +44,12 @@ public sealed class PartyLevelTrackerTests
             Probe = new PartyLevelProbe(
                 Broadcaster, Chat, State,
                 armWindow: Windows.Add,
-                recordLevel: (n, l) => Players.RecordLevel(n, l, DateTime.UnixEpoch),
+                recordLevel: (n, l) => Players.RecordLevel(n, l, Now),
                 log: null);
             Tracker = new PartyLevelTracker(
                 State, Probe, Players,
                 selfLevel: () => SelfLevel,
-                isEnabled: () => Enabled,
+                clock: () => Now,
                 log: null);
         }
 
@@ -77,17 +77,6 @@ public sealed class PartyLevelTrackerTests
     }
 
     // ----- Bounds gating --------------------------------------------------
-
-    [Fact]
-    public void Bounds_FeatureDisabled_ReturnsNull()
-    {
-        var h = new Harness { SelfLevel = 40, Enabled = false };
-        h.AddMember("Bob");
-        h.Lead();
-        h.Players.RecordLevel("Bob", 30, DateTime.UnixEpoch);
-
-        Assert.Null(h.Tracker.Bounds());
-    }
 
     [Fact]
     public void Bounds_NotInParty_ReturnsNull()
@@ -192,17 +181,6 @@ public sealed class PartyLevelTrackerTests
     }
 
     [Fact]
-    public void Probe_DoesNotFire_WhenDisabled()
-    {
-        var h = new Harness { Enabled = false };
-        h.AddMember("Bob");
-        h.Lead();
-
-        Assert.Equal(0, h.Probes);
-        Assert.Empty(h.Wire);
-    }
-
-    [Fact]
     public void Probe_DoesNotFire_WhenNotLeading()
     {
         var h = new Harness();
@@ -251,5 +229,70 @@ public sealed class PartyLevelTrackerTests
 
         Assert.Equal(18, h.Players.Find("Bob")!.Level);   // persisted via the probe seam
         Assert.Equal((18, 40), h.Tracker.Bounds());        // and folded into the window
+    }
+
+    // ----- Route-scoped freshness warm (WarmStaleLevels) -----------------
+
+    [Fact]
+    public void WarmStaleLevels_UnknownMember_Probes()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Bob");   // never answered @level → unknown
+        h.Lead();
+
+        int before = h.Probes;
+        h.Tracker.WarmStaleLevels();
+        Assert.Equal(before + 1, h.Probes);   // unknown member → fresh probe
+    }
+
+    [Fact]
+    public void WarmStaleLevels_FreshExact_NoProbe()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Bob");
+        h.Lead();
+        h.Players.RecordLevel("Bob", 30, h.Now);   // stamped LevelAt = now
+
+        int before = h.Probes;
+        h.Tracker.WarmStaleLevels();
+        Assert.Equal(before, h.Probes);   // everyone fresh → nothing to warm
+    }
+
+    [Fact]
+    public void WarmStaleLevels_StaleExact_Reprobes()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Bob");
+        h.Lead();
+        h.Players.RecordLevel("Bob", 30, h.Now);   // recorded at UnixEpoch
+
+        h.Now = DateTime.UnixEpoch + TimeSpan.FromHours(25);   // aged past the 24h horizon
+        int before = h.Probes;
+        h.Tracker.WarmStaleLevels();
+        Assert.Equal(before + 1, h.Probes);   // stale reading → re-probe
+    }
+
+    [Fact]
+    public void WarmStaleLevels_Debounced_OneRoundTrip()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Bob");   // unknown
+        h.Lead();
+
+        int before = h.Probes;
+        h.Tracker.WarmStaleLevels();
+        h.Tracker.WarmStaleLevels();   // second call inside the debounce window
+        Assert.Equal(before + 1, h.Probes);   // at most one round-trip per plan
+    }
+
+    [Fact]
+    public void WarmStaleLevels_NotLeading_NoProbe()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Bob");
+        h.State.IsInParty = true;   // following, not leading
+
+        h.Tracker.WarmStaleLevels();
+        Assert.Equal(0, h.Probes);
     }
 }
