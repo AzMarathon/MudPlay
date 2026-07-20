@@ -152,7 +152,7 @@ public sealed class GroundItemTracker : IDisposable
         }
     }
 
-    // Cash entries in the survey are either a counted coin ("50 gold sovereigns",
+    // Cash entries in the survey are either a counted coin ("50 gold crowns",
     // "56 silver nobles") or the singular "a gold piece". Cash always carries its
     // count + denomination; an item shows just its name when a lone copy is on the
     // floor and gains a leading count only when 2+ are stacked ("5 piece of
@@ -165,9 +165,10 @@ public sealed class GroundItemTracker : IDisposable
     // copper key") intact.
     //
     // Blind spot (shared with CashManager.TryParseCashEntry, the same heuristic):
-    // a stacked item whose name *starts* with a denomination word ("2 gold key")
-    // would read as cash. Left as-is — whether such items stack with a count in
-    // the survey is unverified, and the fix belongs on the shared cash parser.
+    // items stack with a leading count exactly like cash, so a stacked item whose
+    // name *starts* with a denomination word ("2 gold key") reads as cash here.
+    // Telling it apart needs the board's coin nouns or an item-table lookup rather
+    // than another local guess, so the real fix belongs on the shared cash parser.
     private bool IsCashEntry(string entry)
     {
         string[] words = entry.Split(' ', StringSplitOptions.RemoveEmptyEntries);
