@@ -1276,6 +1276,15 @@ flag). These are hard eligibility gates, independent of resistance and level imm
   it, exactly like any other ground item. The drop isn't announced on the kill line, so to see and
   auto-collect it the room must be re-surveyed (a bare `look` re-renders the `You notice … here.`
   list the auto-get engine already parses).
+- **[CONFIRMED]** (2026-07-20, user) **A ground stack of 2+ identical items shows a leading count;
+  a lone item shows the article form (no count).** The room survey renders a pile as
+  `You notice 5 piece of amber here.` — the count is the true number on the floor. When there is
+  only **one** of the item, the survey omits the count and uses the article: `You notice a piece
+  of amber here.` (never `1 piece of amber`). There is no bulk-get verb, so each `get <name>` grabs
+  a single unit; the auto-collect engine therefore issues **one `get` per counted unit** (the survey
+  count for a stack, exactly one for the article/lone form). Count parsing mirrors
+  `ItemNameStore.Normalize`, which strips the same leading count/article token when matching the
+  item name.
 
 ### Item-cast triggers — how a `CastsSp` fires *([CONFIRMED] 2026-07-18, user)*
 
