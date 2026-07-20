@@ -29,7 +29,7 @@ namespace FujinTerm.Game.Cash;
 // StashRoomManager.ExecuteStash to fire the per-currency `hide` commands),
 // otherwise it must validate as a real bank (Shops ShopType == 7 via
 // BankCatalog) before this manager sends a single `dep <value>` for the held
-// wealth above the keep-on-hand floors. A key that resolves to neither — a
+// wealth above the keep-on-hand floor. A key that resolves to neither — a
 // stale / orphaned BankRoomKey the Settings picker shows as unset — is a no-op:
 // honouring it would detour to a phantom bank and, on a tolled route, probe the
 // party's @wealth for a deposit that can never land.
@@ -549,15 +549,15 @@ public sealed class AutoDepositManager : IDisposable
         }
     }
 
-    // Send a single `dep <value>` for the held wealth above the per-currency
-    // keep-on-hand floors. Reads the snapshot fresh at deposit time (holdings may
-    // have shifted during the walk), so the amount reflects what's actually on
-    // hand at the bank.
+    // Send a single `dep <value>` for the held wealth above the raw keep-on-hand
+    // floor. Reads the snapshot fresh at deposit time (holdings may have shifted
+    // during the walk), so the amount reflects what's actually on hand at the
+    // bank.
     private void DepositAtBank()
     {
         CashSettings cash = _readCash();
         CurrencyHoldings held = _getSnapshot().Currency;
-        long keepValue = cash.KeepOnHandCopper();
+        long keepValue = cash.KeepOnHandWealth;
         long depositValue = held.TotalCopperValue - keepValue;
         if (depositValue <= 0)
         {

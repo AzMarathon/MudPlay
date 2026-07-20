@@ -38,4 +38,52 @@ public readonly record struct CurrencyHoldings(
             "runic"    => count * 1_000_000,
             _          => 0,
         };
+
+    // Decompose the coin above a raw copper-farthing keep floor into a set of
+    // per-denomination offload commands (largest denomination first). Used by
+    // the stash path, where `hide N <coin>` names a specific denomination and
+    // so needs the raw floor converted back into concrete coins to dump.
+    //
+    // Wealth is summed from the per-coin counts here (not TotalCopperValue) so
+    // the plan is realizable coin-by-coin: we only ever offload denominations we
+    // actually hold. excess = held - max(0, keepCopper); greedy largest-first is
+    // exact because each MajorMUD denomination divides the next. Returns the
+    // canonical "runic" name — callers map it to the board-specific word at send
+    // time. Empty when nothing sits above the floor.
+    public IReadOnlyList<(string Currency, long Count)> PlanOffloadAboveKeep(long keepCopper)
+    {
+        long held =
+            ToCopper("copper", Copper)
+            + ToCopper("silver", Silver)
+            + ToCopper("gold", Gold)
+            + ToCopper("platinum", Platinum)
+            + ToCopper("runic", Runic);
+
+        long excess = held - Math.Max(0, keepCopper);
+        if (excess <= 0)
+            return Array.Empty<(string, long)>();
+
+        List<(string Currency, long Count)> plan = new();
+        foreach ((string name, long unit, long available) in new[]
+        {
+            ("runic", 1_000_000L, (long)Runic),
+            ("platinum", 10_000L, (long)Platinum),
+            ("gold", 100L, (long)Gold),
+            ("silver", 10L, (long)Silver),
+            ("copper", 1L, (long)Copper),
+        })
+        {
+            if (excess <= 0)
+                break;
+
+            long count = Math.Min(available, excess / unit);
+            if (count <= 0)
+                continue;
+
+            plan.Add((name, count));
+            excess -= count * unit;
+        }
+
+        return plan;
+    }
 }

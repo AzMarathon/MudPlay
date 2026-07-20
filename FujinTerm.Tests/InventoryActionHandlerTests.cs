@@ -237,7 +237,7 @@ public sealed class InventoryActionHandlerTests
     {
         Harness h = Setup();
         SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
-        h.Cash.KeepRunicOnHand = 3; // keep floor = 3,000,000 copper
+        h.Cash.KeepOnHandWealth = 3_000_000; // keep floor in copper
         FeedCurrencyDump(h.Lines);  // holding 2,069,425 copper
 
         h.Engine.DispatchForTests(Telepath("Bob", "@deposit-all"));
@@ -252,12 +252,8 @@ public sealed class InventoryActionHandlerTests
     {
         Harness h = Setup();
         SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
-        // Keep floors that sum to the exact held wealth (2,069,425 copper).
-        h.Cash.KeepRunicOnHand = 2;
-        h.Cash.KeepPlatinumOnHand = 6;
-        h.Cash.KeepGoldOnHand = 94;
-        h.Cash.KeepSilverOnHand = 2;
-        h.Cash.KeepCopperOnHand = 5;
+        // Keep floor set to the exact held wealth (2,069,425 copper).
+        h.Cash.KeepOnHandWealth = 2_069_425;
         FeedCurrencyDump(h.Lines);
 
         h.Engine.DispatchForTests(Telepath("Bob", "@deposit-all"));

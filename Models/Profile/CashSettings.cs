@@ -37,40 +37,17 @@ public sealed class CashSettings
     // (bank). v1 just stores it; the reroute itself is unwired.
     public string BankRoomKey { get; set; } = string.Empty;
 
-    // ----- Per-currency minimum to keep on hand ---------------------
-    // The floor the character keeps after offloading coin, applied to
-    // BOTH banking (auto-deposit) and stashing. StashRoomManager reads
-    // these at entry into a marked stash room: held - keep is the
-    // amount dumped via `hide N <coin>`; the auto-deposit reroute uses
-    // the same floor for `deposit`. Defaults all 0 = offload everything.
-
-    // Copper to keep on hand when depositing / stashing. Default 0 — offload all.
-    public long KeepCopperOnHand { get; set; }
-
-    // Silver to keep on hand when depositing / stashing. Default 0 — offload all.
-    public long KeepSilverOnHand { get; set; }
-
-    // Gold to keep on hand when depositing / stashing. Default 0 — offload all.
-    public long KeepGoldOnHand { get; set; }
-
-    // Platinum to keep on hand when depositing / stashing. Default 0 — offload all.
-    public long KeepPlatinumOnHand { get; set; }
-
-    // Runic to keep on hand when depositing / stashing. Default 0 — offload all.
-    public long KeepRunicOnHand { get; set; }
-
-    // Total copper-farthing value of the per-denomination keep-on-hand floors —
-    // the slice of wealth the character keeps after offloading coin. Uses the
-    // MajorMUD ratio ladder (silver = 10, gold = 100, platinum = 10 000,
-    // runic = 1 000 000 copper). Shared by the auto-deposit reroute (the bank
-    // dep amount) and the @deposit-all remote command (the deposit / withdraw
-    // target).
-    public long KeepOnHandCopper() =>
-        KeepCopperOnHand
-        + KeepSilverOnHand * 10
-        + KeepGoldOnHand * 100
-        + KeepPlatinumOnHand * 10_000
-        + KeepRunicOnHand * 1_000_000;
+    // ----- Wealth to keep on hand ------------------------------------
+    // The floor the character keeps after offloading coin, expressed as a
+    // single raw copper-farthing value — the SAME unit as the Wealth line
+    // and AutoDepositIfWealthExceeds, so the two thresholds compare directly.
+    // Applied to BOTH banking (auto-deposit) and stashing. The engine
+    // converts as needed: the auto-deposit reroute passes this straight to
+    // `dep <copper>` (the game auto-picks denominations), while
+    // StashRoomManager decomposes held - keep into per-denomination
+    // `hide N <coin>` commands (largest-first, exact because each MajorMUD
+    // denomination divides the next). Default 0 = offload everything.
+    public long KeepOnHandWealth { get; set; }
 
     // ----- Coin encumbrance gate + cascade ---------------------------
     // The "Cash + Items" tab exposes these; CashManager.CollectCoins gates coin

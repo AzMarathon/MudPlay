@@ -65,15 +65,13 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
 
     [ObservableProperty] private BankChoice? _selectedBank;
 
-    // ----- Per-currency keep-on-hand (banking + stashing) ----------
-    // The floor kept after offloading coin, honoured by BOTH the
-    // auto-deposit reroute and StashRoomManager's `hide N <coin>`.
+    // ----- Keep-on-hand (banking + stashing) -----------------------
+    // The floor kept after offloading coin, as a single raw copper-farthing
+    // value (same unit as Wealth / AutoDepositIfWealthExceeds). Honoured by
+    // BOTH the auto-deposit reroute (dep <excess>) and StashRoomManager, which
+    // decomposes the excess into largest-first `hide N <coin>` commands.
 
-    [ObservableProperty] private long _keepCopperOnHand;
-    [ObservableProperty] private long _keepSilverOnHand;
-    [ObservableProperty] private long _keepGoldOnHand;
-    [ObservableProperty] private long _keepPlatinumOnHand;
-    [ObservableProperty] private long _keepRunicOnHand;
+    [ObservableProperty] private long _keepOnHandWealth;
 
     // ----- Coin encumbrance gate + cascade --------------------------
 
@@ -130,11 +128,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
             AutoDepositIfCoinsExceed   = ClampNonNeg(AutoDepositIfCoinsExceed),
             BankRoomKey                = SelectedBank?.Value ?? BankRoomKey ?? string.Empty,
 
-            KeepCopperOnHand   = ClampNonNeg(KeepCopperOnHand),
-            KeepSilverOnHand   = ClampNonNeg(KeepSilverOnHand),
-            KeepGoldOnHand     = ClampNonNeg(KeepGoldOnHand),
-            KeepPlatinumOnHand = ClampNonNeg(KeepPlatinumOnHand),
-            KeepRunicOnHand    = ClampNonNeg(KeepRunicOnHand),
+            KeepOnHandWealth = ClampNonNeg(KeepOnHandWealth),
 
             SkipCollectIfMakesLight    = SkipCollectIfMakesLight,
             SkipCollectIfMakesMedium   = SkipCollectIfMakesMedium,
@@ -199,11 +193,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         SelectedBank = BankChoices.FirstOrDefault(c =>
             string.Equals(c.Value, BankRoomKey, StringComparison.OrdinalIgnoreCase));
 
-        KeepCopperOnHand   = dto.KeepCopperOnHand;
-        KeepSilverOnHand   = dto.KeepSilverOnHand;
-        KeepGoldOnHand     = dto.KeepGoldOnHand;
-        KeepPlatinumOnHand = dto.KeepPlatinumOnHand;
-        KeepRunicOnHand    = dto.KeepRunicOnHand;
+        KeepOnHandWealth = dto.KeepOnHandWealth;
 
         SkipCollectIfMakesLight    = dto.SkipCollectIfMakesLight;
         SkipCollectIfMakesMedium   = dto.SkipCollectIfMakesMedium;
@@ -257,11 +247,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     partial void OnAutoDepositIfWealthExceedsChanged(long value)      => MarkDirty();
     partial void OnAutoDepositIfCoinsExceedChanged(long value)        => MarkDirty();
     partial void OnBankRoomKeyChanged(string value)                   => MarkDirty();
-    partial void OnKeepCopperOnHandChanged(long value)                => MarkDirty();
-    partial void OnKeepSilverOnHandChanged(long value)                => MarkDirty();
-    partial void OnKeepGoldOnHandChanged(long value)                  => MarkDirty();
-    partial void OnKeepPlatinumOnHandChanged(long value)              => MarkDirty();
-    partial void OnKeepRunicOnHandChanged(long value)                 => MarkDirty();
+    partial void OnKeepOnHandWealthChanged(long value)                => MarkDirty();
     // ----- Encumbrance-gate cascade ---------------------------------
     // The three gates are nested by strictness: Light (strictest) ⊃
     // Medium ⊃ Heavy (loosest). Checking a stricter gate subsumes the

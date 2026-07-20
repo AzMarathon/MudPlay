@@ -1,11 +1,11 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.86.0**
-> - Settings → General "Default task" enabled: pick Begin looping / Begin Auto-Lair to auto-start a saved loop or lair on game entry (Do nothing keeps today's idle behaviour)
-> - Startup task routes to the nearest waypoint first, just like Run in the Navigation window; starts even with all auto-engines off
-> - On a reconnect where you had a party, the startup task waits your "if leading, wait" window first so the party can reform
-> - Loop / Auto-Lair pickers list the active game-data set's saved names and keep a saved reference even if it isn't in the current set
+> **Version 1.87.0**
+> - Settings → Cash + Items "Keep on hand" is now a single raw wealth value (copper farthings) instead of five per-currency fields
+> - Depositing sends the excess as `dep <copper>`; stashing decomposes it into largest-denomination-first `hide N <coin>` commands
+> - Settings → Health: HP and Mana / Kai thresholds stack vertically so the tab no longer opens with a horizontal scrollbar
+> - Settings → Health: pre/post-rest command boxes are left-aligned at a sensible width instead of stretched to the pane's right edge
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

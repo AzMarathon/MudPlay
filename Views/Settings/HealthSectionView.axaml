@@ -21,7 +21,7 @@
         </Style>
     </UserControl.Styles>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto">
 
         <Grid>
@@ -40,169 +40,160 @@
                 </StackPanel>
             </Border>
 
+            <!-- HP and Mana / Kai stack vertically rather than side by side:
+                 two columns of these fields demanded ~844px and overflowed the
+                 settings content pane, forcing a permanent horizontal scrollbar.
+                 A single ~410px column (label 180 / value 130 / "abs/max"
+                 readout 100) fits any window width. -->
             <StackPanel IsVisible="{Binding HasProfile}"
                         Margin="22" Spacing="4"
-                        MaxWidth="928" HorizontalAlignment="Left">
+                        MaxWidth="560" HorizontalAlignment="Left">
 
+                <!-- ============ Health (HP) ============ -->
+                <TextBlock Classes="SectionHeader" Text="Health (HP)"/>
 
-                <!-- Two columns: HP left, Mana / Kai right. The outer
-                     columns are Auto so they fit the fixed-width inner
-                     grids; the inner value column is a fixed 100px so the
-                     converted "abs/max" readout (up to "9999/9999" for
-                     4-digit HP / 3-digit MA) is never squeezed to zero.
-                     A horizontal scrollbar covers narrow windows. -->
-                <Grid ColumnDefinitions="Auto,64,Auto">
+                <!-- Mode picker -->
+                <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
+                    <RadioButton GroupName="HpUnit" Content="Percentage"
+                                 IsChecked="{Binding HpModePercentage, Mode=TwoWay}"
+                                 ToolTip.Tip="Thresholds below are read as % of MaxHp."/>
+                    <RadioButton GroupName="HpUnit" Content="Value"
+                                 IsChecked="{Binding HpModeAbsolute, Mode=TwoWay}"
+                                 ToolTip.Tip="Thresholds below are read as absolute HP."/>
+                </StackPanel>
 
-                    <!-- ============ Health (HP) ============ -->
-                    <StackPanel Grid.Column="0" Spacing="4">
-                        <TextBlock Classes="SectionHeader" Text="Health (HP)"/>
+                <Grid ColumnDefinitions="180,130,100" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
+                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                   Value="{Binding RestMaxHp, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Stop resting once HP reaches this threshold. Used by HealthManager (PR 9.B) to clear the HealthRecovery gate."/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding RestMaxHpConverted}"/>
 
-                        <!-- Mode picker -->
-                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
-                            <RadioButton GroupName="HpUnit" Content="Percentage"
-                                         IsChecked="{Binding HpModePercentage, Mode=TwoWay}"
-                                         ToolTip.Tip="Thresholds below are read as % of MaxHp."/>
-                            <RadioButton GroupName="HpUnit" Content="Value"
-                                         IsChecked="{Binding HpModeAbsolute, Mode=TwoWay}"
-                                         ToolTip.Tip="Thresholds below are read as absolute HP."/>
-                        </StackPanel>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Rest if below"/>
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Value="{Binding RestIfBelowHp, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Auto-rest trigger — HealthManager asserts the HealthRecovery gate when HP falls below this."/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding RestIfBelowHpConverted}"/>
 
-                        <Grid ColumnDefinitions="160,130,100" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
-                            <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                           Value="{Binding RestMaxHp, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Stop resting once HP reaches this threshold. Used by HealthManager (PR 9.B) to clear the HealthRecovery gate."/>
-                            <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding RestMaxHpConverted}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Heal (rest)"/>
+                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                   Value="{Binding HealRestTrigger, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Cast Spells → Minor heal during a rest cycle when HP drops below this. CastingDirector (PR 9.D)."/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding HealRestTriggerConverted}"/>
 
-                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Rest if below"/>
-                            <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                           Value="{Binding RestIfBelowHp, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Auto-rest trigger — HealthManager asserts the HealthRecovery gate when HP falls below this."/>
-                            <TextBlock Grid.Row="1" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding RestIfBelowHpConverted}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Minor heal (combat)"/>
+                    <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                   Value="{Binding MinorHealCombatTrigger, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Cast Spells → Minor heal during combat when HP drops below this."/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding MinorHealCombatTriggerConverted}"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Heal (rest)"/>
-                            <NumericUpDown Grid.Row="2" Grid.Column="1"
-                                           Value="{Binding HealRestTrigger, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Cast Spells → Minor heal during a rest cycle when HP drops below this. CastingDirector (PR 9.D)."/>
-                            <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding HealRestTriggerConverted}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Major heal (combat)"/>
+                    <NumericUpDown Grid.Row="4" Grid.Column="1"
+                                   Value="{Binding MajorHealCombatTrigger, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Cast Spells → Major heal during combat when HP drops below this."/>
+                    <TextBlock Grid.Row="4" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding MajorHealCombatTriggerConverted}"/>
 
-                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Minor heal (combat)"/>
-                            <NumericUpDown Grid.Row="3" Grid.Column="1"
-                                           Value="{Binding MinorHealCombatTrigger, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Cast Spells → Minor heal during combat when HP drops below this."/>
-                            <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding MinorHealCombatTriggerConverted}"/>
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
+                    <NumericUpDown Grid.Row="5" Grid.Column="1"
+                                   Value="{Binding RunIfBelowHp, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Trigger flee behavior when HP falls this low. 0 = off (never flee on HP)."/>
+                    <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding RunIfBelowHpConverted}"/>
 
-                            <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Major heal (combat)"/>
-                            <NumericUpDown Grid.Row="4" Grid.Column="1"
-                                           Value="{Binding MajorHealCombatTrigger, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Cast Spells → Major heal during combat when HP drops below this."/>
-                            <TextBlock Grid.Row="4" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding MajorHealCombatTriggerConverted}"/>
+                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Hang up if below"/>
+                    <NumericUpDown Grid.Row="6" Grid.Column="1"
+                                   Value="{Binding HangIfBelowHp, Mode=TwoWay}"
+                                   Minimum="{Binding HangMinimum}" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Drop the connection when HP falls this low — emergency last resort. This can go negative in either mode, down to the realm death floor (HP % goes negative while bleeding out, as par shows), so you can set the hangup deep in the bleeding-out band, closer to death. 0 = hang the moment you drop. To turn it off, use 'Disable hang-ups' in Other settings."/>
+                    <TextBlock Grid.Row="6" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding HangIfBelowHpConverted}"/>
+                </Grid>
 
-                            <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
-                            <NumericUpDown Grid.Row="5" Grid.Column="1"
-                                           Value="{Binding RunIfBelowHp, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Trigger flee behavior when HP falls this low. 0 = off (never flee on HP)."/>
-                            <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding RunIfBelowHpConverted}"/>
+                <!-- ============ Mana / Kai ============ -->
+                <TextBlock Classes="SectionHeader" Text="Mana / Kai"/>
 
-                            <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Hang up if below"/>
-                            <NumericUpDown Grid.Row="6" Grid.Column="1"
-                                           Value="{Binding HangIfBelowHp, Mode=TwoWay}"
-                                           Minimum="{Binding HangMinimum}" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Drop the connection when HP falls this low — emergency last resort. This can go negative in either mode, down to the realm death floor (HP % goes negative while bleeding out, as par shows), so you can set the hangup deep in the bleeding-out band, closer to death. 0 = hang the moment you drop. To turn it off, use 'Disable hang-ups' in Other settings."/>
-                            <TextBlock Grid.Row="6" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding HangIfBelowHpConverted}"/>
-                        </Grid>
-                    </StackPanel>
+                <!-- Mode picker -->
+                <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
+                    <RadioButton GroupName="MaUnit" Content="Percentage"
+                                 IsChecked="{Binding MaModePercentage, Mode=TwoWay}"
+                                 ToolTip.Tip="Thresholds below are read as % of MaxMa / MaxKai."/>
+                    <RadioButton GroupName="MaUnit" Content="Value"
+                                 IsChecked="{Binding MaModeAbsolute, Mode=TwoWay}"
+                                 ToolTip.Tip="Thresholds below are read as absolute MA / KAI."/>
+                </StackPanel>
 
-                    <!-- ============ Mana / Kai ============ -->
-                    <StackPanel Grid.Column="2" Spacing="4">
-                        <TextBlock Classes="SectionHeader" Text="Mana / Kai"/>
+                <Grid ColumnDefinitions="180,130,100" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
+                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                   Value="{Binding RestMaxMa, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Stop resting (caster pool) once MA / KAI reaches this threshold. HealthManager (PR 9.B) uses it to clear the ManaRecovery gate."/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding RestMaxMaConverted}"/>
 
-                        <!-- Mode picker -->
-                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
-                            <RadioButton GroupName="MaUnit" Content="Percentage"
-                                         IsChecked="{Binding MaModePercentage, Mode=TwoWay}"
-                                         ToolTip.Tip="Thresholds below are read as % of MaxMa / MaxKai."/>
-                            <RadioButton GroupName="MaUnit" Content="Value"
-                                         IsChecked="{Binding MaModeAbsolute, Mode=TwoWay}"
-                                         ToolTip.Tip="Thresholds below are read as absolute MA / KAI."/>
-                        </StackPanel>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Rest if below"/>
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Value="{Binding RestIfBelowMa, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Auto-rest trigger for the caster pool — HealthManager asserts the ManaRecovery gate when MA falls below this."/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding RestIfBelowMaConverted}"/>
 
-                        <Grid ColumnDefinitions="160,130,100" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
-                            <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                           Value="{Binding RestMaxMa, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Stop resting (caster pool) once MA / KAI reaches this threshold. HealthManager (PR 9.B) uses it to clear the ManaRecovery gate."/>
-                            <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding RestMaxMaConverted}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Heal if above (rest/idle)"/>
+                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                   Value="{Binding HealIfAboveMaResting, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Only cast heal spells while resting / idle when MA / KAI is at or above this — below it, heals are skipped so the pool regenerates. 0 = always heal. CastingDirector (PR 9.D)."/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding HealIfAboveMaRestingConverted}"/>
 
-                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Rest if below"/>
-                            <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                           Value="{Binding RestIfBelowMa, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Auto-rest trigger for the caster pool — HealthManager asserts the ManaRecovery gate when MA falls below this."/>
-                            <TextBlock Grid.Row="1" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding RestIfBelowMaConverted}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Heal if above (combat)"/>
+                    <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                   Value="{Binding HealIfAboveMaCombat, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Same mana-floor for heal spells but applied in combat. 0 = always heal (survival over conservation). CastingDirector (PR 9.D)."/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding HealIfAboveMaCombatConverted}"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Heal if above (rest/idle)"/>
-                            <NumericUpDown Grid.Row="2" Grid.Column="1"
-                                           Value="{Binding HealIfAboveMaResting, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Only cast heal spells while resting / idle when MA / KAI is at or above this — below it, heals are skipped so the pool regenerates. 0 = always heal. CastingDirector (PR 9.D)."/>
-                            <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding HealIfAboveMaRestingConverted}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
+                    <NumericUpDown Grid.Row="4" Grid.Column="1"
+                                   Value="{Binding RunIfBelowMa, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Flee when caster runs out of MA / KAI to cast. 0 = off (never flee on mana)."/>
+                    <TextBlock Grid.Row="4" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding RunIfBelowMaConverted}"/>
 
-                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Heal if above (combat)"/>
-                            <NumericUpDown Grid.Row="3" Grid.Column="1"
-                                           Value="{Binding HealIfAboveMaCombat, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Same mana-floor for heal spells but applied in combat. 0 = always heal (survival over conservation). CastingDirector (PR 9.D)."/>
-                            <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding HealIfAboveMaCombatConverted}"/>
-
-                            <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Run if below"/>
-                            <NumericUpDown Grid.Row="4" Grid.Column="1"
-                                           Value="{Binding RunIfBelowMa, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Flee when caster runs out of MA / KAI to cast. 0 = off (never flee on mana)."/>
-                            <TextBlock Grid.Row="4" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding RunIfBelowMaConverted}"/>
-
-                            <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Bless if above"/>
-                            <NumericUpDown Grid.Row="5" Grid.Column="1"
-                                           Value="{Binding BlessIfAboveMa, Mode=TwoWay}"
-                                           Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Re-cast party / self buffs when MA recovers past this point. CastingDirector (PR 9.D)."/>
-                            <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding BlessIfAboveMaConverted}"/>
-                        </Grid>
-                    </StackPanel>
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Bless if above"/>
+                    <NumericUpDown Grid.Row="5" Grid.Column="1"
+                                   Value="{Binding BlessIfAboveMa, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Re-cast party / self buffs when MA recovers past this point. CastingDirector (PR 9.D)."/>
+                    <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding BlessIfAboveMaConverted}"/>
                 </Grid>
 
                 <!-- ============ Resting Options ============ -->
@@ -220,20 +211,18 @@
 
                 <!-- ============ Resting commands ============ -->
                 <TextBlock Classes="SectionHeader" Text="Resting commands"/>
-                <!-- Box column (514) is sized so the TextBox right edge lines
-                     up with the Mana pickers' right edge above: HP grid (390)
-                     + spacer (64) + Mana label col (160) + picker width (120)
-                     = 734 from content-left; minus the 220 label col here. -->
-                <Grid ColumnDefinitions="220,514" RowDefinitions="Auto,Auto" Margin="0,0,0,4">
+                <!-- Left-aligned, fixed-width boxes: a chained rest command is
+                     short, so the box needn't stretch to the pane's right edge. -->
+                <Grid ColumnDefinitions="220,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,4">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel"
                                Text="Pre-rest / meditate command"/>
-                    <TextBox Grid.Row="0" Grid.Column="1"
+                    <TextBox Grid.Row="0" Grid.Column="1" Width="300" HorizontalAlignment="Left"
                              Text="{Binding PreRestCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              PlaceholderText="e.g. peer^M;look"
                              ToolTip.Tip="Sent right before the rest / meditate command. `^M` and `;` are both treated as carriage returns so multiple commands can be chained."/>
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel"
                                Text="Post-rest / meditate command"/>
-                    <TextBox Grid.Row="1" Grid.Column="1"
+                    <TextBox Grid.Row="1" Grid.Column="1" Width="300" HorizontalAlignment="Left"
                              Text="{Binding PostRestCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              PlaceholderText="e.g. stand^M;look"
                              ToolTip.Tip="Sent right after standing up. Same chaining rules as the pre-rest command."/>
