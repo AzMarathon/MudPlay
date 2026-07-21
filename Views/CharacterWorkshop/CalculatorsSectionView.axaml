@@ -476,6 +476,7 @@
                                  dead buffer; the grid is Left-aligned to the same end
                                  as the Border. -->
                             <DataGrid Classes="Leaderboard"
+                                      x:Name="LeaderboardGrid"
                                       ItemsSource="{Binding LeaderboardView}"
                                       Height="380"
                                       HorizontalAlignment="Left"

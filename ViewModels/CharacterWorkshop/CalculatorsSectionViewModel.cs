@@ -1099,6 +1099,11 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // LeaderboardRow so numbers order by magnitude, not formatted text.
     public DataGridCollectionView LeaderboardView { get; }
 
+    // Raised after the rows are rebuilt so the view can size the grid's columns to
+    // the whole capture. The DataGrid's Auto columns otherwise measure only the
+    // realized rows and creep wider as more scroll into view.
+    public event Action? LeaderboardRebuilt;
+
     // One-line capture context (when, how many shown vs asked, whole-list vs
     // truncated, snapshot count) or the empty-state hint.
     [ObservableProperty] private string _leaderboardStatus = string.Empty;
@@ -1162,6 +1167,8 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             ? "Reroll suspects since last capture: " + string.Join(", ", report.Notices)
             : string.Empty;
         HasLeaderboardNotices = report.Notices.Count > 0;
+
+        LeaderboardRebuilt?.Invoke();
     }
 
     public override void Dispose()
