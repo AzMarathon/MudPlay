@@ -12,9 +12,9 @@ namespace FujinTerm.Models.Profile;
 //
 // All fields ship with sensible defaults the user can run on day one
 // without touching the tab. The encumbrance-gated travel-cost table is
-// seeded from a single-character run-without-encumbrance measurement
-// (1.5 s / hop), then refined per bucket once the Program Log window's
-// "Hop timing" toggle has produced data for the user to enter.
+// seeded from measured stock-realm hop timings (a two-band step function —
+// see EncumbranceHopTimes), refinable per bucket once the Program Log
+// window's "Hop timing" toggle has produced data for the user to enter.
 public sealed class AutoLairSettings
 {
     // ----- Routing heuristic ----------------------------------------
@@ -37,8 +37,12 @@ public sealed class AutoLairSettings
     // ----- Travel cost model ----------------------------------------
 
     // Picks which Game.Map.ITravelCostModel the scheduler uses for
-    // hop → duration conversion.
-    public AutoLairTravelCostMode TravelCostMode { get; set; } = AutoLairTravelCostMode.Flat;
+    // hop → duration conversion. Auto is the default: it follows the active
+    // realm — the ParaMUD movement formula on Paradigm, the measured
+    // encumbrance buckets on stock — so a fresh character gets realm-correct
+    // hop timing without touching the tab. Flat / EncumbranceGated stay as
+    // explicit user overrides.
+    public AutoLairTravelCostMode TravelCostMode { get; set; } = AutoLairTravelCostMode.Auto;
 
     // Seconds per hop for the Flat cost mode. Default 1.5 s — a
     // single-character run-without-encumbrance observation. Tune with
@@ -59,19 +63,26 @@ public enum AutoLairTravelCostMode
     Flat = 0,
     // Per-bucket seconds-per-hop (None / Light / Medium / Heavy / Encumbered).
     EncumbranceGated = 1,
+    // Realm-aware: the ParaMUD movement formula (live enc% + gear quickness)
+    // on Paradigm realms, the measured encumbrance buckets on stock. The
+    // default — re-resolved whenever the active game-data set changes realm.
+    Auto = 2,
 }
 
 // Per-encumbrance seconds-per-hop lookup. Plain POCO so System.Text.Json
-// round-trips it without a converter. Defaults are scaled from the flat
-// 1.5 s baseline; the HopTimingCalibrator feeds real numbers once the user
-// runs a calibration session.
+// round-trips it without a converter. Defaults come from a measured stock
+// hop-timing sample: movement is a two-band step function, not a smooth
+// ramp. None / Light / Medium all pace at ~0.7 s per hop (the boundaries
+// between them show no change); crossing into Heavy jumps to ~1.7 s and
+// Encumbered holds the same slow band. The HopTimingCalibrator lets the
+// user overwrite these with their own numbers.
 public sealed class EncumbranceHopTimes
 {
-    public double None       { get; set; } = 1.0;
-    public double Light      { get; set; } = 1.5;
-    public double Medium     { get; set; } = 2.5;
-    public double Heavy      { get; set; } = 4.0;
-    public double Encumbered { get; set; } = 6.0;
+    public double None       { get; set; } = 0.7;
+    public double Light      { get; set; } = 0.7;
+    public double Medium     { get; set; } = 0.7;
+    public double Heavy      { get; set; } = 1.7;
+    public double Encumbered { get; set; } = 1.7;
 
     // Lookup helper for the encumbrance-gated travel-cost model.
     public double For(Game.EncumbranceLevel level) => level switch

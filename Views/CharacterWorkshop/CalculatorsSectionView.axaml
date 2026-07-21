@@ -222,7 +222,9 @@
                         <TextBlock Classes="BoxTitle" Text="Movement Speed"/>
                     </Expander.Header>
 
-                    <Border Classes="SubBox" Margin="0,8,0,0">
+                    <StackPanel>
+                    <!-- ParaMUD realms: the interactive movement-formula solver. -->
+                    <Border Classes="SubBox" Margin="0,8,0,0" IsVisible="{Binding IsParadigmRealm}">
                         <StackPanel Spacing="10">
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Classes="Section" Text="Inputs" VerticalAlignment="Center"/>
@@ -259,6 +261,29 @@
                             <TextBlock Classes="FieldLabel" Text="{Binding MoveAdviceText}" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
+
+                    <!-- Stock realms: the formula doesn't apply — show measured findings. -->
+                    <Border Classes="SubBox" Margin="0,8,0,0" IsVisible="{Binding !IsParadigmRealm}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Classes="Section" Text="Measured hop timings"/>
+                            <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                       Text="Stock realms don't use the ParaMUD movement formula. Timing a large sample of moves shows a two-band step function — not a smooth ramp with encumbrance:"/>
+
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="4">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="None / Light / Medium"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue"
+                                           Text="{Binding StockMoveFastBandText}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Heavy / Encumbered"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue"
+                                           Foreground="{StaticResource AccentAmberBrush}"
+                                           Text="{Binding StockMoveSlowBandText}"/>
+                            </Grid>
+
+                            <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                       Text="Speed holds flat until you cross into Heavy, where it roughly doubles. These bands feed the auto-lair travel estimate; tune them under Settings → Auto-Lair."/>
+                        </StackPanel>
+                    </Border>
+                    </StackPanel>
                 </Expander>
 
                 <!-- ===== Swing Calculator ===== -->

@@ -375,6 +375,14 @@ public static class BugReportBuilder
         Kv(sb, "Auto-Lair paused", svc.AutoLair.IsPaused.ToString());
         Kv(sb, "Auto-Lair target",
             svc.AutoLair.CurrentTarget is { } lair ? $"{lair.Map}/{lair.Room}" : "(none)");
+        // The live-resolved travel-cost model + its current per-hop figure — a
+        // "walk-to ETA / lair ranking looks wrong" report needs to know which
+        // model got wired (realm-aware Auto vs Flat vs bucketed) and what it
+        // predicts for one hop at the moment of capture (live enc% / quickness
+        // on Paradigm, the encumbrance bucket on stock).
+        Kv(sb, "Travel cost model", svc.AutoLair.TravelCostModel.GetType().Name);
+        Kv(sb, "Travel per-hop estimate",
+            $"{svc.AutoLair.TravelCostModel.EstimateTravel(1).TotalSeconds:0.00} s");
         Kv(sb, "Auto-deposit reroute", svc.AutoDeposit.RerouteStatus);
 
         // Default-task startup state — a "my loop / Auto-Lair didn't start on

@@ -14,9 +14,10 @@ namespace FujinTerm.ViewModels.Settings;
 // table live here.
 //
 // Apply pushes the live settings into AppServices.AutoLair (heuristic / penalty /
-// engage timeout) AND replaces AutoLairManager.TravelCostModel with the right
-// impl — flat vs encumbrance-gated — built from the section's current values. The
-// scheduler picks up the new estimates on its next tick.
+// engage timeout) AND replaces AutoLairManager.TravelCostModel via the shared
+// AppServices.BuildTravelCostModel — realm-aware Auto, flat, or encumbrance-gated
+// — built from the section's current values. The scheduler picks up the new
+// estimates on its next tick.
 public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
 {
     private const string TabKey = "AutoLair";
@@ -51,6 +52,8 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
             yield return "Idle penalty";
             yield return "Engage timeout";
             yield return "Travel cost";
+            yield return "Automatic";
+            yield return "Match realm";
             yield return "Flat seconds per hop";
             yield return "Encumbrance gated";
             yield return "None";
@@ -86,10 +89,16 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
     // ----- Travel cost mode -----------------------------------------
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAutoMode))]
     [NotifyPropertyChangedFor(nameof(IsFlatMode))]
     [NotifyPropertyChangedFor(nameof(IsEncumbranceGatedMode))]
-    private AutoLairTravelCostMode _travelCostMode = AutoLairTravelCostMode.Flat;
+    private AutoLairTravelCostMode _travelCostMode = AutoLairTravelCostMode.Auto;
 
+    public bool IsAutoMode
+    {
+        get => TravelCostMode == AutoLairTravelCostMode.Auto;
+        set { if (value) TravelCostMode = AutoLairTravelCostMode.Auto; }
+    }
     public bool IsFlatMode
     {
         get => TravelCostMode == AutoLairTravelCostMode.Flat;
@@ -105,11 +114,11 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
 
     // ----- Per-encumbrance seconds-per-hop --------------------------
 
-    [ObservableProperty] private double _hopNone       = 1.0;
-    [ObservableProperty] private double _hopLight      = 1.5;
-    [ObservableProperty] private double _hopMedium     = 2.5;
-    [ObservableProperty] private double _hopHeavy      = 4.0;
-    [ObservableProperty] private double _hopEncumbered = 6.0;
+    [ObservableProperty] private double _hopNone       = 0.7;
+    [ObservableProperty] private double _hopLight      = 0.7;
+    [ObservableProperty] private double _hopMedium     = 0.7;
+    [ObservableProperty] private double _hopHeavy      = 1.7;
+    [ObservableProperty] private double _hopEncumbered = 1.7;
 
     public AutoLairSectionViewModel()
         : this(AppServices.Current.Profile) { }
@@ -223,13 +232,7 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
         svcs.AutoLair.IdlePenalty = Math.Max(0, dto.IdlePenalty);
         svcs.AutoLair.EngageTimeoutSeconds = Math.Clamp(dto.EngageTimeoutSeconds, 1, 3600);
 
-        svcs.AutoLair.TravelCostModel = dto.TravelCostMode switch
-        {
-            AutoLairTravelCostMode.EncumbranceGated =>
-                new EncumbranceGatedTravelCostModel(svcs.PlayerState, dto.HopTimesByEncumbrance),
-            _ =>
-                new FlatTravelCostModel(Math.Max(0.1, dto.FlatSecondsPerHop)),
-        };
+        svcs.AutoLair.TravelCostModel = svcs.BuildTravelCostModel(dto);
     }
 
     // ----- IsDirty plumbing -----------------------------------------

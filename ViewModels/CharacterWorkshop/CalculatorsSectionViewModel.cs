@@ -129,6 +129,17 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     [ObservableProperty] private string _moveSpeedText = "—";
     [ObservableProperty] private string _moveStatusText = "—";
     [ObservableProperty] private string _moveAdviceText = string.Empty;
+    // True on Paradigm — the Movement Speed calculator shows its interactive
+    // ParaMUD-formula solver. On stock the formula doesn't apply (movement is a
+    // measured two-band step function), so the view swaps to a static findings
+    // card. Set from the active realm on every capture.
+    [ObservableProperty] private bool _isParadigmRealm;
+    // Stock findings-card numbers, mirrored from the reseeded stock
+    // EncumbranceHopTimes defaults so the card can't drift from the buckets the
+    // auto-lair scheduler actually uses. None / Light / Medium share the fast
+    // band; Heavy / Encumbered share the slow band.
+    public string StockMoveFastBandText { get; }
+    public string StockMoveSlowBandText { get; }
 
     // ----- Swing calculator ----------------------------------------------
     // Selected swing weapon — null / unmatched means the equipped weapon.
@@ -264,6 +275,12 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         _leaderboards = leaderboards;
         LeaderboardView = new DataGridCollectionView(Leaderboard);
 
+        EncumbranceHopTimes stockHops = new();
+        StockMoveFastBandText = string.Create(CultureInfo.InvariantCulture,
+            $"~{stockHops.None:0.0} s / hop");
+        StockMoveSlowBandText = string.Create(CultureInfo.InvariantCulture,
+            $"~{stockHops.Heavy:0.0} s / hop");
+
         _stats.PropertyChanged += OnStatsChanged;
         _inventory.Changed += OnInventoryChanged;
         _questBonuses.Changed += OnQuestBonusesChanged;
@@ -318,6 +335,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             EquipmentStatSummary t = combined.Totals;
 
             _realm = _gameData.ActiveRealm;
+            IsParadigmRealm = _realm == RealmType.ParaMud;
             _level = _stats.Level;
             _nCombatLevel = GetInt(classRow, "CombatLVL");
             _str = _stats.Strength;

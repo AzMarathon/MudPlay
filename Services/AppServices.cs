@@ -2035,6 +2035,10 @@ public sealed class AppServices
         Profile.ProfileLoaded  += _ => ApplyAutoLairFromActiveProfile();
         Profile.ProfileClosed  += ResetAutoLairToDefaults;
         Profile.ProfileMutated += _ => ApplyAutoLairFromActiveProfile();
+        // Auto travel-cost mode is realm-aware, so a game-data set swap that
+        // changes realm must rewire the model (ReadSection is null-safe when
+        // no profile is loaded — it falls back to the Auto default).
+        GameData.ActiveSetChanged += _ => ApplyAutoLairFromActiveProfile();
 
         // Bridge: follow the pinned BBS's preferred game-data set.
         // Active set lives at BBS scope (every character on the same
@@ -4354,6 +4358,13 @@ public sealed class AppServices
         return selector(general.AutoMode);
     }
 
+    // Live read of the master auto-combat toggle — the same GeneralSettings
+    // AutoMode flag the combat engine gates on. The navigation walk-to ETA
+    // reads it to decide whether to fold lair-fight dwell into the arrival
+    // estimate (auto-combat off ⇒ the walker doesn't stop to fight, so the
+    // route is pure travel time).
+    public bool IsAutoCombatEnabled => ReadAutoModeFlag(d => d.AutoCombat);
+
     // Live read of the master "Disable hangups" kill-switch from the
     // char-tier General section — the same store the toolbar toggle
     // writes. Wired into every automatic-hangup site (HangupHandler,
@@ -5344,14 +5355,28 @@ public sealed class AppServices
         AutoLair.Heuristic = dto.Heuristic;
         AutoLair.IdlePenalty = Math.Max(0, dto.IdlePenalty);
         AutoLair.EngageTimeoutSeconds = Math.Clamp(dto.EngageTimeoutSeconds, 1, 3600);
-        AutoLair.TravelCostModel = dto.TravelCostMode switch
+        AutoLair.TravelCostModel = BuildTravelCostModel(dto);
+    }
+
+    // Map an AutoLairSettings travel-cost selection to the concrete
+    // Game.Map.ITravelCostModel. Shared by the profile-load path (above) and
+    // the Settings tab's live apply so the two never drift on how a mode maps
+    // to a model. The realm-aware Auto mode resolves against the active
+    // game-data set: the ParaMUD movement formula (live enc% + gear quickness)
+    // on Paradigm, the measured encumbrance buckets on stock. Because Auto
+    // reads the realm, ApplyAutoLairFromActiveProfile is re-run on
+    // ActiveSetChanged so a realm switch rewires the model.
+    public Game.Map.ITravelCostModel BuildTravelCostModel(Models.Profile.AutoLairSettings dto) =>
+        dto.TravelCostMode switch
         {
+            Models.Profile.AutoLairTravelCostMode.Flat =>
+                new Game.Map.FlatTravelCostModel(Math.Max(0.1, dto.FlatSecondsPerHop)),
             Models.Profile.AutoLairTravelCostMode.EncumbranceGated =>
                 new Game.Map.EncumbranceGatedTravelCostModel(PlayerState, dto.HopTimesByEncumbrance),
-            _ =>
-                new Game.Map.FlatTravelCostModel(Math.Max(0.1, dto.FlatSecondsPerHop)),
+            _ => GameData.ActiveRealm == Game.RealmType.ParaMud
+                ? new Game.Map.ParadigmMovementCostModel(() => Inventory.Snapshot, GameData)
+                : new Game.Map.EncumbranceGatedTravelCostModel(PlayerState, dto.HopTimesByEncumbrance),
         };
-    }
 
     private void ResetAutoLairToDefaults()
     {
@@ -5359,7 +5384,7 @@ public sealed class AppServices
         AutoLair.Heuristic = defaults.Heuristic;
         AutoLair.IdlePenalty = defaults.IdlePenalty;
         AutoLair.EngageTimeoutSeconds = defaults.EngageTimeoutSeconds;
-        AutoLair.TravelCostModel = new Game.Map.FlatTravelCostModel(defaults.FlatSecondsPerHop);
+        AutoLair.TravelCostModel = BuildTravelCostModel(defaults);
     }
 
     // Pull Models.Settings.ConfirmSettings out of the

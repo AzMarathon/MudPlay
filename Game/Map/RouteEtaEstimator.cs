@@ -1,0 +1,61 @@
+using System.Collections.Generic;
+
+namespace FujinTerm.Game.Map;
+
+// Projects the wall-clock arrival time over a walk's REMAINING route: the
+// sum of per-hop travel estimates plus, when auto-combat is on, a dwell
+// allowance for every lair the walker will fight through on the way.
+//
+// ITravelCostModel is hop-count-only (it can't see the route's rooms), so
+// the lair accounting has to live outside the model — here, where the
+// remaining room keys are available. The walk-status label and the program
+// log both read this so the surfaced ETA matches what the scheduler's cost
+// model actually predicts per hop.
+public static class RouteEtaEstimator
+{
+    // Combat dwell added per monster for each lair the walker steps into
+    // while auto-combat is on. A round figure — the real fight length varies,
+    // but this keeps the ETA honest that lair rooms aren't free walk-throughs.
+    public const double LairSecondsPerMonster = 5.0;
+
+    // Estimate remaining-route arrival time.
+    //   remainingRooms   — the room the walker is standing in followed by each
+    //                      room it will step into (AutoWalkManager.RemainingRoomKeys).
+    //   travel           — the realm-aware per-hop cost model.
+    //   getRoom          — room lookup, for lair detection along the route.
+    //   includeLairDwell — true only when auto-combat is on; adds
+    //                      LairSecondsPerMonster × monster count for each lair
+    //                      room the walker steps into. False leaves the ETA as
+    //                      pure travel time (no fight allowance).
+    public static TimeSpan Estimate(
+        IReadOnlyList<RoomKey> remainingRooms,
+        ITravelCostModel travel,
+        Func<RoomKey, Room?> getRoom,
+        bool includeLairDwell)
+    {
+        ArgumentNullException.ThrowIfNull(travel);
+        ArgumentNullException.ThrowIfNull(getRoom);
+        // Fewer than two entries means no hop left to walk (Idle or already at
+        // the destination) — nothing to estimate.
+        if (remainingRooms is null || remainingRooms.Count < 2) return TimeSpan.Zero;
+
+        int hops = remainingRooms.Count - 1;
+        TimeSpan total = travel.EstimateTravel(hops);
+
+        if (includeLairDwell)
+        {
+            // Skip index 0 — that's the room we're already in; the dwell counts
+            // lairs we'll walk INTO, not the one we're leaving.
+            for (int i = 1; i < remainingRooms.Count; i++)
+            {
+                if (getRoom(remainingRooms[i]) is not { HasLair: true } room) continue;
+                int monsters = RoomTooltipBuilder.TryParseLairMax(room.RawLairTag, out int max) && max > 0
+                    ? max
+                    : 1;
+                total += TimeSpan.FromSeconds(monsters * LairSecondsPerMonster);
+            }
+        }
+
+        return total;
+    }
+}
