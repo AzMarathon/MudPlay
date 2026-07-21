@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using FujinTerm.ViewModels.CharacterWorkshop;
@@ -60,6 +61,17 @@ public partial class CalculatorsSectionView : UserControl
         if (_vm is not null) _vm.LeaderboardRebuilt -= SizeLeaderboardColumns;
         _vm = DataContext as CalculatorsSectionViewModel;
         if (_vm is not null) _vm.LeaderboardRebuilt += SizeLeaderboardColumns;
+    }
+
+    // Size on Loaded, not DataContextChanged: DataContext is set at construction
+    // while the view is still detached, where FontMono doesn't resolve and the
+    // grid's FontSize isn't settled — measuring there under a fallback font sizes
+    // the Experience column too narrow, clipping big (hundreds-of-billions) values
+    // on first open. By Loaded the view is attached and laid out, so the measure
+    // matches what actually renders.
+    protected override void OnLoaded(RoutedEventArgs e)
+    {
+        base.OnLoaded(e);
         SizeLeaderboardColumns();
     }
 
@@ -100,6 +112,7 @@ public partial class CalculatorsSectionView : UserControl
         const double sortReserve = 18; // room for the header's sort glyph
         const double tailBuffer = 20;  // gap past the last column to the right edge
 
+        double total = 0;
         for (int c = 0; c < 6; c++)
         {
             double widest = Measure(headers[c], headerFace, fontSize) + sortReserve;
@@ -109,7 +122,15 @@ public partial class CalculatorsSectionView : UserControl
             double px = Math.Ceiling(widest) + cellPad;
             if (c == 5) px += tailBuffer;
             grid.Columns[c].Width = new DataGridLength(px);
+            total += px;
         }
+
+        // Pin the reroll-suspect notice to the table's own width so a long
+        // suspect list wraps at the grid's right edge instead of running past
+        // it. Resolve through the name scope for the same detached-view reason
+        // the grid does above — the raw field can be null here.
+        TextBlock? notice = RerollNoticeText ?? this.FindControl<TextBlock>("RerollNoticeText");
+        if (notice is not null) notice.MaxWidth = total;
     }
 
     private FontFamily ResolveMono()

@@ -465,7 +465,14 @@
 
                         <TextBlock Classes="FieldLabel" Text="{Binding LeaderboardStatus}" TextWrapping="Wrap"/>
 
-                        <TextBlock Text="{Binding LeaderboardRerolls}" TextWrapping="Wrap"
+                        <!-- MaxWidth is pinned to the table's measured width in
+                             SizeLeaderboardColumns so a long suspect list wraps at
+                             the table's right edge instead of running past it (the
+                             enclosing ScrollViewer would otherwise grant it
+                             unbounded width and it wouldn't wrap at all). -->
+                        <TextBlock x:Name="RerollNoticeText"
+                                   Text="{Binding LeaderboardRerolls}" TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
                                    IsVisible="{Binding HasLeaderboardNotices}"
                                    Foreground="{StaticResource AccentAmberBrush}"/>
 
