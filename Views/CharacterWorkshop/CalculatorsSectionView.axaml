@@ -491,12 +491,22 @@
                                       VerticalScrollBarVisibility="Auto">
                                 <!-- Numeric columns sort on typed *Value keys (via
                                      SortMemberPath) so they order by magnitude, not by
-                                     the thousands-separated display text. -->
+                                     the thousands-separated display text. Rank and
+                                     XP/HR are template columns so a coloured movement /
+                                     trend cue can sit beside the value. -->
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Rank" Binding="{ReflectionBinding Rank}"
-                                                        SortMemberPath="RankValue"
-                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
-                                                        Foreground="#FFC000"/>
+                                    <DataGridTemplateColumn Header="Rank" SortMemberPath="RankValue" Width="Auto">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate x:DataType="vm:LeaderboardRow">
+                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Rank}" FontFamily="{StaticResource FontMono}"
+                                                               Foreground="#FFC000" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding RankMove}" FontFamily="{StaticResource FontMono}"
+                                                               Foreground="{Binding RankMoveBrush}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="Name" Binding="{ReflectionBinding Name}"
                                                         SortMemberPath="Name"
                                                         Width="Auto" FontFamily="{StaticResource FontMono}"
@@ -513,10 +523,18 @@
                                                         SortMemberPath="ExperienceValue"
                                                         Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#00FF00"/>
-                                    <DataGridTextColumn Header="XP/HR" Binding="{ReflectionBinding XpPerHour}"
-                                                        SortMemberPath="XpPerHourSort"
-                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
-                                                        Foreground="#FFFF00"/>
+                                    <DataGridTemplateColumn Header="XP/HR" SortMemberPath="XpPerHourSort" Width="Auto">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate x:DataType="vm:LeaderboardRow">
+                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding XpPerHour}" FontFamily="{StaticResource FontMono}"
+                                                               Foreground="#FFFF00" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding RateTrend}" FontFamily="{StaticResource FontMono}"
+                                                               Foreground="{Binding RateTrendBrush}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
                         </Border>

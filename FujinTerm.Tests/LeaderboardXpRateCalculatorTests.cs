@@ -110,6 +110,63 @@ public sealed class LeaderboardXpRateCalculatorTests
     }
 
     [Fact]
+    public void RankDelta_ReflectsPositionChangeSinceLastCapture()
+    {
+        // Ada passed Bo for #9: Ada 10 → 9 reads (+1), Bo 9 → 10 reads (-1).
+        LeaderboardReport r = LeaderboardXpRateCalculator.Build(new[]
+        {
+            Snap(T,              100, E(9, "Ada Vale", "Bard", 2100), E(10, "Bo Kent", "Mage", 2000)),
+            Snap(T.AddHours(-2), 100, E(9, "Bo Kent", "Mage", 1900), E(10, "Ada Vale", "Bard", 1000)),
+        });
+
+        Assert.Equal(1, RowFor(r, "Ada").RankDelta);
+        Assert.Equal(-1, RowFor(r, "Bo").RankDelta);
+    }
+
+    [Fact]
+    public void RankDelta_NullForNewName()
+    {
+        LeaderboardReport r = LeaderboardXpRateCalculator.Build(new[]
+        {
+            Snap(T,              100, E(1, "New Star", "Bard", 500)),
+            Snap(T.AddHours(-2), 100, E(1, "Old Guard", "Mage", 400)),
+        });
+
+        Assert.Null(RowFor(r, "New").RankDelta);
+    }
+
+    [Fact]
+    public void PreviousRate_ExposedForTrend_WhenTwoChangedIntervalsExist()
+    {
+        // Latest interval: 2000 XP over 1h = 2000. Prior interval: 1000 over 1h =
+        // 1000. The row carries both so a consumer can tell the grind sped up.
+        LeaderboardReport r = LeaderboardXpRateCalculator.Build(new[]
+        {
+            Snap(T,              100, E(1, "Ivy Root", "Ranger", 4000)),
+            Snap(T.AddHours(-1), 100, E(1, "Ivy Root", "Ranger", 2000)),
+            Snap(T.AddHours(-2), 100, E(1, "Ivy Root", "Ranger", 1000)),
+        });
+
+        LeaderboardRankRow row = RowFor(r, "Ivy");
+        Assert.Equal(2000.0, row.XpPerHour!.Value, 3);
+        Assert.Equal(1000.0, row.PreviousXpPerHour!.Value, 3);
+    }
+
+    [Fact]
+    public void PreviousRate_NullWhenOnlyOneInterval()
+    {
+        LeaderboardReport r = LeaderboardXpRateCalculator.Build(new[]
+        {
+            Snap(T,              100, E(1, "Solo Grind", "Bard", 2000)),
+            Snap(T.AddHours(-2), 100, E(1, "Solo Grind", "Bard", 1000)),
+        });
+
+        LeaderboardRankRow row = RowFor(r, "Solo");
+        Assert.Equal(500.0, row.XpPerHour!.Value, 3);
+        Assert.Null(row.PreviousXpPerHour);
+    }
+
+    [Fact]
     public void Notices_CompleteList_FlagsGoneNameAsReroll()
     {
         // Latest asked for 200 but only 2 returned → whole pool visible, so a name

@@ -7,6 +7,7 @@
 > - Purely player-driven — run `top <N>` in-game (or press "Parse Toplist") and the block is snapshotted passively; no auto-polling
 > - A re-capture with no experience or roster change is discarded, so the history keeps only captures that move the needle
 > - XP/HR is measured against the most recent prior capture that actually changed for that hero — an idle reading is skipped and the rate reaches further back
+> - Each XP/HR carries a trend arrow (green ▲ sped up, red ▼ slowed) and each rank shows its movement since the last capture (green (+N) up, red (-N) down)
 > - Rate is figured by first name; a class change or an experience drop is flagged as a likely reroll in the program log
 > - List-cap aware, so an overtake at the bottom of a capped board isn't mistaken for a departed hero
 > - History is capped at the 5 most recent captures; the oldest fall off

@@ -9,6 +9,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Purely player-driven — run `top <N>` in-game (or press "Parse Toplist") and the block is snapshotted passively; no auto-polling
 - A re-capture with no experience or roster change is discarded, so the history keeps only captures that move the needle
 - XP/HR is measured against the most recent prior capture that actually changed for that hero — an idle reading is skipped and the rate reaches further back
+- Each XP/HR carries a trend arrow: green ▲ when the grind sped up versus the previous interval, red ▼ when it slowed
+- Each rank shows its movement since the last capture — green (+N) climbing toward #1, red (-N) sliding down
 - Rate is figured by first name (last names change, first names don't); a class change or an experience drop is flagged as a likely reroll in the program log
 - List-cap aware: a departed name is only flagged as gone when the board is complete or its last-known exp cleared the shown cutoff, so an overtake at the bottom of a capped board isn't mistaken for a reroll
 - History is capped at the 5 most recent captures; the oldest fall off

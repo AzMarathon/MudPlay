@@ -15,6 +15,10 @@ namespace FujinTerm.Game.Leaderboard;
 // reappears under a different class — or whose experience fell — is a reroll, so
 // no rate is shown.
 //
+// Each row also carries its rank movement since the immediately-previous capture
+// (climbed toward #1 vs slid down) and the rate over the PRIOR changed interval,
+// so the table can show a position arrow and an accelerating/slowing trend.
+//
 // Dropouts (present before, gone now) are reconciled against list capping using
 // experience monotonicity: experience only ever grows, so if a departed
 // character's last-known experience is at or above the lowest experience still
@@ -33,12 +37,20 @@ public static class LeaderboardXpRateCalculator
                 Array.Empty<string>());
 
         LeaderboardSnapshot latest = newestFirst[0];
+        LeaderboardSnapshot? prev = newestFirst.Count > 1 ? newestFirst[1] : null;
         var rows = new List<LeaderboardRankRow>(latest.Entries.Count);
         foreach (LeaderboardEntry e in latest.Entries)
         {
-            (double? rate, string note) = RateFor(e, latest, newestFirst);
+            (double? rate, double? prevRate, string note) = RateFor(e, newestFirst);
+
+            // Position change since the immediately-previous capture (+ = climbed
+            // toward #1). Only against last time we looked; absent there → no arrow.
+            int? rankDelta = null;
+            if (prev is not null && FindByFirstName(prev, e.FirstName) is { } before)
+                rankDelta = before.Rank - e.Rank;
+
             rows.Add(new LeaderboardRankRow(
-                e.Rank, e.Name, e.Class, e.Guild, e.Experience, rate, note));
+                e.Rank, e.Name, e.Class, e.Guild, e.Experience, rate, note, rankDelta, prevRate));
         }
 
         return new LeaderboardReport(
@@ -46,43 +58,55 @@ public static class LeaderboardXpRateCalculator
             latest.IsComplete, newestFirst.Count, BuildNotices(latest, newestFirst));
     }
 
-    private static (double? rate, string note) RateFor(
-        LeaderboardEntry e, LeaderboardSnapshot latest,
-        IReadOnlyList<LeaderboardSnapshot> newestFirst)
+    private static (double? rate, double? prevRate, string note) RateFor(
+        LeaderboardEntry e, IReadOnlyList<LeaderboardSnapshot> newestFirst)
     {
-        LeaderboardEntry? classifyMatch = null;  // most recent prior appearance
-        double? rate = null;
-
-        for (int i = 1; i < newestFirst.Count; i++)
-        {
-            LeaderboardSnapshot prior = newestFirst[i];
-            LeaderboardEntry? match = FindByFirstName(prior, e.FirstName);
-            if (match is null) continue;
-
-            classifyMatch ??= match;
-
-            // Rate is measured against the most recent prior capture where this
-            // character's experience was actually lower: an idle reading (delta 0)
-            // is skipped and the search reaches further back for real change.
-            // Same class only — a class change is a reroll, handled below.
-            if (rate is null
-                && string.Equals(match.Class, e.Class, StringComparison.OrdinalIgnoreCase))
-            {
-                long deltaXp = e.Experience - match.Experience;
-                double hours = (latest.CapturedAtUtc - prior.CapturedAtUtc).TotalHours;
-                if (deltaXp > 0 && hours > 0)
-                    rate = deltaXp / hours;
-            }
-        }
+        // Most recent prior appearance drives reroll classification.
+        LeaderboardEntry? classifyMatch = null;
+        for (int i = 1; i < newestFirst.Count && classifyMatch is null; i++)
+            classifyMatch = FindByFirstName(newestFirst[i], e.FirstName);
 
         if (classifyMatch is null)
-            return (null, "new");
+            return (null, null, "new");
         if (!string.Equals(classifyMatch.Class, e.Class, StringComparison.OrdinalIgnoreCase))
-            return (null, $"reroll? class was {classifyMatch.Class}");
+            return (null, null, $"reroll? class was {classifyMatch.Class}");
         if (e.Experience < classifyMatch.Experience)
-            return (null, "reroll? exp dropped");
+            return (null, null, "reroll? exp dropped");
 
-        return (rate, string.Empty);
+        // Current rate ends at the latest capture; the previous rate ends at the
+        // capture the current one diffed against — chaining back one changed
+        // interval so a consumer can tell an accelerating grind from a stalling one.
+        (double? rate, int priorIdx) = RateEndingAt(e.FirstName, newestFirst, 0);
+        double? prevRate = priorIdx > 0 ? RateEndingAt(e.FirstName, newestFirst, priorIdx).rate : null;
+        return (rate, prevRate, string.Empty);
+    }
+
+    // The experience-growth rate over the interval ENDING at this character's
+    // appearance in newestFirst[anchor], measured back to the freshest older
+    // capture where their same-class experience was strictly lower. Returns the
+    // rate and that older capture's index; (null, -1) when none qualifies — an
+    // idle reading is skipped to reach further back, while a class change or an
+    // experience drop stops the search (a reroll boundary can't anchor a rate).
+    private static (double? rate, int priorIndex) RateEndingAt(
+        string firstName, IReadOnlyList<LeaderboardSnapshot> newestFirst, int anchor)
+    {
+        LeaderboardEntry? end = FindByFirstName(newestFirst[anchor], firstName);
+        if (end is null) return (null, -1);
+
+        for (int j = anchor + 1; j < newestFirst.Count; j++)
+        {
+            LeaderboardEntry? older = FindByFirstName(newestFirst[j], firstName);
+            if (older is null) continue;
+            if (!string.Equals(older.Class, end.Class, StringComparison.OrdinalIgnoreCase))
+                return (null, -1);            // class change — reroll boundary
+            long deltaXp = end.Experience - older.Experience;
+            if (deltaXp < 0) return (null, -1); // exp fell — reroll boundary
+            if (deltaXp == 0) continue;         // idle — reach further back
+            double hours = (newestFirst[anchor].CapturedAtUtc - newestFirst[j].CapturedAtUtc).TotalHours;
+            if (hours <= 0) continue;
+            return ((double)deltaXp / hours, j);
+        }
+        return (null, -1);
     }
 
     // Names present in the immediately-previous capture but missing from the
