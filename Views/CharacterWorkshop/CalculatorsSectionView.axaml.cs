@@ -70,11 +70,16 @@ public partial class CalculatorsSectionView : UserControl
     // also carries a trailing buffer so the numbers don't butt the right edge.
     private void SizeLeaderboardColumns()
     {
-        if (_vm is null || LeaderboardGrid.Columns.Count < 6) return;
+        // The x:Name field can be null when this runs off DataContextChanged: on
+        // a freshly-built, not-yet-attached view the generated field isn't
+        // assigned yet (the control IS registered in the name scope, though), so
+        // reach it through the name scope instead of dereferencing the raw field.
+        DataGrid? grid = LeaderboardGrid ?? this.FindControl<DataGrid>("LeaderboardGrid");
+        if (_vm is null || grid is null || grid.Columns.Count < 6) return;
         IReadOnlyList<LeaderboardRow> rows = _vm.Leaderboard;
         if (rows.Count == 0) return;
 
-        double fontSize = LeaderboardGrid.FontSize > 0 ? LeaderboardGrid.FontSize : 13;
+        double fontSize = grid.FontSize > 0 ? grid.FontSize : 13;
         FontFamily mono = ResolveMono();
         var cellFace = new Typeface(mono);
         var headerFace = new Typeface(mono, FontStyle.Normal, FontWeight.Bold);
@@ -103,7 +108,7 @@ public partial class CalculatorsSectionView : UserControl
 
             double px = Math.Ceiling(widest) + cellPad;
             if (c == 5) px += tailBuffer;
-            LeaderboardGrid.Columns[c].Width = new DataGridLength(px);
+            grid.Columns[c].Width = new DataGridLength(px);
         }
     }
 

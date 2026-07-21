@@ -17,6 +17,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Table columns are sortable largest-first (one click puts the top scores on top, a re-click flips it) and auto-size to their widest value with centered headers, in the in-game color scheme (green Rank/Experience, gold ranks, cyan names, magenta class, grey guild) on a black background
 - Class Filter dropdown narrows the table to a single class off the loaded game data; "No Filter" (the default) shows every hero
 - Sea-captain docks now surface a right-click "Use Teleport" item to their arrival port, matching the map's teleport glyph
+- bug reports addressed: stock-20260720-230037
 
 ## 1.89.1
 

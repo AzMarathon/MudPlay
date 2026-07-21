@@ -460,7 +460,7 @@
                             <ComboBox ItemsSource="{Binding ClassFilterOptions}"
                                       SelectedItem="{Binding SelectedClassFilter, Mode=TwoWay}"
                                       MinWidth="140" VerticalAlignment="Center"
-                                      ToolTip.Tip="Show only rows of the selected class; 'All classes' clears the filter."/>
+                                      ToolTip.Tip="Show only rows of the selected class; 'No Filter' clears the filter."/>
                         </StackPanel>
 
                         <TextBlock Classes="FieldLabel" Text="{Binding LeaderboardStatus}" TextWrapping="Wrap"/>
