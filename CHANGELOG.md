@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.92.0
+
+- Dark-room auto-combat now follows a party leader: a "moves to attack <monster>" announce injects that monster so we engage the same round instead of idling until it swings at us
+- bug reports addressed: paradigm-20260721-162758
+
 ## 1.91.0
 
 - Auto-Lair travel cost gains a realm-aware "Automatic" mode, now the default: ParaMUD runs the game's movement-speed formula against live carry weight + worn quickness; stock realms use the measured encumbrance hop-time table
