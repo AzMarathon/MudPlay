@@ -83,6 +83,11 @@
             <TextBlock Classes="HelpText"
                        Text="How long the scheduler thinks each BFS hop takes. Used to project entry-arrival time and pick lairs whose ready-at lines up with our arrival. Calibrate via the Program Log window's &quot;Hop timing&quot; toggle."/>
 
+            <RadioButton Content="Automatic (match realm)"
+                         GroupName="TravelCostMode"
+                         IsChecked="{Binding IsAutoMode, Mode=TwoWay}"
+                         ToolTip.Tip="Follows the active realm: the ParaMUD movement formula (live encumbrance % and worn-gear quickness) on Paradigm, the measured encumbrance buckets below on stock. Recommended — no hand-tuning."/>
+
             <RadioButton Content="Flat seconds per hop"
                          GroupName="TravelCostMode"
                          IsChecked="{Binding IsFlatMode, Mode=TwoWay}"

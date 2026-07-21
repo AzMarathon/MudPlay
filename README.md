@@ -1,19 +1,13 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.90.0**
-> - New "Realm Rankings" calculator in the Workshop Calculators tab: captures the realm's `top N` heroes off the terminal and adds a derived XP/HR column
-> - Captures are stored per-BBS, so every character on the same board feeds and reads one shared history
-> - Purely player-driven — run `top <N>` in-game (or press "Parse Toplist") and the block is snapshotted passively; no auto-polling
-> - A re-capture with no experience or roster change is discarded, so the history keeps only captures that move the needle
-> - XP/HR is measured against the most recent prior capture that actually changed for that hero — an idle reading is skipped and the rate reaches further back
-> - Each XP/HR carries a trend arrow (green ▲ sped up, red ▼ slowed) and each rank shows its movement since the last capture (green (+N) up, red (-N) down)
-> - Rate is figured by first name; a class change or an experience drop is flagged as a likely reroll in the program log
-> - List-cap aware, so an overtake at the bottom of a capped board isn't mistaken for a departed hero
-> - History is capped at the 5 most recent captures; the oldest fall off
-> - Table columns are sortable largest-first (one click puts the top scores on top, a re-click flips it) and auto-size with centered headers, in the in-game color scheme on a black background
-> - Class Filter dropdown narrows the table to a single class off the loaded game data; "No Filter" (the default) shows every hero
-> - Sea-captain docks now surface a right-click "Use Teleport" item to their arrival port, matching the map's teleport glyph
+> **Version 1.91.0**
+> - Auto-Lair travel cost gains a realm-aware "Automatic" mode, now the default: ParaMUD runs the game's movement-speed formula against live carry weight + worn quickness; stock realms use the measured encumbrance hop-time table
+> - Stock encumbrance hop times reseeded to measured two-band timings — ~0.7 s (None/Light/Medium), ~1.7 s (Heavy/Encumbered)
+> - Movement Speed calculator is realm-gated: ParaMUD keeps the interactive solver, stock shows a static two-band findings card
+> - Walk-to status now reads "step X of Y, N steps and ~Ts to arrive" — remaining-route ETA surfaced in the navigation label and program log
+> - ETA sums the per-hop travel estimate and, when auto-combat is on, a 5 s/monster dwell for every lair room crossed
+> - Bug report captures the active travel-cost model and its per-hop estimate
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

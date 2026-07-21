@@ -2054,6 +2054,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                  or WalkEventKind.Stopped)
             _sailingTick.Stop();
 
+        // Surface the walk-to plan + remaining-route ETA in the program log:
+        // the initial estimate at Info on start/resume (lifecycle), the ticking
+        // countdown at Debug on each completed step (verbose per-hop detail).
+        switch (e.Kind)
+        {
+            case WalkEventKind.Started:
+            case WalkEventKind.Resumed:
+                if (BuildWalkToStatus() is { } startLine)
+                    _services.Log?.Info("Navigation", startLine);
+                break;
+            case WalkEventKind.StepCompleted:
+                if (BuildWalkToStatus() is { } stepLine)
+                    _services.Log?.Debug("Navigation", stepLine);
+                break;
+        }
+
         RefreshFromWalker();
     }
 
@@ -2379,13 +2395,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         else if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
         {
-            string dest = _services.Walker.Destination is { } key
-                ? (_services.RoomGraph.GetRoom(key) is { } room
-                    ? $"{room.DisplayName} ({key})"
-                    : key.ToString())
-                : "?";
-            string verb = _services.Walker.State == WalkState.Paused ? "Paused walking" : "Walking";
-            EngineActionLabel = $"{verb} to {dest}";
+            EngineActionLabel = BuildWalkToStatus() ?? "Walking";
             EngineActionKind = NavigationEngineKind.Walking;
         }
         else
@@ -2395,6 +2405,56 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
 
         RefreshDerivedState();
+    }
+
+    // Build the enriched walk-to status line: destination (map/room + name),
+    // step progress, and a remaining-route ETA. The ETA sums the realm-aware
+    // per-hop travel cost over the hops left and, when auto-combat is on, adds
+    // a lair-fight dwell for each lair the walker will step into. Shared by the
+    // nav status label and the program-log entries so both read identically.
+    // Returns null when the walker isn't actively walking.
+    private string? BuildWalkToStatus()
+    {
+        if (_services.Walker.State is not (WalkState.Walking or WalkState.Paused))
+            return null;
+
+        string dest = _services.Walker.Destination is { } key
+            ? (_services.RoomGraph.GetRoom(key) is { } room
+                ? $"{key} - {room.DisplayName}"
+                : key.ToString())
+            : "?";
+        string verb = _services.Walker.State == WalkState.Paused ? "Paused walking" : "Walking";
+
+        // Sailing: the boat leg isn't in the per-hop travel model, so an ETA
+        // over the remaining land hops would mislead. The TopBar shows the boat
+        // countdown; keep this label plain.
+        if (_services.Walker.IsSailing) return $"{verb} to {dest}";
+
+        int total = _services.Walker.StepCount;
+        int current = System.Math.Clamp(_services.Walker.CurrentStepIndex + 1, 1, System.Math.Max(1, total));
+
+        IReadOnlyList<RoomKey> remaining = _services.Walker.RemainingRoomKeys;
+        int remainingHops = System.Math.Max(0, remaining.Count - 1);
+
+        TimeSpan eta = RouteEtaEstimator.Estimate(
+            remaining,
+            _services.AutoLair.TravelCostModel,
+            _services.RoomGraph.GetRoom,
+            includeLairDwell: _services.IsAutoCombatEnabled);
+
+        return $"{verb} to {dest}, step {current} of {total}, "
+             + $"{remainingHops} steps and ~{FormatEta(eta)} to arrive";
+    }
+
+    // Compact ETA phrasing for the walk-to status: seconds under a minute,
+    // "Nm" / "Nm Ss" beyond it.
+    private static string FormatEta(TimeSpan eta)
+    {
+        if (eta <= TimeSpan.Zero) return "0s";
+        int totalSeconds = (int)System.Math.Round(eta.TotalSeconds);
+        if (totalSeconds < 60) return $"{totalSeconds}s";
+        int m = totalSeconds / 60, s = totalSeconds % 60;
+        return s == 0 ? $"{m}m" : $"{m}m {s}s";
     }
 
     // ----- Run / Stop + mode-button state ---------------------------

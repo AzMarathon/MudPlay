@@ -22,14 +22,16 @@ public sealed class AutoLairSettingsTests
         Assert.Equal(AutoLairHeuristic.Default, dto.Heuristic);
         Assert.Equal(1.0, dto.IdlePenalty);
         Assert.Equal(30, dto.EngageTimeoutSeconds);
-        Assert.Equal(AutoLairTravelCostMode.Flat, dto.TravelCostMode);
+        // Auto is the default — realm-aware model selection out of the box.
+        Assert.Equal(AutoLairTravelCostMode.Auto, dto.TravelCostMode);
         Assert.Equal(1.5, dto.FlatSecondsPerHop);
         Assert.NotNull(dto.HopTimesByEncumbrance);
-        // Per-bucket defaults scale up monotonically with encumbrance.
-        Assert.True(dto.HopTimesByEncumbrance.None       < dto.HopTimesByEncumbrance.Light);
-        Assert.True(dto.HopTimesByEncumbrance.Light      < dto.HopTimesByEncumbrance.Medium);
-        Assert.True(dto.HopTimesByEncumbrance.Medium     < dto.HopTimesByEncumbrance.Heavy);
-        Assert.True(dto.HopTimesByEncumbrance.Heavy      < dto.HopTimesByEncumbrance.Encumbered);
+        // Measured stock hop timings are a two-band step function: None /
+        // Light / Medium share the fast band, Heavy / Encumbered the slow one.
+        Assert.Equal(dto.HopTimesByEncumbrance.None,  dto.HopTimesByEncumbrance.Light);
+        Assert.Equal(dto.HopTimesByEncumbrance.Light, dto.HopTimesByEncumbrance.Medium);
+        Assert.True(dto.HopTimesByEncumbrance.Medium  < dto.HopTimesByEncumbrance.Heavy);
+        Assert.Equal(dto.HopTimesByEncumbrance.Heavy,  dto.HopTimesByEncumbrance.Encumbered);
     }
 
     // ----- JSON round-trip ------------------------------------------
@@ -69,11 +71,11 @@ public sealed class AutoLairSettingsTests
     // ----- EncumbranceHopTimes.For ----------------------------------
 
     [Theory]
-    [InlineData(EncumbranceLevel.None,       1.0)]
-    [InlineData(EncumbranceLevel.Light,      1.5)]
-    [InlineData(EncumbranceLevel.Medium,     2.5)]
-    [InlineData(EncumbranceLevel.Heavy,      4.0)]
-    [InlineData(EncumbranceLevel.Encumbered, 6.0)]
+    [InlineData(EncumbranceLevel.None,       0.7)]
+    [InlineData(EncumbranceLevel.Light,      0.7)]
+    [InlineData(EncumbranceLevel.Medium,     0.7)]
+    [InlineData(EncumbranceLevel.Heavy,      1.7)]
+    [InlineData(EncumbranceLevel.Encumbered, 1.7)]
     public void HopTimes_For_ReturnsBucketDefault(EncumbranceLevel level, double expected)
     {
         EncumbranceHopTimes t = new();
@@ -97,7 +99,7 @@ public sealed class AutoLairSettingsTests
     public void EncumbranceGated_UsesLiveStateBucket()
     {
         PlayerState state = new();
-        EncumbranceHopTimes times = new() { Heavy = 4.5 };
+        EncumbranceHopTimes times = new() { None = 1.0, Heavy = 4.5 };
         EncumbranceGatedTravelCostModel model = new(state, times);
 
         state.Encumbrance = EncumbranceLevel.Heavy;
