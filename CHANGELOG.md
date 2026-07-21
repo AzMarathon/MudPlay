@@ -4,13 +4,15 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 1.90.0
 
-- New "Realm Rankings" calculator in the Workshop Calculators tab: captures the realm's `top N` heroes off the terminal and adds a derived XP/HR column from the experience gained between captures
+- New "Realm Rankings" calculator in the Workshop Calculators tab: captures the realm's `top N` heroes off the terminal and adds a derived XP/HR column
 - Captures are stored per-BBS, so every character on the same board feeds and reads one shared history
 - Purely player-driven — run `top <N>` in-game (or press "Parse Toplist") and the block is snapshotted passively; no auto-polling
-- A re-capture with no experience or roster change is discarded, so the history keeps only captures that move the needle (and the next real change diffs over its true elapsed time)
-- Rate is figured by first name (last names change, first names don't); a class change or an experience drop flags a likely reroll instead of a bogus rate
+- A re-capture with no experience or roster change is discarded, so the history keeps only captures that move the needle
+- XP/HR is measured against the most recent prior capture that actually changed for that hero — an idle reading is skipped and the rate reaches further back
+- Rate is figured by first name (last names change, first names don't); a class change or an experience drop is flagged as a likely reroll in the program log
 - List-cap aware: a departed name is only flagged as gone when the board is complete or its last-known exp cleared the shown cutoff, so an overtake at the bottom of a capped board isn't mistaken for a reroll
-- Table columns auto-size to their widest value with centered headers, in the in-game color scheme (green Rank/Experience, gold ranks, cyan names, magenta class, grey guild) on a black background
+- History is capped at the 5 most recent captures; the oldest fall off
+- Table columns are sortable and auto-size to their widest value with centered headers, in the in-game color scheme (green Rank/Experience, gold ranks, cyan names, magenta class, grey guild) on a black background
 - Sea-captain docks now surface a right-click "Use Teleport" item to their arrival port, matching the map's teleport glyph
 
 ## 1.89.1

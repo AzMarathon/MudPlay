@@ -9,15 +9,16 @@ namespace FujinTerm.Services;
 // RoomBlacklistStore: loads Data/BBS/{bbs}/leaderboard.json on every BBS pin, and
 // exposes a read-only, newest-first history the XP/HR calculator diffs across.
 //
-// History is bounded (MaxSnapshots): XP/HR only needs the two most recent
-// appearances of each character, and unbounded growth on an actively-captured
-// board would bloat the file for no gain. The oldest snapshots fall off the tail.
+// History is bounded (MaxSnapshots): XP/HR only reaches back to a character's
+// previous changed reading, and unbounded growth on an actively-captured board
+// would bloat the file for no gain. The oldest snapshots fall off the tail.
 public sealed class LeaderboardSnapshotStore
 {
-    // Enough captures to give every listed character a prior reading to diff
-    // against (a character can be absent from a few captures if the user varied
-    // the requested count), without letting the file grow without limit.
-    private const int MaxSnapshots = 50;
+    // A small ring is enough: the rate diffs the latest capture against the most
+    // recent prior one that showed change, so a handful of captures covers every
+    // listed character's baseline. Older captures give only staler baselines —
+    // there's nothing to gain from hoarding them, so the oldest fall off the tail.
+    private const int MaxSnapshots = 5;
 
     private readonly LogService? _log;
     private string? _activeBbs;
@@ -60,7 +61,22 @@ public sealed class LeaderboardSnapshotStore
         _log?.Log(LogSeverity.Info, "Leaderboard",
             $"Captured top {snapshot.RequestedCount} — {snapshot.Entries.Count} heroes; "
             + $"{_snapshots.Count} snapshot(s) stored.");
+        LogRerollHints();
         Changed?.Invoke();
+    }
+
+    // After a kept capture, surface likely rerolls — a listed hero whose class
+    // changed or whose experience fell versus their prior appearance — to the
+    // program log. This replaces the table's old Note column: the hint now lives
+    // where an operator watches. First appearances ("new") are skipped so the
+    // opening capture of a full board doesn't spray a line per hero.
+    private void LogRerollHints()
+    {
+        if (_log is null || _snapshots.Count < 2) return;
+        LeaderboardReport report = LeaderboardXpRateCalculator.Build(_snapshots);
+        foreach (LeaderboardRankRow row in report.Rows)
+            if (row.Note.StartsWith("reroll", StringComparison.OrdinalIgnoreCase))
+                _log.Log(LogSeverity.Info, "Leaderboard", $"{row.Name} ({row.Class}) — {row.Note}");
     }
 
     // True when candidate carries a change worth keeping vs the previous capture:

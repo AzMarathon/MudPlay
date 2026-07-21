@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using Avalonia.Collections;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -261,6 +262,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         _questBonuses = questBonuses;
         _profile = profile;
         _leaderboards = leaderboards;
+        LeaderboardView = new DataGridCollectionView(Leaderboard);
 
         _stats.PropertyChanged += OnStatsChanged;
         _inventory.Changed += OnInventoryChanged;
@@ -1090,6 +1092,12 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // per-BBS LeaderboardSnapshotStore — every character on the board shares it —
     // and rebuilt whenever a fresh `top N` block is captured off the terminal.
     public ObservableCollection<LeaderboardRow> Leaderboard { get; } = new();
+
+    // The grid binds this, not the raw collection: a DataGridCollectionView is what
+    // makes the columns user-sortable (an ObservableCollection alone is inert to
+    // the grid's sort). Each column's SortMemberPath points at a typed sort key on
+    // LeaderboardRow so numbers order by magnitude, not formatted text.
+    public DataGridCollectionView LeaderboardView { get; }
 
     // One-line capture context (when, how many shown vs asked, whole-list vs
     // truncated, snapshot count) or the empty-state hint.

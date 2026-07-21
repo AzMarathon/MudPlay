@@ -8,9 +8,12 @@ namespace FujinTerm.Game.Leaderboard;
 //
 // Identity is by FIRST name (last names change, first names don't); class is the
 // reroll signal. For each character in the latest listing, XP/HR is the growth in
-// experience over the elapsed time since that character's most recent prior
-// reading. A first name that reappears under a different class — or whose
-// experience fell — is a reroll, so no rate is shown.
+// experience since the most recent prior capture in which that character's
+// experience was actually lower — "the previous capture that had change" for them
+// — measured over the interval to it. A capture where their number is unchanged
+// (idle) is skipped, and the search reaches further back. A first name that
+// reappears under a different class — or whose experience fell — is a reroll, so
+// no rate is shown.
 //
 // Dropouts (present before, gone now) are reconciled against list capping using
 // experience monotonicity: experience only ever grows, so if a departed
@@ -22,10 +25,6 @@ namespace FujinTerm.Game.Leaderboard;
 // is visible), any absence is unambiguously "gone".
 public static class LeaderboardXpRateCalculator
 {
-    // Two captures closer than this are treated as too noisy for a stable rate
-    // (a double-capture seconds apart) — the calc reaches further back instead.
-    private static readonly TimeSpan MinInterval = TimeSpan.FromMinutes(1);
-
     public static LeaderboardReport Build(IReadOnlyList<LeaderboardSnapshot>? newestFirst)
     {
         if (newestFirst is null || newestFirst.Count == 0)
@@ -62,15 +61,17 @@ public static class LeaderboardXpRateCalculator
 
             classifyMatch ??= match;
 
-            // Rate needs a same-class reading, an interval wide enough to be
-            // meaningful, and non-negative growth. Take the freshest that fits.
+            // Rate is measured against the most recent prior capture where this
+            // character's experience was actually lower: an idle reading (delta 0)
+            // is skipped and the search reaches further back for real change.
+            // Same class only — a class change is a reroll, handled below.
             if (rate is null
                 && string.Equals(match.Class, e.Class, StringComparison.OrdinalIgnoreCase))
             {
-                TimeSpan gap = latest.CapturedAtUtc - prior.CapturedAtUtc;
                 long deltaXp = e.Experience - match.Experience;
-                if (gap >= MinInterval && gap.TotalHours > 0 && deltaXp >= 0)
-                    rate = deltaXp / gap.TotalHours;
+                double hours = (latest.CapturedAtUtc - prior.CapturedAtUtc).TotalHours;
+                if (deltaXp > 0 && hours > 0)
+                    rate = deltaXp / hours;
             }
         }
 

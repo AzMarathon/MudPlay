@@ -49,8 +49,8 @@ public sealed class LeaderboardSnapshotStoreTests : IDisposable
         for (int i = 0; i < 60; i++)
             store.Add(Snap(T.AddMinutes(i), 100, 1000 + i));
 
-        // MaxSnapshots caps the history; the tail (oldest) falls off.
-        Assert.Equal(50, store.Snapshots.Count);
+        // MaxSnapshots caps the history at 5; the tail (oldest) falls off.
+        Assert.Equal(5, store.Snapshots.Count);
         Assert.Equal(1059, store.Snapshots[0].Entries[0].Experience); // most recent retained
     }
 

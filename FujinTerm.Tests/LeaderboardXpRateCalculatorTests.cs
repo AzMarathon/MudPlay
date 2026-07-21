@@ -91,15 +91,16 @@ public sealed class LeaderboardXpRateCalculatorTests
     }
 
     [Fact]
-    public void RateFor_SkipsTooCloseCapture_ReachesFurtherBack()
+    public void RateFor_SkipsIdleCapture_ReachesPreviousChanged()
     {
-        // The 30-second-old reading is too tight for a stable rate; the calc
-        // reaches back to the 3-hour-old one: (4000-1000)/3h = 1000 XP/HR.
+        // The middle reading is idle (unchanged experience), so it can't anchor a
+        // rate; the calc reaches past it to the previous CHANGED capture:
+        // (4000-1000)/3h = 1000 XP/HR.
         LeaderboardReport r = LeaderboardXpRateCalculator.Build(new[]
         {
-            Snap(T,                    100, E(1, "Dana Dawn", "Ranger", 4000)),
-            Snap(T.AddSeconds(-30),    100, E(1, "Dana Dawn", "Ranger", 3990)),
-            Snap(T.AddHours(-3),       100, E(1, "Dana Dawn", "Ranger", 1000)),
+            Snap(T,               100, E(1, "Dana Dawn", "Ranger", 4000)),
+            Snap(T.AddHours(-1),  100, E(1, "Dana Dawn", "Ranger", 4000)), // idle → skipped
+            Snap(T.AddHours(-3),  100, E(1, "Dana Dawn", "Ranger", 1000)),
         });
 
         LeaderboardRankRow row = RowFor(r, "Dana");

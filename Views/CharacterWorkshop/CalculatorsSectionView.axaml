@@ -476,7 +476,7 @@
                                  dead buffer; the grid is Left-aligned to the same end
                                  as the Border. -->
                             <DataGrid Classes="Leaderboard"
-                                      ItemsSource="{Binding Leaderboard}"
+                                      ItemsSource="{Binding LeaderboardView}"
                                       Height="380"
                                       HorizontalAlignment="Left"
                                       Background="#000000"
@@ -484,33 +484,39 @@
                                       GridLinesVisibility="None"
                                       IsReadOnly="True"
                                       AutoGenerateColumns="False"
-                                      CanUserSortColumns="False"
+                                      CanUserSortColumns="True"
                                       CanUserResizeColumns="True"
                                       CanUserReorderColumns="False"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Auto">
+                                <!-- Numeric columns sort on typed *Value keys (via
+                                     SortMemberPath) so they order by magnitude, not by
+                                     the thousands-separated display text. -->
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Rank" Binding="{ReflectionBinding Rank}"
+                                                        SortMemberPath="RankValue"
                                                         Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#FFC000"/>
                                     <DataGridTextColumn Header="Name" Binding="{ReflectionBinding Name}"
+                                                        SortMemberPath="Name"
                                                         Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#00FFFF"/>
                                     <DataGridTextColumn Header="Class" Binding="{ReflectionBinding Class}"
+                                                        SortMemberPath="Class"
                                                         Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#FF00FF"/>
                                     <DataGridTextColumn Header="Gang/Guild" Binding="{ReflectionBinding Guild}"
+                                                        SortMemberPath="Guild"
                                                         Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#C0C0C0"/>
                                     <DataGridTextColumn Header="Experience" Binding="{ReflectionBinding Experience}"
+                                                        SortMemberPath="ExperienceValue"
                                                         Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#00FF00"/>
                                     <DataGridTextColumn Header="XP/HR" Binding="{ReflectionBinding XpPerHour}"
+                                                        SortMemberPath="XpPerHourSort"
                                                         Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#FFFF00"/>
-                                    <DataGridTextColumn Header="Note" Binding="{ReflectionBinding Note}"
-                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
-                                                        Foreground="#808080"/>
                                 </DataGrid.Columns>
                             </DataGrid>
                         </Border>
