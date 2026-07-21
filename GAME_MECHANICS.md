@@ -14,6 +14,20 @@ it isn't here and you're unsure, ask.
 
 ---
 
+## Timing & rounds
+
+**Two round lengths** *([CONFIRMED])*
+- **Combat round = 5 seconds** (precisely ~5.04s; the client surfaces it as a round "5" for
+  human input). This is the cadence of combat lines, and a between-round spell can be cast
+  **once per combat round**.
+- **Spell round = 3 seconds.** Buff/debuff durations on a player, item durations, and spell
+  durations (e.g. a teleport / boat-transit spell) are all counted in **spell rounds** — so a
+  duration of `N` rounds lasts `N × 3` seconds. A debuff falls off on the same 3s cadence.
+- A spell record's `Dur` field is therefore **spell rounds**: real seconds = `Dur × 3`.
+  Boat-voyage length is the sum of the transit spells' `Dur` along the disembark chain, × 3s.
+- If a specific duration's unit is ever ambiguous, **ask the user** — they can give the correct
+  value rather than us guessing.
+
 ## Equipment & gear
 
 **Equip / remove verbs** *(all [CONFIRMED])*
@@ -779,6 +793,64 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   (a `Text` exit like `go path`) needs **only the leader** to execute it and is party-safe (followers
   follow normally). Confirm before extending the split/re-invite behaviour to teleport shapes other than
   the `ring chime` CMD case above.
+- **[CONFIRMED, user 2026-07-20 + OBSERVED from Paradigm-1.9.1 data]** **Boat travel — a sea-captain
+  dock `CMD` that ferries a party across water via `secure passage to <place>`.** This is a *specific,
+  more elaborate application* of the CMD-teleport-splits-party mechanic above: a dock room's `CMD`
+  points at a TBInfo block listing one `secure passage to <place>` verb per reachable port. Typing the
+  verb at the dock CMD-teleports **only the caster** onto a ship, so it splits the party exactly like
+  `ring chime` — the leader `@party`-relays the verb, every member fires their own copy, and the party
+  **re-forms at the destination port** (re-invite/wait, same arrival-ordering rules as above). The NPC
+  behind it is the **old sea captain (#2344)** standing in the dock room.
+
+  **Per-member gating — the captain rejects an individual, not the party.** Each `secure passage` line
+  carries an independent **minlevel** *and* a **fare** (price). Every member is gated **individually**
+  on both: a member below the minlevel, or without the fare on hand, is refused *at the captain* and
+  **left behind on the dock** while the rest sail. So the pre-flight check is per-member, mirroring the
+  toll gate: route the party to a port only when the **poorest / lowest** member clears both bars.
+  - **Fare is in copper** (the base coin unit), so it folds into the same `@wealth` pre-flight gate as
+    tolls — a member needs `price` copper-value on hand. (Contrast: a `(Toll: N)` exit is `N` **gold**
+    = `N*100` copper; a boat `price` is already copper.)
+  - **`checkability <flag> <rank>`** (optional, present only on talkiran below) is a **quest-flag /
+    rank** gate the client does **not** read — attunement (e.g. MerchantCaptain rank 3) is the user's
+    responsibility. If a member routes to that port un-attuned the captain rejects *them*; the client
+    never boards and **fails out** (see fail-out below). We do not read or infer quest flags.
+
+  **TBInfo Action format** (verified verbatim off `data-Paradigm-1.9.1`, TBInfo #4986 / #5012, each
+  reached from the dock room's `CMD`). One newline-separated line per port; colon-separated directives:
+
+  ```
+  secure passage to <place>:[checkability <flag> <rank>:]minlevel <L> <failMsgId>:price <copperFare> <failMsgId>:random <tbId>:text <msgId>
+  ```
+
+  `random <tbId>` points at a **weighted-random TBInfo table** (a `Textblock(rndm)`), whose lines read
+  `<roll>:cast <boardSpell>:cast <tripSpell>`. Both `cast`s fire in order: **`boardSpell` (5415 "board
+  ship")** random-teleports the caster into a ship room (`Abil 140` val 0 over `MinBase..MaxBase` =
+  rooms **14/715–723**, `Abil 141` = map 14); **`tripSpell`** starts the buff-locked voyage.
+
+  **Arrival-room resolution is a spell EndCast chain** (uses the `140/141/151` mechanics documented in
+  *Cast-teleport exits* below): follow `tripSpell` down its **`Abil 151` (EndCast → follow-on spell)**
+  chain — `trip 1 → trip 2 → trip 3 → disembark to <port>` — to the terminal **`disembark`** spell,
+  whose **fixed `Abil 140` room + `Abil 141` map** is the arrival `RoomKey`. Each trip leg carries
+  `Abil 29` (buff-lock) so the player can't act mid-voyage; the final `<port> landing` spell is a
+  cosmetic message. Worked chain (albion): random `#4987` → `cast 5415`+`cast 5416` → `5416 → 5418 →
+  5419 → 5417 "disembark to kingsport"` (`Abil 140`=702, `Abil 141`=14) → arrival **14/702**.
+
+  **Verified Paradigm-1.9.1 dock table** (discovered data-driven, *not* to be hardcoded — scan every
+  room's `CMD` TBInfo for `secure passage to` lines and resolve as above):
+
+  | Dock room | Port | Verb | Minlevel | Fare (copper) | checkability | Arrival room |
+  |---|---|---|---|---|---|---|
+  | 14/759 "Blackwater Harbor, Wharf" | albion | `secure passage to albion` | 50 | 2,000,000 | — | 14/702 (Kingsport Harbor) |
+  | 14/759 | terra fuego | `secure passage to terra fuego` | 50 | 2,000,000 | — | 14/1812 (Shoreline, Sandy Beach) |
+  | 14/759 | terra ista | `secure passage to terra ista` | 60 | 5,000,000 | — | 14/1813 (Cliffside Beach) |
+  | 14/759 | talkiran | `secure passage to talkiran` | 65 | 6,000,000 | `211 3` (MerchantCaptain rk 3) | 14/15000 (Tal'kiran Shore) |
+  | 14/702 "Kingsport Harbor, Wharf" | port blackwater | `secure passage to port blackwater` | 1 | 2,000,000 | — | 14/759 (Blackwater Harbor) |
+
+  **Transit + fail-out.** After the verb: board → random ship room (14/715–723) → buff-locked trip
+  legs → disembark teleport to the arrival room. The client **suppresses engines** during the voyage
+  and waits for the arrival room to render. A member the captain rejected (minlevel / fare / attunement)
+  **never boards** — detected as *no teleport into a ship room within a short window of firing the
+  verb*, which is the fail signal.
 - **[CONFIRMED]** **`look <dir>` peeks the adjacent room with a full room display, but the player never
   moves.** Looking into an exit (`look north`, `l e`, `peer …`) renders the neighbouring room exactly
   like walking in would — its title, its `You notice … here.` item/cash survey, and its `Also here:`
@@ -1204,6 +1276,15 @@ flag). These are hard eligibility gates, independent of resistance and level imm
   it, exactly like any other ground item. The drop isn't announced on the kill line, so to see and
   auto-collect it the room must be re-surveyed (a bare `look` re-renders the `You notice … here.`
   list the auto-get engine already parses).
+- **[CONFIRMED]** (2026-07-20, user) **A ground stack of 2+ identical items shows a leading count;
+  a lone item shows the article form (no count).** The room survey renders a pile as
+  `You notice 5 piece of amber here.` — the count is the true number on the floor. When there is
+  only **one** of the item, the survey omits the count and uses the article: `You notice a piece
+  of amber here.` (never `1 piece of amber`). There is no bulk-get verb, so each `get <name>` grabs
+  a single unit; the auto-collect engine therefore issues **one `get` per counted unit** (the survey
+  count for a stack, exactly one for the article/lone form). Count parsing mirrors
+  `ItemNameStore.Normalize`, which strips the same leading count/article token when matching the
+  item name.
 
 ### Item-cast triggers — how a `CastsSp` fires *([CONFIRMED] 2026-07-18, user)*
 
@@ -1290,7 +1371,19 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
   - **Level:** use the member level already **stored in game data** (each player's recorded level);
     only when it's suspected stale, **re-poll in the room with `@level`**. A member outside the
     exit's `(Level: MIN to MAX)` window means the party routes around that exit. (This half is
-    already implemented: `MovementFilter.IsExitBlocked` + `PartyLevelProbe` / `PartyLevelTracker`.)
+    implemented: `MovementFilter.IsExitBlocked` + `PartyLevelProbe` / `PartyLevelTracker`.
+    **Always-on** — routing a following party around a gate it can't clear is never wanted OFF
+    (the alternative strands a member), so there's no opt-in toggle; the only gate is "am I
+    leading a party". A member's exact level comes from an `@level` reply; **until they answer,
+    their `who` title's level band is used with the LOW end as the conservative floor** (they
+    could be as low as the band's minimum, so a `MinLevel` gate clears only if even that floor
+    clears it). Every client answers `@level` — formats vary by client, parsed leniently. An
+    exact reading is stamped with the time it was learned (`PlayerObservation.LevelAt`) and treated
+    as **stale after 24h** — a member could have levelled since — so `PartyLevelTracker.WarmStaleLevels`
+    re-fires `@level` for any unknown / aged member when a walk's planned route actually crosses a
+    level gate. That freshness poll is route-scoped and debounced the same way the `@wealth` toll
+    poll is: fired from `MovementFilter.WarmForRoute` only when the levels-permitted shortest route
+    genuinely uses a level gate, so an off-path level edge in the BFS frontier never triggers it.)
 - **[CONFIRMED]** The **keyword** the client keys policy/value on is the denomination-defining
   first word (`copper`/`silver`/`gold`/`platinum`/`runic`); the second word is the flavour coin
   noun (`farthings`/`nobles`/`crowns`/`pieces`/`coins`). Some lines carry only the keyword,

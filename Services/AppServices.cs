@@ -3151,7 +3151,11 @@ public sealed class AppServices
         // Room-floor loot snapshot from the "You notice <list> here." survey,
         // cash filtered out. Feeds @what (read) and @get-all (get each).
         // LineExtractor attached + OnRoomChanged wired below (and in MainWindowVM).
-        GroundItems = new Game.Inventory.GroundItemTracker(Router, Currency);
+        // isKnownItem gives the cash filter an authoritative item-table
+        // tiebreaker so a stacked denomination-named item ("2 gold key") isn't
+        // mistaken for coin (see IsCashEntry).
+        GroundItems = new Game.Inventory.GroundItemTracker(Router, Currency,
+            isKnownItem: IsKnownGroundItem);
 
         // Read-only inventory queries — @wealth / @enc / @have report off the
         // InventoryManager snapshot; @what reports the GroundItems survey. No
@@ -3259,7 +3263,10 @@ public sealed class AppServices
             getSnapshot: () => Inventory.Snapshot,
             isPeekSuppressed: () => RoomTracker.IsPeekSuppressed(),
             log: Log,
-            naming: Currency);
+            naming: Currency,
+            // Same item-table tiebreaker the ground tracker uses — a stacked
+            // denomination-named item ("2 gold key") isn't collected as coin.
+            isKnownItem: IsKnownGroundItem);
         // Reset held tallies on profile swap — prior character's
         // counts aren't relevant to the new one.
         Profile.ProfileLoaded += _ => Cash.ResetTallies();
@@ -3457,8 +3464,11 @@ public sealed class AppServices
         // exact level supersedes the title band. The tracker fires it on
         // roster change and exposes the party's most-constraining level
         // window; MovementFilter reads that window to route a following
-        // party around gates a member can't clear. Both gated by the
-        // "avoid party-impassable level gates" toggle.
+        // party around gates a member can't clear. Always-on — routing a
+        // party around a gate it can't clear is never wanted OFF; the only
+        // gate is "am I leading a party". WarmStaleLevels re-probes a member
+        // whose exact level is unknown or older than a day, wired into the
+        // route-scoped MovementFilter.LevelWarmProbe below.
         PartyLevelProbe = new Game.Remote.PartyLevelProbe(
             PartyBroadcaster, Chat, PartyState,
             recordLevel: (given, level) => Players.RecordLevel(given, level, DateTime.UtcNow),
@@ -3466,10 +3476,9 @@ public sealed class AppServices
         PartyLevel = new Game.Remote.PartyLevelTracker(
             PartyState, PartyLevelProbe, Players,
             selfLevel: () => Stats.HasParsed ? PlayerStats.Level : (int?)null,
-            isEnabled: () =>
-                Resolver.Resolve<Models.Profile.OtherSettings>("Other").AvoidPartyImpassableLevelGates,
             log: Log);
         Movement.PartyLevelBoundsProvider = PartyLevel.Bounds;
+        Movement.LevelWarmProbe = PartyLevel.WarmStaleLevels;
 
         // Party-wealth probe + tracker. Unlike level, wealth isn't kept warm —
         // it drifts with loot / spend — so the tracker probes @wealth only when
@@ -3491,7 +3500,7 @@ public sealed class AppServices
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Movement.PartyWealthProvider = PartyWealth.MinWealth;
-        Movement.TollWealthProbe = PartyWealth.Probe;
+        Movement.WealthWarmProbe = PartyWealth.Probe;
 
         // Base auto-search — a bare `sea` on each genuine room entry reveals
         // hidden items for the auto-get engines. Armed by the persisted
@@ -3529,6 +3538,25 @@ public sealed class AppServices
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             paradigmResolver: ParadigmResync);
         Walker.SetMazeSolver(MazeSolver);
+        // Data-driven boat routing. When a walk's goal is cheaper (or only)
+        // reachable by a sea-captain sailing, the planner stitches the two land
+        // legs around the boat hop and the walker inserts a BoatStep. The planner
+        // pulls its candidate sailings from RoomGraph's data-driven boat index, so
+        // it no-ops on realms without docks.
+        Walker.SetBoatPlanner(new Game.Map.BoatRoutePlanner(RoomGraph, Bfs, Log));
+        // Voyage timer: the boat step waits out the sail — from boarding in the
+        // captain's room, through the buff-locked transit legs, to landing at the
+        // arrival shore — on a wall-clock deadline it sizes from the passage's
+        // transit-spell rounds. Wire a UI-thread one-shot so OnBoatDeadline runs on
+        // the same thread the walker's tracker events do; the injected shape keeps
+        // the Game/Map layer UI-free (tests drive a fake clock instead).
+        Walker.SetVoyageScheduler((delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+            return new DispatcherTimerHandle(timer);
+        });
         // While a maze solve is Active the tracker legitimately churns Lost/Suspect
         // between same-named teleport landings — relocalizing that is the solver's
         // job. On Paradigm the solver drives its OWN `rm` after each landing (see
@@ -4925,6 +4953,14 @@ public sealed class AppServices
         return result;
     }
 
+    // True when a room "You notice ..." entry resolves to a real item in the
+    // active set. The cash filters (GroundItemTracker.IsCashEntry /
+    // CashManager.TryParseCashEntry) use this as an authoritative tiebreaker so a
+    // stacked denomination-named item ("2 gold key") isn't mistaken for a coin
+    // pile — currency records aren't in Items.json, so a true coin pile never
+    // resolves here.
+    private bool IsKnownGroundItem(string entry) => ItemNames.FindByName(entry) is not null;
+
     // Resolve a single room "You notice ..." entry for
     // AutoGetItems: map the loose wording to an item
     // Number, read its verbatim Name, and resolve the per-character
@@ -5455,5 +5491,12 @@ public sealed class AppServices
 
         Settings.Current.LastUsedProfile = loaded;
         Settings.Save();
+    }
+
+    // Cancels a one-shot voyage DispatcherTimer when the sail completes early (or
+    // the walk resets) — the walker cancels its armed deadline through this handle.
+    private sealed class DispatcherTimerHandle(Avalonia.Threading.DispatcherTimer timer) : IDisposable
+    {
+        public void Dispose() => timer.Stop();
     }
 }

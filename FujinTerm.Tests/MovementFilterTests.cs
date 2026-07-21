@@ -638,7 +638,7 @@ public sealed class MovementFilterTests
             (_, MovementFilter filter) = NewPair();
             int probes = 0;
             filter.PartyWealthProvider = () => 100;   // leading a party
-            filter.TollWealthProbe = () => probes++;
+            filter.WealthWarmProbe = () => probes++;
 
             filter.WarmForRoute(bfs, new RoomKey(1, 1), new RoomKey(1, 3));
 
@@ -654,7 +654,7 @@ public sealed class MovementFilterTests
             (_, MovementFilter filter) = NewPair();
             int probes = 0;
             filter.PartyWealthProvider = () => 100;
-            filter.TollWealthProbe = () => probes++;
+            filter.WealthWarmProbe = () => probes++;
 
             // A→B is a plain E; the N→D toll is in the frontier but not on
             // the route, so it must not trigger a poll (the reported bug).
@@ -672,7 +672,7 @@ public sealed class MovementFilterTests
             (_, MovementFilter filter) = NewPair();
             int probes = 0;
             // PartyWealthProvider unset (solo / not leading) → nothing to warm.
-            filter.TollWealthProbe = () => probes++;
+            filter.WealthWarmProbe = () => probes++;
 
             filter.WarmForRoute(bfs, new RoomKey(1, 1), new RoomKey(1, 3));
 
@@ -687,7 +687,7 @@ public sealed class MovementFilterTests
         {
             (_, MovementFilter filter) = NewPair();
             filter.PartyWealthProvider = () => 100;
-            // TollWealthProbe unset — must not throw.
+            // WealthWarmProbe unset — must not throw.
             filter.WarmForRoute(bfs, new RoomKey(1, 1), new RoomKey(1, 3));
         });
     }
@@ -699,7 +699,7 @@ public sealed class MovementFilterTests
         {
             (_, MovementFilter filter) = NewPair();
             filter.PartyWealthProvider = () => 100;   // party can't cover 500
-            filter.TollWealthProbe = () => { };
+            filter.WealthWarmProbe = () => { };
 
             filter.WarmForRoute(bfs, new RoomKey(1, 1), new RoomKey(1, 3));
 
@@ -1213,5 +1213,121 @@ public sealed class MovementFilterTests
         filter.PicklocksProvider = () => 0;
         filter.MaxBashableStrengthProvider = () => 200;
         Assert.Equal(ExitBlockReason.Door, filter.DescribeExitBlock(DoorExit(251)));
+    }
+
+    // ----- Boat sailing gates: per-member minlevel + copper fare ------------
+
+    private static BoatPassage Boat(int minLevel, long fareCopper, bool checkability = false) =>
+        new(new RoomKey(14, 759), "albion", "secure passage to albion",
+            new RoomKey(14, 702), minLevel, fareCopper, checkability);
+
+    [Fact]
+    public void Boat_UnknownLevelAndWealth_DoesNotGate()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Neither level nor wallet parsed — don't refuse a sailing we can't
+        // yet evaluate (same rule as the land gates).
+        Assert.True(filter.IsBoatPassable(Boat(50, 2_000_000)));
+    }
+
+    [Fact]
+    public void Boat_SelfClearsBothGates_Passable()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.LevelProvider = () => 55;
+        filter.WealthProvider = () => 2_000_000;
+        Assert.True(filter.IsBoatPassable(Boat(50, 2_000_000)));
+    }
+
+    [Fact]
+    public void Boat_SelfUnderLevel_BlocksLevel()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.LevelProvider = () => 49;
+        filter.WealthProvider = () => 5_000_000;
+        Assert.False(filter.IsBoatPassable(Boat(50, 2_000_000)));
+        Assert.Equal(ExitBlockReason.Level, filter.DescribeBoatBlock(Boat(50, 2_000_000)));
+    }
+
+    [Fact]
+    public void Boat_SelfTooPoor_BlocksFare()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.LevelProvider = () => 60;
+        filter.WealthProvider = () => 1_999_999;   // one short of the fare
+        Assert.Equal(ExitBlockReason.Fare, filter.DescribeBoatBlock(Boat(50, 2_000_000)));
+    }
+
+    [Fact]
+    public void Boat_FareIsCopperNotGold_NoHundredScaling()
+    {
+        // A boat charges copper directly (unlike a toll's gold*100): 2,000,000
+        // copper on hand exactly covers a 2,000,000 fare.
+        (_, MovementFilter filter) = NewPair();
+        filter.WealthProvider = () => 2_000_000;
+        Assert.False(filter.DescribeBoatBlock(Boat(0, 2_000_000)).HasFlag(ExitBlockReason.Fare));
+    }
+
+    [Fact]
+    public void Boat_PartyMinWealthGatesFare()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Leading a party whose poorest member holds less than the fare — the
+        // captain would leave them at the dock, so the sailing isn't routable.
+        filter.PartyWealthProvider = () => 1_500_000;
+        filter.WealthProvider = () => 9_000_000;   // leader is rich, but party min governs
+        Assert.Equal(ExitBlockReason.Fare, filter.DescribeBoatBlock(Boat(0, 2_000_000)));
+    }
+
+    [Fact]
+    public void Boat_PartyLevelBoundsGateMinLevel()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Party's lowest member is under the sailing's level floor.
+        filter.PartyLevelBoundsProvider = () => (Low: 45, High: 70);
+        filter.WealthProvider = () => 9_000_000;
+        Assert.Equal(ExitBlockReason.Level, filter.DescribeBoatBlock(Boat(50, 2_000_000)));
+    }
+
+    [Fact]
+    public void Boat_CheckabilityNotGated()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.LevelProvider = () => 70;
+        filter.WealthProvider = () => 9_000_000;
+        // RequiresCheckability=true is the user's responsibility (client can't
+        // read the quest flag) — it must NOT block an otherwise-clearable boat.
+        Assert.True(filter.IsBoatPassable(Boat(65, 6_000_000, checkability: true)));
+    }
+
+    [Fact]
+    public void WarmForBoat_LeadingParty_FiresBothProbes()
+    {
+        (_, MovementFilter filter) = NewPair();
+        int wealth = 0, level = 0;
+        filter.PartyWealthProvider = () => 100;
+        filter.PartyLevelBoundsProvider = () => (Low: 10, High: 20);
+        filter.WealthWarmProbe = () => wealth++;
+        filter.LevelWarmProbe = () => level++;
+
+        filter.WarmForBoat();
+
+        Assert.Equal(1, wealth);
+        Assert.Equal(1, level);
+    }
+
+    [Fact]
+    public void WarmForBoat_Solo_FiresNothing()
+    {
+        (_, MovementFilter filter) = NewPair();
+        int probes = 0;
+        // No party providers set → solo, gates on own live wallet/level, no
+        // round-trip needed.
+        filter.WealthWarmProbe = () => probes++;
+        filter.LevelWarmProbe = () => probes++;
+
+        filter.WarmForBoat();
+
+        Assert.Equal(0, probes);
     }
 }

@@ -33,6 +33,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             DispatcherPriority.Normal, (_, _) => OnLairTick());
         _lairTick.Stop();
 
+        // 1 s tick that refreshes the "Sailing the high seas…" countdown while a
+        // boat voyage is in flight. Started on the walker's Sailing event, it
+        // self-stops the moment the walker lands and clears IsSailing — so an idle
+        // (or land-walking) Navigation window pays nothing.
+        _sailingTick = new DispatcherTimer(TimeSpan.FromSeconds(1),
+            DispatcherPriority.Normal, (_, _) => OnSailingTick());
+        _sailingTick.Stop();
+
         _services.RoomTracker.StateChanged += OnTrackerStateChanged;
         _services.Recovery.TierChanged    += OnRecoveryTierChanged;
         _services.Walker.Event += OnWalkerEvent;
@@ -85,9 +93,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // See EnsureLairTickRunning.
     private readonly DispatcherTimer _lairTick;
 
+    // Per-second pump for the boat-voyage countdown — only runs while a sail is
+    // in flight (see OnSailingTick / the Sailing walker event).
+    private readonly DispatcherTimer _sailingTick;
+
     public void Dispose()
     {
         _lairTick.Stop();
+        _sailingTick.Stop();
         _services.RoomTracker.StateChanged -= OnTrackerStateChanged;
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
         _services.Walker.Event -= OnWalkerEvent;
@@ -2007,10 +2020,36 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             case WalkEventKind.StepCompleted:
             case WalkEventKind.Finished:
             case WalkEventKind.Stopped:
+            case WalkEventKind.Sailing:
                 EngineError = null;
                 break;
         }
+
+        // A boat voyage just began — spin up the 1 s countdown pump so the
+        // "Sailing the high seas…" label ticks down to the arrival ETA. It
+        // self-stops once the walker lands (OnSailingTick checks IsSailing), but
+        // stop it eagerly on any walk-ending event too so a failed / stopped sail
+        // doesn't leave it running.
+        if (e.Kind == WalkEventKind.Sailing)
+            _sailingTick.Start();
+        else if (e.Kind is WalkEventKind.Finished or WalkEventKind.Failed
+                 or WalkEventKind.Stopped)
+            _sailingTick.Stop();
+
         RefreshFromWalker();
+    }
+
+    // Refresh the boat countdown label each second while a sail is in flight;
+    // stop the pump the moment the walker lands and clears IsSailing.
+    private void OnSailingTick()
+    {
+        if (!_services.Walker.IsSailing)
+        {
+            _sailingTick.Stop();
+            OnPropertyChanged(nameof(TopBarStatusText));
+            return;
+        }
+        OnPropertyChanged(nameof(TopBarStatusText));
     }
     private void OnPauseChanged(bool paused) => IsPaused = paused;
 
@@ -2211,15 +2250,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // (teleport <room> <map>) and cast-delivered (cast <spell> where the
     // spell carries a teleport ability) directives qualify — a random
     // cast-teleport drops the walker into the same room-uncertainty state
-    // a literal one does, so it earns the same glyph. The resulting set
-    // drives the map's diagonal hash-line overlay so the user can spot
-    // non-exit movement spots at a glance.
+    // a literal one does, so it earns the same glyph. A sea-captain dock earns
+    // it too: `secure passage` is a delayed, party-splitting teleport to a
+    // distant shore — not an instant one, but still non-exit movement the user
+    // wants to spot. The resulting set drives the map's diagonal hash-line
+    // overlay so the user can pick out every non-exit movement spot at a glance.
     private void RefreshTeleportRooms()
     {
         if (Graph is null) { TeleportRooms = null; return; }
         HashSet<RoomKey> set = new();
         foreach (Room room in Graph.Rooms)
         {
+            // A dock's `secure passage` sailings live in the data-driven boat
+            // index, not the CMD teleport resolvers — flag it off that index so a
+            // captain room glyphs even though its CMD carries no cast-teleport.
+            if (Graph.BoatPassagesAt(room.Key).Count > 0) { set.Add(room.Key); continue; }
+
             if (room.Cmd <= 0) continue;
             using IEnumerator<(string, RoomKey, int)> literal =
                 TBInfoTeleportResolver.EnumerateTeleports(_services.TBInfo, room.Cmd).GetEnumerator();
@@ -2423,6 +2469,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 case NavigationEngineKind.Walking:
                 {
                     Game.Map.AutoWalkManager w = _services.Walker;
+
+                    // Mid-sail: a sea-captain voyage is in flight (boarded, not yet
+                    // landed). Swap the step readout for a high-seas countdown to
+                    // the arrival shore; the 1 s _sailingTick drives the refresh and
+                    // normal walk status resumes once the walker lands and clears
+                    // IsSailing.
+                    if (w.IsSailing)
+                    {
+                        string place = string.IsNullOrWhiteSpace(w.SailingDestinationName)
+                            ? "port"
+                            : w.SailingDestinationName!;
+                        TimeSpan left = w.SailingArrivalEta - DateTimeOffset.UtcNow;
+                        if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+                        return $"Sailing the high seas, reaching {place} in {left:mm\\:ss}";
+                    }
+
                     string dest = w.Destination is { } k
                         ? FormatRoomRef(k)
                         : "?";

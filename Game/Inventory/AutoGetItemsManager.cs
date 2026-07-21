@@ -286,49 +286,60 @@ public sealed class AutoGetItemsManager : IDisposable
             }
             if (!item.AutoCollect) continue;     // user didn't flag it
 
-            // MaxToGet carry cap. Count what we already hold (carried + worn +
-            // key ring — key-type items land in the ring, not the pack) plus
-            // anything already decided in this same survey; stop at the cap.
-            // Decided-count and projected-weight are committed only after BOTH
-            // gates pass, so a weight refusal doesn't burn a cap slot.
-            int decidedSoFar = decidedThisPass?.GetValueOrDefault(item.Number) ?? 0;
-            if (item.MaxToGet != int.MaxValue)
+            // A stacked ground pile is surveyed with a leading count ("5 piece of
+            // amber"): there is no bulk-get verb, so each get grabs a single unit
+            // and the pile needs one get per counted unit — otherwise only one is
+            // taken and the rest linger until the next room re-display. Each unit
+            // re-checks the MaxToGet cap and the encumbrance projection on its own,
+            // so a cap or weight ceiling stops the pile partway rather than after
+            // the whole stack.
+            int units = ParseLeadingCount(entry);
+            for (int u = 0; u < units; u++)
             {
-                int have = _heldCount(item.Number) + decidedSoFar;
-                if (have >= item.MaxToGet)
+                // MaxToGet carry cap. Count what we already hold (carried + worn +
+                // key ring — key-type items land in the ring, not the pack) plus
+                // anything already decided in this same survey; stop at the cap.
+                // Decided-count and projected-weight are committed only after BOTH
+                // gates pass, so a weight refusal doesn't burn a cap slot.
+                int decidedSoFar = decidedThisPass?.GetValueOrDefault(item.Number) ?? 0;
+                if (item.MaxToGet != int.MaxValue)
                 {
-                    _log?.Debug(LogCategory,
-                        $"skipped item={item.Name} (have {have} >= max {item.MaxToGet})");
-                    continue;
+                    int have = _heldCount(item.Number) + decidedSoFar;
+                    if (have >= item.MaxToGet)
+                    {
+                        _log?.Debug(LogCategory,
+                            $"skipped item={item.Name} (have {have} >= max {item.MaxToGet})");
+                        break;   // cap reached — leave the rest of the pile
+                    }
                 }
-            }
 
-            // Weight gate — skip a pickup that would breach the cap. Weight 0
-            // (unknown) and an unknown carry weight both mean "don't gate".
-            if (encKnown && item.Weight > 0 && projectedWeight + item.Weight > capWeight)
-            {
-                _log?.Info(LogCategory,
-                    $"skipped item={item.Name} (encumbrance: {projectedWeight}+{item.Weight} > cap {capWeight})");
-                continue;
-            }
+                // Weight gate — skip a pickup that would breach the cap. Weight 0
+                // (unknown) and an unknown carry weight both mean "don't gate".
+                if (encKnown && item.Weight > 0 && projectedWeight + item.Weight > capWeight)
+                {
+                    _log?.Info(LogCategory,
+                        $"skipped item={item.Name} (encumbrance: {projectedWeight}+{item.Weight} > cap {capWeight})");
+                    break;   // over the weight cap — leave the rest of the pile
+                }
 
-            if (item.MaxToGet != int.MaxValue)
-            {
-                decidedThisPass ??= new Dictionary<int, int>();
-                decidedThisPass[item.Number] = decidedSoFar + 1;
-            }
-            if (encKnown && item.Weight > 0) projectedWeight += item.Weight;
+                if (item.MaxToGet != int.MaxValue)
+                {
+                    decidedThisPass ??= new Dictionary<int, int>();
+                    decidedThisPass[item.Number] = decidedSoFar + 1;
+                }
+                if (encKnown && item.Weight > 0) projectedWeight += item.Weight;
 
-            if (deferMode)
-            {
-                _deferred.Add(item.Name);
-                _log?.Info(LogCategory, $"deferred (combat) item={item.Name}");
-            }
-            else
-            {
-                _log?.Info(LogCategory, $"collect item={item.Name}");
-                _gate?.NoteGetSent();
-                Send($"get {item.Name}");
+                if (deferMode)
+                {
+                    _deferred.Add(item.Name);
+                    _log?.Info(LogCategory, $"deferred (combat) item={item.Name}");
+                }
+                else
+                {
+                    _log?.Info(LogCategory, $"collect item={item.Name}");
+                    _gate?.NoteGetSent();
+                    Send($"get {item.Name}");
+                }
             }
         }
 
@@ -349,6 +360,33 @@ public sealed class AutoGetItemsManager : IDisposable
         }
         _deferred.Clear();
         _gate?.NoteDeferredCleared();
+    }
+
+    // The survey prefixes a stacked ground pile with its count ("5 piece of
+    // amber", "three torches"). Return that count so the collect loop can send
+    // one get per unit; a missing or unrecognized leading token is the article
+    // form ("a rusty dagger") — a single item. Mirrors the leading-count strip
+    // in ItemNameStore.Normalize so the count parsed here is exactly the token
+    // the resolver drops when matching the item name.
+    private static int ParseLeadingCount(string entry)
+    {
+        int sp = entry.IndexOf(' ');
+        if (sp <= 0) return 1;
+        string first = entry[..sp];
+        if (int.TryParse(first, out int n)) return n > 0 ? n : 1;
+        return first.ToLowerInvariant() switch
+        {
+            "two" => 2,
+            "three" => 3,
+            "four" => 4,
+            "five" => 5,
+            "six" => 6,
+            "seven" => 7,
+            "eight" => 8,
+            "nine" => 9,
+            "ten" => 10,
+            _ => 1,   // "one", an article, or a plain noun → single item
+        };
     }
 
     // Split "a, b and c" survey wording into individual entries — commas

@@ -195,9 +195,48 @@ public static class BugReportBuilder
             // Invited rows carry no health round-trip yet, so their percents are
             // meaningless — skip the H/M readout for them.
             if (!m.IsInvited) sb.Append("  [").Append(m.HpRichDisplay).Append(' ').Append(m.MaRichDisplay).Append(']');
+            // Level source drives the party level-gate routing; surface each
+            // member's known level (exact + staleness, else title band) so a
+            // "party routed the wrong way around a gate" report shows what the
+            // gate check actually saw.
+            if (!m.IsSelf && !string.IsNullOrWhiteSpace(m.Name))
+                sb.Append("  {lvl: ").Append(MemberLevelNote(svc, m.Name)).Append('}');
             sb.Append('\n');
         }
+
+        // The most-constraining (Low, High) window the level gate routes on, or
+        // "(n/a)" when not leading / nobody's level is known.
+        (int Low, int High)? window = svc.PartyLevel.Bounds();
+        Kv(sb, "Party level window",
+            window is { } w ? $"{w.Low}–{w.High}" : "(n/a — solo, following, or no levels known)");
         return sb.ToString();
+    }
+
+    // One member's level as the party level-gate check sees it: the exact level
+    // (with how long ago it was learned, since a reading older than 24h is
+    // re-probed) when known, else the title-derived band, else unknown.
+    private static string MemberLevelNote(AppServices svc, string name)
+    {
+        Models.GameData.PlayerRecord? rec = svc.Players.Find(name);
+        if (rec?.Level is { } exact)
+        {
+            string age = rec.LevelAt is { } at
+                ? $", {FormatAgeHours(DateTime.UtcNow - at)}"
+                : ", age unknown";
+            return $"{exact} exact{age}";
+        }
+        if (Game.GameData.ClassTitleTable.LookupLevelRange(rec?.Title) is { } band)
+            return $"{band.MinLevel}–{band.MaxLevel} (from title \"{rec!.Title}\")";
+        return "unknown";
+    }
+
+    private static string FormatAgeHours(TimeSpan age)
+    {
+        if (age < TimeSpan.Zero) age = TimeSpan.Zero;
+        double hours = age.TotalHours;
+        return hours < 1
+            ? $"{age.TotalMinutes:0}m ago"
+            : $"{hours:0.#}h ago{(hours > 24 ? " STALE" : "")}";
     }
 
     private static IEnumerable<string> AilmentFlags(PartyMember m)
@@ -416,6 +455,12 @@ public static class BugReportBuilder
         Kv(sb, "Destination", walker.Destination is { } dest ? $"{dest.Map}/{dest.Room}" : "(none)");
         if (walker.StepCount > 0)
             Kv(sb, "Progress", $"step {Math.Min(walker.CurrentStepIndex + 1, walker.StepCount)}/{walker.StepCount}");
+        // A voyage in flight is the state most likely to hang (captain refused
+        // boarding, arrival mismatch) — surface the sailing target + ETA so a
+        // report captured mid-sail pins down which crossing stalled.
+        if (walker.IsSailing)
+            Kv(sb, "Sailing", $"to {walker.SailingDestinationName ?? "(port)"}, arriving in "
+                + $"{Math.Max(0, (walker.SailingArrivalEta - DateTimeOffset.UtcNow).TotalSeconds):F0}s");
         Kv(sb, "Journey origin (flee anchor)",
             walker.JourneyOrigin is { } origin ? $"{origin.Map}/{origin.Room}" : "(none)");
         Kv(sb, "Next planned direction",

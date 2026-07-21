@@ -2,6 +2,29 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.89.1
+
+- Auto-collect now grabs an entire stacked ground pile: a survey count ("You notice 5 piece of amber here") sends one `get` per unit instead of one item per room re-display
+- The MaxToGet cap and encumbrance ceiling still apply per unit, so a stack is taken only up to the cap or carry limit
+- A stacked item whose name starts with a denomination word ("2 gold key") is no longer mistaken for coin: the item table settles the cash-vs-item call, so it's looted instead of skipped as cash
+- bug reports addressed: paradigm-20260720-153216
+
+## 1.89.0
+
+- Navigation can now route through sea-captain boats: a walk whose goal is cheaper (or only) reachable by a `secure passage` sailing walks to the dock, sails, then walks from the arrival port
+- Boat sailings are discovered from each realm's room-command data (never hardcoded), gated on every party member's level and copper fare
+- The sail is one party-split step (same relay as a chime teleport); the voyage fails out if the captain refuses boarding an under-level, too-poor, or un-attuned member
+- A sea-captain dock now shows the teleport glyph on the map — a `secure passage` is a delayed teleport to a distant shore
+- A boat that's the only crossing is no longer hidden behind a bare "no path" when a member can't cover its level or fare: the walker plans it anyway and warns the captain may leave a member behind
+- The sail is timed from its transit-spell rounds; while sailing, the Navigation top bar reads "Sailing the high seas, reaching <place> in mm:ss" and reverts to normal walk status once you land
+
+## 1.88.0
+
+- Party-impassable level-gate routing is now always-on (the opt-in Settings → Other checkbox is gone); a following party still routes around a `(Level: MIN to MAX)` gate it can't clear rather than stranding a member
+- A member's exact level (from `@level`) is now timestamped; readings older than 24h are treated as stale
+- When a planned walk actually crosses a level gate, `@level` is re-probed for any unknown or stale member (route-scoped + debounced, mirroring the toll `@wealth` warm)
+- Bug report now lists each party member's level estimate (exact + age, or title band) and the folded party level window
+
 ## 1.87.0
 
 - Settings → Cash + Items "Keep on hand" is now a single raw wealth value (copper farthings) instead of five per-currency fields

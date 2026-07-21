@@ -362,6 +362,53 @@ public sealed class BfsMapperTests : IDisposable
         Assert.False(bfs.RouteUsesToll(new RoomKey(1, 1), new RoomKey(9, 9)));
     }
 
+    // ----- RouteUsesLevelGate ----------------------------------------
+
+    //  1/1 ──E── 1/2 ──E(Level: 40 to 0)── 1/3, plus off-path
+    //  1/1 ──N(Level: 40 to 0)── 1/4.
+    private const string LevelGateJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4 (Level: 40 to 0)", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/3 (Level: 40 to 0)", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "D",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void RouteUsesLevelGate_GateOnRoute_True()
+    {
+        var (bfs, _) = NewMapper(LevelGateJson);
+        Assert.True(bfs.RouteUsesLevelGate(new RoomKey(1, 1), new RoomKey(1, 3)));
+    }
+
+    [Fact]
+    public void RouteUsesLevelGate_GateOffRoute_False()
+    {
+        var (bfs, _) = NewMapper(LevelGateJson);
+        // A→B route is plain; the N→D level gate is off it, so it must not count.
+        Assert.False(bfs.RouteUsesLevelGate(new RoomKey(1, 1), new RoomKey(1, 2)));
+    }
+
+    [Fact]
+    public void RouteUsesLevelGate_NoPath_False()
+    {
+        var (bfs, _) = NewMapper(LevelGateJson);
+        Assert.False(bfs.RouteUsesLevelGate(new RoomKey(1, 1), new RoomKey(9, 9)));
+    }
+
     // ----- BuildLayout -----------------------------------------------
 
     [Fact]

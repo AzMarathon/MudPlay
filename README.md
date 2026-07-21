@@ -1,11 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.87.0**
-> - Settings → Cash + Items "Keep on hand" is now a single raw wealth value (copper farthings) instead of five per-currency fields
-> - Depositing sends the excess as `dep <copper>`; stashing decomposes it into lowest-denomination-first `hide N <coin>` commands, leaving the fewest coins on hand
-> - Settings → Health: HP and Mana / Kai thresholds stack vertically so the tab no longer opens with a horizontal scrollbar
-> - Settings → Health: pre/post-rest command boxes are left-aligned at a sensible width instead of stretched to the pane's right edge
+> **Version 1.89.1**
+> - Auto-collect now grabs an entire stacked ground pile: a survey count ("You notice 5 piece of amber here") sends one `get` per unit instead of one item per room re-display
+> - The MaxToGet cap and encumbrance ceiling still apply per unit, so a stack is taken only up to the cap or carry limit
+> - A stacked item whose name starts with a denomination word ("2 gold key") is no longer mistaken for coin: it's looted instead of skipped as cash
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

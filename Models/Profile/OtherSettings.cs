@@ -82,18 +82,12 @@ public sealed class OtherSettings
     // (opt-in). Char-tier; surfaced in Settings → Other.
     public bool SearchRoomsIfItemNeeded { get; set; }
 
-    // When true and leading a party, route around (Level: MIN to MAX) gates the
-    // whole party can't clear rather than walking the leader through and leaving
-    // a member behind. BFS treats such a gate as non-traversable via
-    // Services.MovementFilter.PartyLevelBoundsProvider, which
-    // Game.Remote.PartyLevelTracker feeds from each member's exact level
-    // (learned by an @level probe) or, until probed, their title-derived level
-    // band. When the only safe way needs a gate (all routes level-blocked), the
-    // walker's existing gates-ignored re-probe still tells "level-gated" apart
-    // from "disconnected" so the destination stays reachable. Read live by the
-    // filter through the tracker. Default false (opt-in). Char-tier; surfaced in
-    // Settings → Other.
-    public bool AvoidPartyImpassableLevelGates { get; set; }
+    // Note: the former "Avoid party-impassable level gates" opt-in graduated to
+    // always-on built-in behaviour. Routing a following party around a
+    // (Level: MIN to MAX) gate the group can't clear is never something a leader
+    // wants OFF (the alternative strands a member), so there's no toggle — the
+    // gate check runs whenever this character leads a party. See
+    // Game.Remote.PartyLevelTracker (always-on: IsInParty && SelfIsLeader).
 
     // Leader-side @comeback backtrack budget — when a stranded follower sends a
     // bare @comeback (no target room), the leader pauses its active movement

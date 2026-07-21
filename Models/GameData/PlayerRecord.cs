@@ -34,7 +34,11 @@ namespace FujinTerm.Models.GameData;
 // (PlayerDatabase.RecordLevel); null until the player answers one — the
 // title-derived range from GameData.ClassTitleTable is the only signal
 // before that, and Level is authoritative over the range once set because
-// a title only pins a 5-level band.
+// a title only pins a 5-level band. LevelAt stamps WHEN that exact level was
+// learned: the party level-gate check treats an exact level older than the
+// staleness horizon as due for a fresh @level re-probe (a member could have
+// levelled since), so a long-lived exact reading doesn't silently drift out
+// of date. null whenever Level is null (no reading to age).
 public sealed record PlayerObservation(
     string GivenName,
     string FamilyName,
@@ -49,6 +53,9 @@ public sealed record PlayerObservation(
     IReadOnlyList<EquipmentItem>? Equipment = null,
     DateTime? LastGreetedUtc = null,
     int? Level = null,
+    // When the exact Level was recorded (UTC), for the party level-gate
+    // staleness re-probe. null whenever Level is null.
+    DateTime? LevelAt = null,
     // Authored BBS-tier override: the player's BBS account name, when it
     // differs from their in-game given name. Some boards key their presence
     // lines (logon / logoff) on the account name instead of the character
@@ -133,6 +140,8 @@ public sealed record PlayerRecord(
     bool DontAutoDelete = false,
     IReadOnlyList<EquipmentItem>? Equipment = null,
     int? Level = null,
+    // When the exact Level was recorded (UTC) — see PlayerObservation.LevelAt.
+    DateTime? LevelAt = null,
     // Mirrors PlayerObservation.AccountName (BBS tier) into the merged row so
     // the edit dialog can show + author it. null = account name equals the
     // in-game name.
@@ -167,6 +176,7 @@ public sealed record PlayerRecord(
         DontAutoDelete:      cust.DontAutoDelete,
         Equipment:           obs.Equipment,
         Level:               obs.Level,
+        LevelAt:             obs.LevelAt,
         AccountName:         obs.AccountName);
 
     // Pull just the customization slice off this merged row (used by the edit dialog Save path).

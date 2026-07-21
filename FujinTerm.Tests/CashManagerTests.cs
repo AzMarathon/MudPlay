@@ -34,6 +34,10 @@ public sealed class CashManagerTests
         // non-gate tests run the v1 full-pickup path unchanged. Gate
         // tests set a populated snapshot before feeding the cash line.
         public InventorySnapshot Snapshot { get; set; } = InventorySnapshot.Empty;
+        // Item-table tiebreaker double. Null (default) → unwired, the
+        // count+denomination heuristic stands alone. Read lazily inside the
+        // injected lambda so a test can set it after construction.
+        public Func<string, bool>? KnownItem { get; set; }
         public List<(string Currency, int Count, CashPolicy Policy)> Dispatches { get; } = new();
         public List<long> AutoDeposits { get; } = new();
         public List<(string Currency, int Count)> Collected { get; } = new();
@@ -49,7 +53,8 @@ public sealed class CashManagerTests
                 hasEngageableHostiles: () => HasHostiles,
                 getSnapshot: () => Snapshot,
                 isPeekSuppressed: () => PeekSuppressed,
-                log: Log);
+                log: Log,
+                isKnownItem: entry => KnownItem?.Invoke(entry) ?? false);
             Cash.SetWireSender(b => Sent.Add(b));
             Cash.CashDispatched += (c, n, p) => Dispatches.Add((c, n, p));
             Cash.AutoDepositRequested += t => AutoDeposits.Add(t);
@@ -703,6 +708,72 @@ public sealed class CashManagerTests
         Assert.Equal(2, h.Dispatches.Count);
         Assert.Contains(h.Dispatches, d => d.Currency == "gold" && d.Count == 5);
         Assert.Contains(h.Dispatches, d => d.Currency == "silver" && d.Count == 10);
+    }
+
+    // A stacked item whose name starts with a denomination word ("2 gold key")
+    // has the same "N <denom> ..." shape as a coin pile. With the item table
+    // wired, the survey entry resolves to a real item, so it's NOT collected as
+    // cash — no dispatch, no get.
+    [Fact]
+    public void YouNotice_DenominationNamedStackedItem_NotCollectedAsCash()
+    {
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.KnownItem = KnownItems("gold key");   // table knows the item, not the coin noun
+
+        h.Feed("You notice 2 gold key here.");
+
+        Assert.Empty(h.Sent);
+        Assert.Empty(h.Dispatches);
+    }
+
+    // The tiebreaker must not swallow a real coin pile: a "N <denom> ..." that
+    // isn't in the item table still collects as cash.
+    [Fact]
+    public void YouNotice_CoinPile_NotInItemTable_StillCollected()
+    {
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.KnownItem = KnownItems("gold key");   // "gold crown" absent → stays cash
+
+        h.Feed("You notice 50 gold crowns here.");
+
+        Assert.Equal("get 50 gold crown", h.LastSent);
+        Assert.Single(h.Dispatches);
+        Assert.Equal(("gold", 50, CashPolicy.Collect), h.Dispatches[0]);
+    }
+
+    // A denomination-named item mixed in with real coin: the item is skipped, the
+    // coin is collected — the filter is per-entry, not all-or-nothing.
+    [Fact]
+    public void YouNotice_ItemAndCoin_CollectsOnlyCoin()
+    {
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.KnownItem = KnownItems("gold key");
+
+        h.Feed("You notice 2 gold key, 50 gold crowns here.");
+
+        Assert.Single(h.Dispatches);
+        Assert.Equal(("gold", 50, CashPolicy.Collect), h.Dispatches[0]);
+        Assert.Contains("get 50 gold crown", h.AllSent);
+    }
+
+    // Test double for the item table: matches after the same article/count
+    // stripping the real ItemNameStore.Normalize applies.
+    private static Func<string, bool> KnownItems(params string[] names)
+    {
+        HashSet<string> set = new(names, StringComparer.OrdinalIgnoreCase);
+        return entry =>
+        {
+            string[] words = entry.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            int skip = 0;
+            if (words.Length > 0 && (words[0] is "a" or "an" or "the" or "some"
+                    || int.TryParse(words[0], out _)))
+                skip = 1;
+            string key = string.Join(' ', words.Skip(skip));
+            return set.Contains(key);
+        };
     }
 
     [Fact]

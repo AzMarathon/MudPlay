@@ -57,3 +57,16 @@ public sealed record CommandStep(string Command) : WalkStep
 {
     public override string Display => Command;
 }
+
+// A sea-captain sailing: typing the passage keyword at the dock CMD-teleports
+// the whole party onto a ship and, several buff-locked transit rooms later,
+// lands them at the arrival port. Unlike a MoveStep this ONE step spans many
+// room changes — the walker suppresses the intermediate ship / transit
+// observations and completes only when the tracker confirms the arrival room,
+// failing the voyage out if the captain rejects the boarding (an under-level /
+// too-poor / un-attuned member never leaves the dock). The party-split relay
+// reuses the same `.@party <keyword>` machinery a `ring chime` teleport uses.
+public sealed record BoatStep(BoatPassage Passage) : WalkStep
+{
+    public override string Display => Passage.Keyword;
+}

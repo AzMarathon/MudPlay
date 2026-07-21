@@ -54,6 +54,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Func<RoomKey, IReadOnlyList<int>>? _hazardItemResolver;
     private Func<int, string?>? _itemNameResolver;
     private IMazeSolver? _mazeSolver;
+    private BoatRoutePlanner? _boatPlanner;
+    private Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private readonly LogService? _log;
 
     private List<WalkStep>? _path;
@@ -67,6 +69,35 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private bool _abandonHold;                               // AbandonedCombat gate is ours to release
     private int _retryCount;
     private const int MaxRetriesPerStep = 1;
+
+    // Boat voyage in flight: the BoatStep is on the wire and we're waiting for
+    // the arrival port to confirm. The sail spans intermediate ship / transit
+    // rooms that aren't in the graph, so the tracker churns until it re-anchors
+    // at the port. Because the walker is otherwise purely event-driven — and a
+    // captain who silently refuses boarding emits NO further observation — the
+    // voyage carries a wall-clock deadline: SendBoatStep sizes it from the
+    // passage's transit-spell rounds (VoyageRounds * 3s + a small landing buffer)
+    // and arms OnBoatDeadline through the injected scheduler. Whichever fires
+    // first wins — an early arrival observation completes the step and cancels the
+    // timer; the deadline is the authoritative backstop that completes-if-landed
+    // or fails-out otherwise. _sailingEta / _sailingPlace feed the nav bar's
+    // "Sailing the high seas…" countdown while the voyage is in flight.
+    private bool _awaitingBoatArrival;
+    private IDisposable? _boatTimer;
+    private DateTimeOffset _sailingEta;
+    private string? _sailingPlace;
+
+    // A spell round is 3 real seconds (see GAME_MECHANICS "Timing & rounds"), so a
+    // voyage's summed transit-spell rounds convert to wall-clock at this rate; the
+    // buffer covers the board-cast + landing-render slop past that summed duration.
+    private const int SpellRoundSeconds = 3;
+    private const int BoatArrivalBufferSeconds = 3;
+
+    // A boat hop weighs this many land hops when the planner's stitched route is
+    // compared against a pure land route — the sail itself is one party-split
+    // teleport, but it carries fixed board / transit / disembark overhead, so it
+    // must beat walking by a clear margin to be worth splitting the party for.
+    private const int BoatHopWeight = 4;
 
     // Counter for mid-walk re-plans triggered by tracker entering
     // Suspect/Lost mid-step (typically caused by the user manually typing
@@ -93,6 +124,19 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     // Current walk's destination room (null when Idle).
     public RoomKey? Destination => _destination;
+
+    // True while a sea-captain sailing is between boarding and landing. The nav
+    // bar reads it to swap the walk status line for the "Sailing the high seas…"
+    // countdown; false the instant the arrival port confirms (or the voyage fails).
+    public bool IsSailing => _awaitingBoatArrival;
+
+    // Wall-clock instant the in-flight sail is expected to land — the nav bar
+    // counts down to it. Meaningful only while IsSailing; default otherwise.
+    public DateTimeOffset SailingArrivalEta => _sailingEta;
+
+    // The `secure passage to <place>` destination of the in-flight sail, for the
+    // nav countdown label. Null when not sailing.
+    public string? SailingDestinationName => _sailingPlace;
 
     // Total steps in the current expanded path (0 when Idle).
     public int StepCount => _path?.Count ?? 0;
@@ -284,6 +328,31 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(solver);
         _mazeSolver = solver;
+    }
+
+    // Bind the boat-route planner. When a WalkTo's destination is reachable more
+    // cheaply (or only) by a sea-captain sailing than by walking, the planner
+    // stitches the two land legs around the boat hop and the walker inserts a
+    // BoatStep. Left unset on realms with no docks — the walker just plans land
+    // routes as before.
+    public void SetBoatPlanner(BoatRoutePlanner planner)
+    {
+        ArgumentNullException.ThrowIfNull(planner);
+        _boatPlanner = planner;
+    }
+
+    // Bind the voyage scheduler — a one-shot wall-clock timer the boat step uses
+    // to time the sail from boarding to landing (see the _boatTimer field). It's
+    // injected rather than a raw timer so the Game/Map layer stays UI-free:
+    // production wires a UI-thread one-shot (DispatcherTimer), tests a fake clock
+    // they fire by hand. The callback must land on the same thread the walker runs
+    // on (the UI thread in production). Left unset on realms with no docks — a
+    // voyage then relies purely on the arrival observation, which is fine for the
+    // tests that never sail without wiring a scheduler.
+    public void SetVoyageScheduler(Func<TimeSpan, Action, IDisposable> scheduler)
+    {
+        ArgumentNullException.ThrowIfNull(scheduler);
+        _scheduleDelay = scheduler;
     }
 
     // The maze solver's failure channel — it can't reach the goal, so raise the
@@ -649,10 +718,24 @@ public sealed class AutoWalkManager : IRecoverableEngine
             : null;
         IReadOnlyList<Direction>? path;
         IReadOnlyList<WalkStep> expanded;
+        BoatRoutePlan? boatPlan = null;
         try
         {
             path = _bfs.FindPath(source.Key, destination, _filter);
-            if (path is null || path.Count == 0)
+
+            // A sea-captain sailing can beat (or replace) the land route. Weigh
+            // the boat's stitched land-legs against the pure land route; the
+            // planner returns a plan only when it wins by the boat-overhead
+            // margin, or when there's no land route at all and a sail is the
+            // sole crossing.
+            boatPlan = ChooseBoatRoute(source.Key, destination,
+                landHops: path is { Count: > 0 } ? path.Count : (int?)null);
+
+            if (boatPlan is { } chosen)
+            {
+                expanded = BuildBoatWalk(source.Key, chosen);
+            }
+            else if (path is null || path.Count == 0)
             {
                 // No plain route — but a teleport-maze goal has no plain route by
                 // construction (BFS refuses the cast-teleport exits). Hand off to
@@ -676,8 +759,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
                 return false;
             }
-
-            expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter);
+            else
+            {
+                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter);
+            }
         }
         finally { gateScope?.Dispose(); }
 
@@ -705,16 +790,29 @@ public sealed class AutoWalkManager : IRecoverableEngine
         Raise(new WalkEvent(WalkEventKind.Started, detail, destination));
 
         // Announce the items this route demands so the demand-driven
-        // auto-search can arm for anything we're not carrying. Best-effort:
-        // walks the graph along the planned directions from the source room.
-        // Suppressed for the "direct — send it" choice: that route crosses the
-        // gates as-is without provisioning anything.
-        if (armItemAcquisition)
-            AnnouncePlannedItemRequirements(source.Key, path);
-
-        // Announce the rooms this route crosses so the auto-light provisioner
-        // can ready / buy a light for the darkest one before we step into it.
-        AnnouncePlannedRoute(source.Key, path);
+        // auto-search can arm for anything we're not carrying, and the rooms it
+        // crosses so the auto-light provisioner can ready / buy a light for the
+        // darkest one. Best-effort: walks the graph along the planned
+        // directions. Item announce is suppressed for the "direct — send it"
+        // choice, which crosses the gates as-is without provisioning anything. A
+        // boat route announces each land leg from its own origin (walk to the
+        // dock, then walk from the arrival port).
+        if (boatPlan is { } boat)
+        {
+            if (armItemAcquisition)
+            {
+                AnnouncePlannedItemRequirements(source.Key, boat.ToDock);
+                AnnouncePlannedItemRequirements(boat.Passage.ArrivalRoom, boat.FromArrival);
+            }
+            AnnouncePlannedRoute(source.Key, boat.ToDock);
+            AnnouncePlannedRoute(boat.Passage.ArrivalRoom, boat.FromArrival);
+        }
+        else if (path is not null)
+        {
+            if (armItemAcquisition)
+                AnnouncePlannedItemRequirements(source.Key, path);
+            AnnouncePlannedRoute(source.Key, path);
+        }
 
         if (_coordinator.IsPaused)
         {
@@ -785,6 +883,56 @@ public sealed class AutoWalkManager : IRecoverableEngine
             cur = exit.Target;
         }
         return route;
+    }
+
+    // Pick a boat route only when it beats the pure land route (or when no land
+    // route exists and a sail is the sole crossing). The contained planner picks
+    // the best passable sailing — filter-gated on each member's level + fare —
+    // then we compare its stitched land-legs plus the boat's fixed overhead
+    // against the land route's hop count, so a boat that saves nothing over
+    // walking never splits the party. Null when no planner is bound (realms
+    // without docks) or no sailing helps.
+    private BoatRoutePlan? ChooseBoatRoute(RoomKey source, RoomKey destination, int? landHops)
+    {
+        if (_boatPlanner is null) return null;
+
+        // Accept a fare- / level-gated sailing ONLY when there's no land route —
+        // the sail is then the sole crossing, so surfacing it (and warning the
+        // user a member may be refused at the dock) beats a bare "no path". With a
+        // land route in hand, a gated boat is skipped so we never split the party
+        // for a crossing a member can't make.
+        if (_boatPlanner.TryPlan(source, destination, _filter, allowGated: landHops is null)
+            is not { } plan)
+            return null;
+
+        // A land route exists — the boat must beat it by the overhead margin.
+        if (landHops is { } hops && plan.LandHops + BoatHopWeight >= hops)
+            return null;
+
+        // Committing to a fare- or level-gated sailing primes the party's wealth
+        // / level readings (async), so a re-plan gates on fresh numbers rather
+        // than stale ones — the same best-effort warm a toll on a land route gets.
+        if (plan.Passage.FareCopper > 0 || plan.Passage.MinLevel > 0)
+            _filter?.WarmForBoat();
+
+        return plan;
+    }
+
+    // Expand a boat plan into one ordered step list: the land leg to the dock,
+    // the single BoatStep sail, then the land leg from the arrival port to the
+    // goal. Each land leg runs through RemoteActionPathExpander so doors / traps
+    // / hidden exits along the walk to the pier (or from the port) are handled
+    // exactly as on any land route.
+    private IReadOnlyList<WalkStep> BuildBoatWalk(RoomKey source, BoatRoutePlan plan)
+    {
+        List<WalkStep> steps = new();
+        if (plan.ToDock.Count > 0)
+            steps.AddRange(RemoteActionPathExpander.Expand(_graph, source, plan.ToDock, _bfs, _filter));
+        steps.Add(new BoatStep(plan.Passage));
+        if (plan.FromArrival.Count > 0)
+            steps.AddRange(RemoteActionPathExpander.Expand(
+                _graph, plan.Passage.ArrivalRoom, plan.FromArrival, _bfs, _filter));
+        return steps;
     }
 
     // Name why the only route to the destination is blocked. The gates-ignored
@@ -959,6 +1107,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 break;
             case CommandStep command:
                 SendCommandStep(command);
+                break;
+            case BoatStep boat:
+                SendBoatStep(boat);
                 break;
         }
     }
@@ -1279,6 +1430,64 @@ public sealed class AutoWalkManager : IRecoverableEngine
         WriteBytes(bytes, $"command '{step.Command}'");
     }
 
+    // Put a sea-captain sailing on the wire. Like the chime teleport it splits
+    // the party (leader `.@party <keyword>` relay, then every member types the
+    // keyword), so it reuses the same leader-relay + reform hooks. Unlike a
+    // MoveStep this one step spans many room changes — we DON'T hand the tracker
+    // a pending move (there is no graph edge from the dock to the arrival port),
+    // and instead own arrival detection in HandleBoatTransition off the tracker's
+    // own re-anchor when the port finally renders.
+    private void SendBoatStep(BoatStep step)
+    {
+        _stepInFlight = true;
+        _awaitingBoatArrival = true;
+
+        BoatPassage passage = step.Passage;
+
+        // Size the sail from its transit-spell rounds — each round is 3s (see the
+        // SpellRoundSeconds const) — plus a buffer for the board cast + landing
+        // render past the summed transit duration. The nav bar counts down to this
+        // ETA; OnBoatDeadline is the backstop that completes (if landed) or fails
+        // the voyage out (captain refused boarding) when it fires.
+        int voyageSeconds = passage.VoyageRounds * SpellRoundSeconds + BoatArrivalBufferSeconds;
+        _sailingPlace = passage.Place;
+        _sailingEta = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(voyageSeconds);
+
+        // A gated sole-crossing sail still boards — the captain refuses only the
+        // under-level / too-poor members at the dock and leaves them behind. Warn
+        // so the user knows a member may not make the crossing, rather than the
+        // walk silently splitting the party a head short.
+        ExitBlockReason gate = _filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
+        if (gate != ExitBlockReason.None)
+            _log?.Warn("Walker",
+                $"boat '{passage.Keyword}' is gated ({gate}) — a member may be refused "
+                + "boarding at the dock and left behind; sailing anyway (sole crossing).");
+
+        bool leaderRelay = _isLeaderWithFollowers?.Invoke() == true;
+        _log?.Info("Walker",
+            $"step {_index + 1}/{_path!.Count}: boat '{passage.Keyword}' "
+            + $"(dock {passage.DockRoom} → arrive {passage.ArrivalRoom}); "
+            + $"sail ~{voyageSeconds}s ({passage.VoyageRounds} spell-round(s))"
+            + (leaderRelay ? " [party relay]" : ""));
+
+        if (leaderRelay)
+            WriteBytes(Encoding.Latin1.GetBytes($".@party {passage.Keyword}\r"),
+                $"party relay boat '{passage.Keyword}'");
+
+        EmitMoveBytes(Encoding.Latin1.GetBytes(passage.Keyword + "\r"), $"boat '{passage.Keyword}'");
+
+        if (leaderRelay) _onLeaderPartySplit?.Invoke();
+
+        // Arm the wall-clock backstop last, so the sail bytes are already out. An
+        // early arrival observation disposes this in HandleBoatTransition; the one
+        // that fires first wins.
+        _boatTimer?.Dispose();
+        _boatTimer = _scheduleDelay?.Invoke(TimeSpan.FromSeconds(voyageSeconds), OnBoatDeadline);
+
+        Raise(new WalkEvent(WalkEventKind.Sailing,
+            $"sailing to {passage.Place} (~{voyageSeconds}s)", _destination));
+    }
+
     // Emit a move (cardinal direction, text-exit command, or teleport
     // keyword) — fires the pre-move stealth hook (so sn is the last
     // command before the move) then writes the move bytes. Every move-byte
@@ -1329,6 +1538,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (State != WalkState.Walking) return;
         if (!_stepInFlight) return;
         if (_path is null || _index >= _path.Count) return;
+
+        // A boat voyage owns every transition until the arrival port confirms —
+        // the transit rooms churn the tracker (Suspect, passive redisplays), so
+        // intercept here before the generic recovery / MoveStep paths would
+        // mistake that churn for a mid-step desync.
+        if (_awaitingBoatArrival && _path[_index] is BoatStep boatStep)
+        {
+            HandleBoatTransition(transition, boatStep);
+            return;
+        }
+
         if (_path[_index] is not MoveStep) return;
 
         // A door / trap / hidden-exit sub-FSM owns this step until its own
@@ -1445,6 +1665,74 @@ public sealed class AutoWalkManager : IRecoverableEngine
         }
     }
 
+    // A tracker transition arrived while a boat voyage is in flight. The sail
+    // crosses intermediate ship / transit rooms that aren't in the graph, so the
+    // tracker churns (Suspect, a passive dock redisplay) until it re-anchors at
+    // the arrival port. Complete the step the moment it lands Confirmed there and
+    // cancel the wall-clock backstop; every other observation is transit churn we
+    // simply keep waiting through — OnBoatDeadline is the fail-out, not a hop cap,
+    // so a captain who silently refuses boarding (no arrival, no further
+    // observation) still ends the voyage when the deadline fires.
+    private void HandleBoatTransition(RoomTransition transition, BoatStep boat)
+    {
+        RoomKey arrival = boat.Passage.ArrivalRoom;
+
+        if (transition.NewConfidence == RoomConfidence.Confirmed
+            && transition.NewRoom?.Key is { } landed
+            && landed.Equals(arrival))
+        {
+            _log?.Info("Walker", $"boat '{boat.Passage.Keyword}' arrived at {arrival}.");
+            _boatTimer?.Dispose();
+            _boatTimer = null;
+            _awaitingBoatArrival = false;
+            _sailingPlace = null;
+            _stepInFlight = false;
+            _retryCount = 0;
+            _replanCount = 0;
+            AdvanceStep();
+            return;
+        }
+
+        _log?.Info("Walker",
+            $"boat '{boat.Passage.Keyword}' transit (tracker {transition.NewConfidence}); "
+            + $"awaiting {arrival}.");
+    }
+
+    // The voyage's wall-clock backstop fired. If the tracker has re-anchored at
+    // the arrival port by now, an arrival observation may just not have matched
+    // yet (a late render) — complete the step. Otherwise the captain refused the
+    // boarding (an under-level / too-poor / un-attuned member never left the dock)
+    // or the arrival data never matched, so fail the voyage out rather than leave
+    // the walk wedged on an arrival that won't come.
+    private void OnBoatDeadline()
+    {
+        _boatTimer?.Dispose();
+        _boatTimer = null;
+
+        if (!_awaitingBoatArrival) return;                 // already completed early
+        if (_path is null || _index >= _path.Count) return;
+        if (_path[_index] is not BoatStep boat) return;
+
+        RoomKey arrival = boat.Passage.ArrivalRoom;
+        if (_tracker.State.CurrentRoom?.Key is { } here && here.Equals(arrival))
+        {
+            _log?.Info("Walker",
+                $"boat '{boat.Passage.Keyword}' deadline: already at {arrival}; completing step.");
+            _awaitingBoatArrival = false;
+            _sailingPlace = null;
+            _stepInFlight = false;
+            _retryCount = 0;
+            _replanCount = 0;
+            AdvanceStep();
+            return;
+        }
+
+        Raise(new WalkEvent(WalkEventKind.Failed,
+            $"boat '{boat.Passage.Keyword}' never reached {arrival} "
+            + "(captain refused boarding, or arrival mismatch)", _destination));
+        Reset();
+    }
+
     private void OnPromptObserved(PromptObservation _) => OnPromptObservedCore();
 
     private void OnPromptObservedCore()
@@ -1514,6 +1802,35 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     _deferredWalkThroughGates = false;
                     _deferredWalkArmAcquisition = true;
                     WalkToImmediate(deferred, throughGates, armAcquisition);
+                }
+                return;
+            }
+
+            // Boat voyage in flight when the pause hit: the sail is a party-split
+            // teleport mid-transit. Don't re-send it on resume (that re-teleports
+            // and re-fires the reform) — keep waiting for the arrival port. If we
+            // already reached the port while paused, complete the step here, since
+            // OnTrackerStateChanged bailed on that arrival transition (it gates on
+            // State == Walking).
+            if (_awaitingBoatArrival)
+            {
+                RoomKey? arrival = (_path is { } bp && _index < bp.Count && bp[_index] is BoatStep bs)
+                    ? bs.Passage.ArrivalRoom : (RoomKey?)null;
+                if (arrival is { } port
+                    && _tracker.State.CurrentRoom?.Key is { } here && here.Equals(port))
+                {
+                    _log?.Info("Walker", "resume: boat already arrived while paused; completing step.");
+                    _boatTimer?.Dispose();
+                    _boatTimer = null;
+                    _awaitingBoatArrival = false;
+                    _sailingPlace = null;
+                    _stepInFlight = false;
+                    AdvanceStep();
+                }
+                else
+                {
+                    _log?.Info("Walker",
+                        "resume: boat voyage still in flight; awaiting arrival, not re-sending.");
                 }
                 return;
             }
@@ -1638,6 +1955,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _awaitingTrapDisarm = false;
         _awaitingDoorOpen = false;
         _awaitingHiddenReveal = false;
+        _boatTimer?.Dispose();
+        _boatTimer = null;
+        _awaitingBoatArrival = false;
+        _sailingPlace = null;
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
@@ -1698,6 +2019,7 @@ public enum WalkEventKind
     Finished = 6,
     Failed = 7,
     DisarmingTrap = 8,
+    Sailing = 9,
 }
 
 public readonly record struct WalkEvent(WalkEventKind Kind, string Detail, RoomKey? Destination);

@@ -9,6 +9,14 @@ namespace FujinTerm.Game.Map;
 // and is skipped by PartyLevelBounds.Compute, so we never route around a gate
 // on a member we know nothing about (which would risk making a destination
 // unreachable).
+//
+// When only the title band is known the estimate is conservative on BOTH sides:
+// Low takes the band's FLOOR (the member could be as low as that, so a gate's
+// MinLevel is cleared only if even the floor clears it) and High takes the
+// band's CAP (they could be as high as that, so a MaxLevel cap is respected
+// against the ceiling). An @level probe collapses the band to a single exact
+// value; the tracker re-probes when that exact reading ages past its staleness
+// horizon so the estimate never gates on a level the member has outgrown.
 public readonly record struct PartyLevelEstimate(int? Exact, (int Min, int Max)? TitleRange)
 {
     // Lowest level this member could be — exact if known, else the title band's

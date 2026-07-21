@@ -34,16 +34,23 @@ public sealed class GroundItemTracker : IDisposable
     private readonly IDisposable _noticeSub;
     private readonly List<string> _items = new();
     private readonly CurrencyNaming _naming;
+    private readonly Func<string, bool>? _isKnownItem;
 
     private Terminal.LineExtractor? _lines;
     private string? _noticeBuffer;            // multi-line continuation
     private bool _disposed;
 
-    public GroundItemTracker(MessageRouter router, CurrencyNaming naming)
+    // isKnownItem resolves a survey entry against the active item table (true
+    // when it names a real Items.json record). Injected so the cash filter can
+    // settle the "2 gold key" ambiguity below; null when no game data is wired
+    // (tests), where the count+denomination heuristic stands alone.
+    public GroundItemTracker(MessageRouter router, CurrencyNaming naming,
+        Func<string, bool>? isKnownItem = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(naming);
         _naming = naming;
+        _isKnownItem = isKnownItem;
         _noticeSub = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
     }
 
@@ -152,18 +159,33 @@ public sealed class GroundItemTracker : IDisposable
         }
     }
 
-    // Cash entries in the survey are either a counted coin ("5 gold crowns",
-    // "50 gold sovereigns") or the stock singular ("a gold piece"). We must
-    // NOT swallow items whose material adjective happens to be a denomination
-    // word ("a silver ring", "a copper key"), so the two forms are gated
-    // differently: a bare count + denomination is unambiguously cash (ground
-    // items always carry an article, never a leading count); the singular "a
-    // <denom> ..." only counts as cash when it ends in the canonical coin noun
-    // "piece(s)", leaving material-adjective items intact.
+    // Cash entries in the survey are either a counted coin ("50 gold crowns",
+    // "56 silver nobles") or the singular "a gold piece". Cash always carries its
+    // count + denomination; an item shows just its name when a lone copy is on the
+    // floor and gains a leading count only when 2+ are stacked ("5 piece of
+    // amber"). So a leading count no longer implies cash — both forms are gated on
+    // the word right after the count: cash names a denomination there
+    // (copper/silver/gold/platinum/runic), a stacked item names its own noun
+    // ("piece", "torch"), so "5 piece of amber" stays an item. The singular
+    // "a <denom> ..." form is tighter still — cash only when it ends in the coin
+    // noun "piece(s)", leaving material-adjective items ("a silver ring", "a
+    // copper key") intact.
+    //
+    // The count+denomination heuristic can't tell a stacked item whose name
+    // *starts* with a denomination word ("2 gold key") from a coin pile ("2 gold
+    // crowns") on its own — both read as "N <denom> ...". The item-table
+    // tiebreaker settles it (shared with CashManager.TryParseCashEntry, the same
+    // heuristic + the same fix): an entry that resolves to a real Items.json
+    // record is never cash. Currency isn't in the item table, so a genuine coin
+    // pile won't resolve and still reads as cash. Unwired (tests without game
+    // data) the heuristic stands alone and the "2 gold key" ambiguity resurfaces.
     private bool IsCashEntry(string entry)
     {
         string[] words = entry.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length < 2) return false;
+
+        // Authoritative item-table override — a known item is never cash.
+        if (_isKnownItem is not null && _isKnownItem(entry)) return false;
 
         if (int.TryParse(words[0], out _))
             return IsCashWord(words[1]);

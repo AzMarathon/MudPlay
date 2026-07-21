@@ -299,6 +299,7 @@ public sealed class PlayerDatabaseTests
         PlayerRecord r = Assert.Single(db.Players);
         Assert.Equal("Bob", r.GivenName);
         Assert.Equal(42, r.Level);
+        Assert.Equal(now, r.LevelAt);   // staleness stamp set alongside the level
         Assert.Equal(now, r.FirstSeenUtc);
         Assert.Equal(now, r.LastSeenUtc);
     }
@@ -318,6 +319,7 @@ public sealed class PlayerDatabaseTests
 
         PlayerRecord r = Assert.Single(db.Players);
         Assert.Equal(51, r.Level);
+        Assert.Equal(later, r.LevelAt);        // re-stamped when the level updates
         Assert.Equal("Mage",   r.Class);
         Assert.Equal("Wizard", r.Title);
         Assert.Equal("Guild",  r.Gang);

@@ -16,11 +16,12 @@ namespace FujinTerm.Tests;
 /// </summary>
 public sealed class GroundItemTrackerTests
 {
-    private static (GroundItemTracker ground, MessageRouter router, LineExtractor lines) Setup()
+    private static (GroundItemTracker ground, MessageRouter router, LineExtractor lines) Setup(
+        Func<string, bool>? isKnownItem = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        GroundItemTracker ground = new(router, new CurrencyNaming());
+        GroundItemTracker ground = new(router, new CurrencyNaming(), isKnownItem);
         LineExtractor lines = new(new TerminalEmulator(80, 24));
         ground.AttachLineExtractor(lines);
         return (ground, router, lines);
@@ -117,5 +118,79 @@ public sealed class GroundItemTrackerTests
         FeedRoom(router, "You notice a rusty dagger here.");
 
         Assert.Empty(ground.Items);
+    }
+
+    // ----- item-table tiebreaker (denomination-named items) -----------
+
+    // A stacked item whose name starts with a denomination word ("2 gold key")
+    // has the same "N <denom> ..." shape as a coin pile. The count+denomination
+    // heuristic alone can't tell them apart; the item-table predicate settles it —
+    // "gold key" resolves to a real item, so the entry stays loot, not cash.
+    [Fact]
+    public void DenominationNamedStackedItem_StaysItem_WithItemTable()
+    {
+        // Table knows "gold key" but not the coin noun "gold crown".
+        var (ground, router, _) = Setup(isKnownItem: KnownItems("gold key"));
+
+        FeedRoom(router, "You notice 2 gold key, 50 gold crowns here.");
+
+        // "2 gold key" survives (real item); "50 gold crowns" filtered as cash.
+        Assert.Equal(new[] { "2 gold key" }, ground.Items);
+    }
+
+    // The tiebreaker must not swallow a genuine coin pile: a true "N <denom> ..."
+    // that ISN'T in the item table still reads as cash and is filtered.
+    [Fact]
+    public void CoinPile_NotInItemTable_StillFilteredAsCash()
+    {
+        var (ground, router, _) = Setup(isKnownItem: KnownItems("gold key"));
+
+        FeedRoom(router, "You notice 50 gold crowns and a torch here.");
+
+        Assert.Equal(new[] { "a torch" }, ground.Items);
+    }
+
+    // Singular denomination-named item ("a copper key") is already kept by the
+    // "ends in piece(s)" rule, but the item-table override keeps it robust even
+    // when the wording doesn't end in the coin noun.
+    [Fact]
+    public void SingularDenominationNamedItem_StaysItem_WithItemTable()
+    {
+        var (ground, router, _) = Setup(isKnownItem: KnownItems("copper key"));
+
+        FeedRoom(router, "You notice a copper key and a platinum piece here.");
+
+        // "a copper key" is a real item; "a platinum piece" is singular cash.
+        Assert.Equal(new[] { "a copper key" }, ground.Items);
+    }
+
+    // Without an item table wired (no game data), the heuristic stands alone and
+    // the denomination-named stacked item is misread as cash — documents the
+    // fallback the injected predicate exists to fix.
+    [Fact]
+    public void DenominationNamedStackedItem_MisreadAsCash_WithoutItemTable()
+    {
+        var (ground, router, _) = Setup();
+
+        FeedRoom(router, "You notice 2 gold key here.");
+
+        Assert.Empty(ground.Items);
+    }
+
+    // Test double for the item table: matches an entry to a known item name after
+    // the same article/count stripping the real ItemNameStore.Normalize applies.
+    private static Func<string, bool> KnownItems(params string[] names)
+    {
+        HashSet<string> set = new(names, StringComparer.OrdinalIgnoreCase);
+        return entry =>
+        {
+            string[] words = entry.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            int skip = 0;
+            if (words.Length > 0 && (words[0] is "a" or "an" or "the" or "some"
+                    || int.TryParse(words[0], out _)))
+                skip = 1;
+            string key = string.Join(' ', words.Skip(skip));
+            return set.Contains(key);
+        };
     }
 }

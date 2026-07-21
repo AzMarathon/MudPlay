@@ -16,6 +16,7 @@ public enum ExitBlockReason
     LockedDoor = 1 << 4,   // a key-locked door we can neither key, pick, nor bash
     Door       = 1 << 5,   // a plain door the build can't pick or bash
     Hazard     = 1 << 6,   // a cast-on-enter room hazard we can't survive
+    Fare       = 1 << 7,   // a boat sailing's per-member copper fare the crosser can't cover
 }
 
 // Pathing-time room filter — when supplied to BfsMapper.FindPath, any
@@ -47,6 +48,31 @@ public interface IRoomFilter
     // key-locked door). Mirrors IsExitBlocked: an exit blocks iff this returns
     // non-None. Default never blocks; only Services.MovementFilter overrides.
     ExitBlockReason DescribeExitBlock(in RoomExit exit) => ExitBlockReason.None;
+
+    // True when a boat sailing is routable for the crosser — every party member
+    // clears its per-member level floor AND copper fare (the captain leaves an
+    // under-level or too-poor member at the dock). RequiresCheckability is NOT
+    // gated here: the client can't read the quest-attunement flag, so it's the
+    // user's responsibility. Default never blocks; only the level/wealth-aware
+    // Services.MovementFilter overrides. The boat router skips an un-passable
+    // sailing the way BFS skips a blocked exit.
+    bool IsBoatPassable(in BoatPassage passage) => true;
+
+    // Classifies WHY a sailing is non-boardable — the union of the per-member gate
+    // kinds (Level when the lowest member falls under the fare's level floor, Fare
+    // when the poorest can't cover the copper). Mirrors IsBoatPassable: a sailing
+    // blocks iff this returns non-None. The router uses it to warn on — and, when
+    // it's the sole crossing, still offer — a gated sail rather than hiding the
+    // only route. Default never blocks; only Services.MovementFilter overrides.
+    ExitBlockReason DescribeBoatBlock(in BoatPassage passage) => ExitBlockReason.None;
+
+    // Warm any party-scoped wealth / level readings a chosen fare- or
+    // level-gated sailing needs before boarding — the walker calls this only
+    // once it commits to a boat route whose passage is actually gated, mirroring
+    // WarmForRoute's toll warm so a subsequent re-plan sees fresh party numbers.
+    // Default no-op; only the wealth/level-aware Services.MovementFilter
+    // overrides it.
+    void WarmForBoat() { }
 
     // Called once at walk-start (walker approach, loop expansion) with the
     // route's endpoints so a filter can warm any route-scoped state before
