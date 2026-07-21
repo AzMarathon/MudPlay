@@ -36,6 +36,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         TrainerWalkManager trainerWalk,
         QuestStore quests,
         EquipmentManager equipment,
+        LeaderboardSnapshotStore leaderboards,
         string? initialSectionId = null)
     {
         ArgumentNullException.ThrowIfNull(recovery);
@@ -48,6 +49,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         ArgumentNullException.ThrowIfNull(trainerWalk);
         ArgumentNullException.ThrowIfNull(quests);
         ArgumentNullException.ThrowIfNull(equipment);
+        ArgumentNullException.ThrowIfNull(leaderboards);
         _profile = profile;
         _gameData = gameData;
 
@@ -70,7 +72,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
 
         Sections.Add(new EquipmentSectionViewModel(profile, inventory, gameData, equipment, playerStats, players, questBonuses));
 
-        Sections.Add(new CalculatorsSectionViewModel(playerStats, gameData, inventory, questBonuses, profile));
+        Sections.Add(new CalculatorsSectionViewModel(playerStats, gameData, inventory, questBonuses, profile, leaderboards));
 
         SelectedSection = initialSectionId is not null
             ? Sections.FirstOrDefault(s => string.Equals(s.Id, initialSectionId, StringComparison.OrdinalIgnoreCase))

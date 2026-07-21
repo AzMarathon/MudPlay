@@ -1,10 +1,13 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.89.1**
-> - Auto-collect now grabs an entire stacked ground pile: a survey count ("You notice 5 piece of amber here") sends one `get` per unit instead of one item per room re-display
-> - The MaxToGet cap and encumbrance ceiling still apply per unit, so a stack is taken only up to the cap or carry limit
-> - A stacked item whose name starts with a denomination word ("2 gold key") is no longer mistaken for coin: it's looted instead of skipped as cash
+> **Version 1.90.0**
+> - New "Top 100 — XP/HR" calculator in the Workshop Calculators tab: captures the realm's `top N` heroes off the terminal and adds a derived XP/HR column from the experience gained between captures
+> - Captures are stored per-BBS, so every character on the same board feeds and reads one shared history
+> - Purely player-driven — run `top <N>` in-game (or press "Parse Toplist") and the block is snapshotted passively; no auto-polling
+> - Rate is figured by first name; a class change or an experience drop flags a likely reroll instead of a bogus rate
+> - List-cap aware, so an overtake at the bottom of a capped board isn't mistaken for a departed hero
+> - Table uses the in-game color scheme on a black background
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

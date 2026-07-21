@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using FujinTerm.Game;
 using FujinTerm.Game.Calculators;
 using FujinTerm.Game.Inventory;
+using FujinTerm.Game.Leaderboard;
 using FujinTerm.Game.Quests;
 using FujinTerm.Models.Profile;
 using FujinTerm.Services;
@@ -50,6 +51,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private readonly InventoryManager _inventory;
     private readonly QuestBonusState _questBonuses;
     private readonly ProfileService _profile;
+    private readonly LeaderboardSnapshotStore _leaderboards;
     private Control? _view;
 
     public override string Id => "calculators";
@@ -245,26 +247,30 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private bool _monsterIsEvil;
     private bool _monsterIsGood;
 
-    public CalculatorsSectionViewModel(PlayerStats stats, GameDataCache gameData, InventoryManager inventory, QuestBonusState questBonuses, ProfileService profile)
+    public CalculatorsSectionViewModel(PlayerStats stats, GameDataCache gameData, InventoryManager inventory, QuestBonusState questBonuses, ProfileService profile, LeaderboardSnapshotStore leaderboards)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(questBonuses);
         ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(leaderboards);
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
         _questBonuses = questBonuses;
         _profile = profile;
+        _leaderboards = leaderboards;
 
         _stats.PropertyChanged += OnStatsChanged;
         _inventory.Changed += OnInventoryChanged;
         _questBonuses.Changed += OnQuestBonusesChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
+        _leaderboards.Changed += OnLeaderboardChanged;
         EnsureMonsterNames();
         EnsureWeaponNames();
         SeedAll();
+        RebuildLeaderboard();
     }
 
     // Full (re)seed: refresh the actual snapshot, push it into the editable
@@ -1079,11 +1085,83 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // Backstab set into every editable input.
     private void OnProfileLoaded(CharacterProfile _) => SeedAll();
 
+    // ----- Top-100 XP/HR leaderboard -------------------------------------
+    // The latest capture's ranked rows with a derived XP/HR column. Fed by the
+    // per-BBS LeaderboardSnapshotStore — every character on the board shares it —
+    // and rebuilt whenever a fresh `top N` block is captured off the terminal.
+    public ObservableCollection<LeaderboardRow> Leaderboard { get; } = new();
+
+    // One-line capture context (when, how many shown vs asked, whole-list vs
+    // truncated, snapshot count) or the empty-state hint.
+    [ObservableProperty] private string _leaderboardStatus = string.Empty;
+
+    // Reroll / dropout suspects since the previous capture (empty when none).
+    [ObservableProperty] private string _leaderboardRerolls = string.Empty;
+
+    // True once at least one capture exists — gates the table vs the empty state.
+    [ObservableProperty] private bool _hasLeaderboard;
+
+    // True when there are reroll/dropout notices to show.
+    [ObservableProperty] private bool _hasLeaderboardNotices;
+
+    // Request a fresh listing at the current stored depth: "top N" where N is the
+    // last rank of the latest capture (a 300-deep list re-requests top 300),
+    // defaulting to 100 before the first capture. The reply is captured
+    // automatically off the terminal, so the table refreshes on its own.
+    [RelayCommand]
+    private void ParseToplist()
+    {
+        int n = 100;
+        if (_leaderboards.Snapshots.Count > 0)
+        {
+            IReadOnlyList<LeaderboardEntry> es = _leaderboards.Snapshots[0].Entries;
+            if (es.Count > 0) n = Math.Max(es.Count, es[^1].Rank);
+        }
+        AppServices.Current.SendGameCommand($"top {n}");
+    }
+
+    // Wipe this BBS's capture history.
+    [RelayCommand]
+    private void ClearLeaderboard() => _leaderboards.Clear();
+
+    private void OnLeaderboardChanged() => RebuildLeaderboard();
+
+    private void RebuildLeaderboard()
+    {
+        LeaderboardReport report = LeaderboardXpRateCalculator.Build(_leaderboards.Snapshots);
+
+        Leaderboard.Clear();
+        foreach (LeaderboardRankRow r in report.Rows)
+            Leaderboard.Add(LeaderboardRow.From(r));
+
+        HasLeaderboard = report.Rows.Count > 0;
+
+        if (report.CapturedAtUtc is { } at)
+        {
+            string asked = report.RequestedCount > 0 ? $" (asked top {report.RequestedCount})" : string.Empty;
+            string scope = report.IsComplete ? "whole list visible" : "list may extend below";
+            LeaderboardStatus =
+                $"Last capture {at.ToLocalTime():yyyy-MM-dd HH:mm} · {report.ShownCount} shown{asked} · "
+                + $"{scope} · {report.SnapshotCount} capture(s) stored";
+        }
+        else
+        {
+            LeaderboardStatus =
+                "No captures yet. Press Parse Toplist (or run `top <N>` in-game) to capture the leaderboard.";
+        }
+
+        LeaderboardRerolls = report.Notices.Count > 0
+            ? "Reroll suspects since last capture: " + string.Join(", ", report.Notices)
+            : string.Empty;
+        HasLeaderboardNotices = report.Notices.Count > 0;
+    }
+
     public override void Dispose()
     {
         _stats.PropertyChanged -= OnStatsChanged;
         _inventory.Changed -= OnInventoryChanged;
         _questBonuses.Changed -= OnQuestBonusesChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
+        _leaderboards.Changed -= OnLeaderboardChanged;
     }
 }

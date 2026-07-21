@@ -42,6 +42,20 @@
             <Setter Property="Minimum" Value="0"/>
             <Setter Property="Maximum" Value="9999"/>
         </Style>
+
+        <!-- Leaderboard table wears the in-game "top N" colour scheme so it reads
+             like the listing it mirrors: green headers + Experience, gold ranks,
+             cyan names, magenta class, grey guild, on a black background. Per-cell
+             colours are set on each column below; these style the chrome. -->
+        <Style Selector="DataGrid.Leaderboard DataGridColumnHeader">
+            <Setter Property="Background" Value="#000000"/>
+            <Setter Property="Foreground" Value="#00FF00"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style Selector="DataGrid.Leaderboard DataGridRow">
+            <Setter Property="Background" Value="#000000"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid Margin="22">
@@ -417,6 +431,80 @@
 
                         <TextBlock Classes="FieldLabel" IsVisible="{Binding !BackstabHasWeapon}"
                                    Text="Pick a backstab weapon (or set one on the Backstab gear set) to see the damage range."/>
+                    </StackPanel>
+                </Expander>
+
+                <!-- ===== Top 100 — XP/HR ===== -->
+                <Expander HorizontalAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Classes="BoxTitle" Text="Top 100 — XP/HR"/>
+                    </Expander.Header>
+
+                    <StackPanel Spacing="12" Margin="0,8,0,0">
+                        <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                   Text="The realm's &quot;top N&quot; heroes, captured off the terminal and stored per-BBS so every character here shares one list. The XP/HR column is derived from the experience each hero gained since their previous capture — run Parse Toplist (or `top &lt;N&gt;` in-game) again later to fill it in."/>
+
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="Parse Toplist"
+                                    Command="{Binding ParseToplistCommand}"
+                                    ToolTip.Tip="Send `top N` to the game at the stored list's depth (defaults to top 100 before the first capture), then capture the reply automatically."/>
+                            <Button Content="Clear history"
+                                    Command="{Binding ClearLeaderboardCommand}"
+                                    ToolTip.Tip="Wipe this BBS's stored captures."/>
+                        </StackPanel>
+
+                        <TextBlock Classes="FieldLabel" Text="{Binding LeaderboardStatus}" TextWrapping="Wrap"/>
+
+                        <TextBlock Text="{Binding LeaderboardRerolls}" TextWrapping="Wrap"
+                                   IsVisible="{Binding HasLeaderboardNotices}"
+                                   Foreground="{StaticResource AccentAmberBrush}"/>
+
+                        <Border IsVisible="{Binding HasLeaderboard}"
+                                Background="#000000"
+                                BorderBrush="{StaticResource ChromeBorderBrush}"
+                                BorderThickness="1" CornerRadius="4">
+                            <DataGrid Classes="Leaderboard"
+                                      ItemsSource="{Binding Leaderboard}"
+                                      Height="380"
+                                      Background="#000000"
+                                      RowBackground="#000000"
+                                      GridLinesVisibility="None"
+                                      IsReadOnly="True"
+                                      AutoGenerateColumns="False"
+                                      CanUserSortColumns="False"
+                                      CanUserResizeColumns="True"
+                                      CanUserReorderColumns="False"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Auto">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Rank" Binding="{ReflectionBinding Rank}"
+                                                        Width="52" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#FFC000"/>
+                                    <DataGridTextColumn Header="Name" Binding="{ReflectionBinding Name}"
+                                                        Width="170" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#00FFFF"/>
+                                    <DataGridTextColumn Header="Class" Binding="{ReflectionBinding Class}"
+                                                        Width="96" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#FF00FF"/>
+                                    <DataGridTextColumn Header="Gang/Guild" Binding="{ReflectionBinding Guild}"
+                                                        Width="150" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#C0C0C0"/>
+                                    <DataGridTextColumn Header="Experience" Binding="{ReflectionBinding Experience}"
+                                                        Width="120" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#00FF00"/>
+                                    <DataGridTextColumn Header="XP/HR" Binding="{ReflectionBinding XpPerHour}"
+                                                        Width="96" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#FFFF00"/>
+                                    <DataGridTextColumn Header="Note" Binding="{ReflectionBinding Note}"
+                                                        Width="150" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#808080"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+
+                        <TextBlock Classes="FieldLabel" IsVisible="{Binding !HasLeaderboard}"
+                                   TextWrapping="Wrap"
+                                   Text="No captures yet. Press Parse Toplist (or run `top &lt;N&gt;` in-game) to capture the leaderboard."/>
                     </StackPanel>
                 </Expander>
             </StackPanel>

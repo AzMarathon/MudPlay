@@ -771,6 +771,9 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.AutoBuy.AttachLineExtractor(Lines);
         // And the @what / @get-all ground-item snapshot off the same survey.
         AppServices.Current.GroundItems.AttachLineExtractor(Lines);
+        // Passively snapshots a `top N` leaderboard block for the Calculators
+        // tab's XP/HR table — stitches the multi-row listing off the same feed.
+        AppServices.Current.LeaderboardCapture.AttachLineExtractor(Lines);
         // Inventory parser reads the full `i` dump (carried currency,
         // Wealth, Encumbrance) so CashManager's gate has live carry
         // weight; it buffers the wrapped deposit echo too.
@@ -3099,7 +3102,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         var workshopVm = new ViewModels.CharacterWorkshop.CharacterWorkshopViewModel(
             svc.DeathRecovery, svc.Profile, svc.PlayerStats, svc.GameData, svc.Inventory, svc.Players,
-            svc.Alignment, svc.TrainerWalk, svc.Quests, svc.Equipment, sectionId);
+            svc.Alignment, svc.TrainerWalk, svc.Quests, svc.Equipment, svc.Leaderboards, sectionId);
         Views.CharacterWorkshop.CharacterWorkshopWindow window = new() { DataContext = workshopVm };
         // The Workshop VM + its sections are rebuilt on every open, so dispose
         // them on close to detach their long-lived service-event subscriptions.

@@ -2,6 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.90.0
+
+- New "Top 100 — XP/HR" calculator in the Workshop Calculators tab: captures the realm's `top N` heroes off the terminal and adds a derived XP/HR column from the experience gained between captures
+- Captures are stored per-BBS, so every character on the same board feeds and reads one shared history
+- Purely player-driven — run `top <N>` in-game (or press "Parse Toplist") and the block is snapshotted passively; no auto-polling
+- Rate is figured by first name (last names change, first names don't); a class change or an experience drop flags a likely reroll instead of a bogus rate
+- List-cap aware: a departed name is only flagged as gone when the board is complete or its last-known exp cleared the shown cutoff, so an overtake at the bottom of a capped board isn't mistaken for a reroll
+- Table uses the in-game color scheme (green Rank/Experience, gold ranks, cyan names, magenta class, grey guild) on a black background
+
 ## 1.89.1
 
 - Auto-collect now grabs an entire stacked ground pile: a survey count ("You notice 5 piece of amber here") sends one `get` per unit instead of one item per room re-display
