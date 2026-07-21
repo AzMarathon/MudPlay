@@ -302,6 +302,13 @@ public static class AppPaths
     public static string BbsRoomBlacklistFile(string bbsName) =>
         Path.Combine(BbsFolder(bbsName), "room_blacklist.json");
 
+    // Per-BBS "top N" leaderboard capture history. Snapshots live at the BBS tier
+    // so every character connecting to the same board reads and grows one shared
+    // history — the whole point of the XP/HR calculator is a communal, player-fed
+    // record of the realm's heroes.
+    public static string BbsLeaderboardFile(string bbsName) =>
+        Path.Combine(BbsFolder(bbsName), "leaderboard.json");
+
     // Per-BBS folder holding every character that connects to that BBS. Profiles
     // live UNDER the BBS folder because each MajorMUD server allows only one
     // character of a given name — so the same character name on two different

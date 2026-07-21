@@ -1535,25 +1535,43 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         _contextTeleportDests.Clear();
         Array.Clear(_teleportSlots);
-        if (value is { } k && Graph?.GetRoom(k) is { Cmd: > 0 } room)
+        if (value is { } k && Graph is { } graph)
         {
-            foreach ((string _, RoomKey dest, int _) in
-                     TBInfoTeleportResolver.EnumerateTeleports(_services.TBInfo, room.Cmd))
+            // A sea-captain dock's `secure passage` sailings are CMD teleports,
+            // but they live in the data-driven boat index instead of the CMD
+            // teleport resolvers — so surface their arrival ports here too, or a
+            // dock draws the teleport glyph yet offers no traversal item (mirrors
+            // the boat-first predicate in RefreshTeleportRooms). Collected off the
+            // boat index regardless of Cmd, same as the glyph.
+            foreach (BoatPassage passage in graph.BoatPassagesAt(k))
+                if (!_contextTeleportDests.Contains(passage.ArrivalRoom))
+                    _contextTeleportDests.Add(passage.ArrivalRoom);
+
+            if (graph.GetRoom(k) is { Cmd: > 0 } room)
             {
-                if (!_contextTeleportDests.Contains(dest)) _contextTeleportDests.Add(dest);
-            }
-            // Cast-delivered teleports (`cast <spell>` where the spell carries
-            // a teleport ability — the chained-spell rooms) surface their
-            // landing rooms too. A fixed room contributes one destination; a
-            // random jump contributes every room in its range, which lands the
-            // user in the multi-destination per-room menu below.
-            foreach ((string _, IReadOnlyList<RoomKey> dests, bool _, int _) in
-                     TBInfoCastTeleportResolver.EnumerateCastTeleports(
-                         _services.TBInfo, room.Cmd, room.Key.Map, _services.SpellCatalog))
-            {
-                foreach (RoomKey dest in dests)
+                // Walk the CMD's whole text chain for landing rooms — a captain
+                // dock's `teleport` sits in a LinkTo continuation block behind a
+                // colour-code intro, so the own-block-only keyword resolver misses
+                // it. The map-shift needs only the destination, not a keyword.
+                foreach (RoomKey dest in
+                         TBInfoTeleportResolver.EnumerateTeleportDestinations(_services.TBInfo, room.Cmd))
+                {
                     if (!_contextTeleportDests.Contains(dest)) _contextTeleportDests.Add(dest);
+                }
+                // Cast-delivered teleports (`cast <spell>` where the spell carries
+                // a teleport ability — the chained-spell rooms) surface their
+                // landing rooms too. A fixed room contributes one destination; a
+                // random jump contributes every room in its range, which lands the
+                // user in the multi-destination per-room menu below.
+                foreach ((string _, IReadOnlyList<RoomKey> dests, bool _, int _) in
+                         TBInfoCastTeleportResolver.EnumerateCastTeleports(
+                             _services.TBInfo, room.Cmd, room.Key.Map, _services.SpellCatalog))
+                {
+                    foreach (RoomKey dest in dests)
+                        if (!_contextTeleportDests.Contains(dest)) _contextTeleportDests.Add(dest);
+                }
             }
+
             // Only the multi-destination case needs per-room entries — a
             // single destination is served by the flat UseTeleport command.
             if (_contextTeleportDests.Count > 1)
@@ -1561,7 +1579,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 for (int i = 0; i < _contextTeleportDests.Count && i < MaxTeleportSlots; i++)
                 {
                     RoomKey dest = _contextTeleportDests[i];
-                    string name = Graph.GetRoom(dest)?.Name ?? "(unknown)";
+                    string name = graph.GetRoom(dest)?.Name ?? "(unknown)";
                     _teleportSlots[i] = new TeleportDestinationItem(
                         $"Use Teleport → {name}  ({dest})",
                         new RelayCommand(() => OnFloorChangeRequested(dest)));
@@ -2267,8 +2285,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             if (Graph.BoatPassagesAt(room.Key).Count > 0) { set.Add(room.Key); continue; }
 
             if (room.Cmd <= 0) continue;
-            using IEnumerator<(string, RoomKey, int)> literal =
-                TBInfoTeleportResolver.EnumerateTeleports(_services.TBInfo, room.Cmd).GetEnumerator();
+            // Destinations, not keyworded teleports: a captain dock reaches its
+            // `teleport` through a colour-code intro block that LinkTo's the
+            // effect block, so the glyph must follow the CMD's whole text chain.
+            using IEnumerator<RoomKey> literal =
+                TBInfoTeleportResolver.EnumerateTeleportDestinations(_services.TBInfo, room.Cmd).GetEnumerator();
             if (literal.MoveNext()) { set.Add(room.Key); continue; }
 
             using IEnumerator<(string, IReadOnlyList<RoomKey>, bool, int)> cast =

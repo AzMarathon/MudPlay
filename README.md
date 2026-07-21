@@ -1,10 +1,19 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.89.1**
-> - Auto-collect now grabs an entire stacked ground pile: a survey count ("You notice 5 piece of amber here") sends one `get` per unit instead of one item per room re-display
-> - The MaxToGet cap and encumbrance ceiling still apply per unit, so a stack is taken only up to the cap or carry limit
-> - A stacked item whose name starts with a denomination word ("2 gold key") is no longer mistaken for coin: it's looted instead of skipped as cash
+> **Version 1.90.0**
+> - New "Realm Rankings" calculator in the Workshop Calculators tab: captures the realm's `top N` heroes off the terminal and adds a derived XP/HR column
+> - Captures are stored per-BBS, so every character on the same board feeds and reads one shared history
+> - Purely player-driven — run `top <N>` in-game (or press "Parse Toplist") and the block is snapshotted passively; no auto-polling
+> - A re-capture with no experience or roster change is discarded, so the history keeps only captures that move the needle
+> - XP/HR is measured against the most recent prior capture that actually changed for that hero — an idle reading is skipped and the rate reaches further back
+> - Each XP/HR carries a trend arrow (green ▲ sped up, red ▼ slowed) and each rank shows its movement since the last capture (green (+N) up, red (-N) down)
+> - Rate is figured by first name; a class change or an experience drop is flagged as a likely reroll in the program log
+> - List-cap aware, so an overtake at the bottom of a capped board isn't mistaken for a departed hero
+> - History is capped at the 5 most recent captures; the oldest fall off
+> - Table columns are sortable largest-first (one click puts the top scores on top, a re-click flips it) and auto-size with centered headers, in the in-game color scheme on a black background
+> - Class Filter dropdown narrows the table to a single class off the loaded game data; "No Filter" (the default) shows every hero
+> - Sea-captain docks now surface a right-click "Use Teleport" item to their arrival port, matching the map's teleport glyph
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

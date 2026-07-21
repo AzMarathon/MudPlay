@@ -7,7 +7,7 @@
         x:Class="FujinTerm.Views.CharacterWorkshop.CharacterWorkshopWindow"
         x:DataType="vm:CharacterWorkshopViewModel"
         Title="{Binding WindowTitle}"
-        Width="900" Height="600"
+        Width="960" Height="600"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource ChromeBgBrush}">
 

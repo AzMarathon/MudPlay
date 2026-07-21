@@ -42,17 +42,35 @@
             <Setter Property="Minimum" Value="0"/>
             <Setter Property="Maximum" Value="9999"/>
         </Style>
+
+        <!-- Leaderboard table wears the in-game "top N" colour scheme so it reads
+             like the listing it mirrors: green headers + Experience, gold ranks,
+             cyan names, magenta class, grey guild, on a black background. Per-cell
+             colours are set on each column below; these style the chrome. -->
+        <Style Selector="DataGrid.Leaderboard DataGridColumnHeader">
+            <Setter Property="Background" Value="#000000"/>
+            <Setter Property="Foreground" Value="#00FF00"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="DataGrid.Leaderboard DataGridRow">
+            <Setter Property="Background" Value="#000000"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid Margin="22">
         <ScrollViewer VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
+                      HorizontalScrollBarVisibility="Auto">
             <!-- Each calculator is its own collapsible Expander; add more here as
-                 sibling Expanders to grow the tab into a calculator toolbox. -->
-            <StackPanel Spacing="14" MaxWidth="560" HorizontalAlignment="Left">
+                 sibling Expanders to grow the tab into a calculator toolbox. The
+                 narrow calculators pin to Width=560; Realm Rankings opts out so its
+                 wide table can stretch the panel when expanded (and scroll if the
+                 window is too narrow) without shoving the others around. -->
+            <StackPanel Spacing="14" HorizontalAlignment="Left">
 
                 <!-- ===== Monster Matchup ===== -->
-                <Expander HorizontalAlignment="Stretch">
+                <Expander Width="560" HorizontalAlignment="Left">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Monster Matchup"/>
                     </Expander.Header>
@@ -199,7 +217,7 @@
                 </Expander>
 
                 <!-- ===== Movement Speed ===== -->
-                <Expander HorizontalAlignment="Stretch">
+                <Expander Width="560" HorizontalAlignment="Left">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Movement Speed"/>
                     </Expander.Header>
@@ -244,7 +262,7 @@
                 </Expander>
 
                 <!-- ===== Swing Calculator ===== -->
-                <Expander HorizontalAlignment="Stretch">
+                <Expander Width="560" HorizontalAlignment="Left">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Swing Calculator"/>
                     </Expander.Header>
@@ -352,7 +370,7 @@
                 </Expander>
 
                 <!-- ===== Backstab Calculator ===== -->
-                <Expander HorizontalAlignment="Stretch">
+                <Expander Width="560" HorizontalAlignment="Left">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Backstab Calculator"/>
                     </Expander.Header>
@@ -417,6 +435,128 @@
 
                         <TextBlock Classes="FieldLabel" IsVisible="{Binding !BackstabHasWeapon}"
                                    Text="Pick a backstab weapon (or set one on the Backstab gear set) to see the damage range."/>
+                    </StackPanel>
+                </Expander>
+
+                <!-- ===== Realm Rankings ===== -->
+                <!-- Unlike the fixed-560 calculators above, this one grows to the
+                     full leaderboard table when expanded; MinWidth keeps it flush
+                     with their width while collapsed. See the parent StackPanel. -->
+                <Expander MinWidth="560" HorizontalAlignment="Left">
+                    <Expander.Header>
+                        <TextBlock Classes="BoxTitle" Text="Realm Rankings"/>
+                    </Expander.Header>
+
+                    <StackPanel Spacing="12" Margin="0,8,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Button Content="Parse Toplist"
+                                    Command="{Binding ParseToplistCommand}"
+                                    ToolTip.Tip="Send `top N` to the game at the stored list's depth (defaults to top 100 before the first capture), then capture the reply automatically."/>
+                            <Button Content="Clear history"
+                                    Command="{Binding ClearLeaderboardCommand}"
+                                    ToolTip.Tip="Wipe this BBS's stored captures."/>
+                            <TextBlock Classes="FieldLabel" Text="Class Filter:"
+                                       Margin="20,0,0,0" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding ClassFilterOptions}"
+                                      SelectedItem="{Binding SelectedClassFilter, Mode=TwoWay}"
+                                      MinWidth="140" VerticalAlignment="Center"
+                                      ToolTip.Tip="Show only rows of the selected class; 'No Filter' clears the filter."/>
+                        </StackPanel>
+
+                        <TextBlock Classes="FieldLabel" Text="{Binding LeaderboardStatus}" TextWrapping="Wrap"/>
+
+                        <!-- MaxWidth is pinned to the table's measured width in
+                             SizeLeaderboardColumns so a long suspect list wraps at
+                             the table's right edge instead of running past it (the
+                             enclosing ScrollViewer would otherwise grant it
+                             unbounded width and it wouldn't wrap at all). -->
+                        <TextBlock x:Name="RerollNoticeText"
+                                   Text="{Binding LeaderboardRerolls}" TextWrapping="Wrap"
+                                   HorizontalAlignment="Left"
+                                   IsVisible="{Binding HasLeaderboardNotices}"
+                                   Foreground="{StaticResource AccentAmberBrush}"/>
+
+                        <!-- Left-aligned so the box hugs the table instead of the
+                             DataGrid stretching to fill the expander and trailing a
+                             wide empty filler cell after the last column. -->
+                        <Border IsVisible="{Binding HasLeaderboard}"
+                                HorizontalAlignment="Left"
+                                Background="#000000"
+                                BorderBrush="{StaticResource ChromeBorderBrush}"
+                                BorderThickness="1" CornerRadius="4">
+                            <!-- Columns auto-size to their widest value (header or
+                                 cell), so nothing truncates and no column carries
+                                 dead buffer; the grid is Left-aligned to the same end
+                                 as the Border. -->
+                            <DataGrid Classes="Leaderboard"
+                                      x:Name="LeaderboardGrid"
+                                      ItemsSource="{Binding LeaderboardView}"
+                                      Sorting="OnLeaderboardSorting"
+                                      Height="380"
+                                      HorizontalAlignment="Left"
+                                      Background="#000000"
+                                      RowBackground="#000000"
+                                      GridLinesVisibility="None"
+                                      IsReadOnly="True"
+                                      AutoGenerateColumns="False"
+                                      CanUserSortColumns="True"
+                                      CanUserResizeColumns="True"
+                                      CanUserReorderColumns="False"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Auto">
+                                <!-- Numeric columns sort on typed *Value keys (via
+                                     SortMemberPath) so they order by magnitude, not by
+                                     the thousands-separated display text. Rank and
+                                     XP/HR are template columns so a coloured movement /
+                                     trend cue can sit beside the value. -->
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Header="Rank" SortMemberPath="RankValue" Width="Auto">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate x:DataType="vm:LeaderboardRow">
+                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Rank}" FontFamily="{StaticResource FontMono}"
+                                                               Foreground="#FFC000" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding RankMove}" FontFamily="{StaticResource FontMono}"
+                                                               Foreground="{Binding RankMoveBrush}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Name" Binding="{ReflectionBinding Name}"
+                                                        SortMemberPath="Name"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#00FFFF"/>
+                                    <DataGridTextColumn Header="Class" Binding="{ReflectionBinding Class}"
+                                                        SortMemberPath="Class"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#FF00FF"/>
+                                    <DataGridTextColumn Header="Gang/Guild" Binding="{ReflectionBinding Guild}"
+                                                        SortMemberPath="Guild"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#C0C0C0"/>
+                                    <DataGridTextColumn Header="Experience" Binding="{ReflectionBinding Experience}"
+                                                        SortMemberPath="ExperienceValue"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
+                                                        Foreground="#00FF00"/>
+                                    <DataGridTemplateColumn Header="XP/HR" SortMemberPath="XpPerHourSort" Width="Auto">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate x:DataType="vm:LeaderboardRow">
+                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding XpPerHour}" FontFamily="{StaticResource FontMono}"
+                                                               Foreground="#FFFF00" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding RateTrend}" FontFamily="{StaticResource FontMono}"
+                                                               Foreground="{Binding RateTrendBrush}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+
+                        <TextBlock Classes="FieldLabel" IsVisible="{Binding !HasLeaderboard}"
+                                   TextWrapping="Wrap"
+                                   Text="No captures yet. Press Parse Toplist (or run `top &lt;N&gt;` in-game) to capture the leaderboard."/>
                     </StackPanel>
                 </Expander>
             </StackPanel>

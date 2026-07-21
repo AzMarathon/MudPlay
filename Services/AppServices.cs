@@ -1449,6 +1449,16 @@ public sealed class AppServices
     // + "Modify Blacklist…" flows.
     public RoomBlacklistStore RoomBlacklist { get; private set; } = null!;
 
+    // Per-BBS captured "top N" leaderboard history, read by the Calculators tab's
+    // XP/HR table. Grows communally — every character on the board feeds and reads
+    // the one shared list.
+    public LeaderboardSnapshotStore Leaderboards { get; private set; } = null!;
+
+    // Passive capture tracker that snapshots a "top N" listing off the live
+    // terminal into Leaderboards. Bound to the per-session LineExtractor by
+    // MainWindowViewModel.AttachLineExtractor.
+    public Game.Leaderboard.LeaderboardCaptureTracker LeaderboardCapture { get; private set; } = null!;
+
     // Loop execution engine. Shares
     // MovementCoordinator + RoomTracker
     // with the walker, plus WirePromptScanner for
@@ -3830,6 +3840,15 @@ public sealed class AppServices
         RoomBlacklist = new RoomBlacklistStore(Log);
         Profile.ProfileLoaded += _ => RoomBlacklist.OnBbsPinApplied(ResolveActiveBbs()?.Name);
         Profile.BbsPinApplied += _ => RoomBlacklist.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+
+        // Per-BBS "top N" leaderboard history + its live capture tracker. The
+        // store loads on BBS pin (same shape as the blacklist); the tracker binds
+        // to the per-session LineExtractor in MainWindowViewModel.AttachLineExtractor
+        // and passively snapshots the block whenever the player runs `top <N>`.
+        Leaderboards = new LeaderboardSnapshotStore(Log);
+        Profile.ProfileLoaded += _ => Leaderboards.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => Leaderboards.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        LeaderboardCapture = new Game.Leaderboard.LeaderboardCaptureTracker(Leaderboards, PromptScanner, Log);
         // BFS consults the blacklist to skip placement of hidden
         // rooms (edge still recorded → dangling stub). Cache flushes
         // on every blacklist change so the next layout build picks
@@ -4529,6 +4548,17 @@ public sealed class AppServices
     {
         ArgumentNullException.ThrowIfNull(send);
         _engineWireSend = send;
+    }
+
+    // Send a command line to the server as if the user typed it (CR appended),
+    // riding the raw engine wire-sender. Used by the Calculators tab's "Parse
+    // Toplist" button to request a fresh `top N` listing. Returns false when no
+    // sender is bound yet (not connected).
+    public bool SendGameCommand(string command)
+    {
+        if (_engineWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
+        _engineWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
+        return true;
     }
 
     // A self-buff of ours landed (confirmed via its AppliedMessage). On

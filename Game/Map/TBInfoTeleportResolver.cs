@@ -20,6 +20,11 @@ namespace FujinTerm.Game.Map;
 // outcomes, etc.) are skipped.
 public static class TBInfoTeleportResolver
 {
+    // A CMD text chain is a handful of linked blocks (a colour-code intro block
+    // that LinkTo's the effect block, and so on); this bounds a malformed
+    // self-referential LinkTo when walking it for destinations.
+    private const int MaxChainDepth = 32;
+
     // Find the first keyword in store's entry for roomCmd whose teleport
     // directive matches destination. Returns null when the entry isn't in the
     // store, the entry has no Action chain, or no line teleports to the
@@ -80,23 +85,66 @@ public static class TBInfoTeleportResolver
                     continue;
                 }
 
-                if (haveDest || !parts[i].StartsWith("teleport ", StringComparison.OrdinalIgnoreCase)) continue;
-
-                // `teleport <roomNum> <mapNum>` — note Action field
-                // uses (room, map) order (verified in real Rooms.json
-                // dumps; map is the second token).
-                string[] args = parts[i][9..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (args.Length < 2) continue;
-                if (!int.TryParse(args[0], out int room)) continue;
-                if (!int.TryParse(args[1], out int map))  continue;
-
-                dest = new RoomKey(map, room);
-                haveDest = true;
-                // Keep scanning the rest of the line: minlevel can appear
-                // before OR after the teleport directive in the chain.
+                // Keep scanning past the first teleport for a trailing minlevel:
+                // the gate can appear before OR after the teleport directive.
+                if (haveDest) continue;
+                if (TryParseTeleport(parts[i], out RoomKey d)) { dest = d; haveDest = true; }
             }
 
             if (haveDest) yield return (keyword, dest, minLevel);
         }
+    }
+
+    // Every teleport destination reachable through a room's CMD text chain,
+    // following LinkTo continuations. EnumerateTeleports (above) reads only the
+    // CMD's own block because a keyword-typed traversal needs the player keyword
+    // that sits in the keyword slot of that block — a LinkTo-continuation block
+    // carries the teleport as a bare engine directive with no player command, so
+    // it can't be synthesised into a walker edge. But the teleport GLYPH and the
+    // "Use Teleport" map-shift only need the landing room, so they walk the whole
+    // chain: Paradigm's sea-captain docks reach their `teleport <room> <map>`
+    // this way — the dock's CMD is a colour-code intro block that LinkTo's the
+    // effect block where the teleport actually lives. Cycle-guarded and depth-
+    // capped against a malformed self-referential LinkTo.
+    public static IEnumerable<RoomKey> EnumerateTeleportDestinations(TBInfoStore store, int roomCmd)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (roomCmd <= 0) yield break;
+
+        HashSet<int> visited = new();
+        for (int cur = roomCmd, depth = 0; cur > 0 && depth < MaxChainDepth; depth++)
+        {
+            if (!visited.Add(cur)) yield break;
+            TBInfoEntry? entry = store.GetEntry(cur);
+            if (entry is null) yield break;
+
+            if (!string.IsNullOrWhiteSpace(entry.Action))
+                foreach (string raw in entry.Action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string line = raw.Trim();
+                    if (line.Length == 0) continue;
+                    // Scan every token — a continuation block's teleport sits on a
+                    // keyword-less effect line, so the directive can be the first
+                    // token, not only a trailing one as in a typed-command line.
+                    foreach (string tok in line.Split(':', StringSplitOptions.TrimEntries))
+                        if (TryParseTeleport(tok, out RoomKey dest)) yield return dest;
+                }
+
+            cur = entry.LinkTo;
+        }
+    }
+
+    // `teleport <roomNum> <mapNum>` — note the Action field uses (room, map)
+    // order (verified in real Rooms.json dumps; map is the second token).
+    private static bool TryParseTeleport(string token, out RoomKey dest)
+    {
+        dest = default;
+        if (!token.StartsWith("teleport ", StringComparison.OrdinalIgnoreCase)) return false;
+        string[] args = token[9..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (args.Length < 2) return false;
+        if (!int.TryParse(args[0], out int room)) return false;
+        if (!int.TryParse(args[1], out int map))  return false;
+        dest = new RoomKey(map, room);
+        return true;
     }
 }
