@@ -112,6 +112,10 @@ public partial class CalculatorsSectionView : UserControl
         const double sortReserve = 18; // room for the header's sort glyph
         const double tailBuffer = 20;  // gap past the last column to the right edge
 
+        // The Experience column carries the largest, most-scrutinised numbers, so
+        // give it two extra mono characters of headroom past its widest value.
+        double expHeadroom = Measure("00", cellFace, fontSize);
+
         double total = 0;
         for (int c = 0; c < 6; c++)
         {
@@ -120,6 +124,7 @@ public partial class CalculatorsSectionView : UserControl
                 widest = Math.Max(widest, Measure(cellText[c](row), cellFace, fontSize));
 
             double px = Math.Ceiling(widest) + cellPad;
+            if (c == 4) px += expHeadroom;
             if (c == 5) px += tailBuffer;
             grid.Columns[c].Width = new DataGridLength(px);
             total += px;
