@@ -137,4 +137,57 @@ public sealed class TBInfoTeleportResolverTests : IDisposable
             Assert.Single(TBInfoTeleportResolver.EnumerateTeleports(store, 100));
         Assert.Equal(0, minLevel);
     }
+
+    [Fact]
+    public void EnumerateDestinations_FollowsLinkToChain_FindsCaptainDockTeleport()
+    {
+        // Paradigm-1.9.1 sea-captain dock (rooms 14/1812, 14/1813, 14/15000):
+        // the CMD block is a non-keyword intro (a bold-black colour code in the
+        // real data, a plain word here) that LinkTo's the effect block whose
+        // keyword-less line carries `teleport 459 14`.
+        const string json = """
+            [ { "Number": 3371, "LinkTo": 3469, "Action": "intro\n\n",
+                "Called From": "Room 14/1812" },
+              { "Number": 3469, "LinkTo": 0,
+                "Action": "message 3526:teleport 459 14:text 3379\n\n",
+                "Called From": "Textblock #3371" } ]
+            """;
+        TBInfoStore store = NewStore(json);
+
+        RoomKey dest = Assert.Single(
+            TBInfoTeleportResolver.EnumerateTeleportDestinations(store, 3371));
+        Assert.Equal(new RoomKey(14, 459), dest);
+    }
+
+    [Fact]
+    public void EnumerateTeleports_KeywordResolver_IgnoresLinkToContinuation()
+    {
+        // The keyword-bearing resolver stays own-block-only on purpose: a
+        // continuation teleport has no player keyword to type, so it must not be
+        // minted into a walker edge (only the map-shift glyph/menu surfaces it).
+        const string json = """
+            [ { "Number": 3371, "LinkTo": 3469, "Action": "intro\n\n",
+                "Called From": "Room 14/1812" },
+              { "Number": 3469, "LinkTo": 0,
+                "Action": "message 3526:teleport 459 14:text 3379\n\n",
+                "Called From": "Textblock #3371" } ]
+            """;
+        TBInfoStore store = NewStore(json);
+
+        Assert.Empty(TBInfoTeleportResolver.EnumerateTeleports(store, 3371));
+    }
+
+    [Fact]
+    public void EnumerateDestinations_SelfReferentialLink_DoesNotLoop()
+    {
+        const string json = """
+            [ { "Number": 100, "LinkTo": 100,
+                "Action": "go hole:teleport 487 2\n", "Called From": "Room 1/10" } ]
+            """;
+        TBInfoStore store = NewStore(json);
+
+        RoomKey dest = Assert.Single(
+            TBInfoTeleportResolver.EnumerateTeleportDestinations(store, 100));
+        Assert.Equal(new RoomKey(2, 487), dest);
+    }
 }

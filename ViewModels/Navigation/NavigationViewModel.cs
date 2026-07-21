@@ -1549,8 +1549,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
             if (graph.GetRoom(k) is { Cmd: > 0 } room)
             {
-                foreach ((string _, RoomKey dest, int _) in
-                         TBInfoTeleportResolver.EnumerateTeleports(_services.TBInfo, room.Cmd))
+                // Walk the CMD's whole text chain for landing rooms — a captain
+                // dock's `teleport` sits in a LinkTo continuation block behind a
+                // colour-code intro, so the own-block-only keyword resolver misses
+                // it. The map-shift needs only the destination, not a keyword.
+                foreach (RoomKey dest in
+                         TBInfoTeleportResolver.EnumerateTeleportDestinations(_services.TBInfo, room.Cmd))
                 {
                     if (!_contextTeleportDests.Contains(dest)) _contextTeleportDests.Add(dest);
                 }
@@ -2281,8 +2285,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             if (Graph.BoatPassagesAt(room.Key).Count > 0) { set.Add(room.Key); continue; }
 
             if (room.Cmd <= 0) continue;
-            using IEnumerator<(string, RoomKey, int)> literal =
-                TBInfoTeleportResolver.EnumerateTeleports(_services.TBInfo, room.Cmd).GetEnumerator();
+            // Destinations, not keyworded teleports: a captain dock reaches its
+            // `teleport` through a colour-code intro block that LinkTo's the
+            // effect block, so the glyph must follow the CMD's whole text chain.
+            using IEnumerator<RoomKey> literal =
+                TBInfoTeleportResolver.EnumerateTeleportDestinations(_services.TBInfo, room.Cmd).GetEnumerator();
             if (literal.MoveNext()) { set.Add(room.Key); continue; }
 
             using IEnumerator<(string, IReadOnlyList<RoomKey>, bool, int)> cast =
