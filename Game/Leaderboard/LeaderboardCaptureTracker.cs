@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Avalonia.Threading;
 using FujinTerm.Services;
 
 namespace FujinTerm.Game.Leaderboard;
@@ -12,12 +13,19 @@ namespace FujinTerm.Game.Leaderboard;
 // State machine over LineExtractor.LineEmitted:
 //   idle       — watch for the echoed "top N" request (records the count) and the
 //                "Rank Name … Experience" header (derives column layout, begins).
-//   collecting — accumulate ranked rows until a non-row / prompt line ends it,
-//                then commit the snapshot.
-// The trailing prompt line ([HP=..]:) is the reliable block terminator.
+//   collecting — accumulate ranked rows until the block ends, then commit.
+//
+// End-of-block is the trailing statline prompt, but that bottom prompt row isn't
+// emitted through LineExtractor until the player next presses enter (the cursor
+// parks on it with no newline) — so the IsPromptLine path fires late and the
+// table appears to "stick" until the next room redisplay. WirePromptScanner sees
+// the prompt the instant it lands on the wire, so we also commit off its
+// PromptObserved event (deferred one tick — see OnPromptObserved). A non-row line
+// once rows are in still terminates the block too.
 public sealed class LeaderboardCaptureTracker : IDisposable
 {
     private readonly LeaderboardSnapshotStore _store;
+    private readonly WirePromptScanner? _promptScanner;
     private readonly LogService? _log;
 
     private Terminal.LineExtractor? _lines;
@@ -30,11 +38,16 @@ public sealed class LeaderboardCaptureTracker : IDisposable
     private DateTimeOffset _capturedAt;
     private readonly List<LeaderboardEntry> _entries = new();
 
-    public LeaderboardCaptureTracker(LeaderboardSnapshotStore store, LogService? log = null)
+    public LeaderboardCaptureTracker(
+        LeaderboardSnapshotStore store,
+        WirePromptScanner? promptScanner = null,
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         _store = store;
+        _promptScanner = promptScanner;
         _log = log;
+        if (_promptScanner is not null) _promptScanner.PromptObserved += OnPromptObserved;
     }
 
     // Bind the per-session LineExtractor — the source of the completed terminal
@@ -89,6 +102,22 @@ public sealed class LeaderboardCaptureTracker : IDisposable
         }
     }
 
+    // The statline landed on the wire — if a block is open, its rows are all in
+    // and it's time to commit. Deferred to the next dispatch tick: within one
+    // read, WirePromptScanner.Append (this event) runs BEFORE Emulator.Feed (which
+    // emits the list's final rows via LineEmitted), so _entries isn't complete yet
+    // at fire time. Posting lets Feed finish this tick — the rows land — then the
+    // commit runs. Gated on _collecting so idle prompts (every room, every command)
+    // are a cheap no-op.
+    private void OnPromptObserved(PromptObservation _)
+    {
+        if (!_collecting) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_disposed && _collecting) CommitBlock();
+        });
+    }
+
     private void CommitBlock()
     {
         if (_entries.Count > 0)
@@ -109,5 +138,6 @@ public sealed class LeaderboardCaptureTracker : IDisposable
         _disposed = true;
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
+        if (_promptScanner is not null) _promptScanner.PromptObserved -= OnPromptObserved;
     }
 }

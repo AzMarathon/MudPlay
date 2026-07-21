@@ -60,13 +60,16 @@
 
     <Grid Margin="22">
         <ScrollViewer VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
+                      HorizontalScrollBarVisibility="Auto">
             <!-- Each calculator is its own collapsible Expander; add more here as
-                 sibling Expanders to grow the tab into a calculator toolbox. -->
-            <StackPanel Spacing="14" MaxWidth="560" HorizontalAlignment="Left">
+                 sibling Expanders to grow the tab into a calculator toolbox. The
+                 narrow calculators pin to Width=560; Realm Rankings opts out so its
+                 wide table can stretch the panel when expanded (and scroll if the
+                 window is too narrow) without shoving the others around. -->
+            <StackPanel Spacing="14" HorizontalAlignment="Left">
 
                 <!-- ===== Monster Matchup ===== -->
-                <Expander HorizontalAlignment="Stretch">
+                <Expander Width="560" HorizontalAlignment="Left">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Monster Matchup"/>
                     </Expander.Header>
@@ -213,7 +216,7 @@
                 </Expander>
 
                 <!-- ===== Movement Speed ===== -->
-                <Expander HorizontalAlignment="Stretch">
+                <Expander Width="560" HorizontalAlignment="Left">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Movement Speed"/>
                     </Expander.Header>
@@ -258,7 +261,7 @@
                 </Expander>
 
                 <!-- ===== Swing Calculator ===== -->
-                <Expander HorizontalAlignment="Stretch">
+                <Expander Width="560" HorizontalAlignment="Left">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Swing Calculator"/>
                     </Expander.Header>
@@ -366,7 +369,7 @@
                 </Expander>
 
                 <!-- ===== Backstab Calculator ===== -->
-                <Expander HorizontalAlignment="Stretch">
+                <Expander Width="560" HorizontalAlignment="Left">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Backstab Calculator"/>
                     </Expander.Header>
@@ -434,10 +437,13 @@
                     </StackPanel>
                 </Expander>
 
-                <!-- ===== Top 100 — XP/HR ===== -->
-                <Expander HorizontalAlignment="Stretch">
+                <!-- ===== Realm Rankings ===== -->
+                <!-- Unlike the fixed-560 calculators above, this one grows to the
+                     full leaderboard table when expanded; MinWidth keeps it flush
+                     with their width while collapsed. See the parent StackPanel. -->
+                <Expander MinWidth="560" HorizontalAlignment="Left">
                     <Expander.Header>
-                        <TextBlock Classes="BoxTitle" Text="Top 100 — XP/HR"/>
+                        <TextBlock Classes="BoxTitle" Text="Realm Rankings"/>
                     </Expander.Header>
 
                     <StackPanel Spacing="12" Margin="0,8,0,0">
@@ -463,9 +469,13 @@
                                 Background="#000000"
                                 BorderBrush="{StaticResource ChromeBorderBrush}"
                                 BorderThickness="1" CornerRadius="4">
+                            <!-- MinWidth = sum of the fixed column widths below so
+                                 the grid reports its true width to the auto-sizing
+                                 expander and the whole table shows without a
+                                 horizontal scrollbar. -->
                             <DataGrid Classes="Leaderboard"
                                       ItemsSource="{Binding Leaderboard}"
-                                      Height="380"
+                                      Height="380" MinWidth="834"
                                       Background="#000000"
                                       RowBackground="#000000"
                                       GridLinesVisibility="None"

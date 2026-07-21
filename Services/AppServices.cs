@@ -3848,7 +3848,7 @@ public sealed class AppServices
         Leaderboards = new LeaderboardSnapshotStore(Log);
         Profile.ProfileLoaded += _ => Leaderboards.OnBbsPinApplied(ResolveActiveBbs()?.Name);
         Profile.BbsPinApplied += _ => Leaderboards.OnBbsPinApplied(ResolveActiveBbs()?.Name);
-        LeaderboardCapture = new Game.Leaderboard.LeaderboardCaptureTracker(Leaderboards, Log);
+        LeaderboardCapture = new Game.Leaderboard.LeaderboardCaptureTracker(Leaderboards, PromptScanner, Log);
         // BFS consults the blacklist to skip placement of hidden
         // rooms (edge still recorded → dangling stub). Cache flushes
         // on every blacklist change so the next layout build picks

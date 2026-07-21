@@ -4,7 +4,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 1.90.0
 
-- New "Top 100 — XP/HR" calculator in the Workshop Calculators tab: captures the realm's `top N` heroes off the terminal and adds a derived XP/HR column from the experience gained between captures
+- New "Realm Rankings" calculator in the Workshop Calculators tab: captures the realm's `top N` heroes off the terminal and adds a derived XP/HR column from the experience gained between captures
 - Captures are stored per-BBS, so every character on the same board feeds and reads one shared history
 - Purely player-driven — run `top <N>` in-game (or press "Parse Toplist") and the block is snapshotted passively; no auto-polling
 - Rate is figured by first name (last names change, first names don't); a class change or an experience drop flags a likely reroll instead of a bogus rate
