@@ -5,7 +5,7 @@
 > - Auto-Lair travel cost gains a realm-aware "Automatic" mode, now the default: ParaMUD runs the game's movement-speed formula against live carry weight + worn quickness; stock realms use the measured encumbrance hop-time table
 > - Stock encumbrance hop times reseeded to measured two-band timings — ~0.7 s (None/Light/Medium), ~1.7 s (Heavy/Encumbered)
 > - Movement Speed calculator is realm-gated: ParaMUD keeps the interactive solver, stock shows a static two-band findings card
-> - Walk-to status now reads "step X of Y, N steps and ~Ts to arrive" — remaining-route ETA surfaced in the navigation label and program log
+> - Walk-to status now reads "step X of Y, N steps / ~Ts to arrive" — remaining-route ETA surfaced in the navigation label and program log
 > - ETA sums the per-hop travel estimate and, when auto-combat is on, a 5 s/monster dwell for every lair room crossed
 > - Bug report captures the active travel-cost model and its per-hop estimate
 >

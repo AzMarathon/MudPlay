@@ -2443,7 +2443,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             includeLairDwell: _services.IsAutoCombatEnabled);
 
         return $"{verb} to {dest}, step {current} of {total}, "
-             + $"{remainingHops} steps and ~{FormatEta(eta)} to arrive";
+             + $"{remainingHops} steps / ~{FormatEta(eta)} to arrive";
     }
 
     // Compact ETA phrasing for the walk-to status: seconds under a minute,
