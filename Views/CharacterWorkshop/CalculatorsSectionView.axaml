@@ -52,6 +52,7 @@
             <Setter Property="Foreground" Value="#00FF00"/>
             <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
             <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
         <Style Selector="DataGrid.Leaderboard DataGridRow">
             <Setter Property="Background" Value="#000000"/>
@@ -447,9 +448,6 @@
                     </Expander.Header>
 
                     <StackPanel Spacing="12" Margin="0,8,0,0">
-                        <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
-                                   Text="The realm's &quot;top N&quot; heroes, captured off the terminal and stored per-BBS so every character here shares one list. The XP/HR column is derived from the experience each hero gained since their previous capture — run Parse Toplist (or `top &lt;N&gt;` in-game) again later to fill it in."/>
-
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Content="Parse Toplist"
                                     Command="{Binding ParseToplistCommand}"
@@ -465,17 +463,22 @@
                                    IsVisible="{Binding HasLeaderboardNotices}"
                                    Foreground="{StaticResource AccentAmberBrush}"/>
 
+                        <!-- Left-aligned so the box hugs the table instead of the
+                             DataGrid stretching to fill the expander and trailing a
+                             wide empty filler cell after the last column. -->
                         <Border IsVisible="{Binding HasLeaderboard}"
+                                HorizontalAlignment="Left"
                                 Background="#000000"
                                 BorderBrush="{StaticResource ChromeBorderBrush}"
                                 BorderThickness="1" CornerRadius="4">
-                            <!-- MinWidth = sum of the fixed column widths below so
-                                 the grid reports its true width to the auto-sizing
-                                 expander and the whole table shows without a
-                                 horizontal scrollbar. -->
+                            <!-- Columns auto-size to their widest value (header or
+                                 cell), so nothing truncates and no column carries
+                                 dead buffer; the grid is Left-aligned to the same end
+                                 as the Border. -->
                             <DataGrid Classes="Leaderboard"
                                       ItemsSource="{Binding Leaderboard}"
-                                      Height="380" MinWidth="834"
+                                      Height="380"
+                                      HorizontalAlignment="Left"
                                       Background="#000000"
                                       RowBackground="#000000"
                                       GridLinesVisibility="None"
@@ -488,25 +491,25 @@
                                       VerticalScrollBarVisibility="Auto">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Rank" Binding="{ReflectionBinding Rank}"
-                                                        Width="52" FontFamily="{StaticResource FontMono}"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#FFC000"/>
                                     <DataGridTextColumn Header="Name" Binding="{ReflectionBinding Name}"
-                                                        Width="170" FontFamily="{StaticResource FontMono}"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#00FFFF"/>
                                     <DataGridTextColumn Header="Class" Binding="{ReflectionBinding Class}"
-                                                        Width="96" FontFamily="{StaticResource FontMono}"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#FF00FF"/>
                                     <DataGridTextColumn Header="Gang/Guild" Binding="{ReflectionBinding Guild}"
-                                                        Width="150" FontFamily="{StaticResource FontMono}"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#C0C0C0"/>
                                     <DataGridTextColumn Header="Experience" Binding="{ReflectionBinding Experience}"
-                                                        Width="120" FontFamily="{StaticResource FontMono}"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#00FF00"/>
                                     <DataGridTextColumn Header="XP/HR" Binding="{ReflectionBinding XpPerHour}"
-                                                        Width="96" FontFamily="{StaticResource FontMono}"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#FFFF00"/>
                                     <DataGridTextColumn Header="Note" Binding="{ReflectionBinding Note}"
-                                                        Width="150" FontFamily="{StaticResource FontMono}"
+                                                        Width="Auto" FontFamily="{StaticResource FontMono}"
                                                         Foreground="#808080"/>
                                 </DataGrid.Columns>
                             </DataGrid>

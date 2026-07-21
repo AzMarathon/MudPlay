@@ -55,6 +55,57 @@ public sealed class LeaderboardSnapshotStoreTests : IDisposable
     }
 
     [Fact]
+    public void Add_DiscardsRecapture_WithNoExperienceOrRosterChange()
+    {
+        var store = new LeaderboardSnapshotStore();
+        int fires = 0;
+        store.Changed += () => fires++;
+
+        store.Add(Snap(T.AddHours(-1), 100, 1000));
+        store.Add(Snap(T, 100, 1000)); // identical roster + exp, later timestamp
+
+        // The unchanged re-capture is dropped: history and Changed both stay at one,
+        // and the original (older) capture stands so a later real change diffs over
+        // its true elapsed time.
+        Assert.Single(store.Snapshots);
+        Assert.Equal(1, fires);
+        Assert.Equal(T.AddHours(-1), store.Snapshots[0].CapturedAtUtc);
+    }
+
+    [Fact]
+    public void Add_KeepsRecapture_WhenRosterChanges()
+    {
+        var store = new LeaderboardSnapshotStore();
+        LeaderboardSnapshot first = new(T.AddHours(-1), 100,
+            new[] { new LeaderboardEntry(1, "Salty Exp", "Bard", "None", 1000) });
+        // Same experience total, but a different hero holds the rank — a roster swap.
+        LeaderboardSnapshot second = new(T, 100,
+            new[] { new LeaderboardEntry(1, "Fresh Blood", "Bard", "None", 1000) });
+
+        store.Add(first);
+        store.Add(second);
+
+        Assert.Equal(2, store.Snapshots.Count);
+    }
+
+    [Fact]
+    public void Add_KeepsRecapture_WhenClassChanges()
+    {
+        var store = new LeaderboardSnapshotStore();
+        LeaderboardSnapshot first = new(T.AddHours(-1), 100,
+            new[] { new LeaderboardEntry(1, "Salty Exp", "Bard", "None", 1000) });
+        // Same name + exp but a different class — the fingerprint of a reroll
+        // reusing the name, so the capture is kept.
+        LeaderboardSnapshot second = new(T, 100,
+            new[] { new LeaderboardEntry(1, "Salty Exp", "Mage", "None", 1000) });
+
+        store.Add(first);
+        store.Add(second);
+
+        Assert.Equal(2, store.Snapshots.Count);
+    }
+
+    [Fact]
     public void Clear_EmptiesHistory_AndFires()
     {
         var store = new LeaderboardSnapshotStore();

@@ -5,9 +5,11 @@
 > - New "Realm Rankings" calculator in the Workshop Calculators tab: captures the realm's `top N` heroes off the terminal and adds a derived XP/HR column from the experience gained between captures
 > - Captures are stored per-BBS, so every character on the same board feeds and reads one shared history
 > - Purely player-driven — run `top <N>` in-game (or press "Parse Toplist") and the block is snapshotted passively; no auto-polling
+> - A re-capture with no experience or roster change is discarded, so the history keeps only captures that move the needle
 > - Rate is figured by first name; a class change or an experience drop flags a likely reroll instead of a bogus rate
 > - List-cap aware, so an overtake at the bottom of a capped board isn't mistaken for a departed hero
-> - Table uses the in-game color scheme on a black background
+> - Table columns auto-size with centered headers, in the in-game color scheme on a black background
+> - Sea-captain docks now surface a right-click "Use Teleport" item to their arrival port, matching the map's teleport glyph
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
