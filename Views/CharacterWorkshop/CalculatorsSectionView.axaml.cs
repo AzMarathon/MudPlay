@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
@@ -12,6 +13,10 @@ public partial class CalculatorsSectionView : UserControl
 {
     private CalculatorsSectionViewModel? _vm;
 
+    // The column path whose sort we just forced (below) and expect to see loop
+    // back through the Sorting event — non-null only for that one re-entry.
+    private string? _pendingForcedSortPath;
+
     public CalculatorsSectionView()
     {
         InitializeComponent();
@@ -19,6 +24,36 @@ public partial class CalculatorsSectionView : UserControl
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    // A leaderboard reads best largest-first, but the DataGrid's built-in header
+    // click always leads with Ascending — burying the top scores at the bottom on
+    // the first click. Take the sort over: cancel that default and re-issue the
+    // column's sort leading with Descending, toggling to Ascending on a re-click.
+    // Sort() reposts through the same Sorting event, so a one-shot path flag lets
+    // that forced pass fall through to the grid's own (now direction-honouring) logic.
+    private void OnLeaderboardSorting(object? sender, DataGridColumnEventArgs e)
+    {
+        if (_vm is null) return;
+        string? path = e.Column.SortMemberPath;
+        if (string.IsNullOrEmpty(path)) return;
+
+        if (_pendingForcedSortPath == path)
+        {
+            _pendingForcedSortPath = null;
+            return;
+        }
+
+        ListSortDirection dir = ListSortDirection.Descending;
+        var sorts = _vm.LeaderboardView.SortDescriptions;
+        if (sorts.Count == 1
+            && string.Equals(sorts[0].PropertyPath, path, StringComparison.Ordinal)
+            && sorts[0].Direction == ListSortDirection.Descending)
+            dir = ListSortDirection.Ascending;
+
+        _pendingForcedSortPath = path;
+        e.Handled = true;
+        e.Column.Sort(dir);
+    }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {

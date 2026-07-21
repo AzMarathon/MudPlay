@@ -11,7 +11,8 @@
 > - Rate is figured by first name; a class change or an experience drop is flagged as a likely reroll in the program log
 > - List-cap aware, so an overtake at the bottom of a capped board isn't mistaken for a departed hero
 > - History is capped at the 5 most recent captures; the oldest fall off
-> - Table columns are sortable and auto-size with centered headers, in the in-game color scheme on a black background
+> - Table columns are sortable largest-first (one click puts the top scores on top, a re-click flips it) and auto-size with centered headers, in the in-game color scheme on a black background
+> - Class Filter dropdown narrows the table to a single class off the loaded game data; "No Filter" (the default) shows every hero
 > - Sea-captain docks now surface a right-click "Use Teleport" item to their arrival port, matching the map's teleport glyph
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

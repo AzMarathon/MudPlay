@@ -448,13 +448,19 @@
                     </Expander.Header>
 
                     <StackPanel Spacing="12" Margin="0,8,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                             <Button Content="Parse Toplist"
                                     Command="{Binding ParseToplistCommand}"
                                     ToolTip.Tip="Send `top N` to the game at the stored list's depth (defaults to top 100 before the first capture), then capture the reply automatically."/>
                             <Button Content="Clear history"
                                     Command="{Binding ClearLeaderboardCommand}"
                                     ToolTip.Tip="Wipe this BBS's stored captures."/>
+                            <TextBlock Classes="FieldLabel" Text="Class Filter:"
+                                       Margin="20,0,0,0" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding ClassFilterOptions}"
+                                      SelectedItem="{Binding SelectedClassFilter, Mode=TwoWay}"
+                                      MinWidth="140" VerticalAlignment="Center"
+                                      ToolTip.Tip="Show only rows of the selected class; 'All classes' clears the filter."/>
                         </StackPanel>
 
                         <TextBlock Classes="FieldLabel" Text="{Binding LeaderboardStatus}" TextWrapping="Wrap"/>
@@ -478,6 +484,7 @@
                             <DataGrid Classes="Leaderboard"
                                       x:Name="LeaderboardGrid"
                                       ItemsSource="{Binding LeaderboardView}"
+                                      Sorting="OnLeaderboardSorting"
                                       Height="380"
                                       HorizontalAlignment="Left"
                                       Background="#000000"

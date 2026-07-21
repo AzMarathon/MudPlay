@@ -271,6 +271,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         _leaderboards.Changed += OnLeaderboardChanged;
         EnsureMonsterNames();
         EnsureWeaponNames();
+        EnsureClassFilterOptions();
         SeedAll();
         RebuildLeaderboard();
     }
@@ -1116,6 +1117,43 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     // True when there are reroll/dropout notices to show.
     [ObservableProperty] private bool _hasLeaderboardNotices;
+
+    // Class-filter choices for the leaderboard grid: a leading "No Filter"
+    // sentinel followed by every class name from the active set. Populated once.
+    public ObservableCollection<string> ClassFilterOptions { get; } = new();
+
+    private const string NoClassFilter = "No Filter";
+
+    // The chosen class filter. "No Filter" (the default) clears the filter; any
+    // real class narrows the grid to rows of that class via the view's filter.
+    [ObservableProperty] private string _selectedClassFilter = NoClassFilter;
+
+    partial void OnSelectedClassFilterChanged(string value)
+    {
+        LeaderboardView.Filter = string.Equals(value, NoClassFilter, StringComparison.Ordinal)
+            ? null
+            : o => o is LeaderboardRow row
+                   && string.Equals(row.Class, value, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Populate the class filter once from the active set, with the "No Filter"
+    // sentinel first. Cheap to retry if the set wasn't loaded at construction.
+    private void EnsureClassFilterOptions()
+    {
+        if (ClassFilterOptions.Count > 0) return;
+        ClassFilterOptions.Add(NoClassFilter);
+        JsonDocument? doc = _gameData.GetRawTable("Classes");
+        if (doc is null) return;
+
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
+            if (nameEl.ValueKind != JsonValueKind.String) continue;
+            string? name = nameEl.GetString();
+            if (string.IsNullOrEmpty(name)) continue;
+            ClassFilterOptions.Add(name);
+        }
+    }
 
     // Request a fresh listing at the current stored depth: "top N" where N is the
     // last rank of the latest capture (a 300-deep list re-requests top 300),
