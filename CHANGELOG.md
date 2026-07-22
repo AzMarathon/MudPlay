@@ -8,6 +8,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Players Seen data is per-character and persists on the profile; a Clear history button wipes it
 - Transaction history "Time" column is now "Timestamp" and shows the date too (ddMMMyy HH:mm:ss)
 - Quest seed: Phoenix Feather guide adds an optional "buy rafts for you + party members" step before `use potion`
+- Dark-room hunting now settles a short beat after each move so monsters that reveal on entry get engaged, instead of the loop racing past the fight and double-firing moves
+- bug reports addressed: paradigm-20260722-024841, paradigm-20260722-024915
 
 ## 1.95.0
 

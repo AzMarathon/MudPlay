@@ -39,6 +39,18 @@ public sealed class MovementCoordinator
     // flip on it.
     public const string AbandonedCombatGate = "AbandonedCombat";
 
+    // Asserted by DarkRoomMovementSettle for a brief window after we dead-reckon
+    // a move into a too-dark room. A dark room reveals its occupant only a beat
+    // AFTER the move confirms — via the mob's "strides in" arrival or its first
+    // dark-cyan attack line — but the dark advance confirms synchronously, so
+    // without this the loop fires the NEXT move before the monster surfaces and
+    // marches straight past the fight. This holds the walker for that beat: if a
+    // hostile reveals, the Combat gate asserts and takes over the hold; if the
+    // room really is empty, the settle timer clears and the loop steps on. Kept
+    // out of the manual-override tier (like AbandonedCombatGate) so the toolbar
+    // Start/Pause/Stop never flip on it. Self-clears on its own timer.
+    public const string DarkRoomSettleGate = "DarkRoomSettle";
+
     // Asserted by HealthManager when HP drops below the configured rest
     // trigger; clears when HP recovers past the configured rest target.
     public const string HealthRecoveryGate = "HealthRecovery";

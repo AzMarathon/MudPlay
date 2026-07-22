@@ -2229,6 +2229,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return ("Waiting — recovering corpse", NavActivityKind.Waiting);
         if (gates.Contains(Game.Map.MovementCoordinator.AcquisitionGate))
             return ("Waiting — looting", NavActivityKind.Waiting);
+        // Brief per-room hold while a dark room reveals its occupant. It's a beat
+        // in the middle of moving, not a real stop, so it reads as Moving and sits
+        // last — any more-meaningful wait above wins.
+        if (gates.Contains(Game.Map.MovementCoordinator.DarkRoomSettleGate))
+            return ("Moving — checking the dark", NavActivityKind.Moving);
 
         string first = gates.FirstOrDefault() ?? "?";
         return ($"Waiting — {first}", NavActivityKind.Waiting);

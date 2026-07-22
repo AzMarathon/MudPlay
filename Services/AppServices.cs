@@ -877,6 +877,14 @@ public sealed class AppServices
     // CombatManager engages it as if it had been listed.
     public Game.Combat.DarkRoomCombatWatcher DarkRoomCombat { get; private set; } = null!;
 
+    // Holds the movement stack for a short beat after each dead-reckoned dark-room
+    // advance, so the game engine has time to reveal a hostile (its "strides in"
+    // arrival / first attack line) before the loop fires the next move. Without it
+    // the dark advance confirms synchronously and the walker marches past the
+    // fight. Constructed BEFORE the movement engines so its StateChanged handler
+    // asserts the settle gate ahead of their synchronous SendNextStep.
+    public Game.Map.DarkRoomMovementSettle DarkRoomSettle { get; private set; } = null!;
+
     // Passive HP/MA threshold engine. Asserts /
     // clears HealthRecovery + ManaRecovery gates and drives the
     // rest / stand cycle with pre- and post-rest command sequencing.
@@ -2621,6 +2629,14 @@ public sealed class AppServices
             Router, RoomTracker, RoomClassifier,
             currentTarget: () => Combat.CurrentTarget,
             log: Log);
+
+        // Subscribes to RoomTracker.StateChanged HERE — before Walker / LoopRunner
+        // below — so on a synchronous dark-room advance it asserts the settle gate
+        // (flipping the engines to Paused) before their own StateChanged handlers
+        // run SendNextStep. That ordering is what stops the loop from racing past a
+        // dark-room fight; see DarkRoomMovementSettle for the full race writeup.
+        DarkRoomSettle = new Game.Map.DarkRoomMovementSettle(
+            RoomTracker, MovementCoordinator, Log);
 
         // HealthManager. Master on/off is
         // GeneralSettings.AutoMode.AutoHealRest (shared with the
