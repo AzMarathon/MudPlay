@@ -2193,6 +2193,10 @@ public sealed class AppServices
         // is honoured without re-wiring.
         ParadigmResync = new Game.Map.ParadigmPositionResolver(Router, RoomTracker, Recovery, GameData, Log);
         ParadigmResync.ResyncFailed += Recovery.OnAuthoritativeResyncFailed;
+        // @where answers from the game's authoritative position on Paradigm: when
+        // the heuristic tracker is lost, the handler fires `rm` and replies once
+        // the resolver re-anchors, instead of a bare "Location unknown".
+        PartyEssentials.SetPositionRefix(ParadigmResync.RequestResyncOnce);
         // Recovery.TryResync is wired below once MazeSolver exists: a maze solve
         // suppresses `rm` so the asylum is driven by the realm-agnostic look-sweep
         // (stock parity) rather than rm short-circuiting the solver's relocalize.
@@ -4117,12 +4121,14 @@ public sealed class AppServices
         ComebackRequest = new Game.Remote.ComebackRequester(Router, RoomTracker, Log);
 
         // Follower-side reconnect auto-rejoin. Mirrors live follower membership
-        // into the profile (crash-survivable) and, on the first in-game room
-        // after a reconnect, telepaths @comeback + @invite to re-form the party.
-        // Gated by the Auto-All kill switch like MainMenuEntry — a manual-play
-        // character that silenced automation won't auto-rejoin.
+        // into the profile (crash-survivable) and, on the first in-game prompt
+        // after a reconnect, telepaths @comeback to the leader to re-form the
+        // party. Keys on the statline prompt (not the room display) so a dark
+        // room can't defer the fire past the reconnect. Gated by the Auto-All
+        // kill switch like MainMenuEntry — a manual-play character that silenced
+        // automation won't auto-rejoin.
         PartyRejoin = new Game.Remote.PartyRejoinCoordinator(
-            Router, PartyState, RoomTracker,
+            PromptScanner, PartyState, RoomTracker,
             isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
             log: Log);
         // Write-through: whenever follower membership changes, stamp the loaded

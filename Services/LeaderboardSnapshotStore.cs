@@ -50,20 +50,45 @@ public sealed class LeaderboardSnapshotStore
         if (_snapshots.Count > 0 && !DiffersFrom(_snapshots[0], snapshot))
         {
             _log?.Log(LogSeverity.Info, "Leaderboard",
-                $"Captured top {snapshot.RequestedCount} — no experience or roster change "
+                $"Captured {Describe(snapshot)} — no experience or roster change "
                 + "since the last capture; discarded.");
             return;
         }
         _snapshots.Insert(0, snapshot);
-        if (_snapshots.Count > MaxSnapshots)
-            _snapshots.RemoveRange(MaxSnapshots, _snapshots.Count - MaxSnapshots);
+        TrimHistory();
         Persist();
         _log?.Log(LogSeverity.Info, "Leaderboard",
-            $"Captured top {snapshot.RequestedCount} — {snapshot.Entries.Count} heroes; "
+            $"Captured {Describe(snapshot)} — {snapshot.Entries.Count} heroes; "
             + $"{_snapshots.Count} snapshot(s) stored.");
         LogRerollHints();
         Changed?.Invoke();
     }
+
+    // Bound the history at MaxSnapshots, but never evict the snapshot that defines
+    // the widest known board (the largest real list captured). The XP/HR table shows
+    // the union of readings across the ring; if the widest capture fell off the tail,
+    // a run of smaller "top 10" views would shrink the displayed board back down —
+    // the very prune this store exists to prevent. So the oldest snapshot dropped is
+    // always one that isn't the board-of-record.
+    private void TrimHistory()
+    {
+        while (_snapshots.Count > MaxSnapshots)
+        {
+            int widest = 0;
+            for (int i = 1; i < _snapshots.Count; i++)
+                if (_snapshots[i].Entries.Count > _snapshots[widest].Entries.Count)
+                    widest = i;
+
+            int removeAt = _snapshots.Count - 1;
+            if (removeAt == widest) removeAt--; // pin the widest; take the next-oldest
+            _snapshots.RemoveAt(removeAt);
+        }
+    }
+
+    // A bare "top" (no number) has no requested count; render it as "top" rather
+    // than the misleading "top 0" in the log an operator reads.
+    private static string Describe(LeaderboardSnapshot snapshot)
+        => snapshot.RequestedCount > 0 ? $"top {snapshot.RequestedCount}" : "top";
 
     // After a kept capture, surface likely rerolls — a listed hero whose class
     // changed or whose experience fell versus their prior appearance — to the

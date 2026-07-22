@@ -27,6 +27,14 @@ public sealed class LeaderboardSnapshotStoreTests : IDisposable
     private static LeaderboardSnapshot Snap(DateTimeOffset at, int requested, long exp)
         => new(at, requested, new[] { new LeaderboardEntry(1, "Salty Exp", "Bard", "None", exp) });
 
+    private static LeaderboardSnapshot WideSnap(DateTimeOffset at, int requested, int count)
+    {
+        var entries = new List<LeaderboardEntry>(count);
+        for (int i = 0; i < count; i++)
+            entries.Add(new LeaderboardEntry(i + 1, $"Hero{i}", "Bard", "None", 100_000 - i));
+        return new LeaderboardSnapshot(at, requested, entries);
+    }
+
     [Fact]
     public void Add_InsertsNewestFirst_AndFiresChanged()
     {
@@ -52,6 +60,25 @@ public sealed class LeaderboardSnapshotStoreTests : IDisposable
         // MaxSnapshots caps the history at 5; the tail (oldest) falls off.
         Assert.Equal(5, store.Snapshots.Count);
         Assert.Equal(1059, store.Snapshots[0].Entries[0].Experience); // most recent retained
+    }
+
+    [Fact]
+    public void Add_PinsWidestBoard_AgainstRingEviction()
+    {
+        var store = new LeaderboardSnapshotStore();
+
+        // The board of record: a wide "top 100" capture.
+        store.Add(WideSnap(T, 100, 10));
+
+        // A long run of small, changing "top" views — enough to push past the ring
+        // bound several times over. Each differs (rising exp) so none is discarded.
+        for (int i = 0; i < 12; i++)
+            store.Add(Snap(T.AddMinutes(i + 1), 0, 1000 + i));
+
+        Assert.Equal(5, store.Snapshots.Count);
+        // The wide board survives the churn — a stream of small views can't evict it,
+        // so the merged display never shrinks back down to the small view.
+        Assert.Contains(store.Snapshots, s => s.Entries.Count == 10);
     }
 
     [Fact]

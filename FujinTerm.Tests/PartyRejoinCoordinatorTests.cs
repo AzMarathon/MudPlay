@@ -15,11 +15,12 @@ namespace FujinTerm.Tests;
 // Follower-side reconnect auto-rejoin. Drives the coordinator through the real
 // router lines + PartyState so the whole PartyManager -> coordinator wiring is
 // exercised: becoming a follower stamps the crash-survivable leader memory,
-// leaving clears it, and a reconnect (Arm + first in-game room display) telepaths
-// @comeback to the remembered leader. There's no follower-side wait — the leader
-// owns the pickup once @comeback is on the wire — so this only covers the memory
-// bookkeeping, the one-shot fire, the remembered-leader force-accept predicate,
-// and the @forget-decline forget path.
+// leaving clears it, and a reconnect (Arm + first in-game statline prompt)
+// telepaths @comeback to the remembered leader. The fire keys on the prompt, not
+// the room display, so a dark room can't defer it past the reconnect. There's no
+// follower-side wait — the leader owns the pickup once @comeback is on the wire —
+// so this only covers the memory bookkeeping, the one-shot fire, the
+// remembered-leader force-accept predicate, and the @forget-decline forget path.
 public sealed class PartyRejoinCoordinatorTests : IDisposable
 {
     // Single room 1/1 so the confirmed-room @comeback variant has a real key to
@@ -53,10 +54,19 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         public required MessageRouter Router { get; init; }
         public required PartyManager Manager { get; init; }
         public required RoomTracker Tracker { get; init; }
+        public required WirePromptScanner Scanner { get; init; }
         public required PartyRejoinCoordinator Coord { get; init; }
         // Every value handed to PersistLeader, in order — mirrors the disk
         // write-through the crash-survivable memory relies on.
         public required List<string?> Persisted { get; init; }
+
+        // Latin-1 bytes of a minimal in-game statline. Feeding it to the scanner
+        // fires PromptObserved — the coordinator's reconnect signal, which lands
+        // even in a dark room (no exits display needed).
+        private static readonly byte[] PromptBytes = Encoding.Latin1.GetBytes("[HP=100]: ");
+
+        // Simulate arriving in-game: the server prints the statline prompt.
+        public void EnterGame() => Scanner.Append(PromptBytes);
 
         // Outbound wire buffers decoded back to strings (Latin1 + trailing \r).
         public IEnumerable<string> Sent() =>
@@ -78,14 +88,15 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         PartyState state = new();
         PartyManager mgr = new(router, state);
 
-        PartyRejoinCoordinator coord = new(router, state, tracker, isAutoEnabled);
+        WirePromptScanner scanner = new();
+        PartyRejoinCoordinator coord = new(scanner, state, tracker, isAutoEnabled);
         List<string?> persisted = new();
         coord.PersistLeader = leader => persisted.Add(leader);
 
         return new Fixture
         {
             Router = router, Manager = mgr, Tracker = tracker,
-            Coord = coord, Persisted = persisted,
+            Scanner = scanner, Coord = coord, Persisted = persisted,
         };
     }
 
@@ -139,23 +150,23 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
     // ----- Reconnect @comeback fire -------------------------------------
 
     [Fact]
-    public void ArmThenRoom_NoLeaderRemembered_StaysQuiet()
+    public void ArmThenPrompt_NoLeaderRemembered_StaysQuiet()
     {
         var f = Setup();
         f.Coord.Arm();
-        f.Router.Dispatch(Line("Obvious exits: north, south"));
+        f.EnterGame();
 
         Assert.Empty(f.Coord.LastSentForTests);
     }
 
     [Fact]
-    public void HydratedLeader_ArmThenFirstRoom_SendsBareComeback()
+    public void HydratedLeader_ArmThenFirstPrompt_SendsBareComeback()
     {
         var f = Setup();
         f.Coord.HydrateRememberedLeader("Fujin");
         f.Coord.Arm();
 
-        f.Router.Dispatch(Line("Obvious exits: north, south"));
+        f.EnterGame();
 
         Assert.Equal("/Fujin @comeback", f.Sent().Single());
     }
@@ -168,19 +179,39 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.HydrateRememberedLeader("Fujin");
         f.Coord.Arm();
 
-        f.Router.Dispatch(Line("Obvious exits: north, south"));
+        f.EnterGame();
 
         Assert.Equal("/Fujin @comeback 1/1", f.Sent().Single());
     }
 
     [Fact]
-    public void RoomWithoutArm_DoesNothing()
+    public void DarkRoomReconnect_FiresOnPrompt_NotDeferredToRoomReveal()
     {
-        // No Arm() — a room display outside a fresh connect must not fire.
+        // The reconnect bug this guards: a dark room prints a statline but no
+        // exits, so keying the fire on the room display let the latch survive
+        // until a light later revealed a room — misfiring @comeback long after
+        // the reconnect, at a leader we'd already rejoined. Keying on the prompt
+        // fires promptly in the dark, and the later room reveal can't re-fire.
+        var f = Setup();
+        f.Coord.HydrateRememberedLeader("Fujin");
+        f.Coord.Arm();
+
+        f.EnterGame(); // statline only — still in the dark, no exits shown
+        Assert.Equal("/Fujin @comeback", f.Sent().Single());
+
+        // A light finally reveals the room; the latch is already spent.
+        f.Router.Dispatch(Line("Obvious exits: north, south"));
+        Assert.Single(f.Coord.LastSentForTests);
+    }
+
+    [Fact]
+    public void PromptWithoutArm_DoesNothing()
+    {
+        // No Arm() — a prompt outside a fresh connect must not fire.
         var f = Setup();
         f.Coord.HydrateRememberedLeader("Fujin");
 
-        f.Router.Dispatch(Line("Obvious exits: north, south"));
+        f.EnterGame();
 
         Assert.Empty(f.Coord.LastSentForTests);
     }
@@ -192,10 +223,10 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.HydrateRememberedLeader("Fujin");
         f.Coord.Arm();
 
-        f.Router.Dispatch(Line("Obvious exits: north, south"));
-        f.Router.Dispatch(Line("Obvious exits: east, west"));
+        f.EnterGame();
+        f.EnterGame();
 
-        Assert.Single(f.Coord.LastSentForTests); // latch consumed on first room
+        Assert.Single(f.Coord.LastSentForTests); // latch consumed on first prompt
     }
 
     [Fact]
@@ -205,7 +236,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.HydrateRememberedLeader("Fujin");
         f.Coord.Arm();
 
-        f.Router.Dispatch(Line("Obvious exits: north, south"));
+        f.EnterGame();
 
         Assert.Empty(f.Coord.LastSentForTests);
     }
@@ -268,9 +299,9 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.Arm();
 
         // A profile swap re-hydrates — the stale arm must not survive, so the
-        // first room after the swap fires nothing until Arm() is called again.
+        // first prompt after the swap fires nothing until Arm() is called again.
         f.Coord.HydrateRememberedLeader("Helper");
-        f.Router.Dispatch(Line("Obvious exits: north, south"));
+        f.EnterGame();
 
         Assert.Equal("Helper", f.Coord.RememberedLeader);
         Assert.Empty(f.Coord.LastSentForTests);
@@ -286,7 +317,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.Arm();
 
         f.Coord.Dispose();
-        f.Router.Dispatch(Line("Obvious exits: north, south"));
+        f.EnterGame();
         f.Router.Dispatch(Line("You are now following Helper."));
 
         Assert.Empty(f.Coord.LastSentForTests);

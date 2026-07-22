@@ -1,13 +1,13 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.91.0**
-> - Auto-Lair travel cost gains a realm-aware "Automatic" mode, now the default: ParaMUD runs the game's movement-speed formula against live carry weight + worn quickness; stock realms use the measured encumbrance hop-time table
-> - Stock encumbrance hop times reseeded to measured two-band timings — ~0.7 s (None/Light/Medium), ~1.7 s (Heavy/Encumbered)
-> - Movement Speed calculator is realm-gated: ParaMUD keeps the interactive solver, stock shows a static two-band findings card
-> - Walk-to status now reads "step X of Y, N steps / ~Ts to arrive" — remaining-route ETA surfaced in the navigation label and program log
-> - ETA sums the per-hop travel estimate and, when auto-combat is on, a 5 s/monster dwell for every lair room crossed
-> - Bug report captures the active travel-cost model and its per-hop estimate
+> **Version 1.93.0**
+> - Dark-room auto-combat now follows a party leader: a "moves to attack <monster>" announce injects that monster so we engage the same round instead of idling until it swings at us
+> - On Paradigm, an @where sent while our position is unknown now fires `rm` to re-fix our location from the game, then replies with the real room instead of "Location unknown"
+> - Realm Rankings no longer prunes the board when you view a smaller list: the table merges the most-recent reading per hero, so a "top 10" of a captured "top 100" refreshes the leaders without dropping ranks 11+
+> - A view is only treated as a cap when a numbered request comes back short (asked top 100, got 10 = capped at 10); choosing to display fewer retains the rest
+> - The widest real board is pinned in capture history so a run of small views can't evict it
+> - Reconnect auto-rejoin now fires @comeback on the first in-game prompt instead of the first room display, so a dark room can't defer it into a spurious @comeback when a light later reveals the room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

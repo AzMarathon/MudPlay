@@ -2,6 +2,16 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.93.0
+
+- Dark-room auto-combat now follows a party leader: a "moves to attack <monster>" announce injects that monster so we engage the same round instead of idling until it swings at us
+- On Paradigm, an @where sent while our position is unknown now fires `rm` to re-fix our location from the game, then replies with the real room instead of "Location unknown"
+- Realm Rankings no longer prunes the board when you view a smaller list: the table merges the most-recent reading per hero, so a "top 10" of a captured "top 100" refreshes the leaders without dropping ranks 11+
+- A view is only treated as a cap when a numbered request comes back short (asked top 100, got 10 = capped at 10); choosing to display fewer retains the rest
+- The widest real board is pinned in capture history so a run of small views can't evict it
+- Reconnect auto-rejoin now fires @comeback on the first in-game prompt instead of the first room display, so a dark room can't defer it into a spurious @comeback when a light later reveals the room
+- bug reports addressed: paradigm-20260721-162758, paradigm-20260721-192342, paradigm-20260721-194551, paradigm-20260721-203734
+
 ## 1.91.0
 
 - Auto-Lair travel cost gains a realm-aware "Automatic" mode, now the default: ParaMUD runs the game's movement-speed formula against live carry weight + worn quickness; stock realms use the measured encumbrance hop-time table

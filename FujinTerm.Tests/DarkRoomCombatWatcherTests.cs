@@ -174,6 +174,71 @@ public sealed class DarkRoomCombatWatcherTests
         Assert.Single(h.Classifier.Current!.Value.Entities);
     }
 
+    // ----- party leader's "moves to attack" reveal ---------------------
+
+    [Fact]
+    public void PartyAttackAnnounce_InDark_InjectsForCombat()
+    {
+        // Following a leader into a dark room, their "moves to attack" announce
+        // (a same-room broadcast) names the monster the display can't. Keying off
+        // it lets us follow suit before the mob first swings at us.
+        using Harness h = new();
+        h.AddMonster(1, "cave bear");
+        h.EnterDarkRoom();
+
+        h.Feed("Tristian moves to attack cave bear.");
+
+        Assert.Single(h.Observations);
+        RoomEntity injected = Assert.Single(h.Classifier.Current!.Value.Entities);
+        Assert.Equal(EntityKind.Monster, injected.Kind);
+        Assert.Equal("cave bear", injected.ResolvedName);
+        Assert.Equal(1, injected.MonsterNumber);
+    }
+
+    [Fact]
+    public void PartyAttackAnnounce_NotInDark_Ignored()
+    {
+        // A lit room already lists the monster under "Also here:"; the announce
+        // must not fabricate a second target there.
+        using Harness h = new();
+        h.AddMonster(1, "cave bear");
+
+        h.Feed("Tristian moves to attack cave bear.");
+
+        Assert.Empty(h.Observations);
+        Assert.Null(h.Classifier.Current);
+    }
+
+    [Fact]
+    public void PartyAttackAnnounce_UnknownTarget_NotInjected()
+    {
+        // No Monsters-table link (or a PvP target that resolves to a Player) —
+        // CombatManager can't engage it, so leave the entity list empty.
+        using Harness h = new();
+        h.EnterDarkRoom();
+
+        h.Feed("Tristian moves to attack some stranger.");
+
+        Assert.Empty(h.Observations);
+        Assert.Null(h.Classifier.Current);
+    }
+
+    [Fact]
+    public void PartyAttackThenMobAttack_SameMonster_InjectsOnce()
+    {
+        // The leader's announce and the mob's own attack line both name the same
+        // monster in the same round — the per-round dedupe keeps it to one entry.
+        using Harness h = new();
+        h.AddMonster(1, "cave bear");
+        h.EnterDarkRoom();
+
+        h.Feed("Tristian moves to attack cave bear.");
+        h.Feed("The cave bear swings at you.");
+
+        Assert.Single(h.Observations);
+        Assert.Single(h.Classifier.Current!.Value.Entities);
+    }
+
     // ----- "Your command had no effect." retraction --------------------
 
     [Fact]

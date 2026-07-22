@@ -18,6 +18,16 @@ namespace FujinTerm.Game.Combat;
 // with the user: `a cave bear` engages a cave bear revealed only by its attack
 // line.
 //
+// A second reveal leaks through when we follow a party leader into a dark room:
+// their "<player> moves to attack <monster>." announce. That line is a same-room
+// broadcast (GAME_MECHANICS.md), so a monster a party member engages here shares
+// our room even though the display never named it. It carries the monster's full
+// display name (flavor and all — "small cave lizard") and usually arrives the
+// round the leader engages, before the mob first swings at us, so keying off it
+// lets us follow suit a round sooner instead of idling until we personally get
+// hit. A "moves to attack <player>" (PvP) resolves to a Player, not a Monster,
+// so the same classifier gate below quietly drops it.
+//
 // Scope guard: everything here is gated on RoomTracker.IsInDarkRoom. In a lit
 // room the "Also here:" line already lists occupants and the normal
 // classifier / death-watcher pipeline keeps the target list honest, so this
@@ -35,6 +45,7 @@ public sealed class DarkRoomCombatWatcher : IDisposable
     private readonly LogService? _log;
     private readonly IDisposable _mobMissesSub;
     private readonly IDisposable _mobHitsSub;
+    private readonly IDisposable _partyAttackSub;
     private readonly IDisposable _noEffectSub;
     private bool _disposed;
 
@@ -55,6 +66,7 @@ public sealed class DarkRoomCombatWatcher : IDisposable
         _log = log;
         _mobMissesSub = router.Subscribe(KnownPatterns.MobMisses, OnMobAttack);
         _mobHitsSub = router.Subscribe(KnownPatterns.MobHits, OnMobAttack);
+        _partyAttackSub = router.Subscribe(KnownPatterns.PartyAttackAnnounce, OnPartyAttack);
         _noEffectSub = router.Subscribe(KnownPatterns.CommandNoEffect, OnCommandNoEffect);
     }
 
@@ -66,30 +78,48 @@ public sealed class DarkRoomCombatWatcher : IDisposable
         // Both patterns capture the monster name at group 0 (MobMisses:
         // "The (?<target>...) <verb> at you"; MobHits: same head, "... you for
         // N damage!").
-        string target = match.Groups[0].Trim();
+        TryReveal(match.Groups[0], match.Text, source: "attacker");
+    }
+
+    private void OnPartyAttack(MatchResult match)
+    {
+        if (!_roomTracker.IsInDarkRoom) return;
+        // PartyAttackAnnounce captures the announcer at group 0 and the monster
+        // it targets at group 1 ("<player> moves to attack <target>."). We want
+        // the target — the monster now confirmed in our dark room.
+        if (match.Groups.Count < 2) return;
+
+        TryReveal(match.Groups[1], match.Text, source: "party-attack");
+    }
+
+    private void TryReveal(string rawName, string wireLine, string source)
+    {
+        string target = rawName.Trim();
         if (target.Length == 0) return;
 
-        // A dark room re-emits the same mob's attack line every round. Once the
-        // mob is in the classifier's observation, skip — re-appending it each
-        // round would pile duplicates into the entity list.
+        // A dark room re-emits the same mob's attack line every round, and the
+        // leader's engage announce can arrive alongside it. Once the mob is in
+        // the classifier's observation, skip — re-appending each round would
+        // pile duplicates into the entity list.
         if (AlreadyPresent(target)) return;
 
         RoomEntity classified = _classifier.Classify(target);
         if (classified.Kind != EntityKind.Monster || classified.MonsterNumber is null)
         {
-            // Unknown name, or a message record with no Monsters-table link.
+            // Unknown name, a message record with no Monsters-table link, or (on
+            // the party-attack path) a PvP target that resolves to a Player.
             // CombatManager skips null-number monsters, so injecting one would
             // hold the combat gate without ever engaging — worse than doing
             // nothing. Log at Debug (this fires every attack round) and leave it
             // out; the user can add the monster to their data to enable engage.
             _log?.Debug(LogCategory,
-                $"dark-room attacker '{target}' not a known engageable monster — not injecting");
+                $"dark-room {source} '{target}' not a known engageable monster — not injecting");
             return;
         }
 
-        _classifier.AppendArrivalEntity(classified, rawWireLine: match.Text);
+        _classifier.AppendArrivalEntity(classified, rawWireLine: wireLine);
         _log?.Info(LogCategory,
-            $"dark-room attacker revealed name={classified.ResolvedName} — injected for auto-combat");
+            $"dark-room {source} revealed name={classified.ResolvedName} — injected for auto-combat");
     }
 
     private void OnCommandNoEffect(MatchResult _)
@@ -130,6 +160,7 @@ public sealed class DarkRoomCombatWatcher : IDisposable
         _disposed = true;
         _mobMissesSub.Dispose();
         _mobHitsSub.Dispose();
+        _partyAttackSub.Dispose();
         _noEffectSub.Dispose();
     }
 }

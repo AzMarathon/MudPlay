@@ -143,6 +143,16 @@ it isn't here and you're unsure, ask.
   (`DarkRoomCombatWatcher`). Attacking a monster that **isn't** in the room draws
   `Your command had no effect.` — the signal that the target is gone (retract it and stop
   swinging).
+- **[CONFIRMED]** *(2026-07-21, user)* **In a dark room, a distinct display name is a distinct
+  enemy — dedupe reveals by name, never by monster record.** A mob can swing more than once per
+  round and the dark room re-emits its attack line every round, so four `The cave lizard swings
+  at you` lines are **not** four lizards — the client collapses same-name reveals to one entity.
+  But `cave lizard` and `small cave lizard` (e.g. we're on one, a partner announces the other)
+  are **two separate enemies**, even if they share a Monsters-table record — so the dedupe keys on
+  the **name string**, not the resolved monster number; collapsing by record would drop a live mob.
+  Two genuinely same-named mobs can't be told apart in the dark, so they read as one until the
+  first dies — the survivor's next swing re-reveals it and combat re-engages. Over-count is thus
+  impossible and under-count self-heals.
 
 ## Stealth (sneak & hide)
 

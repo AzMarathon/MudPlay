@@ -43,6 +43,16 @@ public sealed class PartyEssentialHandlers : IDisposable
     private readonly Func<string?>? _readDraggedBy;
     private readonly Func<MessageFlags>? _readAilments;
     private Action<byte[]>? _wireSender;
+
+    // Paradigm-only authoritative position re-fix seam. Bound by AppServices to
+    // ParadigmPositionResolver.RequestResyncOnce: (reason, onResolved, onFailed)
+    // fires `rm` and calls back once the game answers, returning false when a
+    // re-fix can't be started (stock realm / no wire / throttled). Lets @where
+    // ask the game for our true position instead of replying "Location unknown"
+    // when the heuristic tracker is lost but the game can tell us exactly where
+    // we are. Null on stock realms and in tests that don't wire it.
+    private Func<string, Action<RoomKey>, Action, bool>? _requestPositionRefix;
+
     private bool _disposed;
 
     // The curable ailments @status reports, paired with the plain word the reply
@@ -124,6 +134,16 @@ public sealed class PartyEssentialHandlers : IDisposable
     {
         ArgumentNullException.ThrowIfNull(sender);
         _wireSender = sender;
+    }
+
+    // Bind the Paradigm position re-fix seam (ParadigmPositionResolver.
+    // RequestResyncOnce). AppServices calls this once the resolver exists.
+    // Without it, @where degrades to "Location unknown" when the room is
+    // unknown — the stock-realm behaviour.
+    public void SetPositionRefix(Func<string, Action<RoomKey>, Action, bool> requestRefix)
+    {
+        ArgumentNullException.ThrowIfNull(requestRefix);
+        _requestPositionRefix = requestRefix;
     }
 
     public void Dispose()
@@ -258,14 +278,47 @@ public sealed class PartyEssentialHandlers : IDisposable
 
     // @where — reply with the current room's name, exits, and (Map, Room) key.
     // Reads the live RoomTracker snapshot through the injected _readCurrentRoom
-    // accessor; a null room (tracker Unknown / Lost, or no game data loaded yet)
-    // yields a "Location unknown" reply rather than an empty body. The engine
-    // wraps the payload in { } at SendReply time.
+    // accessor. When the room is unknown (tracker Unknown / Lost, or no game data
+    // loaded yet) on a Paradigm realm, ask the game for our authoritative position
+    // via `rm` and answer once it re-anchors — the game can tell us exactly where
+    // we are, so a bare "Location unknown" would throw away information we can
+    // fetch. Stock realms (or an unwired seam) fall straight through to the plain
+    // "Location unknown" reply. The engine wraps the payload in { } at SendReply.
     private void OnWhere(RemoteCommandContext ctx)
     {
         Room? room = _readCurrentRoom?.Invoke();
-        if (room is null) { ctx.Reply("Location unknown"); return; }
+        if (room is not null) { ReplyWhere(ctx, room); return; }
 
+        if (TryResolveWhereViaResync(ctx)) return;
+
+        ctx.Reply("Location unknown");
+    }
+
+    // On Paradigm, fire `rm` and defer the @where reply until the game answers.
+    // Returns false when a re-fix can't be started so OnWhere falls back to the
+    // plain "Location unknown". Both callbacks fire at most once (the resolver's
+    // one-shot contract) on the UI thread, so re-reading the room and replying
+    // needs no locking.
+    private bool TryResolveWhereViaResync(RemoteCommandContext ctx)
+    {
+        if (_requestPositionRefix is null) return false;
+        return _requestPositionRefix(
+            $"@where from {ctx.Sender}",
+            // onResolved: rm answered and the tracker re-anchored.
+            key =>
+            {
+                Room? resolved = _readCurrentRoom?.Invoke();
+                if (resolved is not null) ReplyWhere(ctx, resolved);
+                // rm answered but the room isn't in our map data — still report
+                // the authoritative (map, room) the game just handed us.
+                else ctx.Reply($"map {key.Map}, room {key.Room} (not in map data)");
+            },
+            // onFailed: rm timed out / room not in graph — degrade gracefully.
+            () => ctx.Reply("Location unknown"));
+    }
+
+    private static void ReplyWhere(RemoteCommandContext ctx, Room room)
+    {
         // Stable enum order so a repeated query reads the same and exits
         // come out N, S, E, W, NE, ... rather than dictionary order.
         string exits = room.Exits.Count == 0
