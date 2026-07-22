@@ -162,6 +162,11 @@ public sealed record ItemFinderEntry
     // and when the finder is opened without a usable character context.
     public double AvgSwings { get; init; }
 
+    // The weapon's raw attack speed (Items."Speed"; lower is faster), or the
+    // fixed martial-arts speed on a synthetic bare-handed row. 0 for non-weapons.
+    // Shown next to the modelled swing count in the Swings column.
+    public int WeaponSpeed { get; init; }
+
     // True for the bare-handed attack rows (Punch / Kick / Jumpkick) the catalog
     // synthesises under a martial-arts attack type — these aren't real items, so
     // they carry no slot / type / equip data and bypass the item filters.
@@ -218,7 +223,13 @@ public sealed record ItemFinderEntry
     public string LightningResistText => Signed(LightningResist);
     public string WaterResistText => Signed(WaterResist);
     public string ShadowResistText => Signed(ShadowResist);
-    public string AvgSwingsText => AvgSwings > 0 ? AvgSwings.ToString("0.0", CultureInfo.InvariantCulture) : string.Empty;
+    // The modelled swing average paired with the weapon's raw speed, e.g.
+    // "2.3 (30)". Blank when there's no swing to show (non-weapon, or the finder
+    // opened without a usable character) — the speed rides with the swing count
+    // rather than standing alone in an otherwise empty column.
+    public string SwingSpeedText => AvgSwings > 0
+        ? $"{AvgSwings.ToString("0.0", CultureInfo.InvariantCulture)} ({WeaponSpeed.ToString(CultureInfo.InvariantCulture)})"
+        : string.Empty;
 
     private static string Plain(int v) => v != 0 ? v.ToString(CultureInfo.InvariantCulture) : string.Empty;
     private static string Signed(int v) => v != 0 ? v.ToString("+0;-0", CultureInfo.InvariantCulture) : string.Empty;
@@ -340,6 +351,7 @@ public sealed record ItemFinderEntry
                 WaterResist = t.PlusWaterResist,
                 ShadowResist = t.PlusShadowResist,
                 AvgSwings = avgSwings,
+                WeaponSpeed = isWeapon ? GetInt(row, "Speed") : 0,
                 Row = row,
             });
         }
@@ -394,6 +406,7 @@ public sealed record ItemFinderEntry
         WeaponType = -1,
         ArmourType = -1,
         AvgSwings = ctx.AvgSwingsForMartialArts(attackType),
+        WeaponSpeed = CombatCalculator.MartialArtsSpeed(attackType, ctx.Realm),
         IsSynthetic = true,
         Row = default,
     };

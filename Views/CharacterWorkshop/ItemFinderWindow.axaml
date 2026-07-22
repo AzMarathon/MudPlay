@@ -243,7 +243,7 @@
                         <DataGridTextColumn Header="Str"        Binding="{ReflectionBinding StrReqText}"     SortMemberPath="StrReq"     Width="58"  Tag="StrReqText"/>
                         <DataGridTextColumn Header="Enc"        Binding="{ReflectionBinding EncumText}"      SortMemberPath="Encum"      Width="58"  Tag="EncumText"/>
                         <DataGridTextColumn Header="Dmg"        Binding="{ReflectionBinding DamageText}"     SortMemberPath="MaxDmg"     Width="78"  Tag="DamageText"/>
-                        <DataGridTextColumn Header="Swings"     Binding="{ReflectionBinding AvgSwingsText}"  SortMemberPath="AvgSwings"  Width="70"  Tag="AvgSwingsText"/>
+                        <DataGridTextColumn Header="Swings (W. Spd)" Binding="{ReflectionBinding SwingSpeedText}" SortMemberPath="AvgSwings" Width="112" Tag="SwingSpeedText"/>
                         <DataGridTextColumn Header="Accy"       Binding="{ReflectionBinding AccuracyText}"   SortMemberPath="Accuracy"   Width="66"  Tag="AccuracyText"/>
                         <DataGridTextColumn Header="Crit"       Binding="{ReflectionBinding CritsText}"      SortMemberPath="Crits"      Width="62"  Tag="CritsText"/>
                         <DataGridTextColumn Header="Hit Magic"  Binding="{ReflectionBinding HitMagicText}"   SortMemberPath="HitMagic"   Width="92"  Tag="HitMagicText"/>

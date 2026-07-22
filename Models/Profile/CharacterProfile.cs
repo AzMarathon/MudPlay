@@ -104,6 +104,15 @@ public sealed class CharacterProfile
     // with a saved position once they've actually moved / resized a window.
     public Dictionary<string, WindowBounds>? WindowBounds { get; set; }
 
+    // The Navigation window's map-collapse toggle (the ◀/▶ side-panel button).
+    // true = the user last left the side chrome collapsed so the map fills the
+    // window. Read by NavigationViewModel when the window opens so it reopens in
+    // the same mode — and because the collapsed layout lowers the window's
+    // minimum size, this must be restored before WindowLayoutStore reapplies the
+    // saved bounds, or an expanded min-width clamps the saved (narrower) width
+    // back up. Defaults false (expanded) on a fresh profile.
+    public bool NavMapCollapsed { get; set; }
+
     // Persisted left-pane proportions for resizable two-pane dialogs keyed by
     // stable id (e.g. "MonsterEditDialog"). Each value is the fraction (0.0–1.0)
     // of the splittable area occupied by the LEFT pane at the user's last close.

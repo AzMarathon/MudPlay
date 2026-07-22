@@ -16,6 +16,12 @@ using FujinTerm.Services;
 
 namespace FujinTerm.ViewModels.CharacterWorkshop;
 
+// Which column arrangement the grid should present, derived from what the current
+// filter leaves showing: an all-weapon view leads with the weapon stats (and drops
+// the redundant Slot column), an all-armour view leads with slot / defence, and a
+// mixed view keeps the columns in their declared order.
+public enum ItemFinderLayout { Mixed, Weapon, Armour }
+
 // Modeless catalog browser opened from the Equipment Manager's "Item Finder"
 // button. Lists every equippable item in the active game-data set — one combined
 // list sorted by slot then name (weapons and armour folded into one) — and
@@ -61,7 +67,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ("StrReqText",     static e => e.StrReqText),
         ("EncumText",      static e => e.EncumText),
         ("DamageText",     static e => e.DamageText),
-        ("AvgSwingsText",  static e => e.AvgSwingsText),
+        ("SwingSpeedText", static e => e.SwingSpeedText),
         ("AccuracyText",   static e => e.AccuracyText),
         ("CritsText",      static e => e.CritsText),
         ("HitMagicText",   static e => e.HitMagicText),
@@ -101,9 +107,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
 
     public event Action<bool>? CloseRequested;
 
-    // Raised after each filter pass recomputes which optional columns hold a value,
-    // so the view can re-read IsColumnVisible and toggle each DataGridColumn.
-    public event Action? VisibleColumnsChanged;
+    // Raised after each filter pass recomputes the column presentation — which
+    // optional columns hold a value, and the weapon / armour / mixed layout — so the
+    // view can re-read IsColumnVisible / LayoutMode and reorder + toggle its columns.
+    public event Action? ColumnLayoutChanged;
 
     // Attack-type dropdown labels; "Attack" is the plain base swing, the rest map
     // to MudAttackType via AttackTypeFor. Bash / Smash recompute every weapon's
@@ -149,6 +156,11 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     // view. Unknown keys (the always-on Slot / Name anchors carry no tag) read false
     // and are never consulted by the view, so they stay visible regardless.
     public bool IsColumnVisible(string key) => _visibleColumns.Contains(key);
+
+    // The column arrangement for the current filtered view; recomputed on every
+    // filter pass and read by the view (after ColumnLayoutChanged) to reorder and
+    // hide columns to match what's shown.
+    public ItemFinderLayout LayoutMode { get; private set; }
 
     // Class names from the active set, "(Any class)" first.
     public ObservableCollection<string> ClassOptions { get; } = new();
@@ -395,7 +407,17 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         RowsView.Refresh();
         CountText = string.Create(CultureInfo.InvariantCulture,
             $"Showing {RowsView.Count:N0} of {_all.Count:N0} items");
+        RefreshColumnLayout();
+    }
+
+    // Recompute the whole column presentation for the current view — which optional
+    // columns carry a value, and the weapon / armour / mixed layout — then signal the
+    // view once to reorder and toggle its columns.
+    private void RefreshColumnLayout()
+    {
         RecomputeVisibleColumns();
+        LayoutMode = DetermineLayout();
+        ColumnLayoutChanged?.Invoke();
     }
 
     // Walk the filtered rows and keep only the optional columns that render a
@@ -413,7 +435,26 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
                 if (!_visibleColumns.Contains(key) && !string.IsNullOrEmpty(cell(e)))
                     _visibleColumns.Add(key);
         }
-        VisibleColumnsChanged?.Invoke();
+    }
+
+    // Classify the filtered view for the column layout: all weapons, all armour, or
+    // a mix. Weapons carry EquipmentSlot.Weapon (including the synthetic martial-arts
+    // rows); everything else is armour / jewellery. Short-circuits the moment both
+    // kinds appear — the common mixed default — so only a homogeneous view (the one
+    // that actually reorders) walks the whole set.
+    private ItemFinderLayout DetermineLayout()
+    {
+        bool hasWeapon = false, hasArmour = false;
+        foreach (object? o in RowsView)
+        {
+            if (o is not ItemFinderEntry e) continue;
+            if (e.Slot == EquipmentSlot.Weapon) hasWeapon = true;
+            else hasArmour = true;
+            if (hasWeapon && hasArmour) return ItemFinderLayout.Mixed;
+        }
+        return hasWeapon ? ItemFinderLayout.Weapon
+             : hasArmour ? ItemFinderLayout.Armour
+             : ItemFinderLayout.Mixed;
     }
 
     private bool PassesFilter(object o)

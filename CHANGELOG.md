@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.94.0
+
+- Item Finder reorders columns to the item kind it's showing: an all-armour view leads slot, name, type, level, enc, ac, dr; an all-weapon view leads name, type, level, str, dmg, swings, hit magic, enc
+- Item Finder hides the Slot column in an all-weapon view (every weapon shares the Weapon slot)
+- Item Finder's Swings (W. Spd) column now shows the weapon's raw speed alongside the modelled swing count, e.g. "2.3 (30)"
+- Navigation window reopens in the collapse state you left it — fixes the side-panel toggle resetting to expanded and clamping the saved (narrower) window size back to the expanded minimum
+
 ## 1.93.0
 
 - Dark-room auto-combat now follows a party leader: a "moves to attack <monster>" announce injects that monster so we engage the same round instead of idling until it swings at us
