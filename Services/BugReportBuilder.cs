@@ -338,6 +338,12 @@ public static class BugReportBuilder
         sb.Append("\n**Quest log (QuestLog)** (").Append(quests?.Count ?? 0).Append(")\n\n");
         sb.Append(quests is { Count: > 0 } ? Json(quests) : "_(none)_\n");
 
+        // Count only — the Players Seen log can hold many rows; a count tells an
+        // "empty / not recording" report apart from a working one without bloating
+        // the capture with the whole roster.
+        var seen = profile.PlayersSeen;
+        sb.Append("\n**Players seen (PlayersSeen)**: ").Append(seen?.Count ?? 0).Append('\n');
+
         return sb.ToString();
     }
 

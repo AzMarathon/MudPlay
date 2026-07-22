@@ -133,6 +133,10 @@
                     Content="Transaction history"
                     Command="{Binding OpenTransactionHistoryCommand}"
                     ToolTip.Tip="Bank deposits and stash-room hides recorded this session — the time, the store, and what was put away."/>
+            <Button Classes="topaction"
+                    Content="Players Seen"
+                    Command="{Binding OpenPlayersSeenCommand}"
+                    ToolTip.Tip="Players this character has encountered — the last time and room each was seen, and how many times total. Persists across sessions."/>
         </StackPanel>
     </Border>
 

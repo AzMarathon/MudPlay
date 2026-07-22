@@ -3677,7 +3677,8 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.PlayerStats,
                 AppServices.Current.GameData,
                 AppServices.Current.Currency,
-                OpenTransactionHistory),
+                OpenTransactionHistory,
+                OpenPlayersSeen),
         };
         window.Closed += (_, _) => _sessionStats = null;
         _sessionStats = window;
@@ -3701,6 +3702,26 @@ public partial class MainWindowViewModel : ObservableObject
         };
         window.Closed += (_, _) => _transactionHistory = null;
         _transactionHistory = window;
+        window.Show(main);
+    }
+
+    // Singleton handle for the live PlayersSeenWindow — re-press toggles closed.
+    private PlayersSeenWindow? _playersSeen;
+
+    [RelayCommand]
+    private void OpenPlayersSeen()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_playersSeen is { } existing) { existing.Close(); return; }
+
+        PlayersSeenWindow window = new()
+        {
+            DataContext = new PlayersSeenViewModel(AppServices.Current.PlayerSightings),
+        };
+        window.Closed += (_, _) => _playersSeen = null;
+        _playersSeen = window;
         window.Show(main);
     }
 

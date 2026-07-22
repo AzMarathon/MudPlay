@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.96.0
+
+- New Session Stats → Players Seen window: logs every player spotted (also-here match or walk-in) with timestamp, where (room name + map/room), who, and total times seen
+- Players Seen data is per-character and persists on the profile; a Clear history button wipes it
+- Transaction history "Time" column is now "Timestamp" and shows the date too (ddMMMyy HH:mm:ss)
+
 ## 1.95.0
 
 - New default keybinds: Alt+H connect/disconnect, Alt+M navigation, Alt+V/B/N movement start/pause/stop, Alt+L backscroll, Alt+S capture, Alt+C conversation; F1 workshop, F2 spell book, F3 game data, F4 program log, F5 wire inspector (profile + quit shortcuts unchanged)

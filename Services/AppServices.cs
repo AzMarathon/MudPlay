@@ -726,6 +726,13 @@ public sealed class AppServices
     // PlayerLooksAtYou pattern + RoomEntry.ArrivalObserved.
     public Game.PlayerLookManager PlayerLook { get; private set; } = null!;
 
+    // Per-character log of players seen in the world — one aggregated row per
+    // player with last-seen time / room and a running sighting count. Feeds the
+    // Session Stats → Players Seen window. Records off the same room-presence
+    // hooks Greet / PlayerLook use (Also-here matches + room walk-ins); persists
+    // on the loaded profile.
+    public Game.PlayerSightingTracker PlayerSightings { get; private set; } = null!;
+
     // Owns PlayerState.InCombat and
     // the Game.Map.MovementCoordinator.CombatGate hold
     // state. Cleared automatically when the room is free of
@@ -3432,6 +3439,15 @@ public sealed class AppServices
         // Wire-sender bound by MainWindowViewModel after telnet connects.
         PlayerLook = new Game.PlayerLookManager(Router, RoomEntry, Party.State,
             selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+        // Players Seen log. Records off the same room-presence hooks (Also-here
+        // classification + room walk-ins) and shares the self-name resolution;
+        // persists the aggregated rows on the loaded character's profile. Owns no
+        // room-source subscriptions of its own — we wire the two hooks here.
+        PlayerSightings = new Game.PlayerSightingTracker(
+            () => RoomTracker.State.CurrentRoom, Profile,
+            selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+        RoomClassifier.EntitiesObserved += PlayerSightings.NoteAlsoHere;
+        RoomEntry.ArrivalObserved += PlayerSightings.NoteArrival;
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The

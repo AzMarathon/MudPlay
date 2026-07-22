@@ -186,6 +186,14 @@ public sealed class CharacterProfile
     // deaths yet (the lucky case).
     public List<DeathRecord>? DeathHistory { get; set; }
 
+    // Per-character log of players this character has seen — one aggregated row
+    // per player (given name), each carrying the last-seen time, the last room
+    // they were seen in, and the running total sighting count. Written by
+    // Game.PlayerSightingTracker on "Also here:" matches and room walk-ins;
+    // surfaced by the Session Stats → Players Seen window. null / empty means no
+    // players seen yet.
+    public List<PlayerSighting>? PlayersSeen { get; set; }
+
     // When true, the DEATH-recovery flow grabs lost items (and re-equips what
     // was worn at death) automatically whenever the character re-enters a room
     // holding one of their own deathpiles — regardless of the item's auto-get
