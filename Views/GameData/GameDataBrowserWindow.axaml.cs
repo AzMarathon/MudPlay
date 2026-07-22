@@ -8,6 +8,11 @@ public partial class GameDataBrowserWindow : Window
     public GameDataBrowserWindow()
     {
         InitializeComponent();
+        // Install the store-driven window-toggle hotkeys so re-pressing the
+        // browser's chord (default F3) while this window has focus closes it —
+        // without this the keypress lands on this window instead of MainWindow
+        // and the toggle command never fires.
+        GlobalHotkeys.Attach(this);
         // Browser VMs subscribe to long-lived AppServices events
         // (GameDataCache.ActiveSetChanged, engine CollectionChanged).
         // Dispose detaches them so the VM tree — plus every cached

@@ -7,6 +7,9 @@
 > - New default toolbar: connect, disable hangups | navigation, movement start/pause/stop | party, backscroll | all-auto plus auto combat/nuke/heal-rest/bless/get-items/get-cash/sneak
 > - Default auto engines now boot on: combat, nuke, heal/rest, bless, get-items, get-cash, sneak (light/hide/search default off)
 > - Existing profiles are migrated to the new keybinds + toolbar layout on next load; their auto-mode settings are left untouched
+> - Game Data Browser hotkey (F3) now toggles the window closed on re-press, matching every other panel
+> - "Manage" window renamed to "Navigation Management"; double-clicking a loop / Auto-Lair now runs it (was edit)
+> - Navigation Management rows reordered to Run · Load · Edit · Delete, and Auto-Lair setups gain Run / Load actions (were rail-only)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

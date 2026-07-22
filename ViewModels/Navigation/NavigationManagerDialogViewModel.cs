@@ -46,6 +46,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private readonly RoomSearchService? _search;
     private readonly AutoWalkManager? _walker;
     private readonly MovementController? _movement;
+    private readonly AutoLairManager? _autoLair;
     private readonly Action? _onDraftConsumed;
 
     // Flat backing rows for the Loops pane — source the tree is grouped from + drives HasLoops.
@@ -99,7 +100,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         LogService? log = null,
         RoomSearchService? search = null,
         AutoWalkManager? walker = null,
-        MovementController? movement = null)
+        MovementController? movement = null,
+        AutoLairManager? autoLair = null)
     {
         ArgumentNullException.ThrowIfNull(loops);
         ArgumentNullException.ThrowIfNull(lairSetups);
@@ -120,6 +122,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _search = search;
         _walker = walker;
         _movement = movement;
+        _autoLair = autoLair;
         Draft = draft;
         _onDraftConsumed = onDraftConsumed;
         _runningLoopName = runner?.CurrentLoop?.Name ?? string.Empty;
@@ -428,9 +431,42 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _lairSetups.Delete(row.Source.Name);
     }
 
-    // Run / Load are rail-only actions; the manager dialog is CRUD-only
-    // (Edit + Delete) for saved setups, mirroring how the Loops section
-    // works.
+    // Run a saved Auto-Lair setup immediately — loads its markers into the
+    // AutoLairManager (wiping any current ones) and starts the scheduler, the
+    // "run a saved lair without opening the map" path that mirrors RunLoop.
+    // The map-mode transition the Navigation rail does on Run is window-only
+    // sugar and deliberately skipped here — this dialog isn't the map.
+    [RelayCommand]
+    private void RunLairSetup(ManagerLairSetupRow? row)
+    {
+        if (row is null || _autoLair is null) return;
+        LoadLairMarkers(row.Source);
+        _autoLair.Start();
+    }
+
+    // Stage a saved setup's markers without starting the scheduler — lets the
+    // user load a lair here and begin it later. Mirrors LoadLoop.
+    [RelayCommand]
+    private void LoadLairSetup(ManagerLairSetupRow? row)
+    {
+        if (row is null || _autoLair is null) return;
+        LoadLairMarkers(row.Source);
+    }
+
+    // Shared body for RunLairSetup / LoadLairSetup: stop any in-flight loop /
+    // lair, then swap the AutoLairManager's marker set to this setup's.
+    private void LoadLairMarkers(LairSetup setup)
+    {
+        if (_autoLair is null) return;
+        if (_runner is not null && _runner.State != LoopState.Idle)
+            _runner.Stop("auto-lair setup loaded");
+        if (_autoLair.IsActive)
+            _autoLair.Stop("auto-lair setup loaded");
+
+        _autoLair.Clear();
+        foreach (LairMarker m in setup.Markers)
+            _autoLair.Mark(new RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
+    }
 
     // ----- folder commands -------------------------------------------
     // Folders are SHARED on-disk between loops and lairs (one Loops

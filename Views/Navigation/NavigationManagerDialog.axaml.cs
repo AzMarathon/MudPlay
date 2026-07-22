@@ -8,8 +8,8 @@ using FujinTerm.ViewModels.Navigation;
 namespace FujinTerm.Views.Navigation;
 
 // Modeless dialog hosting saved Loops + Auto-Lair markers for
-// rename/delete/unmark actions. Surfaced from the NavigationWindow's "Manage"
-// chip in the action row.
+// run/load/edit/delete actions. Surfaced from the NavigationWindow's
+// "Navigation Management" button in the action row.
 //
 // Drag-drop lives in code-behind (allowed for drag-session state per CLAUDE.md):
 // a leaf row is the drag source; a folder node — or the empty tree area (root) —
@@ -41,16 +41,16 @@ public partial class NavigationManagerDialog : Window
         WalkTreeView.AddHandler(DoubleTappedEvent, OnRowDoubleTapped, RoutingStrategies.Bubble);
     }
 
-    // Double-clicking a leaf opens its editor — same action as the Edit
-    // button / context menu, just the faster gesture. Folder nodes are
-    // ignored (LeafRowOf returns null for them).
+    // Double-clicking a leaf runs it — the fast "play this now" gesture,
+    // matching each row's green Run button. Edit stays reachable via the Edit
+    // button / context menu. Folder nodes are ignored (LeafRowOf returns null).
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is not NavigationManagerDialogViewModel vm) return;
         switch (LeafRowOf(e.Source as StyledElement))
         {
-            case ManagerLoopRow loop:      vm.EditLoopCommand.Execute(loop); break;
-            case ManagerLairSetupRow lair: vm.EditLairSetupCommand.Execute(lair); break;
+            case ManagerLoopRow loop:      vm.RunLoopCommand.Execute(loop); break;
+            case ManagerLairSetupRow lair: vm.RunLairSetupCommand.Execute(lair); break;
         }
     }
 

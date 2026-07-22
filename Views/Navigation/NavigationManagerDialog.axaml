@@ -6,7 +6,7 @@
         mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="540"
         x:Class="FujinTerm.Views.Navigation.NavigationManagerDialog"
         x:DataType="vm:NavigationManagerDialogViewModel"
-        Title="Manage"
+        Title="Navigation Management"
         Width="640" Height="560"
         WindowStartupLocation="CenterOwner">
 
@@ -270,19 +270,19 @@
                                                     </TextBlock>
                                                 </StackPanel>
                                                 <Button Grid.Column="1"
-                                                        Content="Load"
-                                                        FontSize="10"
-                                                        Padding="8,2"
-                                                        ToolTip.Tip="Stage this loop as active; start it later from the toolbar"
-                                                        Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).LoadLoopCommand}"
-                                                        CommandParameter="{Binding}"/>
-                                                <Button Grid.Column="2"
                                                         Content="Run"
                                                         FontSize="10"
                                                         Padding="8,2"
                                                         Foreground="{StaticResource AccentGreenBrush}"
                                                         ToolTip.Tip="Run this loop now (no map needed)"
                                                         Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).RunLoopCommand}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Grid.Column="2"
+                                                        Content="Load"
+                                                        FontSize="10"
+                                                        Padding="8,2"
+                                                        ToolTip.Tip="Stage this loop as active; start it later from the toolbar"
+                                                        Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).LoadLoopCommand}"
                                                         CommandParameter="{Binding}"/>
                                                 <Button Grid.Column="3"
                                                         Content="Edit"
@@ -301,11 +301,11 @@
                                             </Grid>
                                             <Border.ContextMenu>
                                                 <ContextMenu>
-                                                    <MenuItem Header="Load (stage as active)"
-                                                              Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).LoadLoopCommand}"
-                                                              CommandParameter="{Binding}"/>
                                                     <MenuItem Header="Run now"
                                                               Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).RunLoopCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Load (stage as active)"
+                                                              Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).LoadLoopCommand}"
                                                               CommandParameter="{Binding}"/>
                                                     <MenuItem Header="Edit…"
                                                               Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).EditLoopCommand}"
@@ -324,7 +324,7 @@
                                     <!-- Auto-Lair leaf. -->
                                     <DataTemplate DataType="vm:ManagerLairSetupRow">
                                         <Border Classes="ManagerRow" Background="Transparent" Tag="{Binding}">
-                                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto"
                                                   ColumnSpacing="6" MinWidth="0">
                                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding Name}"
@@ -339,16 +339,29 @@
                                                         <Run Text="{Binding Notes}"/>
                                                     </TextBlock>
                                                 </StackPanel>
-                                                <!-- Run / Load belong on the rail row, not the
-                                                     Manage dialog — per UX direction. Edit + ✕
-                                                     delete are the two CRUD actions the dialog
-                                                     exposes, same shape as the loop rows. -->
+                                                <!-- Run / Load / Edit / ✕ delete — same row shape
+                                                     as the loop rows. Run loads this setup's
+                                                     markers into the scheduler and starts it;
+                                                     Load stages the markers without starting. -->
                                                 <Button Grid.Column="1"
+                                                        Content="Run" FontSize="10"
+                                                        Padding="8,2"
+                                                        Foreground="{StaticResource AccentGreenBrush}"
+                                                        ToolTip.Tip="Run this Auto-Lair setup now (no map needed)"
+                                                        Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).RunLairSetupCommand}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Grid.Column="2"
+                                                        Content="Load" FontSize="10"
+                                                        Padding="8,2"
+                                                        ToolTip.Tip="Stage this setup's markers; start it later"
+                                                        Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).LoadLairSetupCommand}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Grid.Column="3"
                                                         Content="Edit" FontSize="10"
                                                         Padding="8,2"
                                                         Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).EditLairSetupCommand}"
                                                         CommandParameter="{Binding}"/>
-                                                <Button Grid.Column="2"
+                                                <Button Grid.Column="4"
                                                         Content="✕" FontSize="10"
                                                         Padding="6,2"
                                                         ToolTip.Tip="Delete this setup"
@@ -358,6 +371,12 @@
                                             </Grid>
                                             <Border.ContextMenu>
                                                 <ContextMenu>
+                                                    <MenuItem Header="Run now"
+                                                              Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).RunLairSetupCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Load (stage markers)"
+                                                              Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).LoadLairSetupCommand}"
+                                                              CommandParameter="{Binding}"/>
                                                     <MenuItem Header="Edit…"
                                                               Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).EditLairSetupCommand}"
                                                               CommandParameter="{Binding}"/>
