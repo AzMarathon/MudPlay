@@ -108,6 +108,12 @@ public sealed class DarkRoomCombatIntegrationTests
             ? string.Empty
             : Encoding.Latin1.GetString(Sent[^1]).TrimEnd('\r');
 
+        // Count only real commands (attacks), not the bare "\r" room-refresh
+        // nudges CombatManager sends to force a re-display when a combat line
+        // arrives before the roster is known. A CR decodes to "" once trimmed.
+        public int AttackSends => Sent.Count(b =>
+            Encoding.Latin1.GetString(b).TrimEnd('\r').Length > 0);
+
         public void Dispose()
         {
             Watcher.Dispose();
@@ -219,5 +225,57 @@ public sealed class DarkRoomCombatIntegrationTests
 
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
         Assert.Single(h.Sent);
+    }
+
+    [Fact]
+    public void RepeatedSameMonsterAttacks_InDark_EngageOneTargetOneSwing()
+    {
+        // A dark room re-emits a mob's attack line every round, and a single mob
+        // can swing more than once per round — four "cave lizard swings at you"
+        // lines do NOT mean four cave lizards. Name dedupe collapses them to one
+        // injected entity, so CombatManager engages one target and swings once,
+        // never fabricating phantom lizards it would then chase around an empty
+        // room. This pins the contract end-to-end (watcher → classifier → combat).
+        using Harness h = new();
+        h.AddMonster(1, "cave lizard");
+        h.EnterDarkRoom();
+
+        h.Feed("The cave lizard swings at you.");
+        h.Feed("The cave lizard rips you for 6 damage!");
+        h.Feed("The cave lizard swings at you.");
+        h.Feed("The cave lizard swings at you.");
+
+        Assert.Equal("cave lizard", h.Combat.CurrentTarget);
+        Assert.Equal(1, h.AttackSends);              // one swing, not four
+        Assert.Equal("a cave lizard", h.LastSent);
+    }
+
+    [Fact]
+    public void SurvivorReReveals_AfterDedupedMobDies_NeitherStuckNorPhantom()
+    {
+        // Two cave lizards share the dark room, but their attack lines are
+        // indistinguishable, so they dedupe to one injected entity. We kill the
+        // first and the roster empties. The survivor's next swing re-reveals it,
+        // re-engaging — proving the one-entity view neither strands a real second
+        // mob (under-count self-heals) nor leaves a phantom to chase once the room
+        // is genuinely clear.
+        using Harness h = new();
+        h.AddMonster(1, "cave lizard");
+        h.EnterDarkRoom();
+
+        h.Feed("The cave lizard swings at you.");
+        h.Feed("The cave lizard swings at you.");     // 2nd lizard, same name → deduped
+        Assert.Equal(1, h.AttackSends);
+        Assert.Equal("cave lizard", h.Combat.CurrentTarget);
+
+        // First lizard dies — mirror the AppServices MonsterDeath wiring.
+        h.Combat.NoteMonsterDied("cave lizard");
+        h.Classifier.RemoveDeadEntity("cave lizard");
+        Assert.Null(h.Combat.CurrentTarget);          // roster empty, target cleared
+
+        // The surviving lizard swings again — re-revealed, re-engaged.
+        h.Feed("The cave lizard swings at you.");
+        Assert.Equal("cave lizard", h.Combat.CurrentTarget);
+        Assert.Equal(2, h.AttackSends);               // one swing per genuine engage
     }
 }
