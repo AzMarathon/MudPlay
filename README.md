@@ -1,8 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.96.1**
-> - Dark-room roster no longer accumulates: each dark advance resets the occupant list (keeping only the mob we're actively fighting), so pursuit arrivals stop piling into phantoms that blocked engagement and stalled the loop
+> **Version 1.96.2**
+> - "leave party" typed mid-loop no longer stalls a dark walk: the client stops misreading the phrase as a text-exit move that jammed the room-tracker's pending queue after a single step
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

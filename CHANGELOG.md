@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.96.2
+
+- "leave party" typed mid-loop no longer stalls a dark walk: the client stops misreading the phrase as a text-exit move that jammed the room-tracker's pending queue after a single step
+- bug reports addressed: paradigm-20260722-111523
+
 ## 1.96.1
 
 - Dark-room roster no longer accumulates: each dark advance resets the occupant list (keeping only the mob we're actively fighting), so pursuit arrivals stop piling into hundreds of phantoms that blocked engagement and stalled the loop 30s a room

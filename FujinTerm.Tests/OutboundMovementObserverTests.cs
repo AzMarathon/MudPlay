@@ -225,6 +225,27 @@ public sealed class OutboundMovementObserverTests : IDisposable
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
     }
 
+    [Theory]
+    [InlineData("leave party")]
+    [InlineData("LEAVE PARTY")]
+    [InlineData("leave  party")]
+    public void LeaveParty_IsNotAMove_TrackerStaysConfirmed(string command)
+    {
+        // "leave" is a text-exit verb, so "leave party" would otherwise match
+        // TextMovementPattern and enqueue a phantom, cardinal-less pending move.
+        // In a dark room that phantom has no mapped exit and jams the pending
+        // queue, stalling the walk after one step (bug paradigm-20260722-111523,
+        // typed manually mid-loop trying to leave a party). "leave party" isn't a
+        // valid game command and never a move — the tracker must stay put.
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(Cmd(command));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
     [Fact]
     public void Cardinal_RapidDuplicate_DebouncedByTracker()
     {
