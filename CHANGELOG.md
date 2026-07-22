@@ -2,6 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.96.0
+
+- New Session Stats → Players Seen window: logs every player spotted (also-here match, walk-in, or a failed sneak you notice) with timestamp, where (room name + map/room), who, and total times seen
+- Players Seen data is per-character and persists on the profile; a Clear history button wipes it
+- Transaction history "Time" column is now "Timestamp" and shows the date too (ddMMMyy HH:mm:ss)
+- Quest seed: Phoenix Feather guide adds an optional "buy rafts for you + party members" step before `use potion`
+- Dark-room hunting now settles a short beat after each move so monsters that reveal on entry get engaged, instead of the loop racing past the fight and double-firing moves
+- bug reports addressed: paradigm-20260722-024841, paradigm-20260722-024915
+
 ## 1.95.0
 
 - New default keybinds: Alt+H connect/disconnect, Alt+M navigation, Alt+V/B/N movement start/pause/stop, Alt+L backscroll, Alt+S capture, Alt+C conversation; F1 workshop, F2 spell book, F3 game data, F4 program log, F5 wire inspector (profile + quit shortcuts unchanged)

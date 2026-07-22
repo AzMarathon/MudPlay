@@ -726,6 +726,13 @@ public sealed class AppServices
     // PlayerLooksAtYou pattern + RoomEntry.ArrivalObserved.
     public Game.PlayerLookManager PlayerLook { get; private set; } = null!;
 
+    // Per-character log of players seen in the world — one aggregated row per
+    // player with last-seen time / room and a running sighting count. Feeds the
+    // Session Stats → Players Seen window. Records off the same room-presence
+    // hooks Greet / PlayerLook use (Also-here matches + room walk-ins); persists
+    // on the loaded profile.
+    public Game.PlayerSightingTracker PlayerSightings { get; private set; } = null!;
+
     // Owns PlayerState.InCombat and
     // the Game.Map.MovementCoordinator.CombatGate hold
     // state. Cleared automatically when the room is free of
@@ -869,6 +876,14 @@ public sealed class AppServices
     // RoomTracker.IsInDarkRoom) and injects it into RoomClassifier so
     // CombatManager engages it as if it had been listed.
     public Game.Combat.DarkRoomCombatWatcher DarkRoomCombat { get; private set; } = null!;
+
+    // Holds the movement stack for a short beat after each dead-reckoned dark-room
+    // advance, so the game engine has time to reveal a hostile (its "strides in"
+    // arrival / first attack line) before the loop fires the next move. Without it
+    // the dark advance confirms synchronously and the walker marches past the
+    // fight. Constructed BEFORE the movement engines so its StateChanged handler
+    // asserts the settle gate ahead of their synchronous SendNextStep.
+    public Game.Map.DarkRoomMovementSettle DarkRoomSettle { get; private set; } = null!;
 
     // Passive HP/MA threshold engine. Asserts /
     // clears HealthRecovery + ManaRecovery gates and drives the
@@ -2615,6 +2630,14 @@ public sealed class AppServices
             currentTarget: () => Combat.CurrentTarget,
             log: Log);
 
+        // Subscribes to RoomTracker.StateChanged HERE — before Walker / LoopRunner
+        // below — so on a synchronous dark-room advance it asserts the settle gate
+        // (flipping the engines to Paused) before their own StateChanged handlers
+        // run SendNextStep. That ordering is what stops the loop from racing past a
+        // dark-room fight; see DarkRoomMovementSettle for the full race writeup.
+        DarkRoomSettle = new Game.Map.DarkRoomMovementSettle(
+            RoomTracker, MovementCoordinator, Log);
+
         // HealthManager. Master on/off is
         // GeneralSettings.AutoMode.AutoHealRest (shared with the
         // Settings → General checkbox + toolbar Toggle button). When
@@ -3432,6 +3455,15 @@ public sealed class AppServices
         // Wire-sender bound by MainWindowViewModel after telnet connects.
         PlayerLook = new Game.PlayerLookManager(Router, RoomEntry, Party.State,
             selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+        // Players Seen log. Records off the same room-presence hooks (Also-here
+        // classification + room walk-ins) and shares the self-name resolution;
+        // persists the aggregated rows on the loaded character's profile. Owns no
+        // room-source subscriptions of its own — we wire the two hooks here.
+        PlayerSightings = new Game.PlayerSightingTracker(
+            () => RoomTracker.State.CurrentRoom, Profile,
+            selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+        RoomClassifier.EntitiesObserved += PlayerSightings.NoteAlsoHere;
+        RoomEntry.ArrivalObserved += PlayerSightings.NoteArrival;
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The

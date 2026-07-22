@@ -1,15 +1,15 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FujinTerm.ViewModels"
-        xmlns:cash="using:FujinTerm.Game.Cash"
+        xmlns:profile="using:FujinTerm.Models.Profile"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="440"
-        x:Class="FujinTerm.Views.TransactionHistoryWindow"
-        x:DataType="vm:TransactionHistoryViewModel"
-        Title="Transaction History"
-        Width="520" Height="440"
-        MinWidth="360" MinHeight="240"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="440"
+        x:Class="FujinTerm.Views.PlayersSeenWindow"
+        x:DataType="vm:PlayersSeenViewModel"
+        Title="Players Seen"
+        Width="560" Height="440"
+        MinWidth="400" MinHeight="240"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
@@ -21,12 +21,15 @@
                 BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                 BorderThickness="0,0,0,1"
                 Padding="10,6">
-            <Grid ColumnDefinitions="120,56,*">
+            <Grid ColumnDefinitions="120,*,120,48">
                 <TextBlock Grid.Column="0" Text="Timestamp"
                            Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
-                <TextBlock Grid.Column="1" Text="Type"
+                <TextBlock Grid.Column="1" Text="Where"
                            Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
-                <TextBlock Grid.Column="2" Text="Action"
+                <TextBlock Grid.Column="2" Text="Who"
+                           Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
+                <TextBlock Grid.Column="3" Text="Times"
+                           HorizontalAlignment="Right"
                            Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
             </Grid>
         </Border>
@@ -50,39 +53,40 @@
                      BorderThickness="0"
                      SelectionMode="Multiple">
                 <ListBox.ItemTemplate>
-                    <DataTemplate DataType="cash:TransactionEntry">
-                        <Grid ColumnDefinitions="120,56,*" Margin="4,2">
+                    <DataTemplate DataType="profile:PlayerSighting">
+                        <Grid ColumnDefinitions="120,*,120,48" Margin="4,2">
                             <TextBlock Grid.Column="0"
-                                       Text="{Binding Time, StringFormat='{}{0:ddMMMyy HH:mm:ss}'}"
+                                       Text="{Binding LastSeen, StringFormat='{}{0:ddMMMyy HH:mm:ss}'}"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
                                        FontFamily="{StaticResource FontMono}"
                                        FontSize="11"
                                        VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding Kind}"
+                            <SelectableTextBlock Grid.Column="1"
+                                                 Text="{Binding WhereText}"
+                                                 Foreground="{StaticResource ChromeFgSecBrush}"
+                                                 FontFamily="{StaticResource FontMono}"
+                                                 FontSize="11"
+                                                 TextWrapping="Wrap"
+                                                 VerticalAlignment="Center"/>
+                            <SelectableTextBlock Grid.Column="2"
+                                                 Text="{Binding Name}"
+                                                 Foreground="{StaticResource ChromeFgBrush}"
+                                                 FontFamily="{StaticResource FontMono}"
+                                                 FontSize="12"
+                                                 VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="3"
+                                       Text="{Binding TimesSeen}"
+                                       HorizontalAlignment="Right"
                                        Foreground="{StaticResource ChromeFgSecBrush}"
                                        FontFamily="{StaticResource FontMono}"
                                        FontSize="11"
                                        VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                <SelectableTextBlock Text="{Binding Detail}"
-                                                     Foreground="{StaticResource ChromeFgBrush}"
-                                                     FontFamily="{StaticResource FontMono}"
-                                                     FontSize="12"
-                                                     TextWrapping="Wrap"/>
-                                <SelectableTextBlock Text="{Binding Location}"
-                                                     IsVisible="{Binding Location, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                                     Foreground="{StaticResource ChromeFgMutedBrush}"
-                                                     FontFamily="{StaticResource FontMono}"
-                                                     FontSize="10"
-                                                     TextWrapping="Wrap"/>
-                            </StackPanel>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <TextBlock Text="No transactions yet."
+            <TextBlock Text="No players seen yet."
                        IsVisible="{Binding IsEmpty}"
                        Foreground="{StaticResource ChromeFgMutedBrush}"
                        FontSize="12"

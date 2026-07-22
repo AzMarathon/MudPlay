@@ -54,6 +54,10 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // contract (re-press closes) rather than being spawned here.
     private readonly Action _openTransactionHistory;
 
+    // Opens the Players Seen window — routed back to MainWindowViewModel for the
+    // same modeless toggle-window reason as the transaction opener above.
+    private readonly Action _openPlayersSeen;
+
     // Drives the live wall-clock ticking of durations / rates: the
     // time-derived figures advance with real time even when no tracker input
     // fires, so the user sees the session clock move.
@@ -129,7 +133,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         PlayerStats stats,
         GameDataCache gameData,
         CurrencyNaming naming,
-        Action openTransactionHistory)
+        Action openTransactionHistory,
+        Action openPlayersSeen)
     {
         ArgumentNullException.ThrowIfNull(combat);
         ArgumentNullException.ThrowIfNull(time);
@@ -139,6 +144,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(naming);
         ArgumentNullException.ThrowIfNull(openTransactionHistory);
+        ArgumentNullException.ThrowIfNull(openPlayersSeen);
         _combatTracker = combat;
         _timeTracker = time;
         _activityTracker = activity;
@@ -147,6 +153,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _gameData = gameData;
         _naming = naming;
         _openTransactionHistory = openTransactionHistory;
+        _openPlayersSeen = openPlayersSeen;
 
         LoadLayout();
 
@@ -368,6 +375,11 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // deposits + stash-room hides recorded this session).
     [RelayCommand]
     private void OpenTransactionHistory() => _openTransactionHistory();
+
+    // "Players Seen" button — opens the modeless per-character log of players
+    // encountered in the world (Also-here matches + room walk-ins).
+    [RelayCommand]
+    private void OpenPlayersSeen() => _openPlayersSeen();
 
     // ----- Refresh plumbing --------------------------------------------
 
