@@ -31,11 +31,11 @@ public sealed class DarkRoomMovementSettle : IDisposable
 {
     public const string LogCategory = "DarkRoomSettle";
 
-    // A dark reveal lands within roughly a game round of entry; 1s covers the
+    // A dark reveal lands within roughly a game round of entry; 900ms covers the
     // arrival / first-attack line without stalling an empty dark corridor for
     // long. Each fresh dark advance restarts the window, so a corridor of empty
     // dark rooms settles one short beat per room, not a single long freeze.
-    public static readonly TimeSpan DefaultSettleWindow = TimeSpan.FromSeconds(1);
+    public static readonly TimeSpan DefaultSettleWindow = TimeSpan.FromMilliseconds(900);
 
     private readonly RoomTracker _tracker;
     private readonly MovementCoordinator _coordinator;

@@ -5,6 +5,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 ## 1.96.2
 
 - "leave party" typed mid-loop no longer stalls a dark walk: the client stops misreading the phrase as a text-exit move that jammed the room-tracker's pending queue after a single step
+- Dark-room hunt settle window trimmed 1.0s → 0.9s per move
 - bug reports addressed: paradigm-20260722-111523
 
 ## 1.96.1
