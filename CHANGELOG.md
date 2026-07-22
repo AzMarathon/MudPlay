@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.97.0
+
+- Dark-room hunt diagnostics: the settle-gate log now reports whether each window ended on a revealed pursuer (with the reveal-lag in ms) or expired empty, so a capture shows the true reveal-lag distribution and the per-room cost of an empty dark room
+- Combat idle-stall watchdog log now names how long the gate was held, how long it sat idle, and what last counted as activity — distinguishing a post-kill idle release from an unmatched-attack-line pattern gap
+
 ## 1.96.2
 
 - "leave party" typed mid-loop no longer stalls a dark walk: the client stops misreading the phrase as a text-exit move that jammed the room-tracker's pending queue after a single step
