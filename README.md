@@ -5,6 +5,7 @@
 > - Item Finder reorders columns to the item kind it's showing: an all-armour view leads slot, name, type, level, enc, ac, dr; an all-weapon view leads name, type, level, str, dmg, swings, hit magic, enc
 > - Item Finder hides the Slot column in an all-weapon view (every weapon shares the Weapon slot)
 > - Item Finder's Swings (W. Spd) column now shows the weapon's raw speed alongside the modelled swing count, e.g. "2.3 (30)"
+> - Navigation window reopens in the collapse state you left it — fixes the side-panel toggle resetting to expanded and clamping the saved (narrower) window size back to the expanded minimum
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

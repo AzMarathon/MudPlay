@@ -22,6 +22,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(services);
         _services = services;
 
+        // Reopen in the collapse mode the user last left. Set the backing field
+        // directly (not the property) so this seeding doesn't loop back into
+        // OnMapExpandedChanged and re-save during construction. Read here, before
+        // the window's Opened restores geometry, so the collapsed layout's lower
+        // minimum size is already in force and the saved (narrower) bounds aren't
+        // clamped back up by the expanded min-width.
+        if (_services.Profile.Current is { NavMapCollapsed: true })
+            _mapExpanded = false;
+
         // 1 s tick — keeps the CURRENT NAV lair countdowns + the
         // BUILDING-LAIR strip in sync as time passes. Only runs while
         // the user cares (build mode OR active run); idle Navigation
@@ -628,6 +637,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(WindowMinWidth))]
     [NotifyPropertyChangedFor(nameof(WindowMinHeight))]
     private bool _mapExpanded = true;
+
+    // Persist the collapse toggle per-character so the window reopens the way the
+    // user left it. Write-through-on-change (like SessionStatsLayoutStore) so the
+    // preference survives even if the session ends without another explicit save.
+    partial void OnMapExpandedChanged(bool value)
+    {
+        if (_services.Profile.Current is not { } profile) return;
+        bool collapsed = !value;
+        if (profile.NavMapCollapsed == collapsed) return;
+        profile.NavMapCollapsed = collapsed;
+        _services.Profile.Save();
+    }
 
     // Arrow points toward the panels it acts on: ▶ (toward the hidden-away right
     // rail) while expanded, ◀ (pulling the rail back in) while collapsed.
