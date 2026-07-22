@@ -3,6 +3,9 @@
 <!-- current-version:start -->
 > **Version 1.92.0**
 > - Dark-room auto-combat now follows a party leader: a "moves to attack <monster>" announce injects that monster so we engage the same round instead of idling until it swings at us
+> - Realm Rankings no longer prunes the board when you view a smaller list: the table merges the most-recent reading per hero, so a "top 10" of a captured "top 100" refreshes the leaders without dropping ranks 11+
+> - A view is only treated as a cap when a numbered request comes back short (asked top 100, got 10 = capped at 10); choosing to display fewer retains the rest
+> - The widest real board is pinned in capture history so a run of small views can't evict it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

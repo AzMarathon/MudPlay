@@ -211,4 +211,87 @@ public sealed class LeaderboardXpRateCalculatorTests
         });
         Assert.Empty(r.Notices);
     }
+
+    [Fact]
+    public void Build_SmallerViewAfterFullBoard_RetainsHiddenRanks()
+    {
+        // A "top 100" enumerated the whole realm (5 heroes shown, fewer than the 100
+        // asked → complete). A later bare "top" viewed only the top 2 leaders. The
+        // board must NOT shrink to 2 — ranks 3-5 keep their last-known reading and
+        // stay listed. This is the reported bug: viewing 10 of 100 pruned the other 90.
+        LeaderboardReport r = LeaderboardXpRateCalculator.Build(new[]
+        {
+            Snap(T, 0,   E(1, "Alice Ace", "Bard", 5500), E(2, "Bob Blade", "Mage", 5100)),
+            Snap(T.AddHours(-2), 100,
+                 E(1, "Alice Ace",  "Bard",   5000),
+                 E(2, "Bob Blade",  "Mage",   4000),
+                 E(3, "Cara Cane",  "Cleric", 3000),
+                 E(4, "Dan Dusk",   "Ranger", 2000),
+                 E(5, "Eve Edge",   "Thief",  1000)),
+        });
+
+        // Full board retained, ranked by experience.
+        Assert.Equal(5, r.Rows.Count);
+        Assert.Contains(r.Rows, x => x.Name.StartsWith("Cara", StringComparison.Ordinal));
+        Assert.Contains(r.Rows, x => x.Name.StartsWith("Dan", StringComparison.Ordinal));
+        Assert.Contains(r.Rows, x => x.Name.StartsWith("Eve", StringComparison.Ordinal));
+
+        // Leaders refreshed to the newer view's numbers; hidden ranks keep last-known.
+        Assert.Equal(5500, RowFor(r, "Alice").Experience);
+        Assert.Equal(5100, RowFor(r, "Bob").Experience);
+        Assert.Equal(3000, RowFor(r, "Cara").Experience);
+
+        // A partial re-view of the leaders must not spawn "gone" reroll notices for
+        // the ranks it simply didn't display.
+        Assert.Empty(r.Notices);
+    }
+
+    [Fact]
+    public void Build_GenuineCap_ShortNumberedRequest_ShowsWholePoolOnly()
+    {
+        // "top 100" returned only 2 rows (fewer than asked) → the realm genuinely
+        // holds 2 ranked heroes. That short list IS the whole board.
+        LeaderboardReport r = LeaderboardXpRateCalculator.Build(new[]
+        {
+            Snap(T, 100, E(1, "Top Dog", "Bard", 9000), E(2, "Number Two", "Mage", 8000)),
+        });
+
+        Assert.Equal(2, r.Rows.Count);
+        Assert.True(r.IsComplete);
+    }
+
+    [Fact]
+    public void Build_SmallViewCannotEvictKnownBoardFromReport()
+    {
+        // Merging is by first name across the whole ring: even when the newest
+        // capture is a tiny view, a hero seen only in an older, wider capture stays
+        // on the board with their last-known reading rather than vanishing.
+        LeaderboardReport r = LeaderboardXpRateCalculator.Build(new[]
+        {
+            Snap(T,              0,   E(1, "Lead Er", "Bard", 7000)),
+            Snap(T.AddHours(-1), 100, E(1, "Lead Er", "Bard", 6000), E(2, "Deep Cut", "Mage", 500)),
+        });
+
+        // Deep Cut sits far below the single-row view's cutoff (7000) — an overtake,
+        // not a departure — so they're retained, not pruned or flagged gone.
+        Assert.Contains(r.Rows, x => x.Name.StartsWith("Deep", StringComparison.Ordinal));
+        Assert.Empty(r.Notices);
+    }
+
+    [Fact]
+    public void Build_RankByExperience_AcrossMergedBoard()
+    {
+        // Ranks come from experience over the merged board, not any one capture's
+        // stored rank: the refreshed leader outranks a hero seen only older.
+        LeaderboardReport r = LeaderboardXpRateCalculator.Build(new[]
+        {
+            Snap(T,              0,   E(1, "Fast Climber", "Bard", 9999)),
+            Snap(T.AddHours(-1), 100, E(1, "Old Timer", "Mage", 8000), E(2, "Fast Climber", "Bard", 1000)),
+        });
+
+        Assert.Equal("Fast Climber", r.Rows[0].Name);
+        Assert.Equal(1, r.Rows[0].Rank);
+        Assert.Equal("Old Timer", r.Rows[1].Name);
+        Assert.Equal(2, r.Rows[1].Rank);
+    }
 }

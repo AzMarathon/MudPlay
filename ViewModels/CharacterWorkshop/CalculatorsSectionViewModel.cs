@@ -1173,18 +1173,21 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         }
     }
 
-    // Request a fresh listing at the current stored depth: "top N" where N is the
-    // last rank of the latest capture (a 300-deep list re-requests top 300),
-    // defaulting to 100 before the first capture. The reply is captured
-    // automatically off the terminal, so the table refreshes on its own.
+    // Request a fresh listing at the DEEPEST depth we've ever captured (a 300-deep
+    // list re-requests top 300), defaulting to 100 before the first capture. Reading
+    // the depth from the widest stored capture — not just the newest — means a recent
+    // small "top 10" view doesn't shrink the refresh back down. Asking at least 100
+    // also keeps the request over-running a small board so its short reply reveals
+    // the true cap (IsComplete). The reply is captured automatically off the
+    // terminal, so the table refreshes on its own.
     [RelayCommand]
     private void ParseToplist()
     {
         int n = 100;
-        if (_leaderboards.Snapshots.Count > 0)
+        foreach (LeaderboardSnapshot snap in _leaderboards.Snapshots)
         {
-            IReadOnlyList<LeaderboardEntry> es = _leaderboards.Snapshots[0].Entries;
-            if (es.Count > 0) n = Math.Max(es.Count, es[^1].Rank);
+            if (snap.Entries.Count == 0) continue;
+            n = Math.Max(n, Math.Max(snap.Entries.Count, snap.Entries[^1].Rank));
         }
         AppServices.Current.SendGameCommand($"top {n}");
     }
