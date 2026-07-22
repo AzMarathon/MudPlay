@@ -4117,12 +4117,14 @@ public sealed class AppServices
         ComebackRequest = new Game.Remote.ComebackRequester(Router, RoomTracker, Log);
 
         // Follower-side reconnect auto-rejoin. Mirrors live follower membership
-        // into the profile (crash-survivable) and, on the first in-game room
-        // after a reconnect, telepaths @comeback + @invite to re-form the party.
-        // Gated by the Auto-All kill switch like MainMenuEntry — a manual-play
-        // character that silenced automation won't auto-rejoin.
+        // into the profile (crash-survivable) and, on the first in-game prompt
+        // after a reconnect, telepaths @comeback to the leader to re-form the
+        // party. Keys on the statline prompt (not the room display) so a dark
+        // room can't defer the fire past the reconnect. Gated by the Auto-All
+        // kill switch like MainMenuEntry — a manual-play character that silenced
+        // automation won't auto-rejoin.
         PartyRejoin = new Game.Remote.PartyRejoinCoordinator(
-            Router, PartyState, RoomTracker,
+            PromptScanner, PartyState, RoomTracker,
             isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
             log: Log);
         // Write-through: whenever follower membership changes, stamp the loaded

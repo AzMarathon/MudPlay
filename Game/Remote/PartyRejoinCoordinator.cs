@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using FujinTerm.Game.Map;
 using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
 
 namespace FujinTerm.Game.Remote;
 
@@ -26,10 +25,14 @@ namespace FujinTerm.Game.Remote;
 // reconnect-only by construction.
 //
 // One-shot per connect. Arm() (called on every client.Connected, alongside
-// StatlineReconcile.Arm) opens a latch that fires on the first in-game room
-// display — the moment we have a room to hand the leader. If no leader is
-// remembered the fire is a no-op, so a fresh session with no prior party stays
-// quiet.
+// StatlineReconcile.Arm) opens a latch that fires on the first in-game prompt —
+// the statline the server prints once we're back in the realm. The prompt is
+// used deliberately over the room display: a dark room prints no exits, so a
+// room-display latch would survive until a light later reveals a room and then
+// misfire @comeback long after the reconnect (at a leader we may already have
+// rejoined). The statline lands even in the dark, bounding the fire to the
+// reconnect window. If no leader is remembered the fire is a no-op, so a fresh
+// session with no prior party stays quiet.
 //
 // Remembered-leader auto-join override. IsRememberedLeader is handed to
 // AutoPartyManager as a force-accept predicate: when the leader we're
@@ -43,19 +46,19 @@ public sealed class PartyRejoinCoordinator : IDisposable
 {
     public const string LogCategory = "PartyRejoin";
 
+    private readonly WirePromptScanner _scanner;
     private readonly PartyState _party;
     private readonly RoomTracker _tracker;
     private readonly Func<bool> _isAutoEnabled;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
-    private readonly List<IDisposable> _subs = new();
 
     // The leader we currently follow / should try to rejoin, as a given name.
     // Crash-survivable via PersistLeader; mirrors live follower membership.
     private string? _rememberedLeader;
 
     // One-shot rejoin latch — opened by Arm on connect, consumed on the first
-    // in-game room display.
+    // in-game prompt.
     private bool _armed;
     private bool _disposed;
 
@@ -72,15 +75,16 @@ public sealed class PartyRejoinCoordinator : IDisposable
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
     public PartyRejoinCoordinator(
-        MessageRouter router,
+        WirePromptScanner scanner,
         PartyState party,
         RoomTracker tracker,
         Func<bool>? isAutoEnabled = null,
         LogService? log = null)
     {
-        ArgumentNullException.ThrowIfNull(router);
+        ArgumentNullException.ThrowIfNull(scanner);
         ArgumentNullException.ThrowIfNull(party);
         ArgumentNullException.ThrowIfNull(tracker);
+        _scanner = scanner;
         _party = party;
         _tracker = tracker;
         // Master auto-responses gate — when it returns false (kill switch
@@ -89,9 +93,10 @@ public sealed class PartyRejoinCoordinator : IDisposable
         _isAutoEnabled = isAutoEnabled ?? (() => true);
         _log = log;
 
-        // First in-game room display after a connect is our fire signal: it
-        // proves we're in the realm and gives RoomTracker a room to send.
-        _subs.Add(router.Subscribe(KnownPatterns.RoomExits, OnRoomDisplayed));
+        // First in-game prompt after a connect is our fire signal: the statline
+        // proves we're back in the realm and lands even in a dark room, so the
+        // fire can't be deferred to a later light-reveal.
+        _scanner.PromptObserved += OnInGamePrompt;
         _party.PropertyChanged += OnPartyChanged;
     }
 
@@ -110,8 +115,7 @@ public sealed class PartyRejoinCoordinator : IDisposable
     }
 
     // Open the one-shot rejoin latch. Called on every connect; the @comeback
-    // only actually fires on the next in-game room display if a leader is
-    // remembered.
+    // only actually fires on the next in-game prompt if a leader is remembered.
     public void Arm() => _armed = true;
 
     // Force-accept predicate for AutoPartyManager: true when name is the leader
@@ -130,8 +134,7 @@ public sealed class PartyRejoinCoordinator : IDisposable
         if (_disposed) return;
         _disposed = true;
         _party.PropertyChanged -= OnPartyChanged;
-        foreach (IDisposable sub in _subs) sub.Dispose();
-        _subs.Clear();
+        _scanner.PromptObserved -= OnInGamePrompt;
     }
 
     // ----- Follower-membership tracking ---------------------------------
@@ -184,7 +187,7 @@ public sealed class PartyRejoinCoordinator : IDisposable
 
     // ----- Rejoin flow --------------------------------------------------
 
-    private void OnRoomDisplayed(MatchResult _)
+    private void OnInGamePrompt(PromptObservation _)
     {
         if (!_armed) return;
         _armed = false; // one-shot per connect
