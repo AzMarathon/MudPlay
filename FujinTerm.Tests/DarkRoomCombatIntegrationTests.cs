@@ -278,4 +278,32 @@ public sealed class DarkRoomCombatIntegrationTests
         Assert.Equal("cave lizard", h.Combat.CurrentTarget);
         Assert.Equal(2, h.AttackSends);               // one swing per genuine engage
     }
+
+    [Fact]
+    public void TwoDistinctlyNamedMobs_InDark_BothEngagedInTurn()
+    {
+        // In the dark, a distinct name IS a distinct enemy: we're swung at by a
+        // "cave lizard" while a partner announces "small cave lizard". Even if they
+        // shared a monster record, these are two separate mobs — dedupe keys on the
+        // name string, so BOTH inject and both are engaged in turn. (Collapsing them
+        // by monster number would silently drop the second, live enemy.)
+        using Harness h = new();
+        h.AddMonster(1, "cave lizard");
+        h.AddMonster(2, "small cave lizard");
+        h.EnterDarkRoom();
+
+        h.Feed("The cave lizard swings at you.");
+        h.Feed("Tristian moves to attack small cave lizard.");
+
+        Assert.Equal(2, h.Classifier.Current!.Value.Entities.Count);   // two distinct enemies
+        Assert.Equal("cave lizard", h.Combat.CurrentTarget);           // engaged first
+        Assert.Equal(1, h.AttackSends);                                // survivor not thrashed to
+
+        // The first lizard dies; the re-pick engages the still-present second mob.
+        h.Combat.NoteMonsterDied("cave lizard");
+        h.Classifier.RemoveDeadEntity("cave lizard");
+
+        Assert.Equal("small cave lizard", h.Combat.CurrentTarget);
+        Assert.Equal(2, h.AttackSends);
+    }
 }
