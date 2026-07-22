@@ -140,6 +140,39 @@ public sealed class ParadigmPositionResolver : IDisposable
         return true;
     }
 
+    // One-shot convenience for a consumer that wants a single re-fix answer
+    // rather than a standing event subscription — e.g. an @where reply that
+    // needs the game's authoritative position before it can respond. Fires `rm`
+    // via TryRequestResync; whichever of PositionResolved / ResyncFailed lands
+    // first invokes the matching callback exactly once and detaches both. Returns
+    // false when a re-fix can't be started (stock realm / no wire / throttled) so
+    // the caller can fall back immediately. Runs on the UI thread like the rest of
+    // the resolver, so the subscribe-then-detach needs no locking.
+    public bool RequestResyncOnce(string reason, Action<RoomKey> onResolved, Action onFailed)
+    {
+        ArgumentNullException.ThrowIfNull(onResolved);
+        ArgumentNullException.ThrowIfNull(onFailed);
+        if (!TryRequestResync(reason)) return false;
+
+        Action<RoomKey>? resolved = null;
+        Action? failed = null;
+        resolved = key =>
+        {
+            PositionResolved -= resolved;
+            ResyncFailed -= failed;
+            onResolved(key);
+        };
+        failed = () =>
+        {
+            PositionResolved -= resolved;
+            ResyncFailed -= failed;
+            onFailed();
+        };
+        PositionResolved += resolved;
+        ResyncFailed += failed;
+        return true;
+    }
+
     private void OnLocationObserved(MatchResult match)
     {
         if (match.Groups.Count < 2

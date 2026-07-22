@@ -153,4 +153,51 @@ public sealed class ParadigmPositionResolverTests : IDisposable
         Assert.True(failed);
         Assert.False(h.Resolver.RequestInFlight);
     }
+
+    [Fact]
+    public void RequestResyncOnce_Resolved_InvokesOnResolvedExactlyOnce()
+    {
+        Harness h = Build(paradigm: true);
+        int resolved = 0, failed = 0;
+        RoomKey? key = null;
+
+        Assert.True(h.Resolver.RequestResyncOnce("where", k => { resolved++; key = k; }, () => failed++));
+        Assert.Equal("rm\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+
+        h.Resolver.FeedLocationForTests(1, 1);
+
+        Assert.Equal(1, resolved);
+        Assert.Equal(0, failed);
+        Assert.Equal(new RoomKey(1, 1), key);
+
+        // One-shot: the callback detached itself, so a later `rm` reply doesn't
+        // re-fire it.
+        h.Resolver.FeedLocationForTests(1, 1);
+        Assert.Equal(1, resolved);
+    }
+
+    [Fact]
+    public void RequestResyncOnce_Timeout_InvokesOnFailedExactlyOnce()
+    {
+        Harness h = Build(paradigm: true);
+        int resolved = 0, failed = 0;
+
+        Assert.True(h.Resolver.RequestResyncOnce("where", _ => resolved++, () => failed++));
+        h.Resolver.FireTimeoutForTests();
+
+        Assert.Equal(0, resolved);
+        Assert.Equal(1, failed);
+    }
+
+    [Fact]
+    public void RequestResyncOnce_Stock_ReturnsFalse_AndNeverCallsBack()
+    {
+        Harness h = Build(paradigm: false);
+        int resolved = 0, failed = 0;
+
+        Assert.False(h.Resolver.RequestResyncOnce("where", _ => resolved++, () => failed++));
+        Assert.Empty(h.Sent);
+        Assert.Equal(0, resolved);
+        Assert.Equal(0, failed);
+    }
 }

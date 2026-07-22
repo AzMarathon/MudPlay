@@ -24,7 +24,9 @@ public sealed class PartyEssentialHandlersTests
         IReadOnlyList<FujinTerm.Game.Combat.RoomEntity>? roomEntities = null,
         MovementStatus? movement = null,
         Func<string?>? readDraggedBy = null,
-        MessageFlags ailments = MessageFlags.None)
+        MessageFlags ailments = MessageFlags.None,
+        Func<FujinTerm.Game.Map.Room?>? readCurrentRoom = null,
+        Func<string, Action<FujinTerm.Game.Map.RoomKey>, Action, bool>? requestPositionRefix = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -34,11 +36,12 @@ public sealed class PartyEssentialHandlersTests
         PlayerState player = new();
         RemoteCommandManager engine = new(chat, party, players);
         PartyEssentialHandlers handlers = new(engine, player, party,
-            readCurrentRoom: () => currentRoom,
+            readCurrentRoom: readCurrentRoom ?? (() => currentRoom),
             readRoomEntities: () => roomEntities,
             readMovement: () => movement ?? default,
             readDraggedBy: readDraggedBy,
             readAilments: () => ailments);
+        if (requestPositionRefix is not null) handlers.SetPositionRefix(requestPositionRefix);
         List<byte[]> relayCapture = new();
         handlers.SetWireSender(relayCapture.Add);
         return (engine, handlers, player, party, players, relayCapture);
@@ -398,6 +401,90 @@ public sealed class PartyEssentialHandlersTests
         Assert.Contains("room 1141", reply);
         Assert.Contains("north", reply);
         Assert.Contains("east", reply);
+    }
+
+    [Fact]
+    public void Where_UnknownRoom_OnParadigm_FiresRefixAndRepliesResolvedRoom()
+    {
+        // Position unknown, but Paradigm's `rm` answers authoritatively. @where
+        // fires the re-fix; when it resolves, the tracker re-anchors and the
+        // reply carries the real room instead of a bare "Location unknown".
+        FujinTerm.Game.Map.Room resolvedRoom = new()
+        {
+            Key = new FujinTerm.Game.Map.RoomKey(1, 2155),
+            Name = "Training Grounds",
+            Exits = new Dictionary<FujinTerm.Game.Map.Direction, FujinTerm.Game.Map.RoomExit>
+            {
+                [FujinTerm.Game.Map.Direction.S] =
+                    new(new FujinTerm.Game.Map.RoomKey(1, 2156), FujinTerm.Game.Map.RoomExitHint.None, null),
+            },
+        };
+        FujinTerm.Game.Map.Room? live = null;   // unknown until the re-fix answers
+        string? refixReason = null;
+        var (engine, _, _, _, players, _) = Setup(
+            readCurrentRoom: () => live,
+            requestPositionRefix: (reason, onResolved, _) =>
+            {
+                refixReason = reason;
+                live = resolvedRoom;             // `rm` answered, tracker re-anchored
+                onResolved(resolvedRoom.Key);
+                return true;
+            });
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
+        engine.DispatchForTests(Telepath("Friend", "@where"));
+
+        string reply = LastReply(engine);
+        Assert.Contains("Training Grounds", reply);
+        Assert.Contains("map 1", reply);
+        Assert.Contains("room 2155", reply);
+        Assert.Equal("@where from Friend", refixReason);
+    }
+
+    [Fact]
+    public void Where_UnknownRoom_RefixResolvesOutsideGraph_RepliesAuthoritativeKey()
+    {
+        // `rm` answered but the room isn't in our map data — reply the raw
+        // (map, room) the game handed us rather than "Location unknown".
+        var (engine, _, _, _, players, _) = Setup(
+            readCurrentRoom: () => null,
+            requestPositionRefix: (_, onResolved, _) =>
+            {
+                onResolved(new FujinTerm.Game.Map.RoomKey(1, 2155));
+                return true;
+            });
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
+        engine.DispatchForTests(Telepath("Friend", "@where"));
+
+        string reply = LastReply(engine);
+        Assert.Contains("map 1", reply);
+        Assert.Contains("room 2155", reply);
+        Assert.Contains("not in map data", reply);
+    }
+
+    [Fact]
+    public void Where_UnknownRoom_RefixFails_RepliesLocationUnknown()
+    {
+        // The re-fix started but timed out / missed the graph — degrade to the
+        // plain reply.
+        var (engine, _, _, _, players, _) = Setup(
+            requestPositionRefix: (_, _, onFailed) => { onFailed(); return true; });
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
+        engine.DispatchForTests(Telepath("Friend", "@where"));
+
+        Assert.Contains("Location unknown", LastReply(engine));
+    }
+
+    [Fact]
+    public void Where_UnknownRoom_RefixUnavailable_RepliesLocationUnknown()
+    {
+        // Stock realm (no `rm`): the seam returns false, so @where degrades
+        // immediately without waiting on a re-fix that will never come.
+        var (engine, _, _, _, players, _) = Setup(
+            requestPositionRefix: (_, _, _) => false);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
+        engine.DispatchForTests(Telepath("Friend", "@where"));
+
+        Assert.Contains("Location unknown", LastReply(engine));
     }
 
     [Fact]

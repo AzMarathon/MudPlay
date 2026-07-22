@@ -2193,6 +2193,10 @@ public sealed class AppServices
         // is honoured without re-wiring.
         ParadigmResync = new Game.Map.ParadigmPositionResolver(Router, RoomTracker, Recovery, GameData, Log);
         ParadigmResync.ResyncFailed += Recovery.OnAuthoritativeResyncFailed;
+        // @where answers from the game's authoritative position on Paradigm: when
+        // the heuristic tracker is lost, the handler fires `rm` and replies once
+        // the resolver re-anchors, instead of a bare "Location unknown".
+        PartyEssentials.SetPositionRefix(ParadigmResync.RequestResyncOnce);
         // Recovery.TryResync is wired below once MazeSolver exists: a maze solve
         // suppresses `rm` so the asylum is driven by the realm-agnostic look-sweep
         // (stock parity) rather than rm short-circuiting the solver's relocalize.
