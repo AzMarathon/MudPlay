@@ -3,7 +3,6 @@
 <!-- current-version:start -->
 > **Version 1.96.2**
 > - "leave party" typed mid-loop no longer stalls a dark walk: the client stops misreading the phrase as a text-exit move that jammed the room-tracker's pending queue after a single step
-> - Dark-room hunt settle window trimmed 1.0s → 0.9s per move
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

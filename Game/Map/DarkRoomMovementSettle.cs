@@ -31,11 +31,17 @@ public sealed class DarkRoomMovementSettle : IDisposable
 {
     public const string LogCategory = "DarkRoomSettle";
 
-    // A dark reveal lands within roughly a game round of entry; 900ms covers the
-    // arrival / first-attack line without stalling an empty dark corridor for
-    // long. Each fresh dark advance restarts the window, so a corridor of empty
-    // dark rooms settles one short beat per room, not a single long freeze.
-    public static readonly TimeSpan DefaultSettleWindow = TimeSpan.FromMilliseconds(900);
+    // A dark reveal — the pursuing monster's "strides in" arrival or its first
+    // dark-cyan attack line — lands a beat after entry, up to about a game round.
+    // The window must OUTLAST that beat: if it expires first, the loop takes its
+    // next step before the Combat gate can catch the monster, so we walk past the
+    // fight and our attack targets a mob that's no longer here ("Your command had
+    // no effect") while it chases us onward. 1s holds long enough for the reveal
+    // without stalling an empty corridor for long (a shorter 900ms let pursuers
+    // land after we'd already stepped on). Each fresh dark advance restarts the
+    // window, so a run of empty dark rooms settles one short beat per room, not a
+    // single long freeze.
+    public static readonly TimeSpan DefaultSettleWindow = TimeSpan.FromSeconds(1);
 
     private readonly RoomTracker _tracker;
     private readonly MovementCoordinator _coordinator;
