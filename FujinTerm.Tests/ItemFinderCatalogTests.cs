@@ -89,9 +89,13 @@ public sealed class ItemFinderCatalogTests : IDisposable
     {
         IReadOnlyList<ItemFinderEntry> catalog = ItemFinderEntry.BuildCatalog(SeededCache());
 
+        // No character context ⇒ no modelled swing, so the Swings cell stays blank
+        // even though the weapon's raw speed is known (the speed rides with the
+        // swing count, it doesn't stand alone).
         ItemFinderEntry dagger = catalog.Single(e => e.Name == "keen dagger");
         Assert.Equal(0, dagger.AvgSwings);
-        Assert.Equal(string.Empty, dagger.AvgSwingsText);
+        Assert.Equal(30, dagger.WeaponSpeed);
+        Assert.Equal(string.Empty, dagger.SwingSpeedText);
     }
 
     [Fact]
@@ -117,6 +121,22 @@ public sealed class ItemFinderCatalogTests : IDisposable
     }
 
     [Fact]
+    public void BuildCatalog_WithSwingContext_SwingSpeedTextPairsSwingsWithSpeed()
+    {
+        IReadOnlyList<ItemFinderEntry> catalog =
+            ItemFinderEntry.BuildCatalog(SeededCache(), UsableContext());
+
+        // The Swings cell shows the modelled average and the weapon's raw speed
+        // together, e.g. "2.3 (spd 30)".
+        ItemFinderEntry dagger = catalog.Single(e => e.Name == "keen dagger");
+        Assert.Equal(30, dagger.WeaponSpeed);
+        Assert.EndsWith("(spd 30)", dagger.SwingSpeedText);
+        Assert.StartsWith(
+            dagger.AvgSwings.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+            dagger.SwingSpeedText);
+    }
+
+    [Fact]
     public void BuildCatalog_WithSwingContext_ArmourHasNoSwings()
     {
         var ctx = new ItemFinderEntry.SwingContext(
@@ -127,7 +147,8 @@ public sealed class ItemFinderCatalogTests : IDisposable
 
         ItemFinderEntry amulet = catalog.Single(e => e.Name == "amber amulet");
         Assert.Equal(0, amulet.AvgSwings);
-        Assert.Equal(string.Empty, amulet.AvgSwingsText);
+        Assert.Equal(0, amulet.WeaponSpeed);
+        Assert.Equal(string.Empty, amulet.SwingSpeedText);
     }
 
     [Fact]
@@ -278,6 +299,7 @@ public sealed class ItemFinderCatalogTests : IDisposable
         // fixed-speed (1400) martial-arts swing rate.
         ItemFinderEntry kickRow = kick.Single(e => e.IsSynthetic);
         Assert.Equal("Kick", kickRow.Name);
+        Assert.Equal(1400, kickRow.WeaponSpeed);
         SwingCalcResult sim = CombatCalculator.CalcSwings(
             combatLevel: 5, level: 30, attackSpeed: 1400, agility: 60,
             strength: 60, weaponStrReq: 0, currentEncum: 0, maxEncum: 100,

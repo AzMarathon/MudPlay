@@ -23,6 +23,18 @@ public partial class ItemFinderWindow : Window
         "Name", "TypeLabel", "SlotOrder",
     };
 
+    // Lead column order for each layout, keyed by each column's identifier — the Tag
+    // (binding path) for the stat columns, "slot" / "name" for the two untagged
+    // anchors. The remaining columns trail in their declared order. An all-weapon
+    // view fronts the weapon stats; an all-armour view fronts slot / defence.
+    private static readonly string[] _armourLead =
+        { "slot", "name", "TypeLabel", "LevelReqText", "EncumText", "AcText", "DrText" };
+    private static readonly string[] _weaponLead =
+        { "name", "TypeLabel", "LevelReqText", "StrReqText", "DamageText", "SwingSpeedText", "HitMagicText", "EncumText" };
+
+    // Column lookup keyed as above, built once from the fixed column set.
+    private Dictionary<string, DataGridColumn>? _columnByKey;
+
     public ItemFinderWindow()
     {
         InitializeComponent();
@@ -31,23 +43,76 @@ public partial class ItemFinderWindow : Window
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_vm is not null) _vm.VisibleColumnsChanged -= ApplyColumnVisibility;
+        if (_vm is not null) _vm.ColumnLayoutChanged -= ApplyColumnLayout;
         _vm = DataContext as ItemFinderViewModel;
         if (_vm is null) return;
-        _vm.VisibleColumnsChanged += ApplyColumnVisibility;
-        ApplyColumnVisibility();
+        _vm.ColumnLayoutChanged += ApplyColumnLayout;
+        ApplyColumnLayout();
     }
 
-    // Show a tagged stat column only while the VM reports some visible row carries a
-    // value for it, so a narrowed result set collapses its all-blank columns and the
-    // grid stays no wider than the data warrants. Untagged columns (Slot / Name) are
-    // the always-on anchors — left untouched.
-    private void ApplyColumnVisibility()
+    // Map each column to its layout key once — the Tag for the stat columns, and the
+    // two untagged anchors by their sort path (Slot / Name are the only Tag-less ones).
+    private Dictionary<string, DataGridColumn> ColumnIndex()
+    {
+        if (_columnByKey is not null) return _columnByKey;
+        _columnByKey = new Dictionary<string, DataGridColumn>(StringComparer.Ordinal);
+        foreach (DataGridColumn col in ItemsGrid.Columns)
+        {
+            if (col.Tag is string tag) _columnByKey[tag] = col;
+            else if (col.SortMemberPath == "SlotOrder") _columnByKey["slot"] = col;
+            else if (col.SortMemberPath == "Name") _columnByKey["name"] = col;
+        }
+        return _columnByKey;
+    }
+
+    // Match the grid's columns to the current view: hide the all-blank stat columns,
+    // reorder to front the columns that matter for the shown item kind, and drop the
+    // Slot column in an all-weapon view (every weapon shares the Weapon slot).
+    private void ApplyColumnLayout()
     {
         if (_vm is null) return;
+        Dictionary<string, DataGridColumn> index = ColumnIndex();
+
+        // Show a tagged stat column only while some visible row carries a value for
+        // it, so a narrowed result set collapses its all-blank columns. Untagged
+        // columns (Slot / Name) are the always-on anchors — left to the mode below.
         foreach (DataGridColumn col in ItemsGrid.Columns)
             if (col.Tag is string key)
                 col.IsVisible = _vm.IsColumnVisible(key);
+
+        // Slot is dead weight in an all-weapon view; an always-on anchor otherwise.
+        bool weaponView = _vm.LayoutMode == ItemFinderLayout.Weapon;
+        if (index.TryGetValue("slot", out DataGridColumn? slot))
+            slot.IsVisible = !weaponView;
+
+        string[]? lead = _vm.LayoutMode switch
+        {
+            ItemFinderLayout.Weapon => _weaponLead,
+            ItemFinderLayout.Armour => _armourLead,
+            _ => null,   // Mixed keeps the declared order.
+        };
+        ApplyColumnOrder(lead, index);
+    }
+
+    // Reorder the grid to lead with the mode's key columns, then the rest in their
+    // declared order. Display indices are assigned in ascending target order: each
+    // set pulls its column to slot i, shifting only the not-yet-placed columns (≥ i),
+    // so the already-finalised prefix is never disturbed.
+    private void ApplyColumnOrder(string[]? leadKeys, Dictionary<string, DataGridColumn> index)
+    {
+        List<DataGridColumn> order = new(ItemsGrid.Columns.Count);
+        HashSet<DataGridColumn> placed = new();
+        if (leadKeys is not null)
+            foreach (string k in leadKeys)
+                if (index.TryGetValue(k, out DataGridColumn? c) && placed.Add(c))
+                    order.Add(c);
+        foreach (DataGridColumn col in ItemsGrid.Columns)
+            if (placed.Add(col))
+                order.Add(col);
+
+        for (int i = 0; i < order.Count; i++)
+            if (order[i].DisplayIndex != i)
+                order[i].DisplayIndex = i;
     }
 
     // Double-click a result → jump to that item's Game Data record. A double-tap
