@@ -4,7 +4,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 1.96.0
 
-- New Session Stats → Players Seen window: logs every player spotted (also-here match or walk-in) with timestamp, where (room name + map/room), who, and total times seen
+- New Session Stats → Players Seen window: logs every player spotted (also-here match, walk-in, or a failed sneak you notice) with timestamp, where (room name + map/room), who, and total times seen
 - Players Seen data is per-character and persists on the profile; a Clear history button wipes it
 - Transaction history "Time" column is now "Timestamp" and shows the date too (ddMMMyy HH:mm:ss)
 

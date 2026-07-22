@@ -14,9 +14,11 @@ namespace FujinTerm.Game;
 //  • a known player matched in the current room's "Also here:" listing
 //    (RoomEntityClassifier.EntitiesObserved, EntityKind.Player) — the same hook
 //    GreetManager greets off, and
-//  • a player walking into the current room ("<name> walks into the room …")
-//    via RoomEntryWatcher.ArrivalObserved — the same hook PlayerLookManager
-//    look-at's off.
+//  • a player entering the current room via RoomEntryWatcher.ArrivalObserved —
+//    the same hook PlayerLookManager look-at's off. That event covers both an
+//    open walk-in ("<name> walks into the room …") AND a failed sneak we
+//    perceive ("You notice <name> sneaking in from the <dir>."); the watcher
+//    classifies the sneaker as EntityKind.Player, so both reach NoteArrival.
 //
 // The also-here path is deduped per room-visit: standing still in a room (or
 // re-pressing Enter to redisplay it) re-fires the listing, but a present player
@@ -117,7 +119,9 @@ public sealed class PlayerSightingTracker : IDisposable
         if (any) Changed?.Invoke();
     }
 
-    // A player walking into the current room.
+    // A player entering the current room — an open walk-in or a failed sneak we
+    // perceive ("You notice <name> sneaking in …"). RoomEntryWatcher tags the
+    // sneaker EntityKind.Player, so the one Kind check below admits both.
     public void NoteArrival(RoomEntryArrivalEvent e)
     {
         if (e.Kind != EntityKind.Player) return;

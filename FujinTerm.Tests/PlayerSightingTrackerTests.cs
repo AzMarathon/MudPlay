@@ -26,6 +26,9 @@ public sealed class PlayerSightingTrackerTests
         return new RoomEntitiesObservation("Also here: ...", entities, DateTimeOffset.Now);
     }
 
+    // Both an open walk-in and a perceived failed-sneak ("You notice <name>
+    // sneaking in …") reach the tracker as the same Player-kinded ArrivalObserved
+    // event, so one builder covers both cases.
     private static RoomEntryArrivalEvent Arrival(string name) =>
         new(name, EntityKind.Player, "north", DateTimeOffset.Now);
 
@@ -91,6 +94,23 @@ public sealed class PlayerSightingTrackerTests
         t.NoteAlsoHere(AlsoHere("Bob")); // the redisplay that follows the walk-in
 
         Assert.Equal(1, Assert.Single(t.Snapshot()).TimesSeen);
+    }
+
+    // A perceived failed sneak reaches the tracker via the same Player-kinded
+    // ArrivalObserved event as a walk-in, so it records like any other arrival.
+    [Fact]
+    public void SneakArrival_RecordsPlayer()
+    {
+        Room? current = MakeRoom(1, 100, "Town Square");
+        var t = new PlayerSightingTracker(() => current, profile: null, selfNameProvider: () => "Me");
+
+        // "You notice Bob sneaking in from the north." — RoomEntryWatcher tags it
+        // Player and fires the identical arrival event a walk-in would.
+        t.NoteArrival(new RoomEntryArrivalEvent("Bob", EntityKind.Player, "north", DateTimeOffset.Now));
+
+        PlayerSighting row = Assert.Single(t.Snapshot());
+        Assert.Equal("Bob", row.Name);
+        Assert.Equal(1, row.TimesSeen);
     }
 
     [Fact]
