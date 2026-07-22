@@ -2687,6 +2687,13 @@ public sealed class AppServices
         // reads this to keep running instead of halting to fight the pursuer.
         RoomClassifier.FleeProbe = () => Health.IsFleeing;
 
+        // Late-wire the classifier's active-target probe (Combat is built before
+        // this but the probe lives on the classifier). On a dark-room advance the
+        // classifier resets its accumulated roster but keeps the mob we're
+        // fighting, so a live dark fight survives the move while pursuit arrivals
+        // stop piling into a phantom roster that would trip the max-monsters gate.
+        RoomClassifier.ActiveCombatTargetProbe = () => Combat.CurrentTarget;
+
         // Re-check the emergency hangup whenever the room's occupants change: a
         // hostile that wanders in or spawns while we're already below the trigger
         // won't touch our own PlayerState, so nothing else would drive the check.

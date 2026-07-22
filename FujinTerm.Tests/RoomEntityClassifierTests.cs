@@ -907,19 +907,18 @@ public sealed class RoomEntityClassifierTests
     }
 
     [Fact]
-    public void DarkRoomAdvance_DoesNotWipe_KeepsInjectedCombatState()
+    public void DarkRoomAdvance_KeepsActiveCombatTarget_ShedsRest()
     {
         // Dark-room regression: a dark room prints no name / exits / "Also
-        // here:" line, so an empty entity list there means "can't see", not
-        // "room is empty". Advancing through the dark must NOT fire the empty
-        // RoomChange wipe — that empty observation is read as "room cleared" and
-        // drops the Combat gate mid-fight, letting the walker step on through a
-        // dark room while a mob is engaging us. Same setup as the stale-wipe
-        // test (pre-move occupant that the freshness guard would normally wipe);
-        // the ONLY difference is the advance is a dark-room advance, so it's
-        // kept.
+        // here:" line, so we can't re-derive the new room's roster. The mob we're
+        // actively fighting must survive the advance (dropping it fires an empty
+        // "room cleared" observation, drops the Combat gate mid-fight, and lets
+        // the walker step on through while the mob is still engaging us). With the
+        // active-target probe pointing at "giant rat", the advance carries it
+        // across.
         using TrackerHarness h = new();
         h.AddMonster(1, "giant rat");
+        h.Classifier.ActiveCombatTargetProbe = () => "giant rat";
 
         h.Tracker.NoteRoomObserved(new RoomObservation("Town Gates", new HashSet<Direction> { Direction.N }));
         h.FeedAlsoHere("Also here: giant rat.");
@@ -931,12 +930,72 @@ public sealed class RoomEntityClassifierTests
         h.Tracker.NoteDarkRoomEntered();
 
         Assert.True(h.Tracker.IsInDarkRoom);
-        // No wipe: Current still holds the injected mob and no empty
-        // RoomChange observation was emitted.
-        Assert.Single(h.Observations);
+        // The active target is carried across the reset.
         Assert.NotNull(h.Classifier.Current);
         Assert.Single(h.Classifier.Current!.Value.Entities);
         Assert.Equal("giant rat", h.Classifier.Current.Value.Entities[0].ResolvedName);
+    }
+
+    [Fact]
+    public void DarkRoomAdvance_NoActiveTarget_ResetsRoster()
+    {
+        // With no mob we're fighting, a dark advance resets the accumulated roster
+        // to empty so a pursuer/phantom from the room we just left doesn't linger.
+        // This is the half that kills the all-night accumulation: nothing to keep,
+        // so the list clears and the next room starts fresh.
+        using TrackerHarness h = new();
+        h.AddMonster(1, "giant rat");
+        // No ActiveCombatTargetProbe set → keep nothing.
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Town Gates", new HashSet<Direction> { Direction.N }));
+        h.FeedAlsoHere("Also here: giant rat.");
+        Assert.Single(h.Observations);
+
+        DateTimeOffset moveAt = DateTimeOffset.UtcNow.AddSeconds(1);
+        h.Tracker.NoteMoveSent(Direction.N, moveAt);
+        h.Tracker.NoteDarkRoomEntered();
+
+        Assert.True(h.Tracker.IsInDarkRoom);
+        // Reset fired: an empty RoomChange observation, Current now empty.
+        Assert.Equal(2, h.Observations.Count);
+        Assert.Empty(h.Observations[1].Entities);
+        Assert.Equal(RoomObservationSource.RoomChange, h.Observations[1].Source);
+        Assert.NotNull(h.Classifier.Current);
+        Assert.Empty(h.Classifier.Current!.Value.Entities);
+    }
+
+    [Fact]
+    public void ConsecutiveDarkAdvances_ArrivalsDoNotAccumulate()
+    {
+        // The reported bug: over a corridor hunt, a pursuit arrival appends each
+        // room and the dark roster never resets, growing to hundreds of phantom
+        // mobs that trip the max-monsters gate (we never engage) while the Combat
+        // gate stalls for 30s a room. Each dark advance must reset the list so an
+        // arrival that lands afterward is the ONLY occupant — the count stays
+        // bounded, not cumulative.
+        using TrackerHarness h = new();
+        h.AddMonster(1, "dark-elf sentry");
+        // No active target — the mob tanks a party member, we never engage it.
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Town Gates", new HashSet<Direction> { Direction.N }));
+        RoomEntity pursuer = new("dark-elf sentry", "dark-elf sentry", EntityKind.Monster, 1);
+
+        for (int room = 0; room < 5; room++)
+        {
+            // Alternate N/S so each advance is a real room change (1/1 ↔ 1/3).
+            Direction dir = room % 2 == 0 ? Direction.N : Direction.S;
+            DateTimeOffset moveAt = DateTimeOffset.UtcNow.AddMilliseconds(room * 10);
+            h.Tracker.NoteMoveSent(dir, moveAt);
+            h.Tracker.NoteDarkRoomEntered();
+            // A pursuer walks in after the advance resolves (as RoomEntryWatcher
+            // would append it live).
+            h.Classifier.AppendArrivalEntity(pursuer, rawWireLine: "arrival");
+
+            // The roster never carries more than this room's single arrival —
+            // the reset shed the prior rooms' pursuers instead of stacking them.
+            Assert.NotNull(h.Classifier.Current);
+            Assert.Single(h.Classifier.Current!.Value.Entities);
+        }
     }
 
     [Fact]

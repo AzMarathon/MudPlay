@@ -1,12 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.96.0**
-> - New Session Stats → Players Seen window: logs every player spotted (also-here match, walk-in, or a failed sneak you notice) with timestamp, where (room name + map/room), who, and total times seen
-> - Players Seen data is per-character and persists on the profile; a Clear history button wipes it
-> - Transaction history "Time" column is now "Timestamp" and shows the date too (ddMMMyy HH:mm:ss)
-> - Quest seed: Phoenix Feather guide adds an optional "buy rafts for you + party members" step before `use potion`
-> - Dark-room hunting now settles a short beat after each move so monsters that reveal on entry get engaged, instead of the loop racing past the fight and double-firing moves
+> **Version 1.96.1**
+> - Dark-room roster no longer accumulates: each dark advance resets the occupant list (keeping only the mob we're actively fighting), so pursuit arrivals stop piling into phantoms that blocked engagement and stalled the loop
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

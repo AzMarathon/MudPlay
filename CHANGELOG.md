@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.96.1
+
+- Dark-room roster no longer accumulates: each dark advance resets the occupant list (keeping only the mob we're actively fighting), so pursuit arrivals stop piling into hundreds of phantoms that blocked engagement and stalled the loop 30s a room
+- bug reports addressed: paradigm-20260722-104504
+
 ## 1.96.0
 
 - New Session Stats → Players Seen window: logs every player spotted (also-here match, walk-in, or a failed sneak you notice) with timestamp, where (room name + map/room), who, and total times seen
