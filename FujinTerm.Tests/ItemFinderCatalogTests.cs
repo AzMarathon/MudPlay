@@ -127,10 +127,10 @@ public sealed class ItemFinderCatalogTests : IDisposable
             ItemFinderEntry.BuildCatalog(SeededCache(), UsableContext());
 
         // The Swings cell shows the modelled average and the weapon's raw speed
-        // together, e.g. "2.3 (spd 30)".
+        // together, e.g. "2.3 (30)".
         ItemFinderEntry dagger = catalog.Single(e => e.Name == "keen dagger");
         Assert.Equal(30, dagger.WeaponSpeed);
-        Assert.EndsWith("(spd 30)", dagger.SwingSpeedText);
+        Assert.EndsWith("(30)", dagger.SwingSpeedText);
         Assert.StartsWith(
             dagger.AvgSwings.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
             dagger.SwingSpeedText);

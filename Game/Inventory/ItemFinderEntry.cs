@@ -224,11 +224,11 @@ public sealed record ItemFinderEntry
     public string WaterResistText => Signed(WaterResist);
     public string ShadowResistText => Signed(ShadowResist);
     // The modelled swing average paired with the weapon's raw speed, e.g.
-    // "2.3 (spd 30)". Blank when there's no swing to show (non-weapon, or the
-    // finder opened without a usable character) — the speed rides with the swing
-    // count rather than standing alone in an otherwise empty column.
+    // "2.3 (30)". Blank when there's no swing to show (non-weapon, or the finder
+    // opened without a usable character) — the speed rides with the swing count
+    // rather than standing alone in an otherwise empty column.
     public string SwingSpeedText => AvgSwings > 0
-        ? $"{AvgSwings.ToString("0.0", CultureInfo.InvariantCulture)} (spd {WeaponSpeed.ToString(CultureInfo.InvariantCulture)})"
+        ? $"{AvgSwings.ToString("0.0", CultureInfo.InvariantCulture)} ({WeaponSpeed.ToString(CultureInfo.InvariantCulture)})"
         : string.Empty;
 
     private static string Plain(int v) => v != 0 ? v.ToString(CultureInfo.InvariantCulture) : string.Empty;
