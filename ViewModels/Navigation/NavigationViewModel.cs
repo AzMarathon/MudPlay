@@ -1933,7 +1933,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             log: _services.Log,
             search: _services.RoomSearch,
             walker: _services.Walker,
-            movement: _services.MovementControl);
+            movement: _services.MovementControl,
+            autoLair: _services.AutoLair);
         await _services.Dialogs
             .OpenWindowAsync<NavigationManagerDialogViewModel, bool>(vm);
     }

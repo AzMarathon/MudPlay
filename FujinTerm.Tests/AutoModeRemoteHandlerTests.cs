@@ -186,7 +186,7 @@ public sealed class AutoModeRemoteHandlerTests
 
         string reply = Encoding.Latin1.GetString(s.Engine.LastSentForTests[^1]);
         Assert.Contains("Auto-Combat: On", reply);     // default on
-        Assert.Contains("Auto-Sneak: Off", reply);      // default off
+        Assert.Contains("Auto-Light: Off", reply);      // default off
         // @auto-rest aliases @auto-heal — must not double-report.
         Assert.DoesNotContain("Auto-Rest", reply);
         Assert.Contains("Auto-Heal: On", reply);

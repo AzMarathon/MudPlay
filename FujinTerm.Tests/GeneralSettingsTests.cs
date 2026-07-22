@@ -147,17 +147,17 @@ public sealed class GeneralSettingsTests
 
     private static void AssertDefaultColumn(AutoActionDefaults d)
     {
-        // Combat / Nuke / Heal-Rest / Bless / Light / Get-Items / Get-Cash
-        // default on; Sneak / Hide / Search default off (they're class-skill
-        // dependent — a non-stealth class boot-engaging Auto-Sneak is noise).
+        // The on-by-default set mirrors the default toolbar's auto row:
+        // Combat / Nuke / Heal-Rest / Bless / Get-Items / Get-Cash / Sneak.
+        // Light / Hide / Search default off.
         Assert.True(d.AutoCombat);
         Assert.True(d.AutoNuke);
         Assert.True(d.AutoHealRest);
         Assert.True(d.AutoBless);
-        Assert.True(d.AutoLight);
+        Assert.False(d.AutoLight);
         Assert.True(d.AutoGetItems);
         Assert.True(d.AutoGetCash);
-        Assert.False(d.AutoSneak);
+        Assert.True(d.AutoSneak);
         Assert.False(d.AutoHide);
         Assert.False(d.AutoSearch);
     }

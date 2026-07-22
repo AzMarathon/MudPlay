@@ -2,6 +2,17 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.95.0
+
+- New default keybinds: Alt+H connect/disconnect, Alt+M navigation, Alt+V/B/N movement start/pause/stop, Alt+L backscroll, Alt+S capture, Alt+C conversation; F1 workshop, F2 spell book, F3 game data, F4 program log, F5 wire inspector (profile + quit shortcuts unchanged)
+- Party, Session Stats, and Settings have no default shortcut now — F3 opens the Game Data Browser and the function keys are reserved for the editor/browser windows; all three stay on the toolbar/menu and a chord can be assigned in Settings → Shortcuts
+- New default toolbar: connect, disable hangups | navigation, movement start/pause/stop | party, backscroll | all-auto plus auto combat/nuke/heal-rest/bless/get-items/get-cash/sneak
+- Default auto engines now boot on: combat, nuke, heal/rest, bless, get-items, get-cash, sneak (light/hide/search default off)
+- Existing profiles are migrated to the new keybinds + toolbar layout on next load; their auto-mode settings are left untouched
+- Game Data Browser hotkey (F3) now toggles the window closed on re-press, matching every other panel
+- "Manage" window renamed to "Navigation Management"; double-clicking a loop / Auto-Lair now runs it (was edit)
+- Navigation Management rows reordered to Run · Load · Edit · Delete, and Auto-Lair setups gain Run / Load actions (were rail-only)
+
 ## 1.94.0
 
 - Item Finder reorders columns to the item kind it's showing: an all-armour view leads slot, name, type, level, enc, ac, dr; an all-weapon view leads name, type, level, str, dmg, swings, hit magic, enc

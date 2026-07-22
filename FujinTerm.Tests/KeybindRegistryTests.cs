@@ -29,9 +29,9 @@ public sealed class KeybindRegistryTests
     {
         KeybindingStore store = DefaultStore();
         Assert.True(KeybindRegistry.IsReserved(store, Key.F2, false, false, false, out string? action));
-        Assert.Equal("Conversation", action);
+        Assert.Equal("Spell Book", action);
 
-        Assert.True(KeybindRegistry.IsReserved(store, Key.G, true, false, false, out action));
+        Assert.True(KeybindRegistry.IsReserved(store, Key.F3, false, false, false, out action));
         Assert.Equal("Game Data Browser", action);
 
         Assert.True(KeybindRegistry.IsReserved(store, Key.S, true, true, false, out action));
@@ -56,7 +56,7 @@ public sealed class KeybindRegistryTests
         // ships (vs the old hardcoded list which couldn't track rebinds).
         KeybindingStore store = DefaultStore();
         Assert.True(KeybindRegistry.IsReserved(store, Key.F2, false, false, false, out _));
-        store.Rebind(Models.Profile.BuiltInAction.OpenConversation,
+        store.Rebind(Models.Profile.BuiltInAction.OpenSpellBook,
                      new Models.Profile.KeyChord(Key.F8));
         Assert.False(KeybindRegistry.IsReserved(store, Key.F2, false, false, false, out _));
         Assert.True (KeybindRegistry.IsReserved(store, Key.F8, false, false, false, out _));
@@ -66,7 +66,7 @@ public sealed class KeybindRegistryTests
     public void IsForbidden_ReportsReservedReason_WhenChordIsBuiltIn()
     {
         KeybindingStore store = DefaultStore();
-        Assert.True(KeybindRegistry.IsForbidden(store, Key.F4, false, false, false, out string? reason));
+        Assert.True(KeybindRegistry.IsForbidden(store, Key.F1, false, false, false, out string? reason));
         Assert.Contains("Player Workshop", reason);
     }
 
@@ -74,9 +74,9 @@ public sealed class KeybindRegistryTests
     public void IsForbidden_AllowsPlainFunctionKey_WhenNotReserved()
     {
         KeybindingStore store = DefaultStore();
-        // F1 / F8 / F12 aren't in the built-in shortcut list, so they're free.
-        Assert.False(KeybindRegistry.IsForbidden(store, Key.F1,  false, false, false, out _));
+        // F8 / F9 / F12 aren't in the built-in shortcut list, so they're free.
         Assert.False(KeybindRegistry.IsForbidden(store, Key.F8,  false, false, false, out _));
+        Assert.False(KeybindRegistry.IsForbidden(store, Key.F9,  false, false, false, out _));
         Assert.False(KeybindRegistry.IsForbidden(store, Key.F12, false, false, false, out _));
     }
 

@@ -3620,7 +3620,8 @@ public partial class MainWindowViewModel : ObservableObject
             log: s.Log,
             search: s.RoomSearch,
             walker: s.Walker,
-            movement: s.MovementControl);
+            movement: s.MovementControl,
+            autoLair: s.AutoLair);
         _manageDialogOpen = true;
         try
         {

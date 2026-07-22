@@ -1298,7 +1298,7 @@
                             BorderThickness="0,1,0,0"
                             Background="{StaticResource ChromeBgBrush}">
                         <Grid Margin="6,4">
-                            <Button Content="Manage"
+                            <Button Content="Navigation Management"
                                     FontSize="10"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center"
