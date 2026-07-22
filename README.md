@@ -5,6 +5,7 @@
 > - New Session Stats → Players Seen window: logs every player spotted (also-here match, walk-in, or a failed sneak you notice) with timestamp, where (room name + map/room), who, and total times seen
 > - Players Seen data is per-character and persists on the profile; a Clear history button wipes it
 > - Transaction history "Time" column is now "Timestamp" and shows the date too (ddMMMyy HH:mm:ss)
+> - Quest seed: Phoenix Feather guide adds an optional "buy rafts for you + party members" step before `use potion`
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
