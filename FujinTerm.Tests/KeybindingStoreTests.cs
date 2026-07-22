@@ -11,9 +11,11 @@ public sealed class KeybindingStoreTests
     public void Defaults_AreSeeded_OnFreshStore()
     {
         KeybindingStore store = new();
-        Assert.Equal(new KeyChord(Key.F2), store.Get(BuiltInAction.OpenConversation));
-        Assert.Equal(new KeyChord(Key.G, Ctrl: true), store.Get(BuiltInAction.OpenGameDataBrowser));
+        Assert.Equal(new KeyChord(Key.C, Alt: true), store.Get(BuiltInAction.OpenConversation));
+        Assert.Equal(new KeyChord(Key.F3), store.Get(BuiltInAction.OpenGameDataBrowser));
         Assert.Equal(new KeyChord(Key.S, Ctrl: true, Shift: true), store.Get(BuiltInAction.SaveProfileAs));
+        // OpenParty ships unbound — F3 now opens the Game Data Browser.
+        Assert.Equal(KeyChord.Empty, store.Get(BuiltInAction.OpenParty));
     }
 
     [Fact]
@@ -33,28 +35,28 @@ public sealed class KeybindingStoreTests
     public void IsConflict_FlagsCollidingChord_ReportsCollidingAction()
     {
         KeybindingStore store = new();
-        // F2 is bound to OpenConversation by default; rebinding OpenParty
+        // F2 is bound to OpenSpellBook by default; rebinding OpenParty
         // to F2 must flag a conflict.
         bool collision = store.IsConflict(new KeyChord(Key.F2), excluding: BuiltInAction.OpenParty,
                                            out BuiltInAction? culprit);
         Assert.True(collision);
-        Assert.Equal(BuiltInAction.OpenConversation, culprit);
+        Assert.Equal(BuiltInAction.OpenSpellBook, culprit);
     }
 
     [Fact]
     public void IsConflict_ExcludesSpecifiedAction_DuringSelfEdit()
     {
         KeybindingStore store = new();
-        // F2 → OpenConversation by default. The OpenConversation editor
+        // F2 → OpenSpellBook by default. The OpenSpellBook editor
         // should NOT flag its own current chord as a collision.
-        Assert.False(store.IsConflict(new KeyChord(Key.F2), excluding: BuiltInAction.OpenConversation, out _));
+        Assert.False(store.IsConflict(new KeyChord(Key.F2), excluding: BuiltInAction.OpenSpellBook, out _));
     }
 
     [Fact]
     public void FindAction_ReturnsBoundAction_ForKnownChord()
     {
         KeybindingStore store = new();
-        Assert.Equal(BuiltInAction.OpenWorkshop, store.FindAction(new KeyChord(Key.F4)));
+        Assert.Equal(BuiltInAction.OpenWorkshop, store.FindAction(new KeyChord(Key.F1)));
         Assert.Null(store.FindAction(new KeyChord(Key.F8)));  // unbound by default
     }
 

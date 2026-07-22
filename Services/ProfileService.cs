@@ -99,6 +99,9 @@ public sealed class ProfileService
             ?? throw new FileNotFoundException(
                 $"Character profile '{profileName}' on '{bbsName}' not found.", path);
         NormalizeForLoad(loaded);
+        // Upgrade older profiles before ProfileLoaded fires so per-character
+        // services (KeybindingStore, toolbar) rebind from the migrated shape.
+        bool migrated = ProfileMigrations.Apply(loaded);
 
         string? outgoing = CurrentProfileName;
         if (Current is not null)
@@ -123,6 +126,16 @@ public sealed class ProfileService
             ? $"Loaded profile '{profileName}' on '{bbsName}'."
             : $"Swapped profile '{outgoing}' → '{profileName}' on '{bbsName}'.");
         ProfileLoaded?.Invoke(loaded);
+        if (migrated)
+        {
+            // Persist the upgrade now that Current + paths are set — Save runs
+            // after ProfileLoaded so the keybind snapshot reflects the reset
+            // defaults, not the outgoing profile's bindings.
+            Save();
+            Log?.Info(LogCategory,
+                $"Migrated profile '{profileName}' to schema v{CharacterProfile.CurrentSchemaVersion} " +
+                "(reset keybindings + toolbar layout to the new defaults).");
+        }
         return loaded;
     }
 

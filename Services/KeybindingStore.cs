@@ -114,24 +114,33 @@ public sealed class KeybindingStore
     public static readonly IReadOnlyDictionary<BuiltInAction, KeyChord> DefaultBindings =
         new Dictionary<BuiltInAction, KeyChord>
         {
-            [BuiltInAction.OpenConversation]    = new(Key.F2),
-            [BuiltInAction.OpenParty]           = new(Key.F3),
-            [BuiltInAction.OpenWorkshop]        = new(Key.F4),
-            [BuiltInAction.OpenNavigation]      = new(Key.F5),
-            [BuiltInAction.OpenSpellBook]       = new(Key.F7),
-            [BuiltInAction.OpenLogPane]         = new(Key.F9),
-            [BuiltInAction.OpenBackscroll]      = new(Key.F10),
+            // Alt+letter cluster — the live-session actions the user reaches for
+            // most while connected (movement + panel toggles).
+            [BuiltInAction.ToggleConnection]    = new(Key.H, Alt: true),
+            [BuiltInAction.OpenNavigation]      = new(Key.M, Alt: true),
+            [BuiltInAction.MovementStart]       = new(Key.V, Alt: true),
+            [BuiltInAction.MovementPause]       = new(Key.B, Alt: true),
+            [BuiltInAction.MovementStop]        = new(Key.N, Alt: true),
+            [BuiltInAction.OpenBackscroll]      = new(Key.L, Alt: true),
+            [BuiltInAction.ToggleCapture]       = new(Key.S, Alt: true),
+            [BuiltInAction.OpenConversation]    = new(Key.C, Alt: true),
+            // Function-key row — the editor / browser windows.
+            [BuiltInAction.OpenWorkshop]        = new(Key.F1),
+            [BuiltInAction.OpenSpellBook]       = new(Key.F2),
+            [BuiltInAction.OpenGameDataBrowser] = new(Key.F3),
+            [BuiltInAction.OpenLogPane]         = new(Key.F4),
+            [BuiltInAction.OpenWireInspector]   = new(Key.F5),
             [BuiltInAction.OpenSessionStats]    = new(Key.F11),
+            // Ctrl cluster — settings + the File-menu profile actions (unchanged).
             [BuiltInAction.OpenSettings]        = new(Key.OemComma, Ctrl: true),
-            [BuiltInAction.OpenGameDataBrowser] = new(Key.G,        Ctrl: true),
-            [BuiltInAction.OpenWireInspector]   = KeyChord.Empty, // toolbar-only
-            [BuiltInAction.ToggleConnection]    = new(Key.K,        Ctrl: true),
-            [BuiltInAction.ToggleCapture]       = new(Key.F6),
             [BuiltInAction.NewProfile]          = new(Key.N,        Ctrl: true),
             [BuiltInAction.OpenProfile]         = new(Key.O,        Ctrl: true),
             [BuiltInAction.SaveProfile]         = new(Key.S,        Ctrl: true),
             [BuiltInAction.SaveProfileAs]       = new(Key.S,        Ctrl: true, Shift: true),
             [BuiltInAction.Quit]                = new(Key.Q,        Ctrl: true),
+            // OpenParty has no default chord — F3 now opens the Game Data
+            // Browser. Party stays reachable from its toolbar button + View
+            // menu; the user can assign a chord in Settings → Shortcuts.
         };
 
     // Reset every binding back to its DefaultBindings chord (actions with no

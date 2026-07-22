@@ -15,33 +15,69 @@ public sealed class ToolbarSettingsTests
         Assert.Null(dto.Layout);
     }
 
+    // The canonical default layout: three separators grouping connection,
+    // navigation/movement, panels, and the on-by-default auto row.
+    private static readonly string?[] ExpectedDefaultLayout =
+    {
+        "ToggleConnection",
+        "ToggleDisableHangups",
+        null,
+        "OpenNavigation",
+        "MovementStart",
+        "MovementPause",
+        "MovementStop",
+        null,
+        "OpenParty",
+        "OpenBackscroll",
+        null,
+        "ToggleAllAutoOff",
+        "ToggleAutoCombat",
+        "ToggleAutoNuke",
+        "ToggleAutoHealRest",
+        "ToggleAutoBless",
+        "ToggleAutoGetItems",
+        "ToggleAutoGetCash",
+        "ToggleAutoSneak",
+    };
+
     [Fact]
-    public void ToolbarDefaults_OnlyIncludesInDefaultLayoutEntries_AsButtons()
+    public void ToolbarDefaults_MatchesCanonicalOrder_WithSeparators()
     {
         var defaults = ToolbarDefaults.Build();
-        var expected = ToolbarItemCatalogue.AllEntries.Where(e => e.InDefaultLayout).ToArray();
-
-        Assert.Equal(expected.Length, defaults.Count);
-        Assert.All(defaults, item =>
-        {
-            Assert.Equal(ToolbarItemKind.Button, item.Kind);
-            Assert.NotNull(item.ActionId);
-        });
-
-        // Order matches the catalogue's filtered order.
+        Assert.Equal(ExpectedDefaultLayout.Length, defaults.Count);
         for (int i = 0; i < defaults.Count; i++)
         {
-            Assert.Equal(expected[i].ActionId, defaults[i].ActionId);
+            if (ExpectedDefaultLayout[i] is null)
+            {
+                Assert.Equal(ToolbarItemKind.Separator, defaults[i].Kind);
+                Assert.Null(defaults[i].ActionId);
+            }
+            else
+            {
+                Assert.Equal(ToolbarItemKind.Button, defaults[i].Kind);
+                Assert.Equal(ExpectedDefaultLayout[i], defaults[i].ActionId);
+            }
         }
     }
 
     [Fact]
-    public void ToolbarDefaults_DoesNotIncludePhase4_6bStubs()
+    public void ToolbarDefaults_ButtonActionIds_ResolveInCatalogue()
+    {
+        // Every default button must map to a real catalogue entry, or the live
+        // toolbar renders a dead button.
+        var defaults = ToolbarDefaults.Build();
+        Assert.All(
+            defaults.Where(i => i.Kind == ToolbarItemKind.Button),
+            i => Assert.NotNull(ToolbarItemCatalogue.Find(i.ActionId)));
+    }
+
+    [Fact]
+    public void ToolbarDefaults_ExcludesOneShotActions()
     {
         var defaults = ToolbarDefaults.Build();
         Assert.DoesNotContain(defaults, i => i.ActionId == "ActionGetAll");
-        Assert.DoesNotContain(defaults, i => i.ActionId == "ToggleAutoCombat");
-        Assert.DoesNotContain(defaults, i => i.ActionId == "ToggleAllAutoOff");
+        Assert.DoesNotContain(defaults, i => i.ActionId == "ActionDropAll");
+        Assert.DoesNotContain(defaults, i => i.ActionId == "ToggleAutoTrain");
     }
 
     [Fact]
@@ -76,10 +112,10 @@ public sealed class ToolbarSettingsTests
         ToolbarConfig live = new();
         live.ApplyFrom(new ToolbarSettings());
 
-        var expected = ToolbarItemCatalogue.AllEntries.Where(e => e.InDefaultLayout).ToArray();
-        Assert.Equal(expected.Length, live.Layout.Count);
+        var expected = ToolbarDefaults.Build();
+        Assert.Equal(expected.Count, live.Layout.Count);
         Assert.Equal(
-            expected.Select(e => e.ActionId).ToArray(),
+            expected.Select(i => i.ActionId).ToArray(),
             live.Layout.Select(i => i.ActionId).ToArray());
     }
 

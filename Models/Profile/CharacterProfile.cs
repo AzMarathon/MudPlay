@@ -11,8 +11,15 @@ namespace FujinTerm.Models.Profile;
 // FujinTerm. The in-game character name may differ — see Name.
 public sealed class CharacterProfile
 {
+    // The schema version a freshly-authored (fully-migrated) profile carries.
+    // Bump in lockstep with a new Services.ProfileMigrations step.
+    public const int CurrentSchemaVersion = 2;
+
     // JSON schema version (see GlobalSettings.SchemaVersion for the contract).
-    public int SchemaVersion { get; set; } = 1;
+    // A fresh profile is authored at CurrentSchemaVersion so it never triggers a
+    // migration; older on-disk profiles carry a lower number and are upgraded on
+    // load by Services.ProfileMigrations.
+    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
     // In-game character name. Usually matches the profile filename but a user
     // may give two profiles the same in-game name on different BBSes (same

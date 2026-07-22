@@ -23,54 +23,54 @@ public static class ToolbarItemCatalogue
         string IconResourceKey,
         string CommandName,
         string? Tooltip = null,
-        string? ShortcutHint = null,
-        bool InDefaultLayout = true);
+        string? ShortcutHint = null);
 
     private static readonly Entry[] _entries =
     {
         new("ToggleConnection",   "Connect / Disconnect", "IconPlug",
-            "ToggleConnectionCommand", ShortcutHint: "Ctrl+K"),
+            "ToggleConnectionCommand", ShortcutHint: "Alt+H"),
         new("OpenSettings",       "Settings",             "IconGear",
             "OpenSettingsCommand",     ShortcutHint: "Ctrl+,"),
         new("OpenNavigation",     "Navigation",           "IconMap",
-            "OpenNavigationCommand",   ShortcutHint: "F5"),
+            "OpenNavigationCommand",   ShortcutHint: "Alt+M"),
         // Movement engine controls. Only one of Start / Pause is shown at a
         // time (the rows flip IsVisible with the engine state via
         // ApplyToolbarRowState); Stop appears whenever an engine is active.
         // Start opens the Manage dialog (or runs the staged loop) when idle.
         new("MovementStart",      "Start movement",       "IconPlay",
-            "MovementStartCommand",
+            "MovementStartCommand", ShortcutHint: "Alt+V",
             Tooltip: "Start movement — run the staged loop, or open Manage to pick one"),
         new("MovementPause",      "Pause movement",       "IconPause",
-            "MovementPauseCommand",
+            "MovementPauseCommand", ShortcutHint: "Alt+B",
             Tooltip: "Pause the running engine (click again to resume)"),
         new("MovementStop",       "Stop movement",        "IconStop",
-            "MovementStopCommand",
+            "MovementStopCommand", ShortcutHint: "Alt+N",
             Tooltip: "Stop — back fully out of the running engine"),
         new("OpenBackscroll",     "Backscroll",           "IconHistory",
-            "OpenBackscrollCommand",   ShortcutHint: "F10"),
+            "OpenBackscrollCommand",   ShortcutHint: "Alt+L"),
         new("ToggleCapture",      "Capture",              "IconRecord",
-            "ToggleDumpCommand",       Tooltip: "Capture — toggle session capture"),
+            "ToggleDumpCommand", ShortcutHint: "Alt+S",
+            Tooltip: "Capture — toggle session capture"),
         new("ToggleDisableHangups","Disable hangups",     "IconNoHangup",
             "ToggleDisableHangupsCommand",
             Tooltip: "Disable hangups — block every automatic disconnect; only you can hang up"),
         new("OpenWireInspector",  "Wire Inspector",       "IconSearch",
-            "OpenWireInspectorCommand",
+            "OpenWireInspectorCommand", ShortcutHint: "F5",
             Tooltip: "Wire Inspector — view raw + stripped byte streams"),
         new("OpenConversation",   "Conversation",         "IconChat",
-            "OpenConversationCommand", ShortcutHint: "F2"),
+            "OpenConversationCommand", ShortcutHint: "Alt+C"),
         new("OpenParty",          "Party",                "IconParty",
-            "OpenPartyCommand",        ShortcutHint: "F3"),
+            "OpenPartyCommand"),
         new("OpenWorkshop",       "Player Workshop",      "IconUser",
-            "OpenWorkshopCommand",     ShortcutHint: "F4"),
+            "OpenWorkshopCommand",     ShortcutHint: "F1"),
         new("OpenSpellBook",      "Spell Book",           "IconBook",
-            "OpenSpellBookCommand",    ShortcutHint: "F7"),
+            "OpenSpellBookCommand",    ShortcutHint: "F2"),
         new("OpenSessionStats",   "Session Stats",        "IconStats",
             "OpenSessionStatsCommand", ShortcutHint: "F11"),
         new("OpenGameDataBrowser","Game Data Browser",    "IconDatabase",
-            "OpenGameDataBrowserCommand", ShortcutHint: "Ctrl+G"),
+            "OpenGameDataBrowserCommand", ShortcutHint: "F3"),
         new("OpenLogPane",        "Program Log",          "IconLog",
-            "OpenLogPaneCommand",      ShortcutHint: "F9"),
+            "OpenLogPaneCommand",      ShortcutHint: "F4"),
 
         // ----- Action menu surface -------------------------------------------
         // These mirror the Action menu in MainWindow.axaml. The CommandName
@@ -81,79 +81,63 @@ public static class ToolbarItemCatalogue
         // Bulk one-shot actions.
         new("ActionGetAll",       "Get All",              "IconGetAll",
             "GetAllCommand",
-            Tooltip: "Get All — pick up every item on the room floor",
-            InDefaultLayout: false),
+            Tooltip: "Get All — pick up every item on the room floor"),
         new("ActionDropAll",      "Drop All",             "IconDropAll",
             "DropAllCommand",
-            Tooltip: "Drop All — drop every carried (unworn) item",
-            InDefaultLayout: false),
+            Tooltip: "Drop All — drop every carried (unworn) item"),
         new("ActionEquipAll",     "Equip All",            "IconEquipAll",
             "EquipAllCommand",
-            Tooltip: "Equip All — wear the Default gear set",
-            InDefaultLayout: false),
+            Tooltip: "Equip All — wear the Default gear set"),
         new("ActionDepositAll",   "Deposit All",          "IconDepositAll",
             "DepositAllCommand",
-            Tooltip: "Deposit All — bank wealth to the keep-on-hand floor",
-            InDefaultLayout: false),
+            Tooltip: "Deposit All — bank wealth to the keep-on-hand floor"),
 
         // Recovery escape hatch — drop my own conditions and the movement holds
         // / party-wait signals they drive, returning me to an idle, unafflicted
         // state (unsticks a condition that latched but never saw its wear-off).
         new("ResetStates",        "Reset States",         "IconLoop",
             "ResetStatesCommand",
-            Tooltip: "Reset States — clear my own stuck ailments, waits, and movement holds (return to idle)",
-            InDefaultLayout: false),
+            Tooltip: "Reset States — clear my own stuck ailments, waits, and movement holds (return to idle)"),
 
         // Master auto-responses switch. Active = auto-engines run; clicking
         // off kills every Auto-* (remembering which were on) and also gates
         // the game-entry command. Clicking back on restores the prior set.
         new("ToggleAllAutoOff",   "All auto-responses",   "IconKillSwitch",
             "AllAutoOffCommand",
-            Tooltip: "Master switch — off kills every auto-engine and auto-entry; on restores them",
-            InDefaultLayout: false),
+            Tooltip: "Master switch — off kills every auto-engine and auto-entry; on restores them"),
 
         // Auto-engine toggles. Button is depressed (IsActive) while its
         // matching GeneralSettings.AutoMode flag is on; clicking flips it.
         new("ToggleAutoCombat",   "Auto Combat",          "IconAutoCombat",
             "ToggleAutoCombatCommand",
-            Tooltip: "Toggle Auto Combat on / off",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Combat on / off"),
         new("ToggleAutoNuke",     "Auto Nuke",            "IconAutoNuke",
             "ToggleAutoNukeCommand",
-            Tooltip: "Toggle Auto Nuke on / off",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Nuke on / off"),
         new("ToggleAutoHealRest", "Auto Rest / Heal",     "IconAutoHeal",
             "ToggleAutoHealRestCommand",
-            Tooltip: "Toggle Auto Rest / Heal on / off",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Rest / Heal on / off"),
         new("ToggleAutoBless",    "Auto Bless",           "IconAutoBless",
             "ToggleAutoBlessCommand",
-            Tooltip: "Toggle Auto Bless on / off",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Bless on / off"),
         new("ToggleAutoLight",    "Auto Light",           "IconAutoLight",
             "ToggleAutoLightCommand",
-            Tooltip: "Toggle Auto Light on / off",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Light on / off"),
         new("ToggleAutoGetItems", "Auto Get Items",       "IconAutoGetItems",
             "ToggleAutoGetItemsCommand",
-            Tooltip: "Toggle Auto Get Items on / off",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Get Items on / off"),
         new("ToggleAutoGetCash",  "Auto Get Cash",        "IconAutoGetCash",
             "ToggleAutoGetCashCommand",
-            Tooltip: "Toggle Auto Get Cash on / off",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Get Cash on / off"),
         new("ToggleAutoSneak",    "Auto Sneak",           "IconAutoSneak",
             "ToggleAutoSneakCommand",
-            Tooltip: "Toggle Auto Sneak on / off",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Sneak on / off"),
         new("ToggleAutoHide",     "Auto Hide",            "IconAutoHide",
             "ToggleAutoHideCommand",
-            Tooltip: "Toggle Auto Hide on / off",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Hide on / off"),
         new("ToggleAutoSearch",   "Auto Search",          "IconSearch",
             "ToggleAutoSearchCommand",
-            Tooltip: "Toggle Auto Search on / off (search each room on entry)",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Search on / off (search each room on entry)"),
 
         // Auto-trainer master toggle. Mirrors the Settings → Auto-Trainer
         // "Auto-train" checkbox (persisted in AutoTrainerSettings, not the
@@ -161,11 +145,12 @@ public static class ToolbarItemCatalogue
         // list stay in the settings tab.
         new("ToggleAutoTrain",    "Auto Train",           "IconAutoTrain",
             "ToggleAutoTrainCommand",
-            Tooltip: "Toggle Auto Train on / off (level up at the trainer during a loop / auto-lair)",
-            InDefaultLayout: false),
+            Tooltip: "Toggle Auto Train on / off (level up at the trainer during a loop / auto-lair)"),
     };
 
-    // All entries in their canonical (default-layout) order.
+    // Every catalogue entry, in registration order — the pool the Settings →
+    // Toolbar picker offers. The default toolbar layout (a curated subset in a
+    // specific order, with separators) lives in ToolbarDefaults, not here.
     public static IReadOnlyList<Entry> AllEntries { get; } = _entries;
 
     private static readonly FrozenDictionary<string, Entry> _byId =
