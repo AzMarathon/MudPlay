@@ -130,17 +130,17 @@ public sealed class KeybindingStore
             [BuiltInAction.OpenGameDataBrowser] = new(Key.F3),
             [BuiltInAction.OpenLogPane]         = new(Key.F4),
             [BuiltInAction.OpenWireInspector]   = new(Key.F5),
-            [BuiltInAction.OpenSessionStats]    = new(Key.F11),
-            // Ctrl cluster — settings + the File-menu profile actions (unchanged).
-            [BuiltInAction.OpenSettings]        = new(Key.OemComma, Ctrl: true),
+            // Ctrl cluster — the File-menu profile + quit actions (unchanged).
             [BuiltInAction.NewProfile]          = new(Key.N,        Ctrl: true),
             [BuiltInAction.OpenProfile]         = new(Key.O,        Ctrl: true),
             [BuiltInAction.SaveProfile]         = new(Key.S,        Ctrl: true),
             [BuiltInAction.SaveProfileAs]       = new(Key.S,        Ctrl: true, Shift: true),
             [BuiltInAction.Quit]                = new(Key.Q,        Ctrl: true),
-            // OpenParty has no default chord — F3 now opens the Game Data
-            // Browser. Party stays reachable from its toolbar button + View
-            // menu; the user can assign a chord in Settings → Shortcuts.
+            // OpenParty, OpenSessionStats and OpenSettings have no default
+            // chord — F3 now opens the Game Data Browser, and the function keys
+            // are otherwise reserved for the editor/browser windows. All three
+            // stay reachable from their toolbar buttons + menus; the user can
+            // assign a chord in Settings → Shortcuts.
         };
 
     // Reset every binding back to its DefaultBindings chord (actions with no

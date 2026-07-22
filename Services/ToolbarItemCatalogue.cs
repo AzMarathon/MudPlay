@@ -30,7 +30,7 @@ public static class ToolbarItemCatalogue
         new("ToggleConnection",   "Connect / Disconnect", "IconPlug",
             "ToggleConnectionCommand", ShortcutHint: "Alt+H"),
         new("OpenSettings",       "Settings",             "IconGear",
-            "OpenSettingsCommand",     ShortcutHint: "Ctrl+,"),
+            "OpenSettingsCommand"),
         new("OpenNavigation",     "Navigation",           "IconMap",
             "OpenNavigationCommand",   ShortcutHint: "Alt+M"),
         // Movement engine controls. Only one of Start / Pause is shown at a
@@ -66,7 +66,7 @@ public static class ToolbarItemCatalogue
         new("OpenSpellBook",      "Spell Book",           "IconBook",
             "OpenSpellBookCommand",    ShortcutHint: "F2"),
         new("OpenSessionStats",   "Session Stats",        "IconStats",
-            "OpenSessionStatsCommand", ShortcutHint: "F11"),
+            "OpenSessionStatsCommand"),
         new("OpenGameDataBrowser","Game Data Browser",    "IconDatabase",
             "OpenGameDataBrowserCommand", ShortcutHint: "F3"),
         new("OpenLogPane",        "Program Log",          "IconLog",
