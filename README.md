@@ -1,8 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.99.3**
-> - Walk-to route ETA now shows in the Navigation window header ("~Nm Ss to arrive"), not just the program log — the estimate reached a status label that was never on screen
+> **Version 1.99.4**
+> - A blocked walk-to now names the obstacle on the route the character would actually take — a gate key or required item you must fetch — instead of a shorter level-gated backdoor it was never going to use
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

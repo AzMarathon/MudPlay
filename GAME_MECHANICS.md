@@ -1162,6 +1162,34 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
     one-way pocket it already is on stock. The lever is still a real in-game exit the player can pull
     manually — the client just doesn't route through it.
 
+- **[CONFIRMED, user 2026-07-23] A walled city can have a "front door" that is a keyword→item→
+  summon→kill→key chain, entirely separate from any teleport "backdoor" the map data also holds.**
+  The dark-elf city (Paradigm 1.9.1) is the worked example the client got wrong: it has two ways in,
+  and the walk-to diagnostic named the wrong one. The **front door** is a multi-step gauntlet the
+  player performs by hand — the map graph only encodes its final locked-door hop:
+  1. Walk to the **gnome commander** (an NPC) and ask him his textblock keyword.
+  2. Carry his **orb**, then say/use that keyword in the room just outside the city to reveal a
+     **hidden stairwell down**.
+  3. At the city's main gate, use another keyword to **summon an obsidian statue**, then **kill it** —
+     the corpse drops the **gate key**.
+  4. The gate key opens the **town gate** into the city.
+  The **backdoor** is a single **teleport item** (a "nightblack portal") that drops you inside the
+  city map, gated behind a high **minimum character level**.
+  - *[OBSERVED — Paradigm 1.9.1 game data, cross-referenced]* the front-door landmarks are gnome
+    commander in room `8/459`, bloodstone **orb item 807**, keyword-revealed stairwell around `8/398`,
+    the **obsidian statue monster 347** summoned at the Black Steel Gate (`8/461`, a CMD room), which
+    drops **gate key item 806**; the gate hop `8/461 → 8/462` carries `Key: 806 or 101 picklocks`. The
+    backdoor is **nightblack-portal item 1419**, whose teleport exit into map 8 is gated `minlevel 40`.
+    The exact in-game keyword strings (the commander's textblock word, the summon word) come from the
+    NPC's dialogue at play time, not from a fixed command the client hardcodes.
+  - **Why it mattered for pathing:** the backdoor portal is the *shorter* graph route, so a blocked
+    walk-to that re-probed by ignoring **all** gates surfaced it and blamed "a level requirement" — a
+    door the under-level character was never going to take. The real obstacle is the front door's
+    **acquirable** gate (fetch the gate key / carry the orb). Fix: the failure diagnostic now re-probes
+    with only the *acquirable* gates (item / ticket / key-door / hazard) suspended first — level / toll
+    / class stay active — so it describes the route the crosser would actually walk and names the
+    key/item to fetch, and only falls back to the ignore-all probe when even that finds nothing.
+
 ## Attack spells: why one fails to damage a monster
 
 **Three independent mechanics** decide whether an attack spell damages a monster — do not

@@ -744,17 +744,31 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     && mazeSolver.CanSolve(destination) && mazeSolver.TryBegin(destination))
                     return true;
 
-                // Distinguish "all routes blocked by an exit gate" from a
-                // genuinely disconnected target: re-probe with the exit gates
-                // ignored. A path that appears only when gates are off means
-                // every route there is gated beyond the player — a level
-                // window they fall outside, a toll they can't afford, or a
-                // class hall closed to their class — surface that reason so
-                // the user understands why we won't move.
-                IReadOnlyList<Direction>? ungated =
-                    _bfs.FindPath(source.Key, destination, _filter, ignoreExitGates: true);
-                string reason = ungated is { Count: > 0 }
-                    ? DescribeBlockedRoute(source.Key, ungated)
+                // Name the obstacle on the route the crosser would actually
+                // take, not on the shortest path with every gate wished away.
+                // First re-probe with only the ACQUIRABLE gates suspended
+                // (item / ticket / key-door / hazard) and level / toll / class
+                // still active: any route that appears is one the crosser could
+                // walk by acquiring something, so its blockers are the missing
+                // key / item / counter — describe that. This matches the route
+                // the picker identifies (e.g. a city front door gated on a key
+                // you must fetch), instead of naming a shorter level-gated
+                // portal the crosser was never going to use. Only when even that
+                // finds nothing is the target walled by a non-acquirable gate —
+                // fall back to the all-gates-ignored probe to name the level /
+                // toll / class reason (or "no path" when truly disconnected).
+                IReadOnlyList<Direction>? describePath;
+                using (_filter?.SuspendAcquirableGates())
+                    describePath = _bfs.FindPath(source.Key, destination, _filter);
+                if (describePath is null || describePath.Count == 0)
+                    describePath =
+                        _bfs.FindPath(source.Key, destination, _filter, ignoreExitGates: true);
+
+                // DescribeBlockedRoute runs with gating restored (the suspension
+                // scope has closed), so DescribeExitBlock reports the real
+                // acquirable-gate reasons on the front-door route's hops.
+                string reason = describePath is { Count: > 0 }
+                    ? DescribeBlockedRoute(source.Key, describePath)
                     : "no path";
                 Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
                 return false;

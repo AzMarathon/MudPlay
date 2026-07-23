@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.99.4
+
+- A blocked walk-to now names the obstacle on the route the character would actually take — a gate key or required item you must fetch — instead of a shorter level-gated backdoor it was never going to use; the failure diagnostic re-probes with only the acquirable gates suspended first, so it reports the acquirable blocker over the non-acquirable one
+- bug reports addressed: paradigm-20260723-162143
+
 ## 1.99.3
 
 - Walk-to route ETA now shows in the Navigation window header ("~Nm Ss to arrive"), not just the program log — the estimate reached a status label that was never on screen
