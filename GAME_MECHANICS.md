@@ -153,6 +153,15 @@ it isn't here and you're unsure, ask.
   Two genuinely same-named mobs can't be told apart in the dark, so they read as one until the
   first dies — the survivor's next swing re-reveals it and combat re-engages. Over-count is thus
   impossible and under-count self-heals.
+- **[CONFIRMED]** *(2026-07-22, user)* **A dark room's monsters can populate *after* entry, not
+  only at the moment you arrive.** A room that reads empty on arrival (no attack line yet) can still
+  have a hostile reveal itself a beat later via its first swing. This is why the dark-room settle
+  window (`DarkRoomSettleGate`, ~1.0s per dark advance) must hold before the walker moves on — it's
+  the only late-reveal guard for a room that looked empty at entry. Empirically a reveal often
+  lands at 0ms (synchronous with entry — over a 1-hour hunt all 334 populated rooms revealed at
+  0ms), but that is area/condition-dependent, **not** a guarantee: the delayed-populate case is
+  real, so the settle window is a justified safety buffer, not dead time. Do **not** trim or
+  short-circuit it on the strength of an all-synchronous sample.
 
 ## Stealth (sneak & hide)
 
