@@ -115,6 +115,15 @@ public sealed partial class CombatManager : IDisposable
     private Func<int, bool>? _hasSeeHidden;
     private Func<bool>? _seeHiddenClearActive;
     private Func<bool>? _shadowRestHolding;
+
+    // Reports whether the character is standing in a too-dark room
+    // (RoomTracker.IsInDarkRoom). Gates the CR "where am I" room re-displays: a CR
+    // in the dark returns only "you can't see anything" — nothing to re-read — and
+    // that stale dark line is consumed by the movement loop's dead-reckoning as a
+    // false confirmation of an in-flight step, collapsing the dark-room settle
+    // window (see TrySendRoomRefresh). null until wired → fail-open (refreshes
+    // send exactly as before).
+    private Func<bool>? _isInDarkRoom;
     private string? _currentTarget;
 
     // Guard-redirect memory. MajorMUD "guarded" monsters (a brigand chief guarded
@@ -387,6 +396,15 @@ public sealed partial class CombatManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(sender);
         _wireSender = sender;
+    }
+
+    // Wire the dark-room probe (RoomTracker.IsInDarkRoom). With it set, the CR
+    // "where am I" room re-displays are suppressed while we can't see — see
+    // _isInDarkRoom / TrySendRoomRefresh. Until set, refreshes send unconditionally.
+    public void SetDarkRoomProbe(Func<bool> isInDarkRoom)
+    {
+        ArgumentNullException.ThrowIfNull(isInDarkRoom);
+        _isInDarkRoom = isInDarkRoom;
     }
 
     // Wire the gear actuator (EquipmentManager, the sole gear owner). swapWeapon
@@ -1492,6 +1510,34 @@ public sealed partial class CombatManager : IDisposable
         return null;
     }
 
+    // Fire the debounced bare-CR "where am I" room re-display shared by the combat
+    // recovery paths (empty-room combat line, target-not-here, no-effect,
+    // unattributed death, unconfirmed engage). Returns true when a CR actually went
+    // out so the caller can log the send.
+    //
+    // Suppressed entirely in a dark room: a CR there re-emits only "the room is
+    // very dark - you can't see anything" — no Also-Here list to re-read — and
+    // worse, that stale dark line is consumed by RoomTracker's dead-reckoning
+    // (NoteDarkRoomEntered) as a false confirmation of the movement loop's
+    // in-flight step. The false-fast confirm collapses the dark-room settle window,
+    // so the loop double-steps past lairs and drags late-populating monsters. We
+    // can't see in the dark, so there's nothing to refresh.
+    private bool TrySendRoomRefresh(string context)
+    {
+        if (_wireSender is null) return false;
+        if (_isInDarkRoom?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory,
+                $"dark room — CR re-display suppressed ({context})");
+            return false;
+        }
+        DateTimeOffset now = DateTimeOffset.Now;
+        if (now - _lastRoomRefreshAt < RoomRefreshCooldown) return false;
+        _lastRoomRefreshAt = now;
+        _wireSender(Encoding.Latin1.GetBytes("\r"));
+        return true;
+    }
+
     // Safety net: a combat line (user hit / mob hit / mob miss) means something
     // is swinging at us — but if the classifier shows no engageable monster and
     // we have no current target, our view of the room is stale (entity dropped
@@ -1531,13 +1577,9 @@ public sealed partial class CombatManager : IDisposable
 
         if (_classifier.Current is { } cur && HasEngageable(cur)) return;
 
-        DateTimeOffset now = DateTimeOffset.Now;
-        if (now - _lastRoomRefreshAt < RoomRefreshCooldown) return;
-        _lastRoomRefreshAt = now;
-
-        _log?.Combat(LogCategory,
-            "combat-line while room appears empty — sending CR for short re-display");
-        _wireSender(Encoding.Latin1.GetBytes("\r"));
+        if (TrySendRoomRefresh("combat line, room appears empty"))
+            _log?.Combat(LogCategory,
+                "combat-line while room appears empty — sending CR for short re-display");
     }
 
     // Backstab surprise-round resolver. The opener swings exactly once; the first
@@ -1609,10 +1651,7 @@ public sealed partial class CombatManager : IDisposable
         // Force a refresh (debounce shared with OnCombatLine so a
         // simultaneous miss-line + target-not-here doesn't double-send).
         // Bare CR — same rationale as OnCombatLine.
-        DateTimeOffset now = DateTimeOffset.Now;
-        if (now - _lastRoomRefreshAt < RoomRefreshCooldown) return;
-        _lastRoomRefreshAt = now;
-        _wireSender(Encoding.Latin1.GetBytes("\r"));
+        TrySendRoomRefresh("target-not-here");
     }
 
     // "Your command had no effect." — a generic failure the server emits when the
@@ -1640,10 +1679,7 @@ public sealed partial class CombatManager : IDisposable
         _guardBlockedTarget = null;
         ClearBackstabResolution();
 
-        DateTimeOffset now = DateTimeOffset.Now;
-        if (now - _lastRoomRefreshAt < RoomRefreshCooldown) return;
-        _lastRoomRefreshAt = now;
-        _wireSender(Encoding.Latin1.GetBytes("\r"));
+        TrySendRoomRefresh("command-no-effect");
     }
 
     // A kill happened but the death-line didn't hand us a roster slot to drop.
@@ -1693,12 +1729,9 @@ public sealed partial class CombatManager : IDisposable
         // Target name matched no roster slot (flavored / shared wording the
         // RawName doesn't cover). Force the debounced room re-display so the
         // server hands us the true roster now.
-        DateTimeOffset now = DateTimeOffset.Now;
-        if (now - _lastRoomRefreshAt < RoomRefreshCooldown) return;
-        _lastRoomRefreshAt = now;
-        _log?.Combat(LogCategory,
-            "unattributed death — forcing room re-display to resync roster");
-        _wireSender(Encoding.Latin1.GetBytes("\r"));
+        if (TrySendRoomRefresh("unattributed death"))
+            _log?.Combat(LogCategory,
+                "unattributed death — forcing room re-display to resync roster");
     }
 
     // Re-engage the room after an interrupt turned our auto-attack off (an
@@ -2050,11 +2083,7 @@ public sealed partial class CombatManager : IDisposable
         _currentTarget = null;
         _castingSpellTarget = null;
 
-        if (_wireSender is null) return;
-        DateTimeOffset now = DateTimeOffset.Now;
-        if (now - _lastRoomRefreshAt < RoomRefreshCooldown) return;
-        _lastRoomRefreshAt = now;
-        _wireSender(Encoding.Latin1.GetBytes("\r"));
+        TrySendRoomRefresh("engage unconfirmed");
     }
 
     public void Dispose()

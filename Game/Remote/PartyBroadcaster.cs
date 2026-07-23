@@ -49,7 +49,12 @@ public sealed class PartyBroadcaster
     // Generic broadcast. Telepaths atCommand to every non-self party member.
     // Caller is responsible for any feature-flag gating before invoking —
     // BroadcastExpReset is the only entry-point with built-in gating.
-    public void Broadcast(string atCommand)
+    //
+    // skipInvited excludes invited-not-joined rows: they can't answer an @-command
+    // yet (not in the party), so probes that expect a reply (e.g. @level) pass
+    // true. @Reset / @wealth leave it false — a stray telepath to a pending
+    // invitee is harmless there and there's no reply to wait on.
+    public void Broadcast(string atCommand, bool skipInvited = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(atCommand);
         if (_wireSender is null) return;
@@ -57,6 +62,7 @@ public sealed class PartyBroadcaster
         foreach (PartyMember m in _party.Members)
         {
             if (m.IsSelf) continue;
+            if (skipInvited && m.IsInvited) continue;
             if (string.IsNullOrEmpty(m.Name)) continue;
             // Playpen BBS telepath syntax: `/<given> <atCommand>`
             // (slash + given name). The verbose `t` / `tel` / `tell`

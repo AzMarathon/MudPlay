@@ -96,6 +96,14 @@ public sealed class CombatStateTracker : IDisposable
     private Action<byte[]>? _wireSender;
     private Func<bool>? _breakBeforeRunning;
 
+    // Reports whether we're standing in a too-dark room (RoomTracker.IsInDarkRoom).
+    // Gates the idle-stall watchdog's resync CR: a CR in the dark re-emits no
+    // "Also here:" line (nothing to re-observe) AND its "you can't see anything"
+    // reply is dead-reckoned by RoomTracker as a false confirmation of the
+    // movement loop's in-flight step, so we skip the probe and just clear the stuck
+    // gate. null until wired → fail-open (the resync CR sends as before).
+    private Func<bool>? _isInDarkRoom;
+
     // True while the room currently contains at least one engageable
     // (Enemy-relationship, killable) monster. Drives the
     // MovementCoordinator.CombatGate + lets HealthManager gate the rest decision
@@ -234,6 +242,15 @@ public sealed class CombatStateTracker : IDisposable
         _wireSender = sender;
     }
 
+    // Wire the dark-room probe (RoomTracker.IsInDarkRoom). With it set, the
+    // idle-stall watchdog skips its resync CR while we can't see (see
+    // _isInDarkRoom / OnCombatTick). Until set, the resync CR sends unconditionally.
+    public void SetDarkRoomProbe(Func<bool> isInDarkRoom)
+    {
+        ArgumentNullException.ThrowIfNull(isInDarkRoom);
+        _isInDarkRoom = isInDarkRoom;
+    }
+
     // Wire the CombatSettings.BreakBeforeFleeing reader. When set and true,
     // toggling auto-attack OFF mid-fight sends `break` before the Combat gate
     // releases the walker, so the disengage lands ahead of the walker's next
@@ -293,11 +310,19 @@ public sealed class CombatStateTracker : IDisposable
 
         double heldSec = (_now() - _gateAssertedAt).TotalSeconds;
         double idleSec = (_now() - _lastCombatActivityAt).TotalSeconds;
+        // Skip the resync CR while we can't see: a dark room re-emits no
+        // "Also here:" to re-observe, and its "you can't see anything" reply is
+        // dead-reckoned as a false confirm of the movement loop's in-flight step.
+        // The gate still clears optimistically either way.
+        bool dark = _isInDarkRoom?.Invoke() == true;
         _log?.Info(LogCategory,
             $"combat gate held {heldSec:F1}s, idle {idleSec:F1}s since last activity "
             + $"({_lastCombatActivityDesc}) — no combat activity for the stall window, "
-            + "room empty; resyncing and clearing the stuck gate");
-        _wireSender(Encoding.Latin1.GetBytes("\r"));
+            + (dark
+                ? "room empty; dark room, skipping resync CR and clearing the stuck gate"
+                : "room empty; resyncing and clearing the stuck gate"));
+        if (!dark)
+            _wireSender(Encoding.Latin1.GetBytes("\r"));
         ResetCombatState("idle-stall watchdog: no combat activity — room empty");
     }
 

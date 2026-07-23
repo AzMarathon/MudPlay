@@ -57,8 +57,12 @@ public sealed class PartyLevelTrackerTests
         // probe only arms a window when it has members to ask.
         public int Probes => Windows.Count;
 
-        public void AddMember(string name, bool self = false)
-            => State.Members.Add(new PartyMember { Name = name, IsSelf = self });
+        public PartyMember AddMember(string name, bool self = false, bool invited = false)
+        {
+            PartyMember m = new() { Name = name, IsSelf = self, IsInvited = invited };
+            State.Members.Add(m);
+            return m;
+        }
 
         public void Lead()
         {
@@ -212,6 +216,70 @@ public sealed class PartyLevelTrackerTests
 
         h.AddMember("Me", self: true);   // self excluded from the signature
         Assert.Equal(1, h.Probes);       // no re-probe
+    }
+
+    // ----- Invited members are never probed until they join --------------
+
+    [Fact]
+    public void Probe_DoesNotFire_ForInvitedMember()
+    {
+        var h = new Harness();
+        h.AddMember("Tristian", invited: true);   // invited, not yet joined
+        h.Lead();
+
+        Assert.Equal(0, h.Probes);   // no @level while only invited
+        Assert.Empty(h.Wire);
+    }
+
+    [Fact]
+    public void Probe_FiresOnJoin_WhenInvitedFlagClears()
+    {
+        var h = new Harness();
+        PartyMember m = h.AddMember("Tristian", invited: true);
+        h.Lead();
+        Assert.Equal(0, h.Probes);
+
+        m.IsInvited = false;   // acceptance: invited→joined transition
+        Assert.Equal(1, h.Probes);
+        Assert.NotEmpty(h.Wire);   // /Tristian @level now goes out
+    }
+
+    [Fact]
+    public void Probe_InvitedMemberAlongsideJoined_OnlyProbesJoined()
+    {
+        var h = new Harness();
+        h.AddMember("Bob");                        // already joined
+        h.AddMember("Tristian", invited: true);    // pending invite
+        h.Lead();
+
+        Assert.Equal(1, h.Probes);
+        // Only Bob is telepathed; the invited row is skipped.
+        Assert.Single(h.Wire);
+        Assert.Contains("/Bob", System.Text.Encoding.Latin1.GetString(h.Wire[0]));
+    }
+
+    [Fact]
+    public void Bounds_SkipsInvitedMember()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Tristian", invited: true);
+        h.Lead();
+        // Even if a level was somehow cached, an invited row must not widen bounds.
+        h.Players.RecordLevel("Tristian", 12, DateTime.UnixEpoch);
+
+        Assert.Equal((40, 40), h.Tracker.Bounds());   // only self is counted
+    }
+
+    [Fact]
+    public void WarmStaleLevels_SkipsInvitedMember()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Tristian", invited: true);   // unknown level, but invited
+        h.Lead();
+
+        int before = h.Probes;
+        h.Tracker.WarmStaleLevels();
+        Assert.Equal(before, h.Probes);   // invited members don't count as stale
     }
 
     // ----- End-to-end: probe reply persists and shows up in Bounds -------

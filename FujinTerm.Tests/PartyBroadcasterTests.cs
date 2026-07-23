@@ -127,4 +127,35 @@ public sealed class PartyBroadcasterTests
         byte[] sent = Assert.Single(wire);
         Assert.Equal("/Real @kill\r", Encoding.Latin1.GetString(sent));
     }
+
+    [Fact]
+    public void Broadcast_SkipInvited_ExcludesPendingInvitee()
+    {
+        var (bc, state, wire) = Setup();
+        state.Members.Add(new PartyMember { Name = "Joined" });
+        state.Members.Add(new PartyMember { Name = "Tristian", IsInvited = true });
+        state.IsInParty = true;
+
+        bc.Broadcast("@level", skipInvited: true);
+
+        byte[] sent = Assert.Single(wire);
+        Assert.Equal("/Joined @level\r", Encoding.Latin1.GetString(sent));
+    }
+
+    [Fact]
+    public void Broadcast_DefaultIncludesInvited()
+    {
+        // Default (skipInvited=false) keeps @Reset / @wealth behaviour: a stray
+        // telepath to a pending invitee is harmless and there's no reply to wait on.
+        var (bc, state, wire) = Setup();
+        state.Members.Add(new PartyMember { Name = "Joined" });
+        state.Members.Add(new PartyMember { Name = "Tristian", IsInvited = true });
+        state.IsInParty = true;
+
+        bc.Broadcast("@Reset");
+
+        Assert.Equal(2, wire.Count);
+        Assert.Equal("/Joined @Reset\r",   Encoding.Latin1.GetString(wire[0]));
+        Assert.Equal("/Tristian @Reset\r", Encoding.Latin1.GetString(wire[1]));
+    }
 }

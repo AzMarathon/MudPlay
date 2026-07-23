@@ -123,6 +123,11 @@ public sealed partial class PartyLevelProbe : IDisposable
         foreach (PartyMember m in _party.Members)
         {
             if (m.IsSelf) continue;
+            // An invited-not-joined member can't reply to @level (they're not in
+            // the party yet), so don't count them as an expected replier — else
+            // the window always waits the full QueryWindow for a reply that can't
+            // come. The broadcast below skips them for the same reason.
+            if (m.IsInvited) continue;
             if (string.IsNullOrEmpty(m.Name)) continue;
             pending.Remaining.Add(GivenName(m.Name));
         }
@@ -132,7 +137,7 @@ public sealed partial class PartyLevelProbe : IDisposable
             return Task.FromResult(PartyLevelResult.Empty);
 
         _pending.Add(pending);
-        _broadcaster.Broadcast("@level");
+        _broadcaster.Broadcast("@level", skipInvited: true);
         _armWindow(() => Complete(pending));
         return pending.Tcs.Task;
     }

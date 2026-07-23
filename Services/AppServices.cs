@@ -2669,6 +2669,16 @@ public sealed class AppServices
         DarkRoomSettle = new Game.Map.DarkRoomMovementSettle(
             RoomTracker, MovementCoordinator, Log);
 
+        // In a dark room there's nothing to see, so a CR "where am I" refresh
+        // returns only "you can't see anything" — and that stale dark line is
+        // dead-reckoned by RoomTracker as a false confirmation of the movement
+        // loop's in-flight step, collapsing the dark-room settle window (the loop
+        // then double-steps past lairs and drags late-populating monsters). Wire
+        // the dark probe so combat's recovery CRs and the idle-stall resync CR are
+        // suppressed while blind.
+        Combat.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
+        CombatTracker.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
+
         // HealthManager. Master on/off is
         // GeneralSettings.AutoMode.AutoHealRest (shared with the
         // Settings → General checkbox + toolbar Toggle button). When

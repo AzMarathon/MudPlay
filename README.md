@@ -1,9 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.99.0**
-> - Background memory hygiene: after a game-data set loads, the client compacts the large-object-heap fragmentation left by the JSON import (~125MB reclaimed), then periodically returns free native pages to the OS so a days-long loop-mode session no longer holds a working set far above its live heap
-> - Timed to stay unnoticed — the one stop-the-world compaction piggybacks on world-load, and the periodic native trim never suspends the UI or competes with a live combat round
+> **Version 1.99.2**
+> - Party @level probe no longer telepaths members who are only invited: an invited-not-joined row is excluded from the level roster, bounds estimate, and stale-warm scan, and the probe re-fires the moment they accept and join
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

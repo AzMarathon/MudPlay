@@ -29,6 +29,11 @@ public sealed class CombatStateTrackerTests
         public bool AutoAttackEnabled { get; set; } = true;
         public Dictionary<int, MonsterOverlay> Overlays { get; } = new();
 
+        // Drives the dark-room probe: when true the idle-stall watchdog skips its
+        // resync CR (a blind CR re-emits nothing and false-confirms the movement
+        // loop's in-flight step). Default false → the watchdog resyncs as before.
+        public bool Dark { get; set; }
+
         // ----- seehidden clear override (PR 4.c-b) -------------------
         public bool ClearWhenSeenHidden { get; set; }
         public bool AutoSneakEnabled { get; set; }
@@ -89,6 +94,7 @@ public sealed class CombatStateTrackerTests
                                      ? o : new MonsterOverlay(),
                 log: Log,
                 clock: () => FakeNow);
+            Tracker.SetDarkRoomProbe(() => Dark);
         }
 
         public void SetOverlay(int number, MonsterRelationship? relationship = null,
@@ -923,6 +929,28 @@ public sealed class CombatStateTrackerTests
         h.Tracker.OnCombatTick();
         Assert.Contains("\r", h.SentRaw);
         Assert.False(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void IdleStallWatchdog_DarkRoom_ClearsGateWithoutResyncCr()
+    {
+        // In a dark room the watchdog still force-clears the stuck gate, but skips
+        // the resync CR: a blind CR re-emits no "Also here:" to re-observe and its
+        // "you can't see anything" reply is dead-reckoned as a false confirm of the
+        // movement loop's in-flight step (the double-step-past-lairs bug).
+        using Harness h = new();
+        h.WireSender();
+        h.Dark = true;
+        h.AddMonster(1, "giant rat", killable: true);
+
+        h.Feed("Also here: giant rat.");
+        Assert.True(h.CombatGateHeld);
+
+        h.FakeNow = h.FakeNow.AddSeconds(7);        // past the 6s threshold
+        h.Tracker.OnCombatTick();
+
+        Assert.Empty(h.SentRaw);                    // no blind resync CR
+        Assert.False(h.CombatGateHeld);             // gate still cleared
     }
 
     [Fact]
