@@ -63,7 +63,7 @@ public sealed class MovementController : IDisposable
     }
 
     // Coalesced run-state across all three engines. Priority mirrors
-    // NavigationViewModel.RefreshEngineActionLabel: Auto-Lair (drives the
+    // NavigationViewModel.RefreshEngineActionKind: Auto-Lair (drives the
     // walker internally) → Loop → Walker → Idle.
     public MovementEngineState State
     {
