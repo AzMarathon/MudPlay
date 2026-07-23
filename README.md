@@ -1,9 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.98.0**
-> - Last-known encumbrance now persists per character (saved on profile write, restored on load), so a fresh session starts with the real carry-weight bracket instead of Unknown
-> - Travel-cost estimates and hop-timing calibration tag the correct bracket from session start rather than waiting on the connect-time `i` — which never fires on a manual login or a hangup-suppressed relog
+> **Version 1.99.0**
+> - Background memory hygiene: after a game-data set loads, the client compacts the large-object-heap fragmentation left by the JSON import (~125MB reclaimed), then periodically returns free native pages to the OS so a days-long loop-mode session no longer holds a working set far above its live heap
+> - Timed to stay unnoticed — the one stop-the-world compaction piggybacks on world-load, and the periodic native trim never suspends the UI or competes with a live combat round
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

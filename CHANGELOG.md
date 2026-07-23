@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.99.0
+
+- Background memory hygiene: after a game-data set loads, the client compacts the large-object-heap fragmentation left by the JSON import (~125MB reclaimed), then periodically returns free native pages to the OS so a days-long loop-mode session no longer holds a working set far above its live heap
+- Timed to stay unnoticed — the one stop-the-world compaction piggybacks on world-load, and the periodic native trim never suspends the UI or competes with a live combat round
+
 ## 1.98.0
 
 - Last-known encumbrance now persists per character (saved on profile write, restored on load), so a fresh session starts with the real carry-weight bracket instead of Unknown
