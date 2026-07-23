@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.99.1
+
+- Dark-room movement no longer double-steps past lairs or drags monsters onward: combat's "where am I" CR refreshes (and the idle-stall resync CR) are suppressed while we can't see, so a blind refresh can't false-confirm the loop's in-flight step and collapse the dark-room settle window
+- bug reports addressed: paradigm-20260722-233052
+
 ## 1.99.0
 
 - Background memory hygiene: after a game-data set loads, the client compacts the large-object-heap fragmentation left by the JSON import (~125MB reclaimed), then periodically returns free native pages to the OS so a days-long loop-mode session no longer holds a working set far above its live heap

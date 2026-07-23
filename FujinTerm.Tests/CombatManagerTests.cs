@@ -36,6 +36,9 @@ public sealed class CombatManagerTests
         public Dictionary<int, MonsterOverlay> Overlays { get; } = new();
         public string? OwnName { get; set; } = "Fujin";
         public bool AutoCombatEnabled { get; set; } = true;
+        // Drives the dark-room probe CombatManager reads to suppress its CR
+        // "where am I" refreshes. Default false (lit) → refreshes fire as before.
+        public bool Dark { get; set; }
         // Every weapon/off-hand swap the engine asked the actuator for, in order.
         // The actual wire commands (worn-diff + two-handed rule) are
         // EquipmentManager's job now, tested in EquipmentManagerTests; here we
@@ -68,6 +71,7 @@ public sealed class CombatManagerTests
                 log: Log);
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.SetWeaponActuator((w, oh) => Swaps.Add((w, oh)));
+            Combat.SetDarkRoomProbe(() => Dark);
         }
 
         public void SetOverlay(int monsterNumber, MonsterAttackPriority? priority = null,
@@ -133,6 +137,11 @@ public sealed class CombatManagerTests
         public string LastSent => Sent.Count == 0
             ? string.Empty
             : Encoding.Latin1.GetString(Sent[^1]).TrimEnd('\r');
+
+        // Count the bare-CR "where am I" room-refresh nudges (a CR decodes to ""
+        // once trimmed) — distinct from real attack commands.
+        public int CrRefreshSends => Sent.Count(b =>
+            Encoding.Latin1.GetString(b).TrimEnd('\r').Length == 0);
 
         public void Dispose()
         {
@@ -341,6 +350,62 @@ public sealed class CombatManagerTests
         h.Feed("You don't see brigand chief here!");
 
         Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
+    }
+
+    // ----- dark-room CR-refresh suppression -----------------------------
+
+    [Fact]
+    public void CommandNoEffect_LitRoom_FiresCrRefresh()
+    {
+        // Baseline: in a lit room a no-effect swing drops the target and fires the
+        // recovery CR so the server re-displays the room for a fresh pick.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+        Assert.Equal(0, h.CrRefreshSends);
+
+        h.Feed("Your command had no effect.");
+
+        Assert.Null(h.Combat.CurrentTarget);   // target dropped
+        Assert.Equal(1, h.CrRefreshSends);     // recovery CR fired
+    }
+
+    [Fact]
+    public void CommandNoEffect_DarkRoom_SuppressesCrRefresh()
+    {
+        // In a dark room the same recovery path must NOT send a CR: a refresh
+        // there returns only "you can't see anything", and that stale dark line is
+        // dead-reckoned as a false confirmation of the movement loop's in-flight
+        // step — the double-step-past-lairs bug. The target still drops; only the
+        // blind CR is withheld.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.Dark = true;
+        h.Feed("Your command had no effect.");
+
+        Assert.Null(h.Combat.CurrentTarget);   // target still dropped
+        Assert.Equal(0, h.CrRefreshSends);     // no blind CR
+    }
+
+    [Fact]
+    public void TargetNotHere_DarkRoom_SuppressesCrRefresh()
+    {
+        // The "You don't see X here!" recovery path shares the same suppression:
+        // no CR refresh while we can't see.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.Dark = true;
+        h.Feed("You don't see giant rat here!");
+
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.Equal(0, h.CrRefreshSends);
     }
 
     [Fact]
