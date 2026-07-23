@@ -81,6 +81,13 @@ public sealed class RoomEntityClassifier : IDisposable
     // normal case.
     public Func<bool>? FleeProbe { get; set; }
 
+    // Late-wired probe for CombatManager's active target (constructed after this
+    // classifier). On a confirmed dark-room advance we reset the accumulated
+    // roster but keep the one mob matching this name, so an ongoing dark fight
+    // isn't dropped mid-swing while pursuit arrivals stop piling up. Null/unset →
+    // keep nothing (reset to empty).
+    public Func<string?>? ActiveCombatTargetProbe { get; set; }
+
     // Fires after each successful "Also here:" parse. Subscribers run on the
     // MessageRouter's marshalled thread — the UI thread in normal app use; the
     // test thread under xUnit.
@@ -499,15 +506,22 @@ public sealed class RoomEntityClassifier : IDisposable
 
         // A dark-room advance carries NO occupant information: the room display
         // shows no name, no exits, and no "Also here:" line (see
-        // GAME_MECHANICS.md), so an empty entity list here means "can't see",
-        // not "room is empty". Wiping Current would fire an empty
-        // EntitiesObserved that CombatStateTracker reads as "room cleared",
-        // dropping the Combat gate mid-fight — the walker then steps on through
-        // a dark room while a mob is still engaging us (the reported bug). Keep
-        // Current intact: dark-room combat is driven entirely by attack-line
-        // injection (DarkRoomCombatWatcher) and retracted by its "command had no
-        // effect" path, both already gated on IsInDarkRoom.
-        if (_roomTracker is { IsInDarkRoom: true }) return;
+        // GAME_MECHANICS.md), so we can't re-derive the new room's roster. Keeping
+        // Current wholesale here (the old fix) protected an in-progress dark fight
+        // from a mid-move gate drop, but it also let every pursuit arrival
+        // (RoomEntryWatcher) pile onto a list that never resets — over a corridor
+        // hunt that grows to hundreds of phantom mobs. That count trips
+        // CombatManager's max-monsters gate so we never engage, while
+        // CombatStateTracker still counts them and holds the Combat gate until the
+        // idle-stall watchdog tears it down ~30s later: "a party member fights the
+        // monster and we just sit there." Reset the roster on each dark advance but
+        // KEEP the mob we're actively fighting (below), so the real fight survives
+        // and the accumulation doesn't.
+        if (_roomTracker is { IsInDarkRoom: true })
+        {
+            ResetDarkRoomRoster();
+            return;
+        }
 
         // Wire order within a room display is name → "Also here:" →
         // "Obvious exits:", and RoomTracker only CONFIRMS the move on the
@@ -631,6 +645,48 @@ public sealed class RoomEntityClassifier : IDisposable
         Current = obs;
         EntitiesObserved?.Invoke(obs);
         return true;
+    }
+
+    // Reset the roster on a confirmed dark-room advance: shed every accumulated
+    // entity EXCEPT the mob we're actively fighting. A too-dark room prints no
+    // "Also here:" to rebuild from, so pursuit arrivals would otherwise pile up
+    // forever; resetting each advance keeps the list honest. The active target is
+    // matched by name (Resolved then Raw) against CombatManager's current pick and
+    // carried across so a live dark fight isn't dropped mid-swing — the reason this
+    // branch used to keep Current wholesale. A genuine pursuer we're NOT yet
+    // targeting re-reveals off its next attack line (DarkRoomCombatWatcher) within
+    // the settle window. While fleeing we keep nothing and keep running, mirroring
+    // the lit-room pursuer rule in OnRoomTrackerStateChanged.
+    private void ResetDarkRoomRoster()
+    {
+        RoomEntity? keep = null;
+        if (!(FleeProbe?.Invoke() ?? false)
+            && ActiveCombatTargetProbe?.Invoke() is { Length: > 0 } target
+            && Current is { } cur)
+        {
+            foreach (RoomEntity e in cur.Entities)
+            {
+                if (e.Kind != EntityKind.Monster) continue;
+                if (string.Equals(e.ResolvedName, target, StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(e.RawName, target, StringComparison.OrdinalIgnoreCase))
+                {
+                    keep = e;
+                    break;
+                }
+            }
+        }
+
+        RoomEntity[] entities = keep is { } k ? new[] { k } : Array.Empty<RoomEntity>();
+        RoomEntitiesObservation obs = new(
+            RawAlsoHereLine: string.Empty,
+            Entities: entities,
+            At: DateTimeOffset.Now,
+            Source: RoomObservationSource.RoomChange);
+        Current = obs;
+        _log?.Debug(LogCategory, keep is { } kept
+            ? $"dark advance — roster reset, kept active target {kept.ResolvedName}"
+            : "dark advance — roster reset to empty");
+        EntitiesObserved?.Invoke(obs);
     }
 
     // Wipe Current and re-fire EntitiesObserved with an empty observation —

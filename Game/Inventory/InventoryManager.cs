@@ -168,6 +168,56 @@ public sealed partial class InventoryManager : IDisposable
         _pendingMergeLine = "";
     }
 
+    // Persist the carry-weight reading for the profile. Returns null when nothing
+    // has ever been observed (no `i` parsed, no prior restore) so the save hook
+    // won't overwrite a good persisted value with an empty one. Only the
+    // encumbrance numbers travel — coins / items / worn gear re-base from the
+    // next session's connect-`i`.
+    public Models.Profile.LastKnownEncumbrance? SnapshotEncumbrance()
+    {
+        lock (_lock)
+        {
+            if (_maxWeight <= 0) return null;
+            return new Models.Profile.LastKnownEncumbrance
+            {
+                CurrentWeight = _curWeight,
+                MaxWeight = _maxWeight,
+                Percentage = _percentage,
+                Category = _category,
+            };
+        }
+    }
+
+    // Seed the carry-weight reading from a persisted snapshot on profile load.
+    // Encumbrance can't change while out of the realm, so the last-known value is
+    // accurate the moment the next session reconnects. Deliberately leaves
+    // _loaded FALSE: this is a stale estimate for the cost models / calibrator /
+    // Workshop to read, not a fresh dump — the connect-`i` still authoritatively
+    // re-bases the full snapshot. A null clears back to unobserved (profile
+    // close / a character with no persisted reading).
+    public void HydrateEncumbrance(Models.Profile.LastKnownEncumbrance? snapshot)
+    {
+        lock (_lock)
+        {
+            if (snapshot is { MaxWeight: > 0 })
+            {
+                _curWeight = snapshot.CurrentWeight;
+                _maxWeight = snapshot.MaxWeight;
+                _percentage = snapshot.Percentage;
+                _category = snapshot.Category;
+                _lastUpdated = DateTimeOffset.Now;
+                _log?.Info(LogCategory,
+                    $"restored last-known encumbrance {_category} {_curWeight}/{_maxWeight} [{_percentage}%] from profile");
+            }
+            else
+            {
+                _curWeight = _maxWeight = _percentage = 0;
+                _category = EncumbranceLevel.Unknown;
+            }
+        }
+        Changed?.Invoke();
+    }
+
     // Apply an auto-deposit the moment its `dep <value>` is dispatched at the
     // bank. The amount is known exactly — it was computed from the fresh
     // pre-deposit `i` — so the purse is decremented now rather than when the

@@ -76,6 +76,17 @@ public sealed partial class OutboundMovementObserver
             return;
         }
 
+        // "leave party" isn't a valid game command — the game ignores it — but
+        // it's a natural phrase to type when trying to leave a party. "leave" is a
+        // legitimate text-exit verb, so without this guard TextMovementPattern
+        // reads "leave party" as a text-exit move and enqueues a phantom,
+        // cardinal-less pending move. In a dark room that phantom has no mapped
+        // exit, so NoteDarkRoomEntered holds it at the head of the pending queue
+        // indefinitely — jamming every real step queued behind it and stalling the
+        // walk after a single move (bug report paradigm-20260722-111523, typed
+        // manually while a dark loop ran). It never moves the player, so drop it.
+        if (NonMovementLeavePattern().IsMatch(cmd)) return;
+
         if (TextMovementPattern().IsMatch(cmd))
         {
             // Debounced overload: the walker / loop-runner (SpecialExitDispatch)
@@ -149,4 +160,13 @@ public sealed partial class OutboundMovementObserver
         @"^(go|enter|climb|crawl|swim|fly|jump|leap|step|walk|run|ride|sail|board|disembark|embark|exit|leave|cross|descend|ascend)\s+\S+",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TextMovementPattern();
+
+    // A "leave party" phrase — a natural thing to type to leave a party, but not
+    // a valid game command (the game ignores it) and never movement. It starts
+    // with "leave", which TextMovementPattern would otherwise treat as a text-exit
+    // move, so it must be dropped before that check.
+    [GeneratedRegex(
+        @"^leave\s+party\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex NonMovementLeavePattern();
 }

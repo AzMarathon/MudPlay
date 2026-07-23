@@ -31,10 +31,16 @@ public sealed class DarkRoomMovementSettle : IDisposable
 {
     public const string LogCategory = "DarkRoomSettle";
 
-    // A dark reveal lands within roughly a game round of entry; 1s covers the
-    // arrival / first-attack line without stalling an empty dark corridor for
-    // long. Each fresh dark advance restarts the window, so a corridor of empty
-    // dark rooms settles one short beat per room, not a single long freeze.
+    // A dark reveal — the pursuing monster's "strides in" arrival or its first
+    // dark-cyan attack line — lands a beat after entry, up to about a game round.
+    // The window must OUTLAST that beat: if it expires first, the loop takes its
+    // next step before the Combat gate can catch the monster, so we walk past the
+    // fight and our attack targets a mob that's no longer here ("Your command had
+    // no effect") while it chases us onward. 1s holds long enough for the reveal
+    // without stalling an empty corridor for long (a shorter 900ms let pursuers
+    // land after we'd already stepped on). Each fresh dark advance restarts the
+    // window, so a run of empty dark rooms settles one short beat per room, not a
+    // single long freeze.
     public static readonly TimeSpan DefaultSettleWindow = TimeSpan.FromSeconds(1);
 
     private readonly RoomTracker _tracker;
@@ -51,6 +57,14 @@ public sealed class DarkRoomMovementSettle : IDisposable
     private bool _asserted;
     private bool _disposed;
 
+    // Reveal-lag instrumentation. _settleStartedAt stamps the latest dark
+    // advance; _revealObservedAt records when the Combat gate took over the
+    // window (a hostile surfaced). On elapse we log which outcome happened and
+    // the lag — so a long capture's Gate log shows the reveal-lag distribution
+    // (is 1s generous or tight?) and how much a truly-empty dark room costs.
+    private DateTimeOffset _settleStartedAt;
+    private DateTimeOffset? _revealObservedAt;
+
     public DarkRoomMovementSettle(
         RoomTracker tracker,
         MovementCoordinator coordinator,
@@ -64,6 +78,20 @@ public sealed class DarkRoomMovementSettle : IDisposable
         _window = window ?? DefaultSettleWindow;
         _scheduleOverride = scheduleOverride;
         _tracker.StateChanged += OnTrackerStateChanged;
+        _coordinator.GatesChanged += OnGatesChanged;
+    }
+
+    // Watch for the Combat gate taking over an active settle window — the moment
+    // a pursuing hostile reveals. Recording it (once per window) lets OnSettleElapsed
+    // report the reveal-lag instead of mislabelling the room empty. Pure
+    // instrumentation: it changes no gate state, only measures.
+    private void OnGatesChanged()
+    {
+        if (_disposed) return;
+        if (!_asserted) return;
+        if (_revealObservedAt is not null) return;
+        if (!_coordinator.IsGateAsserted(MovementCoordinator.CombatGate)) return;
+        _revealObservedAt = DateTimeOffset.Now;
     }
 
     private void OnTrackerStateChanged(RoomTransition transition)
@@ -82,6 +110,11 @@ public sealed class DarkRoomMovementSettle : IDisposable
         if (transition.NewRoom is null) return;
         if (ReferenceEquals(transition.PreviousRoom, transition.NewRoom)) return;
         if (transition.PreviousRoom.Key.Equals(transition.NewRoom.Key)) return;
+
+        // Each fresh dark advance restarts the window, so re-stamp the start and
+        // clear the prior window's reveal mark before measuring this one.
+        _settleStartedAt = DateTimeOffset.Now;
+        _revealObservedAt = null;
 
         if (!_asserted)
         {
@@ -120,8 +153,17 @@ public sealed class DarkRoomMovementSettle : IDisposable
     {
         if (!_asserted) return;
         _asserted = false;
+
+        // Report the outcome so a capture shows reveal-lag vs. empty-room cost:
+        // "reveal engaged Δms in" means a pursuer surfaced and Combat holds the
+        // loop from here; "empty after Nms" means the whole window was spent on a
+        // room nothing followed us into (the overhead we pay per empty dark room).
+        double heldMs = (DateTimeOffset.Now - _settleStartedAt).TotalMilliseconds;
+        string reason = _revealObservedAt is { } revealedAt
+            ? $"settle elapsed — reveal engaged {(revealedAt - _settleStartedAt).TotalMilliseconds:F0}ms in, Combat holds"
+            : $"settle elapsed empty after {heldMs:F0}ms — no reveal";
         _coordinator.ClearGate(
-            MovementCoordinator.DarkRoomSettleGate, LogCategory, "settle window elapsed");
+            MovementCoordinator.DarkRoomSettleGate, LogCategory, reason);
     }
 
     public void Dispose()
@@ -129,6 +171,7 @@ public sealed class DarkRoomMovementSettle : IDisposable
         if (_disposed) return;
         _disposed = true;
         _tracker.StateChanged -= OnTrackerStateChanged;
+        _coordinator.GatesChanged -= OnGatesChanged;
         if (_timer is { } timer)
         {
             timer.Stop();

@@ -2,6 +2,26 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.98.0
+
+- Last-known encumbrance now persists per character (saved on profile write, restored on load), so a fresh session starts with the real carry-weight bracket instead of Unknown
+- Travel-cost estimates and hop-timing calibration tag the correct bracket from session start rather than waiting on the connect-time `i` — which never fires on a manual login or a hangup-suppressed relog
+
+## 1.97.0
+
+- Dark-room hunt diagnostics: the settle-gate log now reports whether each window ended on a revealed pursuer (with the reveal-lag in ms) or expired empty, so a capture shows the true reveal-lag distribution and the per-room cost of an empty dark room
+- Combat idle-stall watchdog log now names how long the gate was held, how long it sat idle, and what last counted as activity — distinguishing a post-kill idle release from an unmatched-attack-line pattern gap
+
+## 1.96.2
+
+- "leave party" typed mid-loop no longer stalls a dark walk: the client stops misreading the phrase as a text-exit move that jammed the room-tracker's pending queue after a single step
+- bug reports addressed: paradigm-20260722-111523
+
+## 1.96.1
+
+- Dark-room roster no longer accumulates: each dark advance resets the occupant list (keeping only the mob we're actively fighting), so pursuit arrivals stop piling into hundreds of phantoms that blocked engagement and stalled the loop 30s a room
+- bug reports addressed: paradigm-20260722-104504
+
 ## 1.96.0
 
 - New Session Stats → Players Seen window: logs every player spotted (also-here match, walk-in, or a failed sneak you notice) with timestamp, where (room name + map/room), who, and total times seen

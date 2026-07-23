@@ -79,6 +79,14 @@ public sealed class CombatStateTracker : IDisposable
     // watchdog fires once this goes IdleStallThreshold stale with the gate held.
     private DateTimeOffset _lastCombatActivityAt = DateTimeOffset.MinValue;
 
+    // Watchdog diagnostics: when the gate was asserted, and what last refreshed
+    // the activity stamp. Logged when the watchdog fires so a capture can tell a
+    // post-kill idle release (last activity = a combat line) from a pattern gap
+    // (last activity = only the room-entry observation — our attack lines never
+    // matched, so they never refreshed the stamp).
+    private DateTimeOffset _gateAssertedAt;
+    private string _lastCombatActivityDesc = "none";
+
     private Func<bool>? _clearWhenSeenHidden;
     private Func<bool>? _isAutoSneakEnabled;
     private Func<int, bool>? _hasSeeHidden;
@@ -283,9 +291,12 @@ public sealed class CombatStateTracker : IDisposable
         if (_wireSender is null) return;
         if (_now() - _lastCombatActivityAt < IdleStallThreshold) return;
 
+        double heldSec = (_now() - _gateAssertedAt).TotalSeconds;
+        double idleSec = (_now() - _lastCombatActivityAt).TotalSeconds;
         _log?.Info(LogCategory,
-            "combat gate held with no combat activity for the stall window — "
-            + "room empty, resyncing and clearing the stuck gate");
+            $"combat gate held {heldSec:F1}s, idle {idleSec:F1}s since last activity "
+            + $"({_lastCombatActivityDesc}) — no combat activity for the stall window, "
+            + "room empty; resyncing and clearing the stuck gate");
         _wireSender(Encoding.Latin1.GetBytes("\r"));
         ResetCombatState("idle-stall watchdog: no combat activity — room empty");
     }
@@ -381,6 +392,7 @@ public sealed class CombatStateTracker : IDisposable
             // gate's already held, so stamp here regardless so a slow-but-real
             // fight never trips the stall watchdog).
             _lastCombatActivityAt = _now();
+            _lastCombatActivityDesc = "room-entry hostile";
             string reason = first is null
                 ? $"room-entry actionable={actionable}/{targetable}"
                 : $"room-entry actionable={actionable}/{targetable} first={first}";
@@ -453,6 +465,7 @@ public sealed class CombatStateTracker : IDisposable
     {
         if (_gateAsserted) return;
         _gateAsserted = true;
+        _gateAssertedAt = _now();
         _coordinator.AssertGate(MovementCoordinator.CombatGate, AsserterName, reason);
     }
 
@@ -487,6 +500,7 @@ public sealed class CombatStateTracker : IDisposable
         // A damage/miss line is proof the fight is live — refresh the
         // watchdog's activity stamp so it never fires mid-fight.
         _lastCombatActivityAt = _now();
+        _lastCombatActivityDesc = "combat line";
         if (!_state.InCombat) _state.InCombat = true;
     }
 

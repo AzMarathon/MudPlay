@@ -152,6 +152,12 @@ public sealed class MovementCoordinator
     // Navigation status strip: "paused: User, HealthRecovery".
     public IReadOnlyCollection<string> AssertedGates => _assertedGates.ToArray();
 
+    // True when the named gate is currently asserting pause. Allocation-free
+    // single-gate probe — for callers that only care about one gate on a hot
+    // path (e.g. the dark-room settle watcher checking whether Combat took over
+    // its window) rather than the whole AssertedGates snapshot.
+    public bool IsGateAsserted(string gate) => _assertedGates.Contains(gate);
+
     // Fires after every transition that changes IsPaused from false to true or
     // vice versa. Single-gate changes that don't flip the overall paused state
     // do not fire (e.g. clearing HealthRecovery while User is still asserted).

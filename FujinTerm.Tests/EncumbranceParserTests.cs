@@ -1,4 +1,5 @@
 using FujinTerm.Game;
+using FujinTerm.Models.Profile;
 using FujinTerm.Services;
 using FujinTerm.Services.Patterns;
 using FujinTerm.Terminal;
@@ -108,6 +109,37 @@ public sealed class EncumbranceParserTests
         router.Dispatch(Line("Encumbrance: 2200/2880 - Heavy [76%]"));
 
         // Default `[ObservableProperty]` value before any write.
+        Assert.Equal(EncumbranceLevel.Unknown, state.Encumbrance);
+    }
+
+    // ----- Cross-session persistence (Hydrate) ----------------------
+
+    [Fact]
+    public void Hydrate_SeedsBracketFromSnapshot()
+    {
+        var (_, state, parser) = Setup();
+
+        parser.Hydrate(new LastKnownEncumbrance
+        {
+            CurrentWeight = 3908, MaxWeight = 6804, Percentage = 57,
+            Category = EncumbranceLevel.Medium,
+        });
+
+        Assert.Equal(EncumbranceLevel.Medium, state.Encumbrance);
+    }
+
+    [Fact]
+    public void Hydrate_NullOrUnobserved_ResetsToUnknown()
+    {
+        var (_, state, parser) = Setup();
+        state.Encumbrance = EncumbranceLevel.Heavy;
+
+        parser.Hydrate(null);
+        Assert.Equal(EncumbranceLevel.Unknown, state.Encumbrance);
+
+        // A DTO that never captured a dump (MaxWeight 0) also clears.
+        state.Encumbrance = EncumbranceLevel.Heavy;
+        parser.Hydrate(new LastKnownEncumbrance { Category = EncumbranceLevel.Medium });
         Assert.Equal(EncumbranceLevel.Unknown, state.Encumbrance);
     }
 }

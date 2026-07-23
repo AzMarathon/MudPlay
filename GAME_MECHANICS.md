@@ -153,6 +153,15 @@ it isn't here and you're unsure, ask.
   Two genuinely same-named mobs can't be told apart in the dark, so they read as one until the
   first dies — the survivor's next swing re-reveals it and combat re-engages. Over-count is thus
   impossible and under-count self-heals.
+- **[CONFIRMED]** *(2026-07-22, user)* **A dark room's monsters can populate *after* entry, not
+  only at the moment you arrive.** A room that reads empty on arrival (no attack line yet) can still
+  have a hostile reveal itself a beat later via its first swing. This is why the dark-room settle
+  window (`DarkRoomSettleGate`, ~1.0s per dark advance) must hold before the walker moves on — it's
+  the only late-reveal guard for a room that looked empty at entry. Empirically a reveal often
+  lands at 0ms (synchronous with entry — over a 1-hour hunt all 334 populated rooms revealed at
+  0ms), but that is area/condition-dependent, **not** a guarantee: the delayed-populate case is
+  real, so the settle window is a justified safety buffer, not dead time. Do **not** trim or
+  short-circuit it on the strength of an all-synchronous sample.
 
 ## Stealth (sneak & hide)
 
@@ -625,6 +634,29 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
 
 ## Movement & navigation
 
+- **[CONFIRMED — user, 2026-07-22] Per-hop movement speed is realm-specific, and the two realms
+  differ enough that no single fixed movement timer can be right for both.**
+  - **Paradigm** paces each hop by a deterministic server formula (no lag term):
+    `hop_ms = max(1000, 1100 + enc² · 2000 − quickness · 10)`, where `enc` is the encumbrance
+    fraction (0–1 of max carry) and `quickness` is total quickness. There is a hard **1.0s cap —
+    the fastest any hop can be.** Time rises quadratically with encumbrance and falls linearly with
+    quickness: a light, high-quickness build sits pinned at the 1.0s floor (quickness 100 stays
+    capped until ~67% enc), while a heavy or low-quickness build ranges up toward ~3.1s/hop. The
+    server will not process a hop faster than this, so back-to-back move commands are throttled to
+    it rather than executing instantly. (Cross-checked against the falls-below-cap points: quickness
+    15 → 16% enc, 100 → 67%, 200 → 97%.)
+  - **Stock** has no such floor. Empirical captures (8 sessions, 199 moves) show a true-speed floor
+    around **0.25s** unencumbered, medians ~0.6–0.7s at light/medium loads rising to ~1.65s when
+    Heavy (≈67%+ enc), with wide lag-driven variance per hop. A comparable character therefore moves
+    roughly **2–4× faster per hop on stock** than the Paradigm 1.0s cap.
+  - **Design consequence:** the dark-room settle window (and any fixed inter-move timer) is
+    realm-coupled. At 1.0s it ≈ the Paradigm server cadence, so on Paradigm it costs almost nothing
+    on an empty room; on stock the same 1.0s nearly doubles the natural ~0.6s hop — a heavy tax.
+    Overshoot (stepping before a dark pursuer reveals) is therefore a *fast-mover* problem: it only
+    bites a character near the Paradigm cap or a quick stock character; a slow/heavy mover has ample
+    reveal margin. This argues for making dark-room room-clear detection **event-driven** (step once
+    the room is confirmed clear via the attack→"no effect" + combat-line-silence signals) rather than
+    a single global duration.
 - **[CONFIRMED, capture 2026-07-12] Paradigm-only `rm` command prints authoritative position.**
   On a ParaMud (Paradigm) realm, typing `rm` returns a fixed three-line block, each label
   left-justified with the value padded to a column:
