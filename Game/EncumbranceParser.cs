@@ -25,6 +25,21 @@ public sealed partial class EncumbranceParser : IDisposable
 
     public void Dispose() => _sub.Dispose();
 
+    // Restore PlayerState.Encumbrance from a persisted reading on profile load,
+    // routed through this parser so it stays the field's sole writer. The stock
+    // travel-cost model reads the bracket off PlayerState (the Paradigm model
+    // reads the numeric snapshot instead), so seeding it here starts a returning
+    // session with the real bracket instead of Unknown. A null / never-observed
+    // reading resets to Unknown (fresh or bracketless profile).
+    public void Hydrate(Models.Profile.LastKnownEncumbrance? snapshot)
+    {
+        EncumbranceLevel level = snapshot is { MaxWeight: > 0 }
+            ? snapshot.Category
+            : EncumbranceLevel.Unknown;
+        if (_state.Encumbrance == level) return;
+        _state.Encumbrance = level;
+    }
+
     private void OnMatch(MatchResult match)
     {
         EncumbranceLevel level = ParseLevel(match.Text);

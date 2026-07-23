@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 1.98.0
+
+- Last-known encumbrance now persists per character (saved on profile write, restored on load), so a fresh session starts with the real carry-weight bracket instead of Unknown
+- Travel-cost estimates and hop-timing calibration tag the correct bracket from session start rather than waiting on the connect-time `i` — which never fires on a manual login or a hangup-suppressed relog
+
 ## 1.97.0
 
 - Dark-room hunt diagnostics: the settle-gate log now reports whether each window ended on a revealed pursuer (with the reveal-lag in ms) or expired empty, so a capture shows the true reveal-lag distribution and the per-room cost of an empty dark room

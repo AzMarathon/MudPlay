@@ -1842,10 +1842,30 @@ public sealed class AppServices
             // class can't learn (a cross-set carryover) are harmlessly dropped.
             if (learned is not null) Spellbook.SetObtainedByNames(learned);
         };
+        // Persist + restore the last-known carry weight across sessions.
+        // Encumbrance only changes in the realm, so the value the client last saw
+        // is still accurate on the next reconnect — seeding it starts the
+        // travel-cost models / hop-timing calibrator / Workshop with the real
+        // bracket instead of Unknown, without waiting on the connect-`i` (which
+        // never fires on a manual login or a hangup-suppressed relog).
+        // InventoryManager holds the numeric reading (Paradigm cost model,
+        // calibrator, Workshop); EncumbranceParser owns PlayerState.Encumbrance
+        // (stock cost model) — restore both, each through its sole writer.
+        Profile.ProfileSaving += p =>
+        {
+            if (Inventory.SnapshotEncumbrance() is { } enc) p.LastKnownEncumbrance = enc;
+        };
+        Profile.ProfileLoaded += p =>
+        {
+            Inventory.HydrateEncumbrance(p.LastKnownEncumbrance);
+            Encumbrance.Hydrate(p.LastKnownEncumbrance);
+        };
         Profile.ProfileClosed += () =>
         {
             Stats.Hydrate(null);
             SeedSpellbook(null);
+            Inventory.HydrateEncumbrance(null);
+            Encumbrance.Hydrate(null);
         };
         // @hangup handler — sends the configured GameCommands.ExitCommand
         // when an authorised sender (HangupDisconnect permission on

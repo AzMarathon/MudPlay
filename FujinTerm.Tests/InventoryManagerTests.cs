@@ -1,6 +1,7 @@
 using System.Reflection;
 using FujinTerm.Game;
 using FujinTerm.Game.Inventory;
+using FujinTerm.Models.Profile;
 using FujinTerm.Terminal;
 using Xunit;
 
@@ -1135,5 +1136,89 @@ public sealed class InventoryManagerTests
         h.Feed("You are now wearing padded vest.");
 
         Assert.Contains(Worn(h), e => e is { Name: "padded vest", Slot: "Worn" });
+    }
+
+    // ----- Cross-session encumbrance persistence --------------------
+
+    [Fact]
+    public void SnapshotEncumbrance_BeforeAnyParse_ReturnsNull()
+    {
+        using Harness h = new();
+        // Nothing observed yet — a null keeps the save hook from clobbering a
+        // previously-persisted good reading with an empty one.
+        Assert.Null(h.Inv.SnapshotEncumbrance());
+    }
+
+    [Fact]
+    public void SnapshotEncumbrance_AfterFullParse_MirrorsReading()
+    {
+        using Harness h = new();
+        FeedFullInventory(h);
+
+        LastKnownEncumbrance? snap = h.Inv.SnapshotEncumbrance();
+        Assert.NotNull(snap);
+        Assert.Equal(36, snap!.CurrentWeight);
+        Assert.Equal(2880, snap.MaxWeight);
+        Assert.Equal(1, snap.Percentage);
+        Assert.Equal(EncumbranceLevel.Light, snap.Category);
+    }
+
+    [Fact]
+    public void HydrateEncumbrance_SeedsReadingButStaysUnloaded()
+    {
+        using Harness h = new();
+
+        h.Inv.HydrateEncumbrance(new LastKnownEncumbrance
+        {
+            CurrentWeight = 3908, MaxWeight = 6804, Percentage = 57,
+            Category = EncumbranceLevel.Medium,
+        });
+
+        EncumbranceReading e = h.Inv.Snapshot.Encumbrance;
+        Assert.Equal(3908, e.CurrentWeight);
+        Assert.Equal(6804, e.MaxWeight);
+        Assert.Equal(57, e.Percentage);
+        Assert.Equal(EncumbranceLevel.Medium, e.Category);
+        // A restored value is a stale estimate — the connect-`i` still owns the
+        // authoritative full re-base, so IsLoaded must stay false.
+        Assert.False(h.Inv.IsLoaded);
+        Assert.Equal(1, h.ChangedCount);
+    }
+
+    [Fact]
+    public void HydrateEncumbrance_Null_ClearsToUnobserved()
+    {
+        using Harness h = new();
+        h.Inv.HydrateEncumbrance(new LastKnownEncumbrance
+        {
+            CurrentWeight = 3908, MaxWeight = 6804, Percentage = 57,
+            Category = EncumbranceLevel.Medium,
+        });
+
+        h.Inv.HydrateEncumbrance(null);
+
+        Assert.Null(h.Inv.SnapshotEncumbrance());
+        EncumbranceReading e = h.Inv.Snapshot.Encumbrance;
+        Assert.Equal(0, e.MaxWeight);
+        Assert.Equal(EncumbranceLevel.Unknown, e.Category);
+    }
+
+    [Fact]
+    public void SnapshotThenHydrate_RoundTripsIntoFreshManager()
+    {
+        // The "close client, reconnect" flow: parse an `i`, snapshot, hydrate
+        // into a freshly-constructed manager — the reading survives intact.
+        using Harness writer = new();
+        FeedFullInventory(writer);
+        LastKnownEncumbrance? snap = writer.Inv.SnapshotEncumbrance();
+
+        using InventoryManager reader = new();
+        reader.HydrateEncumbrance(snap);
+
+        EncumbranceReading e = reader.Snapshot.Encumbrance;
+        Assert.Equal(36, e.CurrentWeight);
+        Assert.Equal(2880, e.MaxWeight);
+        Assert.Equal(1, e.Percentage);
+        Assert.Equal(EncumbranceLevel.Light, e.Category);
     }
 }

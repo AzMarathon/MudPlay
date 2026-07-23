@@ -134,6 +134,13 @@ public sealed class CharacterProfile
     // user's last-known values instead of zeros. null until the first capture.
     public LastKnownStats? LastKnownStats { get; set; }
 
+    // Snapshot of the most recent carry-weight reading. Written by
+    // Game.Inventory.InventoryManager on ProfileSaving and rehydrated on
+    // ProfileService.ProfileLoaded so the travel-cost models / hop-timing
+    // calibrator / Workshop start the next session with the last-known
+    // encumbrance bracket instead of Unknown. null until the first `i` capture.
+    public LastKnownEncumbrance? LastKnownEncumbrance { get; set; }
+
     // Full names of the spells this character has learned — the persisted Spell
     // Book obtained set, so the learned checkmarks survive across sessions
     // instead of blanking until the next in-game `spells` / `pow` poll. Stored

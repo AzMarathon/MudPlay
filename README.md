@@ -1,9 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.97.0**
-> - Dark-room hunt diagnostics: the settle-gate log now reports whether each window ended on a revealed pursuer (with the reveal-lag in ms) or expired empty, so a capture shows the true reveal-lag distribution and the per-room cost of an empty dark room
-> - Combat idle-stall watchdog log now names how long the gate was held, how long it sat idle, and what last counted as activity — distinguishing a post-kill idle release from an unmatched-attack-line pattern gap
+> **Version 1.98.0**
+> - Last-known encumbrance now persists per character (saved on profile write, restored on load), so a fresh session starts with the real carry-weight bracket instead of Unknown
+> - Travel-cost estimates and hop-timing calibration tag the correct bracket from session start rather than waiting on the connect-time `i` — which never fires on a manual login or a hangup-suppressed relog
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
