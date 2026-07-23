@@ -91,6 +91,13 @@ public sealed class AppServices
     // Only writes while LogDiagnostics.AutoCollectLogs is on (default off).
     public MemoryUsageLog MemoryLog { get; }
 
+    // Background memory hygiene: compacts the LOH once a game-data set settles
+    // (reclaiming the startup JSON-parse fragmentation) and periodically returns
+    // glibc's free native pages to the OS, so a loop-mode session running for days
+    // doesn't hold a working set far larger than its live heap. Invisible — no
+    // toggle; see the class comment for the timing that keeps it unnoticed.
+    public MemoryMaintenance Memory { get; }
+
     // Per-character diagnostic switches surfaced in the Log pane: DebugDiagnostics
     // and CombatDiagnostics gate in-memory Debug/Combat channel generation;
     // AutoCollectLogs gates whether the on-disk diagnostic files (program /
@@ -1537,6 +1544,10 @@ public sealed class AppServices
         // Same gating for the memory-footprint sampler: the timer runs for the
         // whole process, but samples land on disk only while AutoCollectLogs is on.
         MemoryLog = new MemoryUsageLog(LogDiagnostics);
+        // Background memory hygiene. CombatTracker is bound later in construction;
+        // the combat-active probe is lazy and the first periodic tick is minutes
+        // out, so it's always assigned before the Func is ever invoked.
+        Memory = new MemoryMaintenance(Log, GameData, () => CombatTracker.HasEngageableHostiles);
         // Late-bind the cache's log sink so SwitchSet emits the swap
         // audit entries (load / unload / swap) without coupling the
         // cache to AppServices construction order.
