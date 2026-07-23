@@ -28,9 +28,16 @@ namespace FujinTerm.Game.Remote;
 // round-trip. An exact level older than StalenessHorizon is treated as due for
 // a fresh probe (WarmStaleLevels) — the member could have levelled since.
 //
-// Read-only on party state: subscribes to PartyState.Members collection changes
-// and the PartyState.IsInParty / PartyState.SelfIsLeader property changes; never
-// writes a party field.
+// Invited members are never probed: an invited-not-joined row exists only for
+// the PartyWindow chip and isn't yet someone we route the party around, so it's
+// excluded from the roster signature, the Bounds estimate, and the stale-warm
+// scan. The probe re-fires on the invited→joined edge (IsInvited true→false),
+// which arrives as a per-member PropertyChanged rather than a collection change.
+//
+// Read-only on party state: subscribes to PartyState.Members collection changes,
+// each member's PropertyChanged (for the invited→joined edge), and the
+// PartyState.IsInParty / PartyState.SelfIsLeader property changes; never writes a
+// party field.
 public sealed class PartyLevelTracker : IDisposable
 {
     private readonly PartyState _party;
@@ -83,6 +90,10 @@ public sealed class PartyLevelTracker : IDisposable
 
         _party.Members.CollectionChanged += OnMembersChanged;
         _party.PropertyChanged += OnPartyPropertyChanged;
+        // Subscribe to any members already present so their invited→joined flip
+        // re-probes even if the roster predates this tracker.
+        foreach (PartyMember m in _party.Members)
+            m.PropertyChanged += OnMemberPropertyChanged;
         MaybeProbe();
     }
 
@@ -98,6 +109,9 @@ public sealed class PartyLevelTracker : IDisposable
         foreach (PartyMember m in _party.Members)
         {
             if (m.IsSelf) continue;
+            // Skip pending invitees — an invited-not-joined row isn't yet a
+            // party member we route around, and hasn't been @level-probed.
+            if (m.IsInvited) continue;
             if (string.IsNullOrEmpty(m.Name)) continue;
             PlayerRecord? rec = _players.Find(m.Name);
             int? exact = rec?.Level;
@@ -127,7 +141,7 @@ public sealed class PartyLevelTracker : IDisposable
         bool anyStale = false;
         foreach (PartyMember m in _party.Members)
         {
-            if (m.IsSelf || string.IsNullOrEmpty(m.Name)) continue;
+            if (m.IsSelf || m.IsInvited || string.IsNullOrEmpty(m.Name)) continue;
             PlayerRecord? rec = _players.Find(m.Name);
             // Unknown (no exact reading) or aged past the horizon → due a probe.
             if (rec?.Level is null || rec.LevelAt is not { } at || now - at > StalenessHorizon)
@@ -143,7 +157,33 @@ public sealed class PartyLevelTracker : IDisposable
         _ = _probe.QueryAsync();   // fire-and-forget; the probe persists levels via RecordLevel
     }
 
-    private void OnMembersChanged(object? sender, NotifyCollectionChangedEventArgs e) => MaybeProbe();
+    private void OnMembersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Detach evicted rows so a removed member can be GC'd cleanly.
+        if (e.OldItems is not null)
+            foreach (object? item in e.OldItems)
+                if (item is PartyMember m) m.PropertyChanged -= OnMemberPropertyChanged;
+
+        // Subscribe fresh rows so the later invited→joined flip re-probes.
+        if (e.NewItems is not null)
+            foreach (object? item in e.NewItems)
+                if (item is PartyMember m) m.PropertyChanged += OnMemberPropertyChanged;
+
+        MaybeProbe();
+    }
+
+    // Per-row PropertyChanged — a member added as IsInvited only becomes a real
+    // party member (and an @level target) when they accept via `follow`, which
+    // flips IsInvited true→false without a CollectionChanged event. Re-probe on
+    // that transition so the newly joined member's level warms; without this hook
+    // the roster signature would never change on acceptance and we'd never ask.
+    private void OnMemberPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(PartyMember.IsInvited)) return;
+        if (sender is not PartyMember m) return;
+        if (m.IsInvited) return;   // only the invited→joined edge probes
+        MaybeProbe();
+    }
 
     private void OnPartyPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -176,7 +216,7 @@ public sealed class PartyLevelTracker : IDisposable
     private string RosterSignature()
     {
         IEnumerable<string> names = _party.Members
-            .Where(m => !m.IsSelf && !string.IsNullOrEmpty(m.Name))
+            .Where(m => !m.IsSelf && !m.IsInvited && !string.IsNullOrEmpty(m.Name))
             .Select(m => m.Name)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
         return string.Join('\n', names);   // a newline can't appear in a player name
@@ -186,5 +226,7 @@ public sealed class PartyLevelTracker : IDisposable
     {
         _party.Members.CollectionChanged -= OnMembersChanged;
         _party.PropertyChanged -= OnPartyPropertyChanged;
+        foreach (PartyMember m in _party.Members)
+            m.PropertyChanged -= OnMemberPropertyChanged;
     }
 }

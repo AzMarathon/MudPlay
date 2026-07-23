@@ -1,8 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.99.1**
-> - Dark-room movement no longer double-steps past lairs or drags monsters onward: combat's "where am I" CR refreshes (and the idle-stall resync CR) are suppressed while we can't see, so a blind refresh can't false-confirm the loop's in-flight step and collapse the dark-room settle window
+> **Version 1.99.2**
+> - Party @level probe no longer telepaths members who are only invited: an invited-not-joined row is excluded from the level roster, bounds estimate, and stale-warm scan, and the probe re-fires the moment they accept and join
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

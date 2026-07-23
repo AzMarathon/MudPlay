@@ -43,8 +43,8 @@ public sealed class PartyLevelProbeTests
                 log: null);
         }
 
-        public void AddMember(string name, bool self = false)
-            => State.Members.Add(new PartyMember { Name = name, IsSelf = self });
+        public void AddMember(string name, bool self = false, bool invited = false)
+            => State.Members.Add(new PartyMember { Name = name, IsSelf = self, IsInvited = invited });
 
         public void GoInParty() => State.IsInParty = true;
 
@@ -80,6 +80,33 @@ public sealed class PartyLevelProbeTests
         Assert.Equal(0, r.Expected);
         Assert.False(r.AnyReplied);
         Assert.Empty(h.Wire);   // no broadcast fired
+    }
+
+    [Fact]
+    public async Task Query_OnlyInvitedMember_ReturnsEmptyImmediately()
+    {
+        var h = new Harness();
+        h.AddMember("Tristian", invited: true);   // invited, not joined
+        h.GoInParty();
+
+        PartyLevelProbe.PartyLevelResult r = await h.Probe.QueryAsync();
+
+        Assert.Equal(0, r.Expected);   // invited member isn't an expected replier
+        Assert.Empty(h.Wire);          // and no @level goes out
+    }
+
+    [Fact]
+    public void Query_SkipsInvitedMember_BroadcastsOnlyToJoined()
+    {
+        var h = new Harness();
+        h.AddMember("Bob");                        // joined
+        h.AddMember("Tristian", invited: true);    // pending invite
+        h.GoInParty();
+
+        _ = h.Probe.QueryAsync();
+
+        Assert.Single(h.Wire);
+        Assert.Equal("/Bob @level\r", h.Sent(0));   // invited row not telepathed
     }
 
     [Fact]
