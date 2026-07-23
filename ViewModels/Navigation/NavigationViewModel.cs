@@ -2460,17 +2460,25 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         int total = _services.Walker.StepCount;
         int current = System.Math.Clamp(_services.Walker.CurrentStepIndex + 1, 1, System.Math.Max(1, total));
 
-        IReadOnlyList<RoomKey> remaining = _services.Walker.RemainingRoomKeys;
-        int remainingHops = System.Math.Max(0, remaining.Count - 1);
+        int remainingHops = System.Math.Max(0, _services.Walker.RemainingRoomKeys.Count - 1);
 
-        TimeSpan eta = RouteEtaEstimator.Estimate(
-            remaining,
+        return $"{verb} to {dest}, step {current} of {total}, "
+             + $"{remainingHops} steps / ~{FormatEta(CurrentWalkEta())} to arrive";
+    }
+
+    // Remaining-route arrival ETA for the active walk — realm-aware per-hop
+    // travel plus a lair-fight dwell for each lair the walker steps into when
+    // auto-combat is on. Zero on a sail leg (not in the per-hop cost model) or
+    // when no hop is left. Shared by the program-log line (BuildWalkToStatus)
+    // and the always-visible TopBar status so both surface the same estimate.
+    private TimeSpan CurrentWalkEta()
+    {
+        if (_services.Walker.IsSailing) return TimeSpan.Zero;
+        return RouteEtaEstimator.Estimate(
+            _services.Walker.RemainingRoomKeys,
             _services.AutoLair.TravelCostModel,
             _services.RoomGraph.GetRoom,
             includeLairDwell: _services.IsAutoCombatEnabled);
-
-        return $"{verb} to {dest}, step {current} of {total}, "
-             + $"{remainingHops} steps / ~{FormatEta(eta)} to arrive";
     }
 
     // Compact ETA phrasing for the walk-to status: seconds under a minute,
@@ -2603,7 +2611,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                     if (total <= 0) return $"Walking to {dest}";
                     int step = Math.Min(total, w.CurrentStepIndex + 1);
                     int remaining = Math.Max(0, total - w.CurrentStepIndex);
-                    return $"Walking to {dest} on step {step} of {total}, remaining {remaining}";
+                    return $"Walking to {dest} on step {step} of {total}, remaining {remaining}, "
+                         + $"~{FormatEta(CurrentWalkEta())} to arrive";
                 }
                 case NavigationEngineKind.Looping:
                 {

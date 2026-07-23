@@ -1,8 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.99.2**
-> - Party @level probe no longer telepaths members who are only invited: an invited-not-joined row is excluded from the level roster, bounds estimate, and stale-warm scan, and the probe re-fires the moment they accept and join
+> **Version 1.99.3**
+> - Walk-to route ETA now shows in the Navigation window header ("~Nm Ss to arrive"), not just the program log — the estimate reached a status label that was never on screen
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
