@@ -345,4 +345,49 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Contains("acquire", vm.GatedSummary, System.StringComparison.OrdinalIgnoreCase);
         Assert.Contains("send it", vm.SendItSummary, System.StringComparison.OrdinalIgnoreCase);
     }
+
+    // ----- Teleport fork: walk vs teleport --------------------------------
+
+    private static RouteChoice TeleportChoice() =>
+        new(FreeStepCount: 8, GatedStepCount: 2,
+            System.Array.Empty<RouteRequirement>(), FreeLine, GatedLine,
+            RouteChoiceKind.Teleport, "Silver River (12/34)");
+
+    [Fact]
+    public void TeleportChoice_WordsCardsAsWalkVsTeleport_HidesSendIt()
+    {
+        var vm = new RouteChoiceDialogViewModel(TeleportChoice(), "Silver River (12/34)", id => null);
+
+        Assert.True(vm.IsTeleportChoice);
+        Assert.True(vm.HasFreeRoute);
+        Assert.False(vm.ShowSendItCard);            // no acquisition to skip
+        Assert.Contains("teleport", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Walk it", vm.FreeSummary);
+        Assert.Contains("Teleport", vm.GatedSummary);
+        Assert.Empty(vm.RequirementSummary);
+
+        // The gated card's detail line names the landing and warns of the danger.
+        Assert.Equal(vm.TeleportCaveat, vm.GatedDetail);
+        Assert.Contains("Silver River", vm.GatedDetail);
+        Assert.Contains("deadly", vm.GatedDetail, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TeleportChoice_FreeIsWalk_GatedIsTeleport_GoCommits()
+    {
+        var vm = new RouteChoiceDialogViewModel(TeleportChoice(), "Silver River (12/34)", id => null);
+        var previews = new List<RouteChoiceResult?>();
+        RouteChoiceResult? closed = null;
+        vm.PreviewRequested += r => previews.Add(r);
+        vm.CloseRequested += r => closed = r;
+
+        vm.SelectFreeCommand.Execute(null);         // "Walk it"
+        vm.SelectGatedCommand.Execute(null);        // "Teleport"
+        vm.GoCommand.Execute(null);
+
+        Assert.Equal(RouteChoiceResult.Gated, closed);
+        Assert.Equal(
+            new RouteChoiceResult?[] { RouteChoiceResult.Free, RouteChoiceResult.Gated },
+            previews);
+    }
 }

@@ -5,15 +5,18 @@ using FujinTerm.Services;
 
 namespace FujinTerm.ViewModels.Navigation;
 
-// Shared entry point for user-initiated walks that should offer a free-vs-direct
-// route choice. Automated walks (event scripts, death recovery, loops, deposits,
-// party comeback, trainer routing) bypass this and call Walker.WalkTo directly —
-// they default to the free-preferring route with no prompt.
+// Shared entry point for user-initiated walks that should offer a route choice.
+// Automated walks (event scripts, death recovery, loops, deposits, party
+// comeback, trainer routing) bypass this and call Walker.WalkTo directly — they
+// default to the free-preferring, teleport-allowed route with no prompt.
 //
-// The flow: resolve the current room, ask RouteChoicePlanner whether a shorter
-// gated route exists, and only pop the picker when it does. No fork → plain walk.
-// The picker's answer selects the free route or the gated route (which arms the
-// item-acquisition pipeline for anything missing); cancel walks nothing.
+// The flow: resolve the current room, then check two forks in priority order.
+// First the walk-vs-teleport fork — a shorter route that teleports where a
+// walking route also exists — because a teleport can drop the crosser somewhere
+// lethal only the user's character knowledge can judge. Failing that, the
+// free-vs-direct item-gate fork — a shorter route that crosses an acquirable
+// gate. Neither fork → plain walk. The picker's answer commits the chosen route;
+// cancel walks nothing.
 public static class RouteChoicePrompt
 {
     // previewSink: optional map-preview channel. When the user selects a route in
@@ -34,6 +37,20 @@ public static class RouteChoicePrompt
             // No confident source room — let the walker plan and report the
             // "no known source" failure itself rather than second-guessing here.
             CommitWalk(services, destination, gated: false);
+            return;
+        }
+
+        // Walk-vs-teleport fork takes precedence over the item-gate fork: if the
+        // shortest route teleports and a pure-walking route also exists, let the
+        // user weigh the teleport's shortcut against its danger. A teleport can
+        // drop the crosser somewhere lethal (a damaging plane, water with no
+        // boat), survivable or not depending on the character — a call the client
+        // can't make, so we surface it rather than silently taking the shortcut.
+        RouteChoice? teleport = RouteChoicePlanner.EvaluateTeleport(
+            services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
+        if (teleport is not null)
+        {
+            await RunPickerAsync(services, destination, source.Key, teleport, previewSink);
             return;
         }
 
@@ -60,6 +77,20 @@ public static class RouteChoicePrompt
             return;
         }
 
+        await RunPickerAsync(services, destination, source.Key, choice, previewSink);
+    }
+
+    // Build the picker, draw the previewed route while it's open, and commit the
+    // chosen route. Shared by the item-gate and teleport forks — the commit
+    // branches on the choice kind: an item-gate choice picks free / acquire / send
+    // it, a teleport choice picks walk (refuse teleports) / teleport (allow them).
+    private static async Task RunPickerAsync(
+        AppServices services,
+        RoomKey destination,
+        RoomKey source,
+        RouteChoice choice,
+        Action<IReadOnlyList<RoomKey>?>? previewSink)
+    {
         var vm = new RouteChoiceDialogViewModel(
             choice,
             DestinationLabel(services, destination),
@@ -68,11 +99,11 @@ public static class RouteChoicePrompt
             // (item flagged buy-if-needed + a reachable shop stocks it). Resolved
             // from this walk's source/destination so the "buy at X" tail matches
             // the actual detour.
-            itemId => services.PathItemShopName(itemId, source.Key, destination),
+            itemId => services.PathItemShopName(itemId, source, destination),
             // No shop sells it but a flagged monster drops it: name the lair the
             // run would reroute to hunt, so the picker previews the hunt option
             // (which otherwise only surfaces as a prompt once the walk starts).
-            itemId => services.PathItemDropName(itemId, source.Key));
+            itemId => services.PathItemDropName(itemId, source));
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and
@@ -96,6 +127,23 @@ public static class RouteChoicePrompt
         finally
         {
             previewSink?.Invoke(null);
+        }
+
+        if (choice.Kind == RouteChoiceKind.Teleport)
+        {
+            switch (result)
+            {
+                case RouteChoiceResult.Free:
+                    // "Walk it" — refuse the teleport shortcut, plan the safe route.
+                    CommitWalk(services, destination, gated: false, avoidTeleports: true);
+                    break;
+                case RouteChoiceResult.Gated:
+                    // "Teleport" — allow the shortcut, the walker's default.
+                    CommitWalk(services, destination, gated: false);
+                    break;
+                // null → cancelled: walk nothing.
+            }
+            return;
         }
 
         switch (result)
@@ -123,7 +171,8 @@ public static class RouteChoicePrompt
     // the destination changed but the walker stayed frozen. Engine waits (Combat /
     // rest / party) are left asserted and re-pause on their own if still relevant.
     private static void CommitWalk(
-        AppServices services, RoomKey destination, bool gated, bool armAcquisition = true)
+        AppServices services, RoomKey destination, bool gated,
+        bool armAcquisition = true, bool avoidTeleports = false)
     {
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
@@ -136,7 +185,10 @@ public static class RouteChoicePrompt
         services.MovementCoordinator.ClearGate(
             MovementCoordinator.UserGate, nameof(RouteChoicePrompt));
         services.Walker.WalkTo(
-            destination, planThroughAcquirableGates: gated, armItemAcquisition: armAcquisition);
+            destination,
+            planThroughAcquirableGates: gated,
+            armItemAcquisition: armAcquisition,
+            avoidTeleports: avoidTeleports);
     }
 
     private static string DestinationLabel(AppServices services, RoomKey destination) =>

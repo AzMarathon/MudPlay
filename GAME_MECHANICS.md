@@ -1190,6 +1190,26 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
     / class stay active — so it describes the route the crosser would actually walk and names the
     key/item to fetch, and only falls back to the ignore-all probe when even that finds nothing.
 
+- **[CONFIRMED, user 2026-07-23] A teleport shortcut is usually far shorter than the equivalent
+  walking route but can drop the character somewhere lethal — and whether it's lethal depends on the
+  character, so the client must NOT silently take it: it surfaces a walk-vs-teleport choice.** An
+  item/CMD-cast teleport exit (`RoomExitHint.Teleport`, promoted from an `(Item: N)` exit on a
+  `CMD > 0` room) is a plain one-hop edge to BFS, so a walk-to will silently route through it as the
+  shortest path — which is dangerous, because a teleport can land you in a **damaging plane** (negative
+  power plane, black wasteland) or across **water with no boat** (Balthazar's teleport dropping you at
+  the silver river, which is near-certain death without a boat). But the danger is **character-
+  dependent**: a high-level priest can out-heal the silver-river damage spell and cross freely, so the
+  same teleport that kills one character is a fine shortcut for another. The client cannot judge this,
+  so — exactly like the acquire-item-vs-take-the-long-way choice — it presents the fork to the user:
+  - **Client rule:** on a user-initiated walk-to, if the shortest route takes a teleport AND a
+    teleport-free walking route also exists AND the teleport saves ≥ 2 rooms, pop the route picker
+    ("walk it, don't teleport" vs "take the teleport"). If there's no walking alternative the walker
+    just takes the teleport (no fork to offer); if the shortest route already walks the whole way there
+    is nothing to weigh. `BfsMapper.FindPath(refuseTeleports: true)` backs the "walk it" side by
+    refusing both `RoomExitHint.Teleport` and gateway-portal exits. Automated walks (loops, death
+    recovery, deposits, party comeback, trainer routing) never prompt — they keep the default
+    teleport-allowed shortest route.
+
 ## Attack spells: why one fails to damage a monster
 
 **Three independent mechanics** decide whether an attack spell damages a monster — do not

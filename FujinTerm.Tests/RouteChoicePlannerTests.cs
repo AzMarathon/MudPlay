@@ -193,6 +193,79 @@ public sealed class RouteChoicePlannerTests
         ]
         """;
 
+    // A CMD>0 room with an "(Item: N)" exit is the teleport pattern: TryReadRoom
+    // promotes that exit to RoomExitHint.Teleport, which BFS crosses as a normal
+    // short edge. Here 1/1's E teleports straight to 1/9 (1 hop), while the
+    // walking route detours 1/1→1/2→1/3→1/9 (3 hops).
+    private const string TeleportShortcutJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "CMD": 5,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/9 (Item: 5)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Mid1",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Mid2",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/9", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // The teleport is the ONLY way from 1/1 to 1/9 — no walking route exists.
+    private const string TeleportOnlyJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "CMD": 5,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9 (Item: 5)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // Teleport saves only one room over the walk — below the picker's floor.
+    // Teleport: 1/1 ──E(teleport)── 1/9   (1 hop).
+    // Walk:     1/1 ──N── 1/2 ──E── 1/9   (2 hops).
+    private const string TeleportSavesOneJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "CMD": 5,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/9 (Item: 5)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Mid1",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "1/9", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // No teleport anywhere — the shortest route already walks the whole way.
+    private const string NoTeleportJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     private static void WithGraph(
         string roomsJson,
         Action<BfsMapper, RoomGraphManager, MovementFilter> body,
@@ -431,6 +504,94 @@ public sealed class RouteChoicePlannerTests
             filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 5) ? 700 : 0;
             filter.InventoryReadyProbe = () => true;
             filter.ItemCarriedProbe = _ => false;   // no counter
+        });
+    }
+
+    // ----- EvaluateTeleport: walk-vs-teleport fork -------------------
+
+    [Fact]
+    public void OffersTeleportChoice_WhenTeleportShortcuts_AndWalkExists()
+    {
+        WithGraph(TeleportShortcutJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTeleport(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.Equal(RouteChoiceKind.Teleport, choice!.Kind);
+            Assert.Equal(3, choice.FreeStepCount);      // walking route
+            Assert.Equal(1, choice.GatedStepCount);     // teleport hop
+            Assert.Empty(choice.Requirements);          // no item gate on a teleport
+            Assert.NotNull(choice.TeleportLanding);
+            Assert.Contains("Vault", choice.TeleportLanding!);
+
+            // Free path is the pure-walking detour; gated path is the teleport hop.
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3), new RoomKey(1, 9) },
+                choice.FreePath);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 9) },
+                choice.GatedPath);
+        });
+    }
+
+    [Fact]
+    public void NoTeleportChoice_WhenNoTeleportOnRoute()
+    {
+        WithGraph(NoTeleportJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTeleport(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            // Shortest route already walks the whole way — nothing to weigh.
+            Assert.Null(choice);
+        });
+    }
+
+    [Fact]
+    public void NoTeleportChoice_WhenTeleportIsOnlyRoute()
+    {
+        WithGraph(TeleportOnlyJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTeleport(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            // No walking alternative — there's no fork, so the walker just takes
+            // the teleport rather than prompting.
+            Assert.Null(choice);
+        });
+    }
+
+    [Fact]
+    public void NoTeleportChoice_WhenTeleportSavesOnlyOneStep()
+    {
+        WithGraph(TeleportSavesOneJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTeleport(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            // Teleport 1 hop, walk 2 hops — a single room saved isn't worth
+            // interrupting the walk to weigh against the teleport's danger.
+            Assert.Null(choice);
+        });
+    }
+
+    // The refuseTeleports pass backs the picker's "walk it" choice: the default
+    // pass takes the teleport as the shortest route; refusing it returns the
+    // pure-walking route.
+    [Fact]
+    public void Bfs_RefuseTeleports_ReturnsWalkingRouteNotTeleport()
+    {
+        WithGraph(TeleportShortcutJson, (bfs, graph, _) =>
+        {
+            IReadOnlyList<Direction>? tele = bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 9), null);
+            Assert.NotNull(tele);
+            Assert.Single(tele!);   // the 1-hop teleport
+
+            IReadOnlyList<Direction>? walk = bfs.FindPath(
+                new RoomKey(1, 1), new RoomKey(1, 9), null, refuseTeleports: true);
+            Assert.NotNull(walk);
+            Assert.Equal(3, walk!.Count);   // the 3-hop walking detour
         });
     }
 }
