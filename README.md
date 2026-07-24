@@ -5,6 +5,7 @@
 > - Walk-to route picker now offers walk-vs-teleport: when a route could teleport but a walking route also exists, you choose — walk the safe long way, or take the much shorter teleport (which can drop you somewhere lethal, a call only your character can make)
 > - A blocked walk-to now names the obstacle on the route the character would actually take — a gate key or required item you must fetch — instead of a shorter level-gated backdoor it was never going to use
 > - Walk-to route ETA now shows in the Navigation window header ("~Nm Ss to arrive"), not just the program log
+> - Post-kill loot re-survey sends a bare Enter instead of `look`, re-rendering ground drops without the room-description text
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

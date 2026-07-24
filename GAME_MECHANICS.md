@@ -1167,21 +1167,38 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   The dark-elf city (Paradigm 1.9.1) is the worked example the client got wrong: it has two ways in,
   and the walk-to diagnostic named the wrong one. The **front door** is a multi-step gauntlet the
   player performs by hand — the map graph only encodes its final locked-door hop:
-  1. Walk to the **gnome commander** (an NPC) and ask him his textblock keyword.
-  2. Carry his **orb**, then say/use that keyword in the room just outside the city to reveal a
-     **hidden stairwell down**.
-  3. At the city's main gate, use another keyword to **summon an obsidian statue**, then **kill it** —
-     the corpse drops the **gate key**.
-  4. The gate key opens the **town gate** into the city.
+  1. Walk to the **gnome commander** (NPC in `8/459`) and `ask gnome orb` — he hands over the
+     **bloodstone orb (item 807)**.
+  2. Carry the orb to `8/398` and `rub orb` — consumes the orb and opens the **south exit to `8/403`**
+     toward the gate. This step's gate IS surfaced on the room exit ("Needs 1 action: rub bloodstone
+     orb / hold bloodstone orb / rub orb"), so once the orb is in hand the walker already knows how to
+     cross it.
+  3. At the **Black Steel Gate (`8/461`)**, `touch statue` — summons the **obsidian statue
+     (monster 347)**; kill it and the corpse drops the **gate key (item 806)**. This summon command is
+     NOT surfaced anywhere on the map.
+  4. The gate key opens the **town gate `8/461 → 8/462`** into the city — the exit shows
+     `(Key: gate key)` but not how to obtain the key.
   The **backdoor** is a single **teleport item** (a "nightblack portal") that drops you inside the
   city map, gated behind a high **minimum character level**.
+  - **What the map surfaces vs. what it hides (the crux of auto-traversal):** the room graph encodes
+    how to *cross* an item/key gate — the consumption command and required item ride on the exit
+    (`8/398` south names `rub orb` + bloodstone orb; `8/461` south names `Key: gate key`) — but it does
+    NOT encode how to *acquire* the gating item. Acquisition provenance lives only in the **TBInfo**
+    game-data table: `ask gnome orb` → `giveitem 807`, and `touch statue` → `summon 347` (kill → drop
+    806) are invisible to the walker until it reads TBInfo. So the walker can cross a gate it holds the
+    item for, but is blind to how to obtain that item.
+  - **[CONFIRMED, user 2026-07-23] Keyword command form depends on the TBInfo trigger's root:** an
+    **NPC-attached** keyword is issued as `ask <npc name> <keyword>` (e.g. `ask gnome orb`); a
+    **room CMD** keyword is typed **verbatim** (e.g. `rub orb`, `touch statue`). This supersedes the
+    earlier note that keyword strings "come from the NPC's dialogue at play time" — they are fixed in
+    the TBInfo `Action`/keyword data, and the client can read them.
   - *[OBSERVED — Paradigm 1.9.1 game data, cross-referenced]* the front-door landmarks are gnome
-    commander in room `8/459`, bloodstone **orb item 807**, keyword-revealed stairwell around `8/398`,
-    the **obsidian statue monster 347** summoned at the Black Steel Gate (`8/461`, a CMD room), which
-    drops **gate key item 806**; the gate hop `8/461 → 8/462` carries `Key: 806 or 101 picklocks`. The
-    backdoor is **nightblack-portal item 1419**, whose teleport exit into map 8 is gated `minlevel 40`.
-    The exact in-game keyword strings (the commander's textblock word, the summon word) come from the
-    NPC's dialogue at play time, not from a fixed command the client hardcodes.
+    commander in room `8/459`, bloodstone **orb item 807** (given by monster #332 via keyword `orb`,
+    Textblock #809→#814→#815 `giveitem 807`), the `rub orb` consume-gate at `8/398`, the **obsidian
+    statue monster 347** summoned at the Black Steel Gate (`8/461`, Textblock #863 `touch statue:summon
+    347`, Called From Room 8/461), which drops **gate key item 806**; the gate hop `8/461 → 8/462`
+    carries `Key: 806 or 101 picklocks`. The backdoor is **nightblack-portal item 1419**, whose
+    teleport exit into map 8 is gated `minlevel 40`.
   - **Why it mattered for pathing:** the backdoor portal is the *shorter* graph route, so a blocked
     walk-to that re-probed by ignoring **all** gates surfaced it and blamed "a level requirement" — a
     door the under-level character was never going to take. The real obstacle is the front door's

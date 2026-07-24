@@ -577,11 +577,14 @@ public sealed class AutoGetItemsManagerTests
     // ----- Post-kill drop re-look ----------------------------------
 
     [Fact]
-    public void RequestDropReLook_SendsLook()
+    public void RequestDropReLook_SendsBareEnter()
     {
         using Harness h = new();
         h.Items.RequestDropReLook();
-        Assert.Equal(new[] { "look" }, h.SentText);
+        // A lone carriage return (Enter) re-renders the "You notice … here." survey
+        // without look's room description / flavor text.
+        Assert.Equal(new[] { "" }, h.SentText);
+        Assert.Equal(new byte[] { (byte)'\r' }, h.Sent[0]);
     }
 
     [Fact]
