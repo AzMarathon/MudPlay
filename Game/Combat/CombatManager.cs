@@ -61,6 +61,16 @@ public sealed partial class CombatManager : IDisposable
     // swap + re-fire.
     public const string LogCategory = "Combat";
 
+    // Fires when a combat line arrives but the room shows no engageable target and
+    // we hold none — something is swinging at us that our room view has lost (a
+    // hostile that leapt in after an empty render, an arrival line we missed). We
+    // send a CR to force a short re-display; CombatRedisplaySettle listens here to
+    // hold the movement loop until that re-display reveals the hostile (Combat gate
+    // takes over) or confirms the room is really empty (loop steps on). Only fires
+    // when the CR actually went out — a dark room suppresses the CR and is handled
+    // by DarkRoomMovementSettle instead, so this stays scoped to the lit-room case.
+    public event Action? RoomAppearsEmptyDuringCombat;
+
     private readonly RoomEntityClassifier _classifier;
     private readonly MonsterMessageStore _monsters;
     private readonly Func<int, MonsterOverlay> _resolveOverlay;
@@ -1578,8 +1588,14 @@ public sealed partial class CombatManager : IDisposable
         if (_classifier.Current is { } cur && HasEngageable(cur)) return;
 
         if (TrySendRoomRefresh("combat line, room appears empty"))
+        {
             _log?.Combat(LogCategory,
                 "combat-line while room appears empty — sending CR for short re-display");
+            // Something is swinging at us in a room our view shows empty. Signal
+            // the settle watcher to hold the movement loop until the CR re-display
+            // resolves — a hostile that leapt in must engage before we step past it.
+            RoomAppearsEmptyDuringCombat?.Invoke();
+        }
     }
 
     // Backstab surprise-round resolver. The opener swings exactly once; the first

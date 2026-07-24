@@ -892,6 +892,12 @@ public sealed class AppServices
     // asserts the settle gate ahead of their synchronous SendNextStep.
     public Game.Map.DarkRoomMovementSettle DarkRoomSettle { get; private set; } = null!;
 
+    // Lit-room twin of DarkRoomSettle: holds the movement loop when a combat line
+    // arrives in a room our view shows empty, so a hostile that leapt in a beat
+    // after an empty render engages before the loop steps past it. See
+    // CombatRedisplaySettle for the race writeup.
+    public Game.Combat.CombatRedisplaySettle CombatRedisplaySettle { get; private set; } = null!;
+
     // Passive HP/MA threshold engine. Asserts /
     // clears HealthRecovery + ManaRecovery gates and drives the
     // rest / stand cycle with pre- and post-rest command sequencing.
@@ -2677,6 +2683,15 @@ public sealed class AppServices
         // dark-room fight; see DarkRoomMovementSettle for the full race writeup.
         DarkRoomSettle = new Game.Map.DarkRoomMovementSettle(
             RoomTracker, MovementCoordinator, Log);
+
+        // Lit-room twin: a combat line in an apparently-empty room means a hostile
+        // leapt in a beat after the empty render, so CombatManager fires its CR
+        // re-display and raises RoomAppearsEmptyDuringCombat. This holds the loop
+        // for that beat — the mob surfaces on the CR response and the Combat gate
+        // takes over, or the room is truly empty and it clears on that observation.
+        // See CombatRedisplaySettle for the full race writeup.
+        CombatRedisplaySettle = new Game.Combat.CombatRedisplaySettle(
+            Combat, RoomClassifier, MovementCoordinator, Log);
 
         // In a dark room there's nothing to see, so a CR "where am I" refresh
         // returns only "you can't see anything" — and that stale dark line is

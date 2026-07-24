@@ -1,7 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.100.0**
+> **Version 2.0.0**
+> - Loop mode no longer walks past a hostile that leaps into an apparently-empty room: a combat line arriving while the room view shows no target now holds the walker for a beat so the mob reveals and the fight engages, instead of firing the next move mid-combat (the lit-room twin of 1.99.1's dark-room fix)
 > - Walk-to route picker now offers walk-vs-teleport: when a route could teleport but a walking route also exists, you choose — walk the safe long way, or take the much shorter teleport (which can drop you somewhere lethal, a call only your character can make)
 > - A blocked walk-to now names the obstacle on the route the character would actually take — a gate key or required item you must fetch — instead of a shorter level-gated backdoor it was never going to use
 > - Walk-to route ETA now shows in the Navigation window header ("~Nm Ss to arrive"), not just the program log
