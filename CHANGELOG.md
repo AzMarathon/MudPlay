@@ -7,6 +7,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Walk-to route picker now offers walk-vs-teleport: when a route could teleport but a walking route also exists, you choose — walk the safe long way, or take the much shorter teleport (which can drop you somewhere lethal, a call only your character can make), mirroring the existing acquire-item-vs-detour choice
 - A blocked walk-to now names the obstacle on the route the character would actually take — a gate key or required item you must fetch — instead of a shorter level-gated backdoor it was never going to use
 - Walk-to route ETA now shows in the Navigation window header ("~Nm Ss to arrive"), not just the program log
+- Walk-to now auto-collects a free gate item en route when a giver hands it over on a single fail-proof command (an NPC keyword ask or a room command): the walk detours to the nearest giver, asks, collects, and resumes — no buying or hunting, and preferred over both when it applies
+- Route picker names such a giver as "(ask <giver>)", taking precedence over the "(buy at …)" / "(dropped by …)" tails
 - Post-kill loot re-survey sends a bare Enter instead of `look`, re-rendering ground drops without the room-description text
 - bug reports addressed: paradigm-20260723-151900, paradigm-20260723-162143, paradigm-20260723-180918
 

@@ -90,6 +90,7 @@ public sealed partial class RouteChoiceDialogViewModel
         RouteChoice choice,
         string destinationLabel,
         Func<int, string?> itemName,
+        Func<int, string?>? giveNameForItem = null,
         Func<int, string?>? shopNameForItem = null,
         Func<int, string?>? dropNameForItem = null)
     {
@@ -125,7 +126,8 @@ public sealed partial class RouteChoiceDialogViewModel
                 ? $"Direct — acquire then go — {Steps(choice.GatedStepCount)}"
                 : $"Route — {Steps(choice.GatedStepCount)}";
             RequirementSummary = "Requires "
-                + DescribeRequirements(choice.Requirements, itemName, shopNameForItem, dropNameForItem);
+                + DescribeRequirements(
+                    choice.Requirements, itemName, giveNameForItem, shopNameForItem, dropNameForItem);
             TeleportCaveat = string.Empty;
             Footnote = "Click a route to preview it on the map, then Go to walk it. "
                 + "\"Acquire then go\" sources any missing gate items first; \"send it\" walks "
@@ -138,15 +140,18 @@ public sealed partial class RouteChoiceDialogViewModel
     // "a raft (buy at General Store); the iron key; a waterskin (dropped by a
     // sand nomad)" — each requirement is one clause; a hazard's any-of counters
     // join with " or ". An Item / Ticket gate, or a SINGLE-counter hazard, whose
-    // item the walk will auto-source gets a tail naming where: "(buy at <shop>)"
-    // when a shop sells it, else "(dropped by <monster>)" when a flagged dropper
-    // is reachable. Keys and any-of hazard counters never get a tail — a key
-    // isn't sourced and an any-of hazard group posts no single auto-obtain
-    // path-item need. Shop wins over drop when both resolve (a buy is cheap and
-    // deterministic; the routers are mutually exclusive shop-first anyway).
+    // item the walk will auto-source gets a tail naming where: "(ask <giver>)"
+    // when a deterministic textblock give hands it over free, else "(buy at
+    // <shop>)" when a shop sells it, else "(dropped by <monster>)" when a flagged
+    // dropper is reachable. Keys and any-of hazard counters never get a tail — a
+    // key isn't sourced and an any-of hazard group posts no single auto-obtain
+    // path-item need. The order mirrors the routers' precedence (free give >
+    // shop buy > drop hunt) so the tail names exactly what the run will do —
+    // the name helpers return null when a higher-priority router preempts.
     private static string DescribeRequirements(
         IReadOnlyList<RouteRequirement> reqs,
         Func<int, string?> itemName,
+        Func<int, string?>? giveNameForItem,
         Func<int, string?>? shopNameForItem,
         Func<int, string?>? dropNameForItem)
     {
@@ -157,6 +162,8 @@ public sealed partial class RouteChoiceDialogViewModel
                 || (r.Kind is RouteRequirementKind.HazardProtection && r.ItemIds.Count == 1);
             if (!autoSourced || r.ItemIds.Count != 1)
                 return items;
+            if (giveNameForItem?.Invoke(r.ItemIds[0]) is { Length: > 0 } giver)
+                return $"{items} (ask {giver})";
             if (shopNameForItem?.Invoke(r.ItemIds[0]) is { Length: > 0 } shop)
                 return $"{items} (buy at {shop})";
             if (dropNameForItem?.Invoke(r.ItemIds[0]) is { Length: > 0 } monster)

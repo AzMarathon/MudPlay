@@ -1097,12 +1097,21 @@ public sealed class AppServices
     // GameDataCache.ActiveSetChanged.
     public MonsterDropIndex MonsterDrops { get; private set; } = null!;
 
-    // Reverse item-acquisition index for the Game Data Browser's item detail
-    // pane — the containers an item is found in and the monster/room textblock
-    // `giveitem` awards that hand it over. Browser-only, so unlike the routing
-    // indexes above it builds lazily on first query and self-invalidates on a
-    // set swap (no ActiveSetChanged subscription).
+    // Reverse item-acquisition index — the containers an item is found in and
+    // the monster/room textblock `giveitem` awards that hand it over. Feeds the
+    // Game Data Browser's item detail pane AND PathItemGiveRouter's giver lookup
+    // (deterministic, keyword-carrying awards, with each Monster giver's spawn
+    // rooms). Builds lazily on first query and self-invalidates on a set swap (no
+    // ActiveSetChanged subscription).
     public ItemSourceIndex ItemSources { get; private set; } = null!;
+
+    // Active fulfiller for NeedKind.PathItem needs an NPC / room hands over for
+    // free: on a one-shot walk-to that needs an uncarried item a deterministic
+    // textblock `giveitem` supplies, detours to the fewest-added-steps giver,
+    // issues the `ask <npc> <keyword>` / room-CMD command, and resumes once it
+    // lands. Preempts the shop and drop routers. Gated per item by the item
+    // record's AutoObtainForPath flag.
+    public Game.Map.PathItemGiveRouter PathItemGiveRouter { get; private set; } = null!;
 
     // Index of the active set's room-entry hazards — a room's cast-on-enter
     // Spell mapped to the item(s) that make the room safe (fish-helm negator,
@@ -4141,8 +4150,35 @@ public sealed class AppServices
         // deferred through the dispatcher because the triggering NeedPosted
         // fires synchronously inside the walker's WalkTo. Wire-sender bound
         // by MainWindowViewModel after connect.
+        // Give-source routing. On a one-shot walk-to that needs an uncarried
+        // Item/Ticket-gate item a deterministic textblock `giveitem` hands over
+        // for free (an `ask <noun> <keyword>` dialogue give, or a room-CMD keyword
+        // give), detour to the fewest-added-steps giver, issue the command, and
+        // resume once it lands — gated per-item by the same AutoObtainForPath
+        // flag. Preempts both the shop and drop routers (a free, certain give
+        // beats a paid buy or a percentage hunt), which stand down whenever
+        // DeterministicGiveExists. Wire-sender bound by MainWindowViewModel.
+        PathItemGiveRouter = new Game.Map.PathItemGiveRouter(
+            giveSourcesForItem: GiveSourcesForItem,
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
+            walkDestination: () => Walker.Destination,
+            distanceBetween: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            carriedCount: CountItemCarried,
+            itemName: ItemNames.GetName,
+            isEnabled: IsAutoObtainForPath,
+            engineWalkActive: () =>
+                AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
+                || AutoDeposit.IsRerouting,
+            walkTo: key => Walker.WalkTo(key),
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+            log: Log);
+        Needs.NeedPosted += PathItemGiveRouter.OnNeedPosted;
+        Walker.Event += PathItemGiveRouter.OnWalkEvent;
+        Inventory.Changed += PathItemGiveRouter.OnInventoryChanged;
+
         PathItemShopRouter = new Game.Map.PathItemShopRouter(
             shopRoomsSellingItem: ShopRoomsSellingItem,
+            deterministicGiveExists: DeterministicGiveExists,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
             distanceBetween: (a, b) => Bfs.DistanceBetween(a, b, Movement),
@@ -4176,6 +4212,7 @@ public sealed class AppServices
         MonsterDropRouter = new Game.Map.MonsterDropRouter(
             dropSpawnsForItem: DropSpawnsForItem,
             anyShopSells: ShopStock.AnyShopSells,
+            deterministicGiveExists: DeterministicGiveExists,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
             distancesFrom: src => Bfs.ComputeDistancesFrom(src, Movement),
@@ -4948,15 +4985,36 @@ public sealed class AppServices
     }
 
     // Route-picker helper: for a path-gate item the direct route needs, name the
+    // giver the walk would actually detour to for a free hand-over — but only
+    // when that detour will run. It runs only if the item is flagged
+    // AutoObtainForPath (same gate PathItemGiveRouter enforces) AND a reachable
+    // deterministic giver exists. The chosen giver matches the router's
+    // fewest-added-steps pick (shared TrySelectGiver), so the picker's "ask X"
+    // promise is the giver the run visits — not a plausible guess.
+    public string? PathItemGiveName(int itemId, Game.Map.RoomKey source, Game.Map.RoomKey destination)
+    {
+        if (!IsAutoObtainForPath(itemId)) return null;
+        System.Collections.Generic.IReadOnlyList<Game.Map.GiveSource> givers = GiveSourcesForItem(itemId);
+        if (givers.Count == 0) return null;
+        return Game.Map.PathItemGiveRouter.TrySelectGiver(
+                givers, source, destination, (a, b) => Bfs.DistanceBetween(a, b, Movement),
+                out Game.Map.GiveSource giver)
+            ? giver.GiverName
+            : null;
+    }
+
+    // Route-picker helper: for a path-gate item the direct route needs, name the
     // shop the walk would actually detour to buy it — but only when that detour
     // will really run. It runs only if the item is flagged AutoObtainForPath
-    // (same gate PathItemShopRouter enforces) AND a reachable shop stocks it, so
-    // both conditions must hold or we return null. The chosen shop matches the
-    // router's fewest-added-steps pick (shared TrySelectShop), so the picker's
+    // (same gate PathItemShopRouter enforces), no free deterministic give
+    // preempts it (a give owns the item over a buy), AND a reachable shop stocks
+    // it, so all conditions must hold or we return null. The chosen shop matches
+    // the router's fewest-added-steps pick (shared TrySelectShop), so the picker's
     // "buy at X" promise is the shop the run visits — not a plausible guess.
     public string? PathItemShopName(int itemId, Game.Map.RoomKey source, Game.Map.RoomKey destination)
     {
         if (!IsAutoObtainForPath(itemId)) return null;
+        if (DeterministicGiveExists(itemId)) return null;   // give preempts the buy
         System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(itemId);
         if (shops.Count == 0) return null;
         if (!Game.Map.PathItemShopRouter.TrySelectShop(
@@ -4966,17 +5024,18 @@ public sealed class AppServices
         return RoomGraph.GetRoom(shop)?.Name;
     }
 
-    // Route-picker helper: for a path-gate item NO shop sells, name the monster
-    // the walk would actually reroute to hunt — but only when that hunt will run.
-    // It runs only if the item is flagged AutoObtainForPath (same gate
-    // MonsterDropRouter enforces), no shop sells it (a sold item is the buy
-    // tail's job), AND a dropper spawns in a room reachable from source. The
-    // chosen monster matches the router's nearest-spawn pick (shared
+    // Route-picker helper: for a path-gate item no give / shop covers, name the
+    // monster the walk would actually reroute to hunt — but only when that hunt
+    // will run. It runs only if the item is flagged AutoObtainForPath (same gate
+    // MonsterDropRouter enforces), no free give and no shop cover it (those are
+    // the give / buy tails' job), AND a dropper spawns in a room reachable from
+    // source. The chosen monster matches the router's nearest-spawn pick (shared
     // SelectNearestSpawn from the same forward BFS), so the picker's "dropped by
     // X" promise is the lair the run visits — not a plausible guess.
     public string? PathItemDropName(int itemId, Game.Map.RoomKey source)
     {
         if (!IsAutoObtainForPath(itemId)) return null;
+        if (DeterministicGiveExists(itemId)) return null;   // give preempts the hunt
         if (ShopStock.AnyShopSells(itemId)) return null;
         System.Collections.Generic.IReadOnlyList<Game.Map.MonsterDropSpawn> spawns = DropSpawnsForItem(itemId);
         if (spawns.Count == 0) return null;
@@ -5079,6 +5138,50 @@ public sealed class AppServices
                 result.Add(new Game.Map.MonsterDropSpawn(room, d.MonsterId, d.MonsterName, d.DropPercent));
         return result;
     }
+
+    // Every concrete place we can be handed itemId on demand, backing
+    // PathItemGiveRouter's detour-target search. Filters ItemSourceIndex to the
+    // deterministic, keyword-carrying awards (a gated turn-in / purchase / quest
+    // reward or a `random` roll isn't a reliable one-command hand-over), then
+    // resolves each to a room + command: a Monster giver becomes
+    // `ask <noun> <keyword>` at each of its spawn rooms (Summoned By) — <noun> is
+    // the last word of the name, the game's `ask` parser taking a single-word
+    // target (shared GuardDoorCommandResolver.LastWord) — while a Room giver
+    // becomes the bare keyword typed verbatim in that room. The GiverName kept for
+    // the picker stays the full name (a readable "(ask Gnome Commander)" promise).
+    // Computed lazily (only when a path-item need fires), so the fan-out is never
+    // materialised at load time. Also decides DeterministicGiveExists, the
+    // shop/drop stand-down.
+    private System.Collections.Generic.IReadOnlyList<Game.Map.GiveSource> GiveSourcesForItem(int itemId)
+    {
+        System.Collections.Generic.IReadOnlyList<ItemGiver> givers = ItemSources.GiversOf(itemId);
+        if (givers.Count == 0)
+            return System.Array.Empty<Game.Map.GiveSource>();
+        var result = new System.Collections.Generic.List<Game.Map.GiveSource>();
+        foreach (ItemGiver g in givers)
+        {
+            if (!g.Deterministic || g.Keyword.Length == 0) continue;
+            if (g.Kind == ItemGiverKind.Monster)
+            {
+                string noun = Game.Map.GuardDoorCommandResolver.LastWord(g.Name);
+                if (noun.Length == 0) continue;   // no addressable noun — can't ask
+                string command = $"ask {noun} {g.Keyword}";
+                foreach (Game.Map.RoomKey room in ItemSources.GiverMonsterRoomsOf(g.Number))
+                    result.Add(new Game.Map.GiveSource(room, command, g.Name));
+            }
+            else // Room giver — the keyword is the verbatim room CMD.
+            {
+                result.Add(new Game.Map.GiveSource(new Game.Map.RoomKey(g.Map, g.Room), g.Keyword, g.Name));
+            }
+        }
+        return result;
+    }
+
+    // True when a free deterministic give can supply itemId at a resolved room —
+    // the precedence gate the shop and drop routers stand down on. Mirrors the
+    // give router's own "can act" test (a resolved candidate list), so the two
+    // never both claim the item.
+    private bool DeterministicGiveExists(int itemId) => GiveSourcesForItem(itemId).Count > 0;
 
     // True when a room "You notice ..." entry resolves to a real item in the
     // active set. The cash filters (GroundItemTracker.IsCashEntry /
@@ -5218,8 +5321,9 @@ public sealed class AppServices
 
     // Per-item on-demand path acquisition gate: the single AutoObtainForPath
     // opt-in on the item's overlay. Checked means every acquisition method is in
-    // play (party redistribute, shop buy, bank withdraw, drop reroute). Backs all
-    // three path-item routers' isEnabled predicates and the picker's name helpers.
+    // play (party redistribute, textblock give, shop buy, bank withdraw, drop
+    // reroute). Backs all three path-item routers' isEnabled predicates and the
+    // picker's name helpers.
     private bool IsAutoObtainForPath(int itemId)
     {
         if (itemId <= 0) return false;

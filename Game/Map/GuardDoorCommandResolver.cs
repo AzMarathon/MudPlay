@@ -171,7 +171,12 @@ public static class GuardDoorCommandResolver
         _ => null,
     };
 
-    private static string LastWord(string? name)
+    // The MMUD `ask <noun> <keyword>` target noun: the last word of a monster's
+    // name ("shadow guard" → "guard"). The game's `ask` parser takes a single-word
+    // target and treats the rest as the keyword, so a multi-word name must be
+    // reduced to its noun. Shared with the path-item give router, which addresses a
+    // giver NPC through the same verb.
+    internal static string LastWord(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return string.Empty;
         string[] words = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);

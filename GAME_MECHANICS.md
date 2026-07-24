@@ -1100,6 +1100,13 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
     `RoomGraphManager.InjectGuardDoorActions`). The crossing then reuses `SpecialExitDispatch`'s
     ask-then-move path. Monster ids come from the room's `Lair` group (and its single placed `Npc`);
     only monsters carrying a `GreetTXT` are considered.
+  - **The same `ask <noun> <keyword>` noun rule backs the path-item give router.** A giver NPC that
+    hands over a path-gate item via a deterministic `giveitem` (an `ask <keyword>` dialogue award) is
+    addressed by the identical single-word target — the game's `ask` parser takes one target token and
+    treats the rest as the keyword, so a multi-word name (`Gnome Commander`) must reduce to its last-word
+    noun (`ask commander orb`, **not** `ask gnome commander orb`). The give router reuses
+    `GuardDoorCommandResolver.LastWord` for this; only the picker's human-readable "(ask …)" promise keeps
+    the full name.
 
 - **[CONFIRMED, game data Paradigm 1.9.1 map 9]** **A quest-gated portal keyword can teleport to a
   fixed room for flagged characters but a *random* room for everyone else — so it is routed as a

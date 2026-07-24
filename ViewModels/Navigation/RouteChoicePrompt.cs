@@ -95,12 +95,16 @@ public static class RouteChoicePrompt
             choice,
             DestinationLabel(services, destination),
             services.ItemNames.GetName,
-            // Name the shop the run would detour to buy a gate item, when it will
-            // (item flagged buy-if-needed + a reachable shop stocks it). Resolved
+            // Name the NPC / room the run would ask for a free deterministic give,
+            // when one exists. This preempts the shop and drop tails (the give
+            // router stands both down), so the "ask X" tail matches the run.
+            itemId => services.PathItemGiveName(itemId, source, destination),
+            // No free give but a shop stocks the gate item and it's flagged
+            // buy-if-needed: name the shop the run would detour to buy at. Resolved
             // from this walk's source/destination so the "buy at X" tail matches
             // the actual detour.
             itemId => services.PathItemShopName(itemId, source, destination),
-            // No shop sells it but a flagged monster drops it: name the lair the
+            // No give or shop but a flagged monster drops it: name the lair the
             // run would reroute to hunt, so the picker previews the hunt option
             // (which otherwise only surfaces as a prompt once the walk starts).
             itemId => services.PathItemDropName(itemId, source));

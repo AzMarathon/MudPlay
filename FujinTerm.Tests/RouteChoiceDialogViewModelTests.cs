@@ -6,13 +6,13 @@ using Xunit;
 
 namespace FujinTerm.Tests;
 
-// The picker's requirement line promises a source tail — "(buy at <shop>)" or,
-// when no shop sells it, "(dropped by <monster>)" — only for the single-item
+// The picker's requirement line promises a source tail — "(ask <giver>)", else
+// "(buy at <shop>)", else "(dropped by <monster>)" — only for the single-item
 // gate kinds a walk actually auto-sources (Item, Ticket, single-counter
 // hazard). Keys and any-of hazard counters never post a single auto-obtain
 // path-item need, so they must not carry a tail even when a resolver would name
-// one. These pin that kind-gating, the shop-over-drop precedence, and the
-// no-resolver fallback, plus the select-to-preview / Go interaction.
+// one. These pin that kind-gating, the give-over-shop-over-drop precedence, and
+// the no-resolver fallback, plus the select-to-preview / Go interaction.
 public sealed class RouteChoiceDialogViewModelTests
 {
     private static readonly IReadOnlyList<RoomKey> FreeLine =
@@ -35,7 +35,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Bank (1/9)", id => id == 5 ? "a raft" : null,
-            id => id == 5 ? "General Store" : null);
+            shopNameForItem: id => id == 5 ? "General Store" : null);
 
         Assert.Equal("Requires a raft (buy at General Store)", vm.RequirementSummary);
     }
@@ -47,7 +47,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Docks (1/9)", id => id == 7 ? "a ferry ticket" : null,
-            id => id == 7 ? "Ticket Booth" : null);
+            shopNameForItem: id => id == 7 ? "Ticket Booth" : null);
 
         Assert.Equal("Requires a ferry ticket (buy at Ticket Booth)", vm.RequirementSummary);
     }
@@ -57,10 +57,11 @@ public sealed class RouteChoiceDialogViewModelTests
     {
         var choice = Choice(new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 9 }));
 
-        // A key is never bought on a path detour, so a resolver that names a shop
-        // must be ignored for the DoorKey kind.
+        // A key is never sourced on a path detour, so a resolver that names a
+        // giver or shop must be ignored for the DoorKey kind.
         var vm = new RouteChoiceDialogViewModel(
-            choice, "Vault (1/9)", id => "the iron key", id => "Locksmith");
+            choice, "Vault (1/9)", id => "the iron key",
+            giveNameForItem: id => "a gatekeeper", shopNameForItem: id => "Locksmith");
 
         Assert.Equal("Requires the iron key", vm.RequirementSummary);
     }
@@ -109,6 +110,37 @@ public sealed class RouteChoiceDialogViewModelTests
             dropNameForItem: id => "a river troll");
 
         Assert.Equal("Requires a raft (buy at General Store)", vm.RequirementSummary);
+    }
+
+    [Fact]
+    public void CarryItemGate_WithGive_GetsAskTail()
+    {
+        // A deterministic textblock giver hands the gate item over for free — the
+        // picker names the giver the run will ask.
+        var choice = Choice(new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 5 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Bank (1/9)", id => "a bloodstone orb",
+            giveNameForItem: id => id == 5 ? "Gnome Commander" : null);
+
+        Assert.Equal("Requires a bloodstone orb (ask Gnome Commander)", vm.RequirementSummary);
+    }
+
+    [Fact]
+    public void CarryItemGate_GiveWinsOverShopAndDrop_WhenAllResolve()
+    {
+        // Give, shop, and drop all name a source — the free give tail wins,
+        // mirroring the routers' give-first precedence (the give stands the shop
+        // and drop routers down, so the picker must promise the give).
+        var choice = Choice(new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 5 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Bank (1/9)", id => "a bloodstone orb",
+            giveNameForItem: id => "Gnome Commander",
+            shopNameForItem: id => "General Store",
+            dropNameForItem: id => "a river troll");
+
+        Assert.Equal("Requires a bloodstone orb (ask Gnome Commander)", vm.RequirementSummary);
     }
 
     [Fact]

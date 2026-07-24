@@ -944,6 +944,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Shop-source routing — the `buy <item>` at the detour shop
         // rides the same gate-wrapped pipeline.
         AppServices.Current.PathItemShopRouter.SetWireSender(engineSend);
+        // Give-source routing — the `ask <npc> <keyword>` / room-CMD give
+        // command at the detour giver rides the same gate-wrapped pipeline.
+        AppServices.Current.PathItemGiveRouter.SetWireSender(engineSend);
         // Party-inventory deferral — the `@party give` / `@do give`
         // hand-off rides the same gate-wrapped pipeline. The @have probe
         // itself broadcasts through the already-bound PartyBroadcaster.
