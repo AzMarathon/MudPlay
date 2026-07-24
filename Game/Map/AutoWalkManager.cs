@@ -613,6 +613,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // "direct — send it" mode) across the tracker-Pending deferral.
     private bool _deferredWalkArmAcquisition = true;
 
+    // Companion to _deferredWalkTarget: preserves the teleport route
+    // picker's "walk it, don't teleport" choice (true only when the
+    // user chose the pure-walking route over a shorter teleport
+    // shortcut) across the tracker-Pending deferral.
+    private bool _deferredWalkAvoidTeleports;
+
     // planThroughAcquirableGates: when true, BFS plans the route as if every
     // acquirable gate item (raft / ticket / door key / hazard counter) were
     // already carried — the route picker's "direct" choice. Default false
@@ -623,10 +629,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // shop / drop / party-share pipeline to source it. The route picker's
     // "direct — send it" choice passes false: it crosses the gates as-is
     // without provisioning, trusting the user to already hold what's needed.
+    //
+    // avoidTeleports: when true, BFS refuses item/CMD-cast teleport exits and
+    // gateway portals, so the planned route is the pure-walking one. The
+    // teleport route picker's "walk it, don't teleport" choice passes true;
+    // every other caller keeps the default (false), which lets BFS take a
+    // teleport hop as a normal short edge when it's the shortest route.
     public bool WalkTo(
         RoomKey destination,
         bool planThroughAcquirableGates = false,
-        bool armItemAcquisition = true)
+        bool armItemAcquisition = true,
+        bool avoidTeleports = false)
     {
         if (State is WalkState.Walking or WalkState.Paused)
         {
@@ -654,6 +667,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _deferredWalkTarget = destination;
             _deferredWalkThroughGates = planThroughAcquirableGates;
             _deferredWalkArmAcquisition = armItemAcquisition;
+            _deferredWalkAvoidTeleports = avoidTeleports;
             _destination = destination;       // populated so status surfaces show the target
             State = WalkState.Walking;
             Raise(new WalkEvent(WalkEventKind.Started,
@@ -662,13 +676,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return true;
         }
 
-        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition);
+        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports);
     }
 
     private bool WalkToImmediate(
         RoomKey destination,
         bool planThroughAcquirableGates = false,
-        bool armItemAcquisition = true)
+        bool armItemAcquisition = true,
+        bool avoidTeleports = false)
     {
         // Callers may arrive here from the WalkTo entry (Idle) OR from
         // the deferred dispatch in OnTrackerStateChanged (Walking with
@@ -721,7 +736,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         BoatRoutePlan? boatPlan = null;
         try
         {
-            path = _bfs.FindPath(source.Key, destination, _filter);
+            path = _bfs.FindPath(source.Key, destination, _filter, refuseTeleports: avoidTeleports);
 
             // A sea-captain sailing can beat (or replace) the land route. Weigh
             // the boat's stitched land-legs against the pure land route; the
@@ -744,17 +759,31 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     && mazeSolver.CanSolve(destination) && mazeSolver.TryBegin(destination))
                     return true;
 
-                // Distinguish "all routes blocked by an exit gate" from a
-                // genuinely disconnected target: re-probe with the exit gates
-                // ignored. A path that appears only when gates are off means
-                // every route there is gated beyond the player — a level
-                // window they fall outside, a toll they can't afford, or a
-                // class hall closed to their class — surface that reason so
-                // the user understands why we won't move.
-                IReadOnlyList<Direction>? ungated =
-                    _bfs.FindPath(source.Key, destination, _filter, ignoreExitGates: true);
-                string reason = ungated is { Count: > 0 }
-                    ? DescribeBlockedRoute(source.Key, ungated)
+                // Name the obstacle on the route the crosser would actually
+                // take, not on the shortest path with every gate wished away.
+                // First re-probe with only the ACQUIRABLE gates suspended
+                // (item / ticket / key-door / hazard) and level / toll / class
+                // still active: any route that appears is one the crosser could
+                // walk by acquiring something, so its blockers are the missing
+                // key / item / counter — describe that. This matches the route
+                // the picker identifies (e.g. a city front door gated on a key
+                // you must fetch), instead of naming a shorter level-gated
+                // portal the crosser was never going to use. Only when even that
+                // finds nothing is the target walled by a non-acquirable gate —
+                // fall back to the all-gates-ignored probe to name the level /
+                // toll / class reason (or "no path" when truly disconnected).
+                IReadOnlyList<Direction>? describePath;
+                using (_filter?.SuspendAcquirableGates())
+                    describePath = _bfs.FindPath(source.Key, destination, _filter);
+                if (describePath is null || describePath.Count == 0)
+                    describePath =
+                        _bfs.FindPath(source.Key, destination, _filter, ignoreExitGates: true);
+
+                // DescribeBlockedRoute runs with gating restored (the suspension
+                // scope has closed), so DescribeExitBlock reports the real
+                // acquirable-gate reasons on the front-door route's hops.
+                string reason = describePath is { Count: > 0 }
+                    ? DescribeBlockedRoute(source.Key, describePath)
                     : "no path";
                 Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
                 return false;
@@ -1528,10 +1557,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
         {
             bool throughGates = _deferredWalkThroughGates;
             bool armAcquisition = _deferredWalkArmAcquisition;
+            bool avoidTeleports = _deferredWalkAvoidTeleports;
             _deferredWalkTarget = null;
             _deferredWalkThroughGates = false;
             _deferredWalkArmAcquisition = true;
-            WalkToImmediate(deferred, throughGates, armAcquisition);
+            _deferredWalkAvoidTeleports = false;
+            WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports);
             return;
         }
 
@@ -1798,10 +1829,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 {
                     bool throughGates = _deferredWalkThroughGates;
                     bool armAcquisition = _deferredWalkArmAcquisition;
+                    bool avoidTeleports = _deferredWalkAvoidTeleports;
                     _deferredWalkTarget = null;
                     _deferredWalkThroughGates = false;
                     _deferredWalkArmAcquisition = true;
-                    WalkToImmediate(deferred, throughGates, armAcquisition);
+                    _deferredWalkAvoidTeleports = false;
+                    WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports);
                 }
                 return;
             }
@@ -1962,6 +1995,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
+        _deferredWalkAvoidTeleports = false;
         _retryCount = 0;
         _replanCount = 0;
         // Drop any AbandonedCombat hold this walk was carrying so a stopped /

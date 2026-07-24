@@ -32,6 +32,7 @@ public sealed class PathItemShopRouterTests
         public RoomKey? WalkDest = Dest;
         public bool Enabled = true;
         public bool EngineWalk;
+        public bool GiveExists;   // a free deterministic give preempts the buy
         public readonly List<RoomKey> Walks = new();
 
         // Bank leg. Cash is a live figure the buy/withdraw path reads; BuyCost
@@ -47,6 +48,7 @@ public sealed class PathItemShopRouterTests
             shopRoomsSellingItem: id => ShopRooms.TryGetValue(id, out List<RoomKey>? r)
                 ? r
                 : (IReadOnlyList<RoomKey>)Array.Empty<RoomKey>(),
+            deterministicGiveExists: _ => GiveExists,
             currentRoom: () => Current,
             walkDestination: () => WalkDest,
             distanceBetween: (a, b) => Dist.TryGetValue((a, b), out int d) ? d : null,
@@ -114,6 +116,21 @@ public sealed class PathItemShopRouterTests
     {
         var h = new Harness().WithSingleShop();
         h.EngineWalk = true;             // a loop / auto-lair drives movement
+        PathItemShopRouter r = h.Build();
+
+        r.OnNeedPosted(PathNeed(42));
+
+        Assert.False(r.DetourActive);
+        Assert.Empty(h.Walks);
+    }
+
+    [Fact]
+    public void OnNeedPosted_DeterministicGiveExists_StandsDownForGiveRouter()
+    {
+        // A free, certain give preempts a paid buy — the shop router yields even
+        // with a reachable shop in stock.
+        var h = new Harness().WithSingleShop();
+        h.GiveExists = true;
         PathItemShopRouter r = h.Build();
 
         r.OnNeedPosted(PathNeed(42));

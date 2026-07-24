@@ -20,6 +20,18 @@ public enum RouteRequirementKind
 // HazardProtection it's the any-of counter set (hold at least one).
 public sealed record RouteRequirement(RouteRequirementKind Kind, IReadOnlyList<int> ItemIds);
 
+// Which kind of route fork the picker is presenting. ItemGate: a shorter direct
+// route crosses an acquirable item / ticket / key / hazard gate the free route
+// detours around. Teleport: a shorter route takes a teleport hop the walking
+// route avoids — offered because a teleport can drop the crosser somewhere
+// deadly (a damaging plane, water with no boat) that only the user's character
+// knowledge can judge, so the client can't silently take the shortcut for them.
+public enum RouteChoiceKind
+{
+    ItemGate,
+    Teleport,
+}
+
 // A free-vs-direct route comparison for one destination: the free route's step
 // count, the shorter direct route's step count, the requirements the direct
 // route demands, and each route as a RoomKey sequence (source first, then every
@@ -29,12 +41,18 @@ public sealed record RouteRequirement(RouteRequirementKind Kind, IReadOnlyList<i
 // the only way there crosses something acquirable (a survivable room hazard, or
 // an item / ticket / key gate). The caller decides what to do with a sole route
 // by its requirement shape; see RouteChoicePrompt.
+// For a Teleport choice the "free" route is the pure-walking one (longer, safe)
+// and the "gated" route is the teleport shortcut (shorter, potentially deadly);
+// Requirements is empty and TeleportLanding names the room the teleport drops you
+// in so the picker can caveat the danger.
 public sealed record RouteChoice(
     int FreeStepCount,
     int GatedStepCount,
     IReadOnlyList<RouteRequirement> Requirements,
     IReadOnlyList<RoomKey> FreePath,
-    IReadOnlyList<RoomKey> GatedPath)
+    IReadOnlyList<RoomKey> GatedPath,
+    RouteChoiceKind Kind = RouteChoiceKind.ItemGate,
+    string? TeleportLanding = null)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -59,6 +77,12 @@ public static class RouteChoicePlanner
     // worth the saving, so the free route wins outright. Hazard-only shortcuts
     // ignore this floor.
     private const int MinItemGateSavings = 2;
+
+    // Minimum rooms a teleport shortcut must save before the picker surfaces the
+    // walk-vs-teleport fork. A teleport that shaves only a room isn't worth
+    // interrupting the walk to weigh against its danger; below this the walker
+    // just takes it (unchanged silent behavior).
+    private const int MinTeleportSavings = 2;
 
     public static RouteChoice? Evaluate(
         BfsMapper bfs,
@@ -125,6 +149,76 @@ public static class RouteChoicePlanner
             free.Count, gated.Count, reqs,
             BuildKeyPath(graph, source, free),
             BuildKeyPath(graph, source, gated));
+    }
+
+    // Compares the shortest route (teleport hops allowed — BFS treats an item /
+    // CMD-cast teleport exit as a normal short edge) against the pure-walking
+    // route (teleports refused). Returns a Teleport RouteChoice when the shortest
+    // route takes a teleport the walking route avoids AND the walk is meaningfully
+    // longer, so the user can weigh the teleport's shortcut against its danger — a
+    // teleport can drop the crosser on a damaging plane or across water with no
+    // boat, survivable or lethal depending on the character, a call only the user
+    // can make. Null when the shortest route already walks the whole way (no
+    // teleport to weigh), no walking route exists (teleport is the only way there,
+    // so there's no fork), or the teleport saves too little to be worth the risk.
+    public static RouteChoice? EvaluateTeleport(
+        BfsMapper bfs,
+        MovementFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+
+        // Shortest route: teleports allowed (the walker's default plan).
+        IReadOnlyList<Direction>? tele = bfs.FindPath(source, destination, filter);
+        if (tele is null || tele.Count == 0) return null;
+
+        // Nothing to weigh unless the shortest route actually teleports.
+        if (FirstTeleportLanding(graph, source, tele) is not { } landing) return null;
+
+        // Pure-walking route: teleports refused. No walking route → the teleport
+        // is the only way there, so there's no walk-vs-teleport fork to offer.
+        IReadOnlyList<Direction>? walk =
+            bfs.FindPath(source, destination, filter, refuseTeleports: true);
+        if (walk is null || walk.Count == 0) return null;
+
+        // The teleport must shave enough walking to be worth weighing against its
+        // danger — a one-room shortcut isn't worth a lethal-plane gamble.
+        if (walk.Count - tele.Count < MinTeleportSavings) return null;
+
+        return new RouteChoice(
+            walk.Count, tele.Count,
+            Array.Empty<RouteRequirement>(),
+            BuildKeyPath(graph, source, walk),
+            BuildKeyPath(graph, source, tele),
+            RouteChoiceKind.Teleport,
+            landing);
+    }
+
+    // The first teleport hop's landing-room label ("Silver River (12/34)"), or
+    // null when the route takes no teleport. Names both item / CMD-cast teleport
+    // exits and gateway portals — either can shortcut a walk.
+    private static string? FirstTeleportLanding(
+        RoomGraphManager graph, RoomKey source, IReadOnlyList<Direction> path)
+    {
+        RoomKey cur = source;
+        foreach (Direction dir in path)
+        {
+            Room? room = graph.GetRoom(cur);
+            if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            if (exit.Hint == RoomExitHint.Teleport || exit.GatewayTeleport)
+            {
+                Room? landing = graph.GetRoom(exit.Target);
+                return landing?.Name is { Length: > 0 } name
+                    ? $"{name} ({exit.Target})"
+                    : exit.Target.ToString();
+            }
+            cur = exit.Target;
+        }
+        return null;
     }
 
     // Expand a planned direction list to the RoomKey sequence it visits (source

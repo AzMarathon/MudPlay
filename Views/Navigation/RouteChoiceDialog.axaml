@@ -54,7 +54,7 @@
                                    FontSize="12"
                                    TextWrapping="Wrap"
                                    Foreground="{StaticResource ChromeFgBrush}"/>
-                        <TextBlock Text="{Binding RequirementSummary}"
+                        <TextBlock Text="{Binding GatedDetail}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
@@ -83,7 +83,7 @@
             </StackPanel>
 
             <TextBlock Grid.Row="2"
-                       Text="Click a route to preview it on the map, then Go to walk it. &quot;Acquire then go&quot; sources any missing gate items first; &quot;send it&quot; walks straight through without them."
+                       Text="{Binding Footnote}"
                        FontSize="10"
                        TextWrapping="Wrap"
                        Foreground="{StaticResource ChromeFgMutedBrush}"/>

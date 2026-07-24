@@ -6,13 +6,13 @@ using Xunit;
 
 namespace FujinTerm.Tests;
 
-// The picker's requirement line promises a source tail — "(buy at <shop>)" or,
-// when no shop sells it, "(dropped by <monster>)" — only for the single-item
+// The picker's requirement line promises a source tail — "(ask <giver>)", else
+// "(buy at <shop>)", else "(dropped by <monster>)" — only for the single-item
 // gate kinds a walk actually auto-sources (Item, Ticket, single-counter
 // hazard). Keys and any-of hazard counters never post a single auto-obtain
 // path-item need, so they must not carry a tail even when a resolver would name
-// one. These pin that kind-gating, the shop-over-drop precedence, and the
-// no-resolver fallback, plus the select-to-preview / Go interaction.
+// one. These pin that kind-gating, the give-over-shop-over-drop precedence, and
+// the no-resolver fallback, plus the select-to-preview / Go interaction.
 public sealed class RouteChoiceDialogViewModelTests
 {
     private static readonly IReadOnlyList<RoomKey> FreeLine =
@@ -35,7 +35,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Bank (1/9)", id => id == 5 ? "a raft" : null,
-            id => id == 5 ? "General Store" : null);
+            shopNameForItem: id => id == 5 ? "General Store" : null);
 
         Assert.Equal("Requires a raft (buy at General Store)", vm.RequirementSummary);
     }
@@ -47,7 +47,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Docks (1/9)", id => id == 7 ? "a ferry ticket" : null,
-            id => id == 7 ? "Ticket Booth" : null);
+            shopNameForItem: id => id == 7 ? "Ticket Booth" : null);
 
         Assert.Equal("Requires a ferry ticket (buy at Ticket Booth)", vm.RequirementSummary);
     }
@@ -57,10 +57,11 @@ public sealed class RouteChoiceDialogViewModelTests
     {
         var choice = Choice(new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 9 }));
 
-        // A key is never bought on a path detour, so a resolver that names a shop
-        // must be ignored for the DoorKey kind.
+        // A key is never sourced on a path detour, so a resolver that names a
+        // giver or shop must be ignored for the DoorKey kind.
         var vm = new RouteChoiceDialogViewModel(
-            choice, "Vault (1/9)", id => "the iron key", id => "Locksmith");
+            choice, "Vault (1/9)", id => "the iron key",
+            giveNameForItem: id => "a gatekeeper", shopNameForItem: id => "Locksmith");
 
         Assert.Equal("Requires the iron key", vm.RequirementSummary);
     }
@@ -109,6 +110,37 @@ public sealed class RouteChoiceDialogViewModelTests
             dropNameForItem: id => "a river troll");
 
         Assert.Equal("Requires a raft (buy at General Store)", vm.RequirementSummary);
+    }
+
+    [Fact]
+    public void CarryItemGate_WithGive_GetsAskTail()
+    {
+        // A deterministic textblock giver hands the gate item over for free — the
+        // picker names the giver the run will ask.
+        var choice = Choice(new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 5 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Bank (1/9)", id => "a bloodstone orb",
+            giveNameForItem: id => id == 5 ? "Gnome Commander" : null);
+
+        Assert.Equal("Requires a bloodstone orb (ask Gnome Commander)", vm.RequirementSummary);
+    }
+
+    [Fact]
+    public void CarryItemGate_GiveWinsOverShopAndDrop_WhenAllResolve()
+    {
+        // Give, shop, and drop all name a source — the free give tail wins,
+        // mirroring the routers' give-first precedence (the give stands the shop
+        // and drop routers down, so the picker must promise the give).
+        var choice = Choice(new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 5 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Bank (1/9)", id => "a bloodstone orb",
+            giveNameForItem: id => "Gnome Commander",
+            shopNameForItem: id => "General Store",
+            dropNameForItem: id => "a river troll");
+
+        Assert.Equal("Requires a bloodstone orb (ask Gnome Commander)", vm.RequirementSummary);
     }
 
     [Fact]
@@ -315,6 +347,39 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Equal(RouteChoiceResult.GatedNoAcquire, closed);
     }
 
+    // ----- Sole-route wording (no gate-free detour) ------------------------
+
+    [Fact]
+    public void SoleDoorKeyRoute_UsesGateGenericWording_NotHazard()
+    {
+        // A locked-door sole route reaches the picker (a key is never auto-sourced).
+        // The wording must not call it a "hazard" — it's a gate cleared by hand.
+        var vm = new RouteChoiceDialogViewModel(
+            SoleChoice(new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 9 })),
+            "Vault (1/9)", id => "the iron key");
+
+        Assert.False(vm.HasFreeRoute);
+        Assert.False(vm.ShowSendItCard);
+        Assert.Contains("gated", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("hazard", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("hazard", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("gate", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
+        // The key names itself with no source tail (keys aren't sourced).
+        Assert.Equal("Requires the iron key", vm.RequirementSummary);
+    }
+
+    [Fact]
+    public void SoleHazardRoute_KeepsHazardWording()
+    {
+        var vm = new RouteChoiceDialogViewModel(
+            SoleChoice(new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 42 })),
+            "Sunbaked dune (1/9)", id => "a waterskin");
+
+        Assert.False(vm.HasFreeRoute);
+        Assert.Contains("hazard", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hazard", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void SwitchAcrossAllThree_RepreviewsEachSelection()
     {
@@ -344,5 +409,50 @@ public sealed class RouteChoiceDialogViewModelTests
         var vm = PickerVm();
         Assert.Contains("acquire", vm.GatedSummary, System.StringComparison.OrdinalIgnoreCase);
         Assert.Contains("send it", vm.SendItSummary, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ----- Teleport fork: walk vs teleport --------------------------------
+
+    private static RouteChoice TeleportChoice() =>
+        new(FreeStepCount: 8, GatedStepCount: 2,
+            System.Array.Empty<RouteRequirement>(), FreeLine, GatedLine,
+            RouteChoiceKind.Teleport, "Silver River (12/34)");
+
+    [Fact]
+    public void TeleportChoice_WordsCardsAsWalkVsTeleport_HidesSendIt()
+    {
+        var vm = new RouteChoiceDialogViewModel(TeleportChoice(), "Silver River (12/34)", id => null);
+
+        Assert.True(vm.IsTeleportChoice);
+        Assert.True(vm.HasFreeRoute);
+        Assert.False(vm.ShowSendItCard);            // no acquisition to skip
+        Assert.Contains("teleport", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Walk it", vm.FreeSummary);
+        Assert.Contains("Teleport", vm.GatedSummary);
+        Assert.Empty(vm.RequirementSummary);
+
+        // The gated card's detail line names the landing and warns of the danger.
+        Assert.Equal(vm.TeleportCaveat, vm.GatedDetail);
+        Assert.Contains("Silver River", vm.GatedDetail);
+        Assert.Contains("deadly", vm.GatedDetail, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TeleportChoice_FreeIsWalk_GatedIsTeleport_GoCommits()
+    {
+        var vm = new RouteChoiceDialogViewModel(TeleportChoice(), "Silver River (12/34)", id => null);
+        var previews = new List<RouteChoiceResult?>();
+        RouteChoiceResult? closed = null;
+        vm.PreviewRequested += r => previews.Add(r);
+        vm.CloseRequested += r => closed = r;
+
+        vm.SelectFreeCommand.Execute(null);         // "Walk it"
+        vm.SelectGatedCommand.Execute(null);        // "Teleport"
+        vm.GoCommand.Execute(null);
+
+        Assert.Equal(RouteChoiceResult.Gated, closed);
+        Assert.Equal(
+            new RouteChoiceResult?[] { RouteChoiceResult.Free, RouteChoiceResult.Gated },
+            previews);
     }
 }

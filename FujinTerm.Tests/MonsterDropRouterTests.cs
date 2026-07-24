@@ -24,6 +24,7 @@ public sealed class MonsterDropRouterTests
         public readonly Dictionary<RoomKey, int> Distances = new();
         public readonly HashSet<int> Carried = new();
         public readonly Dictionary<int, string> Names = new() { [42] = "rune" };
+        public readonly HashSet<int> GiveItems = new();   // a free deterministic give preempts the hunt
         public RoomKey? Current = Cur;
         public RoomKey? WalkDest = Dest;
         public bool Enabled = true;
@@ -44,6 +45,7 @@ public sealed class MonsterDropRouterTests
                 ? l
                 : (IReadOnlyList<MonsterDropSpawn>)Array.Empty<MonsterDropSpawn>(),
             anyShopSells: ShopItems.Contains,
+            deterministicGiveExists: GiveItems.Contains,
             currentRoom: () => Current,
             walkDestination: () => WalkDest,
             distancesFrom: _ => Distances,
@@ -103,6 +105,20 @@ public sealed class MonsterDropRouterTests
     {
         var h = new Harness().WithSingleSpawn();
         h.ShopItems.Add(42);             // PathItemShopRouter's job, not ours
+        MonsterDropRouter r = h.Build();
+
+        r.OnNeedPosted(PathNeed(42));
+
+        Assert.Equal(0, h.ConfirmCalls);
+        Assert.False(r.DetourActive);
+        Assert.Empty(h.Walks);
+    }
+
+    [Fact]
+    public void OnNeedPosted_DeterministicGiveExists_Ignored()
+    {
+        var h = new Harness().WithSingleSpawn();
+        h.GiveItems.Add(42);             // PathItemGiveRouter's job — a free give preempts the hunt
         MonsterDropRouter r = h.Build();
 
         r.OnNeedPosted(PathNeed(42));

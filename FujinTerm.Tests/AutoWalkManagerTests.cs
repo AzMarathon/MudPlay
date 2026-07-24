@@ -1500,4 +1500,63 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains("a required item you're missing", failed.Detail);
         Assert.DoesNotContain("(", failed.Detail);            // no name parenthetical
     }
+
+    // ----- two-route diagnostic: name the acquirable front door ------
+    //
+    // 1/1 has TWO routes to 1/4:
+    //   • E ──(Level: 40 to 0)──► 1/4            (1 hop, level-gated backdoor)
+    //   • N ──(Item: 474)──► 1/2 ── E ──► 1/4    (2 hops, item-gated front door)
+    // A level-22 character carrying nothing can walk neither. The shorter
+    // route is what an ignore-ALL-gates probe surfaces, so the pre-fix
+    // diagnostic blamed "a level requirement" — a portal the crosser was
+    // never going to take. The fix re-probes with only the acquirable gates
+    // suspended first, so the item route (the real front door) is described.
+    private const string TwoRouteGateGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Item: 474)", "S": "0", "E": "1/4 (Level: 40 to 0)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1 (Item: 474)", "E": "1/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "C",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void BlockedRoute_TwoRoutes_NamesAcquirableGate_NotShorterLevelGate()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), TwoRouteGateGraphJson);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        BfsMapper bfs = new(graph);
+        RoomTracker tracker = new(graph);
+        MovementCoordinator coord = new();
+        ProfileService profile = new();
+        MovementFilter filter = new(profile)
+        {
+            LevelProvider = () => 22,               // below the 40+ portal floor
+            InventoryReadyProbe = () => true,
+            ItemCarriedProbe = _ => false,          // lacks item 474
+        };
+        AutoWalkManager walker = new(graph, bfs, tracker, coord, filter);
+        var events = new List<WalkEvent>();
+        walker.Event += events.Add;
+        walker.SetItemNameResolver(id => id == 474 ? "gate key" : null);
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.False(walker.WalkTo(new RoomKey(1, 4)));
+
+        WalkEvent failed = events.Single(e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains("a required item you're missing (gate key)", failed.Detail);
+        Assert.DoesNotContain("a level requirement", failed.Detail);
+    }
 }

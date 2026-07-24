@@ -1,8 +1,14 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.99.2**
-> - Party @level probe no longer telepaths members who are only invited: an invited-not-joined row is excluded from the level roster, bounds estimate, and stale-warm scan, and the probe re-fires the moment they accept and join
+> **Version 1.100.0**
+> - Walk-to route picker now offers walk-vs-teleport: when a route could teleport but a walking route also exists, you choose — walk the safe long way, or take the much shorter teleport (which can drop you somewhere lethal, a call only your character can make)
+> - A blocked walk-to now names the obstacle on the route the character would actually take — a gate key or required item you must fetch — instead of a shorter level-gated backdoor it was never going to use
+> - Walk-to route ETA now shows in the Navigation window header ("~Nm Ss to arrive"), not just the program log
+> - Walk-to now auto-collects a free gate item en route when a giver hands it over on a single fail-proof command (an NPC keyword ask or a room command): the walk detours to the nearest giver, asks, collects, and resumes — no buying or hunting, and preferred over both when it applies
+> - Route picker names such a giver as "(ask <giver>)", taking precedence over the "(buy at …)" / "(dropped by …)" tails
+> - Walk-to whose only route is locked behind a door key (or an item you didn't flag for auto-fetch) now surfaces the picker naming that gate, then walks to the door and halts for you to clear it — instead of silently walking a route that dead-ends at the lock
+> - Post-kill loot re-survey sends a bare Enter instead of `look`, re-rendering ground drops without the room-description text
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

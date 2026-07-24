@@ -165,10 +165,13 @@ public sealed class AutoGetItemsManager : IDisposable
 
     // Re-survey the room after a kill whose monster could drop an
     // AutoCollect-flagged item. A drop lands loose on the ground as the item but
-    // isn't announced on the kill line, so a bare `look` re-renders the "You
-    // notice … here." survey the get path already parses. No-op while the master
-    // toggle is off; cooldown-guarded so an area kill re-looks once (the single
-    // survey collects every ground drop at once).
+    // isn't announced on the kill line, so a re-render of the "You notice … here."
+    // survey the get path already parses is needed. A bare Enter (carriage return)
+    // re-renders that survey exactly like `look` would but without look's room
+    // description / flavor text, so we send an empty line — Send appends the \r,
+    // making an empty payload a lone Enter. No-op while the master toggle is off;
+    // cooldown-guarded so an area kill re-looks once (the single survey collects
+    // every ground drop at once).
     public void RequestDropReLook()
     {
         if (_disposed || !_isEnabled()) return;
@@ -176,7 +179,7 @@ public sealed class AutoGetItemsManager : IDisposable
         if ((now - _lastReLookAt).TotalMilliseconds < ReLookCooldownMs) return;
         _lastReLookAt = now;
         _log?.Info(LogCategory, "re-look after kill (monster drops a flagged item)");
-        Send("look");
+        Send("");
     }
 
     // ----- notice parsing ----------------------------------------------

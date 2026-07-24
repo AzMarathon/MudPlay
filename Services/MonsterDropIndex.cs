@@ -165,9 +165,19 @@ public sealed class MonsterDropIndex
         if (!row.TryGetProperty("Summoned By", out JsonElement summonEl)
             || summonEl.ValueKind != JsonValueKind.String)
             return;
-        string? text = summonEl.GetString();
-        if (string.IsNullOrEmpty(text)) return;
+        List<RoomKey>? rooms = ParseSummonedByRooms(summonEl.GetString());
+        if (rooms is not null)
+            _spawnRoomsByMonster[monsterId] = rooms;
+    }
 
+    // Extract the distinct (map)/(room) spawn sites from a monster's raw
+    // "Summoned By" field, or null when it names none. The field carries
+    // occasional malformed tokens (a truncated oup:, a map-less Group: 102);
+    // the digits/digits regex skips those naturally. Shared with ItemSourceIndex,
+    // which resolves a giver monster's location off the same field.
+    public static List<RoomKey>? ParseSummonedByRooms(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
         List<RoomKey>? rooms = null;
         foreach (Match m in s_roomToken.Matches(text))
         {
@@ -177,8 +187,7 @@ public sealed class MonsterDropIndex
             rooms ??= new List<RoomKey>();
             if (!rooms.Contains(key)) rooms.Add(key);
         }
-        if (rooms is not null)
-            _spawnRoomsByMonster[monsterId] = rooms;
+        return rooms;
     }
 
     private static bool TryReadInt(JsonElement row, string property, out int value)

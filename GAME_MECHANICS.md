@@ -1100,6 +1100,13 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
     `RoomGraphManager.InjectGuardDoorActions`). The crossing then reuses `SpecialExitDispatch`'s
     ask-then-move path. Monster ids come from the room's `Lair` group (and its single placed `Npc`);
     only monsters carrying a `GreetTXT` are considered.
+  - **The same `ask <noun> <keyword>` noun rule backs the path-item give router.** A giver NPC that
+    hands over a path-gate item via a deterministic `giveitem` (an `ask <keyword>` dialogue award) is
+    addressed by the identical single-word target — the game's `ask` parser takes one target token and
+    treats the rest as the keyword, so a multi-word name (`Gnome Commander`) must reduce to its last-word
+    noun (`ask commander orb`, **not** `ask gnome commander orb`). The give router reuses
+    `GuardDoorCommandResolver.LastWord` for this; only the picker's human-readable "(ask …)" promise keeps
+    the full name.
 
 - **[CONFIRMED, game data Paradigm 1.9.1 map 9]** **A quest-gated portal keyword can teleport to a
   fixed room for flagged characters but a *random* room for everyone else — so it is routed as a
@@ -1161,6 +1168,71 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
     **not synthesised** (`RoomGraphManager.ParadigmAsylumLeverRoom`), making the asylum act as the same
     one-way pocket it already is on stock. The lever is still a real in-game exit the player can pull
     manually — the client just doesn't route through it.
+
+- **[CONFIRMED, user 2026-07-23] A walled city can have a "front door" that is a keyword→item→
+  summon→kill→key chain, entirely separate from any teleport "backdoor" the map data also holds.**
+  The dark-elf city (Paradigm 1.9.1) is the worked example the client got wrong: it has two ways in,
+  and the walk-to diagnostic named the wrong one. The **front door** is a multi-step gauntlet the
+  player performs by hand — the map graph only encodes its final locked-door hop:
+  1. Walk to the **gnome commander** (NPC in `8/459`) and `ask gnome orb` — he hands over the
+     **bloodstone orb (item 807)**.
+  2. Carry the orb to `8/398` and `rub orb` — consumes the orb and opens the **south exit to `8/403`**
+     toward the gate. This step's gate IS surfaced on the room exit ("Needs 1 action: rub bloodstone
+     orb / hold bloodstone orb / rub orb"), so once the orb is in hand the walker already knows how to
+     cross it.
+  3. At the **Black Steel Gate (`8/461`)**, `touch statue` — summons the **obsidian statue
+     (monster 347)**; kill it and the corpse drops the **gate key (item 806)**. This summon command is
+     NOT surfaced anywhere on the map.
+  4. The gate key opens the **town gate `8/461 → 8/462`** into the city — the exit shows
+     `(Key: gate key)` but not how to obtain the key.
+  The **backdoor** is a single **teleport item** (a "nightblack portal") that drops you inside the
+  city map, gated behind a high **minimum character level**.
+  - **What the map surfaces vs. what it hides (the crux of auto-traversal):** the room graph encodes
+    how to *cross* an item/key gate — the consumption command and required item ride on the exit
+    (`8/398` south names `rub orb` + bloodstone orb; `8/461` south names `Key: gate key`) — but it does
+    NOT encode how to *acquire* the gating item. Acquisition provenance lives only in the **TBInfo**
+    game-data table: `ask gnome orb` → `giveitem 807`, and `touch statue` → `summon 347` (kill → drop
+    806) are invisible to the walker until it reads TBInfo. So the walker can cross a gate it holds the
+    item for, but is blind to how to obtain that item.
+  - **[CONFIRMED, user 2026-07-23] Keyword command form depends on the TBInfo trigger's root:** an
+    **NPC-attached** keyword is issued as `ask <npc name> <keyword>` (e.g. `ask gnome orb`); a
+    **room CMD** keyword is typed **verbatim** (e.g. `rub orb`, `touch statue`). This supersedes the
+    earlier note that keyword strings "come from the NPC's dialogue at play time" — they are fixed in
+    the TBInfo `Action`/keyword data, and the client can read them.
+  - *[OBSERVED — Paradigm 1.9.1 game data, cross-referenced]* the front-door landmarks are gnome
+    commander in room `8/459`, bloodstone **orb item 807** (given by monster #332 via keyword `orb`,
+    Textblock #809→#814→#815 `giveitem 807`), the `rub orb` consume-gate at `8/398`, the **obsidian
+    statue monster 347** summoned at the Black Steel Gate (`8/461`, Textblock #863 `touch statue:summon
+    347`, Called From Room 8/461), which drops **gate key item 806**; the gate hop `8/461 → 8/462`
+    carries `Key: 806 or 101 picklocks`. The backdoor is **nightblack-portal item 1419**, whose
+    teleport exit into map 8 is gated `minlevel 40`.
+  - **Why it mattered for pathing:** the backdoor portal is the *shorter* graph route, so a blocked
+    walk-to that re-probed by ignoring **all** gates surfaced it and blamed "a level requirement" — a
+    door the under-level character was never going to take. The real obstacle is the front door's
+    **acquirable** gate (fetch the gate key / carry the orb). Fix: the failure diagnostic now re-probes
+    with only the *acquirable* gates (item / ticket / key-door / hazard) suspended first — level / toll
+    / class stay active — so it describes the route the crosser would actually walk and names the
+    key/item to fetch, and only falls back to the ignore-all probe when even that finds nothing.
+
+- **[CONFIRMED, user 2026-07-23] A teleport shortcut is usually far shorter than the equivalent
+  walking route but can drop the character somewhere lethal — and whether it's lethal depends on the
+  character, so the client must NOT silently take it: it surfaces a walk-vs-teleport choice.** An
+  item/CMD-cast teleport exit (`RoomExitHint.Teleport`, promoted from an `(Item: N)` exit on a
+  `CMD > 0` room) is a plain one-hop edge to BFS, so a walk-to will silently route through it as the
+  shortest path — which is dangerous, because a teleport can land you in a **damaging plane** (negative
+  power plane, black wasteland) or across **water with no boat** (Balthazar's teleport dropping you at
+  the silver river, which is near-certain death without a boat). But the danger is **character-
+  dependent**: a high-level priest can out-heal the silver-river damage spell and cross freely, so the
+  same teleport that kills one character is a fine shortcut for another. The client cannot judge this,
+  so — exactly like the acquire-item-vs-take-the-long-way choice — it presents the fork to the user:
+  - **Client rule:** on a user-initiated walk-to, if the shortest route takes a teleport AND a
+    teleport-free walking route also exists AND the teleport saves ≥ 2 rooms, pop the route picker
+    ("walk it, don't teleport" vs "take the teleport"). If there's no walking alternative the walker
+    just takes the teleport (no fork to offer); if the shortest route already walks the whole way there
+    is nothing to weigh. `BfsMapper.FindPath(refuseTeleports: true)` backs the "walk it" side by
+    refusing both `RoomExitHint.Teleport` and gateway-portal exits. Automated walks (loops, death
+    recovery, deposits, party comeback, trainer routing) never prompt — they keep the default
+    teleport-allowed shortest route.
 
 ## Attack spells: why one fails to damage a monster
 

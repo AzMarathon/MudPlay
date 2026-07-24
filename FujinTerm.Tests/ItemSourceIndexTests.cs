@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using FujinTerm.Game.Map;
 using FujinTerm.Services;
 using Xunit;
 
@@ -40,7 +41,8 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 21, "Name": "Dragon Key", "ItemType": 2 },
           { "Number": 22, "Name": "Fang Blade", "ItemType": 1 },
           { "Number": 23, "Name": "Health Potion", "ItemType": 2 },
-          { "Number": 24, "Name": "Dragon Hide Vest", "ItemType": 0 }
+          { "Number": 24, "Name": "Dragon Hide Vest", "ItemType": 0 },
+          { "Number": 25, "Name": "Bloodstone Orb", "ItemType": 2 }
         ]
         """;
 
@@ -54,7 +56,8 @@ public sealed class ItemSourceIndexTests : IDisposable
         [
           { "Number": 300, "Name": "Martok" },
           { "Number": 301, "Name": "Gnome Merchant" },
-          { "Number": 302, "Name": "Dragon Lord" }
+          { "Number": 302, "Name": "Dragon Lord" },
+          { "Number": 303, "Name": "Gnome Commander", "Summoned By": "Room 5/512, Room 5/513" }
         ]
         """;
 
@@ -65,11 +68,14 @@ public sealed class ItemSourceIndexTests : IDisposable
         """;
 
     // 500 — chest loot (Spell-rooted → never a giver).
-    // 610 — Martok turn-in: takeitem 20 → giveitem 22.
-    // 620 — dragon statue quest reward: giveitem 21 + giveability.
+    // 610 — Martok turn-in: takeitem 20 → giveitem 22 (single-block keyword "give blade").
+    // 620 — dragon statue quest reward: giveitem 21 + giveability (room CMD "insert fang").
     // 630 — gnome merchant purchase: price → giveitem 23.
     // 640/641 — textblock chain: giveitem 24, called by TB 641, which is called
-    //           by Monster 302.
+    //           by Monster 302 (deterministic, bare-greeting → empty keyword).
+    // 700/701 — multi-block menu: Gnome Commander's greeting routes "orb" to a
+    //           sub-block that unconditionally gives item 25 (deterministic,
+    //           keyword read off the parent menu).
     private const string TBInfoJson = """
         [
           { "Number": 500, "LinkTo": 0, "Action": "giveitem 10\n", "Called From": "Spell #200" },
@@ -77,7 +83,9 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 620, "LinkTo": 0, "Action": "insert fang:checkability 126 4:giveitem 21:giveability 126 5\n", "Called From": "Room 3/606" },
           { "Number": 630, "LinkTo": 0, "Action": "buy potion:price 5000 999:giveitem 23\n", "Called From": "Monster #301" },
           { "Number": 640, "LinkTo": 0, "Action": "giveitem 24\n", "Called From": "Textblock #641" },
-          { "Number": 641, "LinkTo": 0, "Action": "text 640\n", "Called From": "Monster #302" }
+          { "Number": 641, "LinkTo": 0, "Action": "text 640\n", "Called From": "Monster #302" },
+          { "Number": 700, "LinkTo": 0, "Action": "orb:701\n", "Called From": "Monster #303" },
+          { "Number": 701, "LinkTo": 0, "Action": "giveitem 25\n", "Called From": "Textblock #700" }
         ]
         """;
 
@@ -173,6 +181,90 @@ public sealed class ItemSourceIndexTests : IDisposable
         Assert.Equal(302, giver.Number);
         Assert.Equal("Dragon Lord", giver.Name);
         Assert.Equal(string.Empty, giver.Requirement);
+    }
+
+    [Fact]
+    public void GiversOf_MultiBlockMenu_CarriesMenuKeywordAndIsDeterministic()
+    {
+        // Gnome Commander's greeting menu keys "orb" to a sub-block that gives
+        // item 25 with no turn-in / price / random — the keyword is read off the
+        // parent menu, and the unconditional hand-over is deterministic.
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        ItemGiver giver = Assert.Single(index.GiversOf(25));
+        Assert.Equal(ItemGiverKind.Monster, giver.Kind);
+        Assert.Equal(303, giver.Number);
+        Assert.Equal("Gnome Commander", giver.Name);
+        Assert.Equal("orb", giver.Keyword);
+        Assert.True(giver.Deterministic);
+        Assert.Equal(string.Empty, giver.Requirement);
+    }
+
+    [Fact]
+    public void GiversOf_SingleBlockGive_CarriesLeadingTokenKeyword()
+    {
+        // Martok's "give blade:takeitem 20:giveitem 22" supplies its own trigger
+        // as the award line's leading token; the turn-in gate makes it non-det.
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        ItemGiver giver = Assert.Single(index.GiversOf(22));
+        Assert.Equal("give blade", giver.Keyword);
+        Assert.False(giver.Deterministic);
+    }
+
+    [Fact]
+    public void GiversOf_RoomCmd_CarriesVerbatimKeyword()
+    {
+        // A room CMD's keyword is the verbatim command typed in the room —
+        // "insert fang" here; the giveability gate makes it non-deterministic.
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        ItemGiver giver = Assert.Single(index.GiversOf(21));
+        Assert.Equal(ItemGiverKind.Room, giver.Kind);
+        Assert.Equal("insert fang", giver.Keyword);
+        Assert.False(giver.Deterministic);
+    }
+
+    [Fact]
+    public void GiversOf_BareGreetingChain_DeterministicWithEmptyKeyword()
+    {
+        // The 640/641 chain gives item 24 through LinkTo continuations with no
+        // menu key — deterministic hand-over, but nothing to ask for.
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        ItemGiver giver = Assert.Single(index.GiversOf(24));
+        Assert.True(giver.Deterministic);
+        Assert.Equal(string.Empty, giver.Keyword);
+    }
+
+    [Fact]
+    public void GiversOf_MerchantPurchase_IsNotDeterministic()
+    {
+        // A priced give still costs cash — never an unconditional hand-over.
+        ItemSourceIndex index = NewIndex(NewCache());
+        Assert.False(Assert.Single(index.GiversOf(23)).Deterministic);
+    }
+
+    [Fact]
+    public void GiverMonsterRoomsOf_ResolvesSpawnRoomsFromSummonedBy()
+    {
+        // The give router needs a concrete room for a Monster giver — resolved
+        // off Monsters.json "Summoned By" (item 25's giver, the Gnome Commander).
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        var rooms = index.GiverMonsterRoomsOf(303);
+        Assert.Equal(2, rooms.Count);
+        Assert.Contains(new RoomKey(5, 512), rooms);
+        Assert.Contains(new RoomKey(5, 513), rooms);
+    }
+
+    [Fact]
+    public void GiverMonsterRoomsOf_NonGiverMonster_IsEmpty()
+    {
+        // Only monsters that actually give an item get their spawn rooms indexed;
+        // Martok gives (turn-in) but has no Summoned By, so it resolves to none.
+        ItemSourceIndex index = NewIndex(NewCache());
+        Assert.Empty(index.GiverMonsterRoomsOf(300));
     }
 
     [Fact]

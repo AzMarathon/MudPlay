@@ -135,12 +135,19 @@ public sealed class BfsMapper
     //   the avoid filter still cuts nodes. The walker uses this to
     //   re-probe a failed walk and tell "all routes are level-gated"
     //   apart from "graph-disconnected".
+    // refuseTeleports: when true, item/CMD-cast teleport exits AND gateway
+    //   portals are treated as non-traversable, so the search returns the
+    //   pure-walking route. Backs the route picker's "walk it, don't
+    //   teleport" choice — a teleport is often a much shorter but far more
+    //   dangerous crossing (it can drop you in a lethal zone, or past a
+    //   hazard only a specific build survives), so the user picks.
     public IReadOnlyList<Direction>? FindPath(
         RoomKey source,
         RoomKey destination,
         IRoomFilter? filter = null,
         bool returnEmptyWhenAtDestination = false,
-        bool ignoreExitGates = false)
+        bool ignoreExitGates = false,
+        bool refuseTeleports = false)
     {
         if (_graph.GetRoom(source) is null) return null;
         if (_graph.GetRoom(destination) is null) return null;
@@ -156,8 +163,8 @@ public sealed class BfsMapper
         // walker never routes through the portal and loops; from the overworld,
         // where the only way up is the portal, the fallback pass takes it and the
         // walker re-plans from wherever the cast drops it.
-        return FindPathCore(source, destination, filter, ignoreExitGates, allowGateway: false)
-            ?? FindPathCore(source, destination, filter, ignoreExitGates, allowGateway: true);
+        return FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: false)
+            ?? FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: true);
     }
 
     private IReadOnlyList<Direction>? FindPathCore(
@@ -165,6 +172,7 @@ public sealed class BfsMapper
         RoomKey destination,
         IRoomFilter? filter,
         bool ignoreExitGates,
+        bool refuseTeleports,
         bool allowGateway)
     {
         // Per-node parent + direction-from-parent, replayed on hit.
@@ -196,6 +204,14 @@ public sealed class BfsMapper
                 // deterministic pass ignores it so a routable cardinal path is
                 // always preferred (see FindPath).
                 if (exit.GatewayTeleport && !allowGateway) continue;
+
+                // "Walk it, don't teleport" pass: refuse the item/CMD-cast
+                // teleport exits (a plain cardinal edge to BFS, so normally
+                // taken as a shortcut) and the gateway portals, so the search
+                // returns the pure-walking route the picker offers alongside
+                // the teleport.
+                if (refuseTeleports && (exit.Hint == RoomExitHint.Teleport || exit.GatewayTeleport))
+                    continue;
 
                 // Avoid filter applies to intermediates AND to the
                 // destination itself — walking *into* an avoided room

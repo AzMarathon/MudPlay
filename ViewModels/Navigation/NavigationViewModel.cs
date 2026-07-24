@@ -375,7 +375,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         IsAutoLairing = active;
         EnsureLairTickRunning();
-        RefreshEngineActionLabel();
+        RefreshEngineActionKind();
         RefreshAutoLairApproachPath();
     }
 
@@ -444,7 +444,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsLoopRunning));
         RefreshLoopOverlays();
-        RefreshEngineActionLabel();
+        RefreshEngineActionKind();
         // The lap counter ticks over on the RepeatStarted wrap event, which
         // isn't a tracker-state change — refresh the top-bar readout here so
         // the action line advances the moment a lap closes, not only on the
@@ -672,12 +672,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     partial void OnCurrentRoomKeyChanged(RoomKey? value) => RefreshPreviewPath();
     [ObservableProperty] private RoomKey? _destinationRoomKey;
 
-    // Top-of-strip action label that replaces the redundant status-badge +
-    // current-room label (current room lives in the main UI's bottom status
-    // bar as the source-of-truth). Reads: "Idle" when no engine is moving;
-    // "Walking to {dest}" while the walker is active; "Looping: {name}" while
-    // the loop runner is active; "Auto-Lair" while the scheduler is driving.
-    [ObservableProperty] private string _engineActionLabel = "Idle";
     [ObservableProperty] private RoomGraphManager? _graph;
     [ObservableProperty] private IReadOnlyList<RoomKey>? _walkPath;
     [ObservableProperty] private IReadOnlyList<RoomKey>? _loopPath;
@@ -2402,43 +2396,38 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             ? _services.Walker.RemainingRoomKeys
             : null;
         DestinationRoomKey = IsWalking ? _services.Walker.Destination : null;
-        RefreshEngineActionLabel();
+        RefreshEngineActionKind();
     }
 
-    private void RefreshEngineActionLabel()
+    private void RefreshEngineActionKind()
     {
         // Priority: Auto-Lair (drives walker/loop internally) →
         // Looping (named) → Walking (with destination room) → Idle.
         if (_services.AutoLair.IsActive)
         {
-            EngineActionLabel = "Auto-Lair";
             EngineActionKind = NavigationEngineKind.AutoLair;
         }
         else if (_services.LoopRunner.State != LoopState.Idle
-            && _services.LoopRunner.CurrentLoop is { } loop)
+            && _services.LoopRunner.CurrentLoop is not null)
         {
-            EngineActionLabel = $"Looping: {loop.Name}";
             EngineActionKind = NavigationEngineKind.Looping;
         }
         else if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
         {
-            EngineActionLabel = BuildWalkToStatus() ?? "Walking";
             EngineActionKind = NavigationEngineKind.Walking;
         }
         else
         {
-            EngineActionLabel = "Idle";
             EngineActionKind = NavigationEngineKind.Idle;
         }
 
         RefreshDerivedState();
     }
 
-    // Build the enriched walk-to status line: destination (map/room + name),
-    // step progress, and a remaining-route ETA. The ETA sums the realm-aware
-    // per-hop travel cost over the hops left and, when auto-combat is on, adds
-    // a lair-fight dwell for each lair the walker will step into. Shared by the
-    // nav status label and the program-log entries so both read identically.
+    // Build the enriched walk-to status line for the program log: destination
+    // (map/room + name), step progress, and a remaining-route ETA. The ETA sums
+    // the realm-aware per-hop travel cost over the hops left and, when auto-combat
+    // is on, adds a lair-fight dwell for each lair the walker will step into.
     // Returns null when the walker isn't actively walking.
     private string? BuildWalkToStatus()
     {
@@ -2460,17 +2449,25 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         int total = _services.Walker.StepCount;
         int current = System.Math.Clamp(_services.Walker.CurrentStepIndex + 1, 1, System.Math.Max(1, total));
 
-        IReadOnlyList<RoomKey> remaining = _services.Walker.RemainingRoomKeys;
-        int remainingHops = System.Math.Max(0, remaining.Count - 1);
+        int remainingHops = System.Math.Max(0, _services.Walker.RemainingRoomKeys.Count - 1);
 
-        TimeSpan eta = RouteEtaEstimator.Estimate(
-            remaining,
+        return $"{verb} to {dest}, step {current} of {total}, "
+             + $"{remainingHops} steps / ~{FormatEta(CurrentWalkEta())} to arrive";
+    }
+
+    // Remaining-route arrival ETA for the active walk — realm-aware per-hop
+    // travel plus a lair-fight dwell for each lair the walker steps into when
+    // auto-combat is on. Zero on a sail leg (not in the per-hop cost model) or
+    // when no hop is left. Shared by the program-log line (BuildWalkToStatus)
+    // and the always-visible TopBar status so both surface the same estimate.
+    private TimeSpan CurrentWalkEta()
+    {
+        if (_services.Walker.IsSailing) return TimeSpan.Zero;
+        return RouteEtaEstimator.Estimate(
+            _services.Walker.RemainingRoomKeys,
             _services.AutoLair.TravelCostModel,
             _services.RoomGraph.GetRoom,
             includeLairDwell: _services.IsAutoCombatEnabled);
-
-        return $"{verb} to {dest}, step {current} of {total}, "
-             + $"{remainingHops} steps / ~{FormatEta(eta)} to arrive";
     }
 
     // Compact ETA phrasing for the walk-to status: seconds under a minute,
@@ -2603,7 +2600,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                     if (total <= 0) return $"Walking to {dest}";
                     int step = Math.Min(total, w.CurrentStepIndex + 1);
                     int remaining = Math.Max(0, total - w.CurrentStepIndex);
-                    return $"Walking to {dest} on step {step} of {total}, remaining {remaining}";
+                    return $"Walking to {dest} on step {step} of {total}, remaining {remaining}, "
+                         + $"~{FormatEta(CurrentWalkEta())} to arrive";
                 }
                 case NavigationEngineKind.Looping:
                 {

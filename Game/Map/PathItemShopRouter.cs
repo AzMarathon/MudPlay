@@ -19,7 +19,9 @@ namespace FujinTerm.Game.Map;
 // just demanded — never a stale leftover. Only one detour runs at a time:
 // re-entrant posts (a multi-gate route announces several) are ignored while a
 // detour is in flight, so we service one item per walk and leave the rest to
-// demand-driven search.
+// demand-driven search. A free deterministic textblock give preempts a paid buy:
+// when one exists (deterministicGiveExists) this router stands down and lets
+// PathItemGiveRouter own the item.
 //
 // Shop selection. Among the rooms hosting a shop that stocks the item, pick the
 // one minimising dist(cur, shop) + dist(shop, dest) — the smallest number of
@@ -68,6 +70,7 @@ public sealed class PathItemShopRouter : IDisposable
     }
 
     private readonly Func<int, IReadOnlyList<RoomKey>> _shopRoomsSellingItem;
+    private readonly Func<int, bool> _deterministicGiveExists;
     private readonly Func<RoomKey?> _currentRoom;
     private readonly Func<RoomKey?> _walkDestination;
     private readonly Func<RoomKey, RoomKey, int?> _distanceBetween;
@@ -97,6 +100,7 @@ public sealed class PathItemShopRouter : IDisposable
 
     public PathItemShopRouter(
         Func<int, IReadOnlyList<RoomKey>> shopRoomsSellingItem,
+        Func<int, bool> deterministicGiveExists,
         Func<RoomKey?> currentRoom,
         Func<RoomKey?> walkDestination,
         Func<RoomKey, RoomKey, int?> distanceBetween,
@@ -114,6 +118,7 @@ public sealed class PathItemShopRouter : IDisposable
         TimeSpan? withdrawTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(shopRoomsSellingItem);
+        ArgumentNullException.ThrowIfNull(deterministicGiveExists);
         ArgumentNullException.ThrowIfNull(currentRoom);
         ArgumentNullException.ThrowIfNull(walkDestination);
         ArgumentNullException.ThrowIfNull(distanceBetween);
@@ -127,6 +132,7 @@ public sealed class PathItemShopRouter : IDisposable
         ArgumentNullException.ThrowIfNull(walkTo);
         ArgumentNullException.ThrowIfNull(post);
         _shopRoomsSellingItem = shopRoomsSellingItem;
+        _deterministicGiveExists = deterministicGiveExists;
         _currentRoom = currentRoom;
         _walkDestination = walkDestination;
         _distanceBetween = distanceBetween;
@@ -173,6 +179,9 @@ public sealed class PathItemShopRouter : IDisposable
             || itemId <= 0)
             return;
         if (!_isEnabled(itemId)) return;   // per-item auto-obtain (buy method) gate
+        // A free, certain textblock give preempts a paid buy — the give router
+        // owns the item whenever one exists.
+        if (_deterministicGiveExists(itemId)) return;
         int target = Math.Max(1, need.Quantity);
         if (_carriedCount(itemId) >= target) return;   // already hold the whole shortfall
 
