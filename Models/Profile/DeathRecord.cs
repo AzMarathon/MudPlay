@@ -42,6 +42,13 @@ public sealed class DeathRecord
     public int LivesRemaining { get; set; }
     public string? MessageText { get; set; }
 
+    // Bare filename (inside the character's DeathLogs folder) of the backscroll
+    // snapshot captured at death — the "How did I Die?" replay. null on records
+    // written before the death-log feature, or when no transcript provider was
+    // attached (headless / test paths). The file itself lives out of profile.json
+    // to keep the profile small; this is just the pointer to it.
+    public string? DeathLogFile { get; set; }
+
     // Recovery state — drives the stoplight tint in the grid.
     public DeathRecoveryStatus Status { get; set; } = DeathRecoveryStatus.Active;
 

@@ -1,9 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.0.0**
-> - Loop mode no longer walks past a hostile that leaps into an apparently-empty room: a combat line arriving while the room view shows no target now holds the walker for a beat so the mob reveals and the fight engages, instead of firing the next move mid-combat (the lit-room twin of 1.99.1's dark-room fix)
-> - Loop mode no longer bails off a freshly-engaged monster a beat before it dies: the "exp + Combat Off" fallback death no longer misfires on a prior kill's still-recent experience when a thrown-weapon Combat Off cycles mid-fight, which had dropped the live target and walked a room early even though the mob hadn't died yet
+> **Version 2.1.0**
+> - Character Workshop death list gains a "How did I Die?" button: each recorded death captures its backscroll to a per-character log, so a death that scrolls off the live buffer overnight stays reviewable
+> - @status reply overhauled — reports current activity and sub-state (idle / walking / looping / auto-lair, plus fighting / fleeing / resting), the room name with map/room numbers, walk ETA (steps left, or a countdown to the destination port when sailing), and active ailments
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

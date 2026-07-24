@@ -30,6 +30,7 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(RecoverNowCommand))]
     [NotifyCanExecuteChangedFor(nameof(MarkRecoveredCommand))]
     [NotifyCanExecuteChangedFor(nameof(ClearSelectedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(HowDidIDieCommand))]
     private DeathRecord? _selectedRecord;
 
     public DeathSectionViewModel(DeathRecoveryManager recovery, ProfileService profile)
@@ -75,6 +76,29 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         ClearAllRecoveredCommand.NotifyCanExecuteChanged();
     }
 
+    // Open the death-log replay for the selected record — the backscroll tail
+    // frozen at that death. CanExecute keys on the cheap DeathLogFile pointer (no
+    // disk I/O); the read itself may still come back empty if the file was
+    // removed out from under us, in which case we say so rather than pop a blank.
+    [RelayCommand(CanExecute = nameof(CanShowDeathLog))]
+    private async Task HowDidIDie()
+    {
+        if (SelectedRecord is not { } r) return;
+        string? log = _recovery.ReadDeathLog(r);
+        if (string.IsNullOrEmpty(log))
+        {
+            AppServices.Current.Dialogs.ShowInfo(
+                "How did I Die?",
+                "No death log was captured for this death (or its file is gone). " +
+                "Death logs are only recorded for deaths that happen while connected, " +
+                "on a saved character.");
+            return;
+        }
+        string title = $"How did I Die? — {r.RoomName ?? "Unknown room"} · {r.DiedText}";
+        await AppServices.Current.Dialogs
+            .OpenWindowAsync<DeathLogViewModel, bool>(new DeathLogViewModel(title, log));
+    }
+
     [RelayCommand(CanExecute = nameof(CanRecoverSelected))]
     private void RecoverNow() { if (SelectedRecord is { } r) _recovery.RecoverNow(r); }
 
@@ -91,6 +115,7 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
     private void SimulateDeath() => _recovery.SimulateDeath();
 
     private bool HasSelection() => SelectedRecord is not null;
+    private bool CanShowDeathLog() => SelectedRecord?.DeathLogFile is { Length: > 0 };
     private bool CanRecoverSelected() => SelectedRecord is { Room: not null } r && r.Status != DeathRecoveryStatus.Recovered;
     private bool CanMarkRecovered() => SelectedRecord is { } r && r.Status != DeathRecoveryStatus.Recovered;
     private bool CanClearAllRecovered() => Records.Any(r => r.Status == DeathRecoveryStatus.Recovered);

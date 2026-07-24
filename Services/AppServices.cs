@@ -1723,7 +1723,10 @@ public sealed class AppServices
             readRoomEntities: () => RoomClassifier?.Current?.Entities,
             readMovement: () => Game.Remote.MovementStatus.Capture(Walker, LoopRunner, AutoLair),
             readDraggedBy: () => Dragged.DraggedBy,
-            readAilments: () => Conditions?.ActiveFlags ?? Models.GameData.MessageFlags.None);
+            readAilments: () => Conditions?.ActiveFlags ?? Models.GameData.MessageFlags.None,
+            // HealthManager is built later in OnGameDataLoaded; the lambda reads it
+            // lazily so a @status arriving after startup sees the live flee state.
+            readFleeing: () => Health?.IsFleeing ?? false);
         // Drives the on-join @health exchange + the
         // periodic par poll. Wire-sender + cadence-from-settings hookup
         // happens in MainWindowViewModel.

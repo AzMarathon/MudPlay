@@ -155,6 +155,13 @@ public partial class App : Application
                 FujinTerm.ViewModels.CharacterWorkshop.QuestEditorViewModel,
                 FujinTerm.Views.CharacterWorkshop.QuestEditorWindow>();
 
+            // Death-log viewer (Character Workshop → Death Recovery → "How did
+            // I Die?"). Read-only replay of the backscroll snapshot captured at
+            // the moment of a recorded death.
+            AppServices.Current.Dialogs.RegisterWindow<
+                FujinTerm.ViewModels.CharacterWorkshop.DeathLogViewModel,
+                FujinTerm.Views.CharacterWorkshop.DeathLogWindow>();
+
             // Item Finder (Character Workshop → Equipment Manager →
             // "Item Finder"). Read-only catalog of every equippable item in the
             // active set, grouped filters by class / level / alignment / stats.

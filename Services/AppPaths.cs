@@ -327,6 +327,19 @@ public static class AppPaths
     public static string CharacterProfileFile(string bbsName, string characterName) =>
         Path.Combine(ProfileFolder(bbsName, characterName), "profile.json");
 
+    // Per-character folder holding the death-log captures — one plain-text file
+    // per death, a snapshot of the backscroll tail at the moment of death so the
+    // "How did I Die?" viewer can replay the fatal scene long after the live
+    // scrollback has buffered out. Sits under the character's ProfileFolder so it
+    // travels with the profile and is scoped to the one character on the one BBS.
+    public static string DeathLogsFolder(string bbsName, string characterName) =>
+        Path.Combine(ProfileFolder(bbsName, characterName), "DeathLogs");
+
+    // A single death-log file inside DeathLogsFolder. fileName is the bare
+    // timestamped name stored on the owning DeathRecord.
+    public static string DeathLogFile(string bbsName, string characterName, string fileName) =>
+        Path.Combine(DeathLogsFolder(bbsName, characterName), fileName);
+
     // Per-set game-data override side-file at the given tier. Routes to the
     // right folder: Global → DataRoot/Global, BBS → BbsFolder,
     // Character → ProfileFolder. File name is

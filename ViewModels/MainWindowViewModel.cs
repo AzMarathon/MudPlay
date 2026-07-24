@@ -781,6 +781,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Death-recovery watches for `You pick up ...` confirmations
         // to drive the deathpile Partial → Recovered transition + re-equip.
         AppServices.Current.DeathRecovery.AttachLineExtractor(Lines);
+        // The Emulator lives here, so hand death-recovery a provider for the
+        // backscroll tail it snapshots at each death ("How did I Die?").
+        AppServices.Current.DeathRecovery.AttachTranscriptTail(
+            () => TranscriptSnapshot.Tail(Emulator, 200));
         // Every engine wire-sender is routed through EngineGate's
         // wrapper. The wrapper short-circuits while
         // EngineGate.IsLocked is true (today: while

@@ -39,6 +39,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private Action<byte[]>? _wireSender;
     private LineExtractor? _lines;
     private Func<InventorySnapshot>? _inventorySnapshot;
+    private Func<IReadOnlyList<TranscriptSnapshot.Line>>? _transcriptTail;
     private bool _disposed;
 
     // In-progress recovery context — one deathpile at a time (you stand in one
@@ -70,6 +71,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // Re-entering a room that holds one of our deathpiles drives the
         // Active → Partial → Recovered transitions (and the auto-grab).
         _roomTracker.StateChanged += OnRoomChanged;
+        // A death record was just appended — snapshot the backscroll tail now,
+        // before the graveyard room display floods scrollback and pushes the
+        // fatal scene out of the "How did I Die?" window.
+        _roomTracker.PlayerDeathObserved += OnDeathObserved;
     }
 
     private void OnPlayerDied(PlayerDiedEvent evt)
@@ -114,6 +119,16 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         ArgumentNullException.ThrowIfNull(provider);
         _inventorySnapshot = provider;
+    }
+
+    // Bind the backscroll-tail provider — the live terminal transcript's last
+    // ~200 lines, oldest → newest. Bound by MainWindowViewModel, where the
+    // Emulator lives. Unbound (headless / test paths), death logs simply aren't
+    // captured: the record still exists, just without a "How did I Die?" replay.
+    public void AttachTranscriptTail(Func<IReadOnlyList<TranscriptSnapshot.Line>> provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _transcriptTail = provider;
     }
 
     // The loaded profile's death history (oldest → newest). Empty when no profile
@@ -165,20 +180,27 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Records));
     }
 
-    // Remove a single record from the history.
+    // Remove a single record from the history (and its death-log file, if any).
     public void ClearSelected(DeathRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
         if (_profile.Current?.DeathHistory is not { } list || !list.Remove(record)) return;
+        DeleteDeathLog(record);
         _profile.Save();
         OnPropertyChanged(nameof(Records));
     }
 
-    // Remove every record whose status is Recovered.
+    // Remove every record whose status is Recovered (and their death-log files).
     public void ClearAllRecovered()
     {
         if (_profile.Current?.DeathHistory is not { } list) return;
-        if (list.RemoveAll(r => r.Status == DeathRecoveryStatus.Recovered) == 0) return;
+        List<DeathRecord> removed = list.Where(r => r.Status == DeathRecoveryStatus.Recovered).ToList();
+        if (removed.Count == 0) return;
+        foreach (DeathRecord r in removed)
+        {
+            DeleteDeathLog(r);
+            list.Remove(r);
+        }
         _profile.Save();
         OnPropertyChanged(nameof(Records));
     }
@@ -417,7 +439,116 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         }
         p.DeathHistory.Add(record);
         _profile.Save();
+        // Real deaths capture via the PlayerDeathObserved hook; the test button
+        // bypasses RoomTracker.NoteDeath, so snapshot the tail here too.
+        CaptureDeathLog(record);
         OnPropertyChanged(nameof(Records));
+    }
+
+    // ----- death-log capture ("How did I Die?") -----------------------
+
+    // PlayerDeathObserved fires synchronously from RoomTracker.NoteDeath right
+    // after the record is appended, so the just-added record is the history tail.
+    // Snapshot its backscroll before the graveyard display floods scrollback.
+    private void OnDeathObserved()
+    {
+        if (_profile.Current?.DeathHistory is not { Count: > 0 } list) return;
+        DeathRecord last = list[^1];
+        if (last.DeathLogFile is not null) return;   // already captured
+        CaptureDeathLog(last);
+    }
+
+    // Snapshot the transcript tail to a per-character death-log file and pin its
+    // name on the record. No-op without a bound transcript provider or a named
+    // profile (drafts / tests have nowhere to write). Best-effort: a capture
+    // failure must never break the death-record write it rides on.
+    private void CaptureDeathLog(DeathRecord record)
+    {
+        if (_transcriptTail is not { } provider) return;
+        if (record.DeathLogFile is not null) return;
+        if (_profile.CurrentBbsName is not { } bbs || _profile.CurrentProfileName is not { } chr) return;
+
+        IReadOnlyList<TranscriptSnapshot.Line> lines;
+        try { lines = provider(); }
+        catch { return; }
+        if (lines.Count == 0) return;
+
+        string fileName = $"death-{record.At.LocalDateTime:yyyyMMdd-HHmmss}-{record.RecordNumber}.log";
+        try
+        {
+            Directory.CreateDirectory(AppPaths.DeathLogsFolder(bbs, chr));
+            File.WriteAllText(AppPaths.DeathLogFile(bbs, chr, fileName),
+                RenderDeathLog(record, lines, chr));
+            record.DeathLogFile = fileName;
+            _profile.Save();
+            _log?.Info(LogCategory, $"death log captured: {fileName} ({lines.Count} lines)");
+        }
+        catch (Exception ex)
+        {
+            _log?.Warn(LogCategory, $"death log capture failed: {ex.Message}");
+        }
+    }
+
+    // True when the record names a death-log file that still exists on disk.
+    public bool HasDeathLog(DeathRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return ResolveDeathLogPath(record) is { } path && File.Exists(path);
+    }
+
+    // Read a record's captured death log, or null when it has none / the file is
+    // gone / unreadable. The "How did I Die?" viewer treats null as "nothing to
+    // show".
+    public string? ReadDeathLog(DeathRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (ResolveDeathLogPath(record) is not { } path) return null;
+        try { return File.Exists(path) ? File.ReadAllText(path) : null; }
+        catch { return null; }
+    }
+
+    // Resolve the on-disk path for a record's death log, or null when the record
+    // has no log or no profile is loaded to scope it.
+    private string? ResolveDeathLogPath(DeathRecord record)
+    {
+        if (record.DeathLogFile is not { Length: > 0 } fileName) return null;
+        if (_profile.CurrentBbsName is not { } bbs || _profile.CurrentProfileName is not { } chr) return null;
+        return AppPaths.DeathLogFile(bbs, chr, fileName);
+    }
+
+    private void DeleteDeathLog(DeathRecord record)
+    {
+        if (ResolveDeathLogPath(record) is not { } path) return;
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch { /* best-effort; an orphaned log file is harmless clutter */ }
+    }
+
+    // Render a captured death log as plain text: a short header (who / when /
+    // where / lives / death line) followed by the backscroll tail, oldest →
+    // newest. Scrollback rows carry the wall-clock instant they scrolled off; the
+    // live-screen tail (the grid at death) has no per-row time. internal + static
+    // so the format can be pinned by a test without a live profile.
+    internal static string RenderDeathLog(
+        DeathRecord record, IReadOnlyList<TranscriptSnapshot.Line> lines, string characterName)
+    {
+        StringBuilder sb = new();
+        sb.Append("Death log — ").Append(characterName).Append('\n');
+        sb.Append("Died: ").Append(record.DiedText).Append('\n');
+        sb.Append("Room: ")
+          .Append(record.RoomName ?? "(unknown)").Append("  ").Append(record.RoomKeyText).Append('\n');
+        sb.Append("Lives remaining: ").Append(record.LivesRemaining).Append('\n');
+        if (!string.IsNullOrWhiteSpace(record.MessageText))
+            sb.Append("Death line: ").Append(record.MessageText).Append('\n');
+        sb.Append('\n')
+          .Append("Last ").Append(lines.Count)
+          .Append(" line(s) of backscroll before death (scrollback rows timestamped; the live-screen tail is the grid at death):\n");
+        sb.Append(new string('-', 60)).Append('\n');
+        foreach (TranscriptSnapshot.Line line in lines)
+        {
+            sb.Append(line.Timestamp is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ")
+              .Append(' ').Append(line.Text).Append('\n');
+        }
+        return sb.ToString();
     }
 
     public void Dispose()
@@ -426,6 +557,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _disposed = true;
         _deathWatcher.PlayerDied -= OnPlayerDied;
         _roomTracker.StateChanged -= OnRoomChanged;
+        _roomTracker.PlayerDeathObserved -= OnDeathObserved;
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
     }

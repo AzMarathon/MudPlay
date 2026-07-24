@@ -738,46 +738,23 @@ public static class BugReportBuilder
         // timestamp with each row so the log's timestamps can be aligned against
         // the wire I/O (e.g. matching a nag-cancel log line to the telepath that
         // triggered it).
-        List<(DateTimeOffset? Ts, string Text)> lines = new();
-
-        foreach (ScrollbackBuffer.Row row in emulator.Screen.Scrollback.Enumerate())
-            lines.Add((row.Timestamp, RowText(row.Cells)));
-
-        TerminalScreen screen = emulator.Screen;
-        for (int y = 0; y < screen.Rows; y++)
-            lines.Add((null, RowText(screen.Row(y).ToArray())));
-
-        // Trim only trailing blank padding rows from the live screen; keep
-        // interior blanks (they may be meaningful spacing the user saw).
-        while (lines.Count > 0 && lines[^1].Text.Length == 0) lines.RemoveAt(lines.Count - 1);
-
-        int take = Math.Min(ScrollbackLines, lines.Count);
-        if (take == 0) return "_(nothing on screen yet)_";
+        IReadOnlyList<TranscriptSnapshot.Line> lines =
+            TranscriptSnapshot.Tail(emulator, ScrollbackLines);
+        if (lines.Count == 0) return "_(nothing on screen yet)_";
 
         StringBuilder sb = new();
-        sb.Append("Last ").Append(take)
+        sb.Append("Last ").Append(lines.Count)
           .Append(" line(s). Scrollback rows are timestamped; the live-screen tail (no time prefix) is the current grid.\n\n```\n");
-        for (int i = lines.Count - take; i < lines.Count; i++)
+        foreach (TranscriptSnapshot.Line line in lines)
         {
-            (DateTimeOffset? ts, string text) = lines[i];
-            sb.Append(ts is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ")
-              .Append(' ').Append(text).Append('\n');
+            sb.Append(line.Timestamp is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ")
+              .Append(' ').Append(line.Text).Append('\n');
         }
         sb.Append("```");
         return sb.ToString();
     }
 
     // ----- Helpers -------------------------------------------------------
-
-    private static string RowText(Cell[] cells)
-    {
-        StringBuilder sb = new(cells.Length);
-        foreach (Cell c in cells) sb.Append(c.Char);
-        // Drop trailing spaces so cell-grid padding doesn't bloat the report.
-        int end = sb.Length;
-        while (end > 0 && sb[end - 1] == ' ') end--;
-        return sb.ToString(0, end);
-    }
 
     private static string RealmLabel(RealmType realm) => realm switch
     {
