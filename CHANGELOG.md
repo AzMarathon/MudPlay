@@ -2,6 +2,17 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.1.0
+
+- Character Workshop death list gains a "How did I Die?" button: each recorded death captures its backscroll to a per-character log, so a death that scrolls off the live buffer overnight stays reviewable
+- @status reply overhauled — reports current activity and sub-state (idle / walking / looping / auto-lair, plus fighting / fleeing / resting), the room name with map/room numbers, walk ETA (steps left, or a countdown to the destination port when sailing), and active ailments
+
+## 2.0.0
+
+- Loop mode no longer walks past a hostile that leaps into an apparently-empty room: a combat line arriving while the room view shows no target now holds the walker for a beat so the mob reveals and the fight engages, instead of firing the next move mid-combat (the lit-room twin of 1.99.1's dark-room fix)
+- Loop mode no longer bails off a freshly-engaged monster a beat before it dies: the "exp + Combat Off" fallback death no longer misfires on a prior kill's still-recent experience when a thrown-weapon Combat Off cycles mid-fight (a swarm of identical-exp mobs kept the last kill's exp inside the window), which had dropped the live target and walked a room early even though the mob hadn't died yet
+- bug reports addressed: paradigm-20260723-205235, paradigm-20260723-213657, paradigm-20260723-230838, paradigm-20260723-231046, paradigm-20260723-231759
+
 ## 1.100.0
 
 - Walk-to route picker now offers walk-vs-teleport: when a route could teleport but a walking route also exists, you choose — walk the safe long way, or take the much shorter teleport (which can drop you somewhere lethal, a call only your character can make), mirroring the existing acquire-item-vs-detour choice

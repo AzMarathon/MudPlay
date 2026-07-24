@@ -1,14 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 1.100.0**
-> - Walk-to route picker now offers walk-vs-teleport: when a route could teleport but a walking route also exists, you choose — walk the safe long way, or take the much shorter teleport (which can drop you somewhere lethal, a call only your character can make)
-> - A blocked walk-to now names the obstacle on the route the character would actually take — a gate key or required item you must fetch — instead of a shorter level-gated backdoor it was never going to use
-> - Walk-to route ETA now shows in the Navigation window header ("~Nm Ss to arrive"), not just the program log
-> - Walk-to now auto-collects a free gate item en route when a giver hands it over on a single fail-proof command (an NPC keyword ask or a room command): the walk detours to the nearest giver, asks, collects, and resumes — no buying or hunting, and preferred over both when it applies
-> - Route picker names such a giver as "(ask <giver>)", taking precedence over the "(buy at …)" / "(dropped by …)" tails
-> - Walk-to whose only route is locked behind a door key (or an item you didn't flag for auto-fetch) now surfaces the picker naming that gate, then walks to the door and halts for you to clear it — instead of silently walking a route that dead-ends at the lock
-> - Post-kill loot re-survey sends a bare Enter instead of `look`, re-rendering ground drops without the room-description text
+> **Version 2.1.0**
+> - Character Workshop death list gains a "How did I Die?" button: each recorded death captures its backscroll to a per-character log, so a death that scrolls off the live buffer overnight stays reviewable
+> - @status reply overhauled — reports current activity and sub-state (idle / walking / looping / auto-lair, plus fighting / fleeing / resting), the room name with map/room numbers, walk ETA (steps left, or a countdown to the destination port when sailing), and active ailments
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

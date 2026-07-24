@@ -26,7 +26,8 @@ public sealed class PartyEssentialHandlersTests
         Func<string?>? readDraggedBy = null,
         MessageFlags ailments = MessageFlags.None,
         Func<FujinTerm.Game.Map.Room?>? readCurrentRoom = null,
-        Func<string, Action<FujinTerm.Game.Map.RoomKey>, Action, bool>? requestPositionRefix = null)
+        Func<string, Action<FujinTerm.Game.Map.RoomKey>, Action, bool>? requestPositionRefix = null,
+        bool fleeing = false)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -40,7 +41,8 @@ public sealed class PartyEssentialHandlersTests
             readRoomEntities: () => roomEntities,
             readMovement: () => movement ?? default,
             readDraggedBy: readDraggedBy,
-            readAilments: () => ailments);
+            readAilments: () => ailments,
+            readFleeing: () => fleeing);
         if (requestPositionRefix is not null) handlers.SetPositionRefix(requestPositionRefix);
         List<byte[]> relayCapture = new();
         handlers.SetWireSender(relayCapture.Add);
@@ -206,7 +208,7 @@ public sealed class PartyEssentialHandlersTests
     }
 
     [Fact]
-    public void Status_EmitsPositionNavAndAilments()
+    public void Status_Idle_EmitsStateRoomAndAilments()
     {
         var (engine, _, player, _, players, _) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
@@ -214,21 +216,92 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
-        // Position; nav-engine phrase; ailment clause — all three present.
-        Assert.Equal("/Friend {Meditating; not moving; no ailments}\r", LastReply(engine));
+        // Not moving + meditating → "meditating"; room unknown (no tracker fix);
+        // no ETA clause (not walking); ailment clause. No boat/steps ETA present.
+        Assert.Equal("/Friend {meditating; location unknown; no ailments}\r", LastReply(engine));
     }
 
     [Fact]
-    public void Status_WhenWalking_ReportsMovementEngine()
+    public void Status_WhenWalking_ReportsEngineRoomAndStepsLeft()
     {
-        MovementStatus mv = new(MovementKind.Walking, "5/1141", CurrentStep: 0, TotalSteps: 4);
-        var (engine, _, player, _, players, _) = Setup(movement: mv);
+        FujinTerm.Game.Map.Room room = new()
+        {
+            Key = new FujinTerm.Game.Map.RoomKey(5, 1000),
+            Name = "Market Road",
+            Exits = new Dictionary<FujinTerm.Game.Map.Direction, FujinTerm.Game.Map.RoomExit>(),
+        };
+        MovementStatus mv = new(MovementKind.Walking, "5/1141", CurrentStep: 1, TotalSteps: 4);
+        var (engine, _, player, _, players, _) = Setup(currentRoom: room, movement: mv);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
         player.Position = PlayerPosition.Standing;
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
-        Assert.Contains("walking to 5/1141", LastReply(engine));
+        string reply = LastReply(engine);
+        Assert.Contains("walking to 5/1141", reply);
+        Assert.Contains("Market Road (map 5, room 1000)", reply);
+        // 4 total - 1 sent = 3 steps left (the ETA proxy for land walks).
+        Assert.Contains("3 steps left", reply);
+    }
+
+    [Fact]
+    public void Status_WhenSailing_ReportsDestinationBoatRoomAndCountdown()
+    {
+        // Aboard a sea-captain passage: the state reads "sailing to <port>" (the
+        // same boat serves every destination, so the port is the signal), the room
+        // clause reports the boat transit room the tracker holds, and the ETA counts
+        // down to the wall-clock arrival rather than reporting step distance.
+        FujinTerm.Game.Map.Room boat = new()
+        {
+            Key = new FujinTerm.Game.Map.RoomKey(2, 500),
+            Name = "The Ship's Hold",
+            Exits = new Dictionary<FujinTerm.Game.Map.Direction, FujinTerm.Game.Map.RoomExit>(),
+        };
+        MovementStatus mv = new(MovementKind.Walking, "7/200", CurrentStep: 0, TotalSteps: 3,
+            Sailing: true, SailingEta: DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30),
+            SailingPlace: "tal'kiran");
+        var (engine, _, player, _, players, _) = Setup(currentRoom: boat, movement: mv);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
+        player.Position = PlayerPosition.Standing;
+        player.HasPromptData = true;
+
+        engine.DispatchForTests(Telepath("Friend", "@status"));
+        string reply = LastReply(engine);
+        Assert.Contains("sailing to tal'kiran", reply);
+        Assert.Contains("The Ship's Hold (map 2, room 500)", reply);
+        Assert.Contains("ETA ~", reply);
+        Assert.DoesNotContain("walking to", reply);
+        Assert.DoesNotContain("steps left", reply);
+    }
+
+    [Fact]
+    public void Status_WhenFighting_ReportsFightingSubState()
+    {
+        var (engine, _, player, _, players, _) = Setup();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
+        player.Position = PlayerPosition.Standing;
+        player.InCombat = true;
+        player.HasPromptData = true;
+
+        engine.DispatchForTests(Telepath("Friend", "@status"));
+        Assert.Contains("fighting", LastReply(engine));
+    }
+
+    [Fact]
+    public void Status_WhenFleeing_OutranksFighting()
+    {
+        // Fleeing is the most urgent condition — reported even when InCombat is
+        // also true (a flee is a combat action).
+        var (engine, _, player, _, players, _) = Setup(fleeing: true);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
+        player.Position = PlayerPosition.Standing;
+        player.InCombat = true;
+        player.HasPromptData = true;
+
+        engine.DispatchForTests(Telepath("Friend", "@status"));
+        string reply = LastReply(engine);
+        Assert.Contains("fleeing", reply);
+        Assert.DoesNotContain("fighting", reply);
     }
 
     [Fact]

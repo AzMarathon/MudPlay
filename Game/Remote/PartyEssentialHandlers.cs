@@ -42,6 +42,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     private readonly Func<MovementStatus>? _readMovement;
     private readonly Func<string?>? _readDraggedBy;
     private readonly Func<MessageFlags>? _readAilments;
+    private readonly Func<bool>? _readFleeing;
     private Action<byte[]>? _wireSender;
 
     // Paradigm-only authoritative position re-fix seam. Bound by AppServices to
@@ -93,7 +94,8 @@ public sealed class PartyEssentialHandlers : IDisposable
         Func<IReadOnlyList<RoomEntity>?>? readRoomEntities = null,
         Func<MovementStatus>? readMovement = null,
         Func<string?>? readDraggedBy = null,
-        Func<MessageFlags>? readAilments = null)
+        Func<MessageFlags>? readAilments = null,
+        Func<bool>? readFleeing = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(player);
@@ -107,6 +109,7 @@ public sealed class PartyEssentialHandlers : IDisposable
         _readMovement = readMovement;
         _readDraggedBy = readDraggedBy;
         _readAilments = readAilments;
+        _readFleeing = readFleeing;
 
         // Categories sourced from RemoteCommandCatalog — single source of truth
         // for every documented @-command's required permission category.
@@ -201,19 +204,79 @@ public sealed class PartyEssentialHandlers : IDisposable
         ctx.Reply($"HP={_player.Hp}/{_player.MaxHp}{mana}{position}");
     }
 
-    // @status — reply with three semicolon-separated clauses the party can act on:
-    // our stance (Standing / Resting / Meditating), whether a movement engine is
-    // running (the same phrase @path opens with), and our curable-ailment set
-    // ("no ailments" or "ailments: blind, poisoned"). The ailment clause doubles
-    // as a pull-based resync: the asking client's PartyAilmentTracker reconciles
-    // our chips against it, so a chip missed by the push-based .@X on/off say still
-    // clears the next time someone asks @status. The engine wraps the payload in
-    // { } at SendReply time.
+    // @status — reply with semicolon-separated clauses the party can act on:
+    //   1. activity — the running movement engine (walking / looping / auto-lair)
+    //      or "idle", plus the most urgent condition sub-state when one applies
+    //      (fleeing > fighting > resting/meditating).
+    //   2. where — the current room name + (map, room), or "location unknown".
+    //   3. ETA — only while en route: a boat-leg countdown, else the land walk's
+    //      remaining step count. Absent when not walking anywhere.
+    //   4. ailments — "no ailments" or "ailments: blind, poisoned".
+    // The ailment clause doubles as a pull-based resync: the asking client's
+    // PartyAilmentTracker reconciles our chips against it, so a chip missed by the
+    // push-based .@X on/off say still clears the next time someone asks @status.
+    // The engine wraps the payload in { } at SendReply time.
     private void OnStatus(RemoteCommandContext ctx)
     {
         if (!_player.HasPromptData) { ctx.Reply("Status unknown"); return; }
-        string nav = MovementEnginePhrase(_readMovement?.Invoke() ?? default);
-        ctx.Reply($"{_player.Position}; {nav}; {DescribeAilments()}");
+        MovementStatus mv = _readMovement?.Invoke() ?? default;
+        string eta = DescribeEta(mv);
+        string etaClause = eta.Length > 0 ? $"; {eta}" : string.Empty;
+        ctx.Reply($"{DescribeState(mv)}; {DescribeRoom()}{etaClause}; {DescribeAilments()}");
+    }
+
+    // The activity phrase: the running movement engine (or "idle") plus the most
+    // urgent condition sub-state that adds signal. Fleeing outranks fighting, which
+    // outranks a held rest stance; only the single most urgent condition is shown.
+    // Movement + a condition co-occur only when combat has halted an in-flight walk,
+    // so both are listed in that case ("running loop 'X', fighting").
+    private string DescribeState(MovementStatus mv)
+    {
+        List<string> parts = new();
+
+        string move = MovementEnginePhrase(mv);
+        if (move.Length > 0) parts.Add(move);
+
+        string? condition =
+            _readFleeing?.Invoke() == true ? "fleeing"
+            : _player.InCombat            ? "fighting"
+            : _player.Position switch
+            {
+                PlayerPosition.Resting    => "resting",
+                PlayerPosition.Meditating => "meditating",
+                _                         => null,
+            };
+        if (condition is not null) parts.Add(condition);
+
+        return parts.Count == 0 ? "idle" : string.Join(", ", parts);
+    }
+
+    // The current-room clause shared with @path: room name + (map, room), or a
+    // plain "location unknown" when the tracker has no fix.
+    private string DescribeRoom()
+    {
+        Room? room = _readCurrentRoom?.Invoke();
+        return room is null ? "location unknown" : FormatRoom(room);
+    }
+
+    // ETA clause, present only when a walk is actually under way. A boat leg has a
+    // real wall-clock arrival, so we count down to it (the state clause already reads
+    // "sailing to <port>", so the tag isn't repeated here). A land walk has no
+    // per-step cadence to time — the walker sends each step reactively on arrival —
+    // so we report the honest distance measure instead: steps left on the path.
+    private static string DescribeEta(MovementStatus mv)
+    {
+        if (mv.Sailing)
+        {
+            int secs = Math.Max(0, (int)Math.Round((mv.SailingEta - DateTimeOffset.UtcNow).TotalSeconds));
+            return $"ETA ~{secs}s";
+        }
+        if (mv.Kind == MovementKind.Walking && mv.TotalSteps > 0)
+        {
+            int left = Math.Max(0, mv.TotalSteps - mv.CurrentStep);
+            return left == 1 ? "1 step left" : $"{left} steps left";
+        }
+        return string.Empty;
     }
 
     // The curable ailments currently active on us, as the @status ailment clause.
@@ -227,17 +290,28 @@ public sealed class PartyEssentialHandlers : IDisposable
         return words.Count == 0 ? "no ailments" : $"ailments: {string.Join(", ", words)}";
     }
 
-    // The leading engine phrase shared by @status and @path: "not moving", or a
-    // short description of the topmost running movement engine. @path appends the
-    // room and step progress on top; @status stops here.
-    private static string MovementEnginePhrase(MovementStatus mv) => mv.Kind switch
+    // The movement-engine token shared by @status and @path: a short phrase for the
+    // topmost running engine, or empty when nothing is moving us. @path early-returns
+    // "not moving" for None before calling this; @status folds the empty string into
+    // its "idle" fallback. A boat leg overrides the engine token — while aboard we're
+    // "sailing to <port>" whichever engine steered us onto the ship.
+    private static string MovementEnginePhrase(MovementStatus mv)
     {
-        MovementKind.Loop    => $"running loop '{mv.Label}'",
-        MovementKind.Lair    => "auto-lair",
-        MovementKind.Walking => $"walking to {mv.Label}",
-        MovementKind.None    => "not moving",
-        _                    => "moving",
-    };
+        if (mv.Sailing)
+            return mv.SailingPlace is { Length: > 0 } place ? $"sailing to {place}" : "sailing";
+        return mv.Kind switch
+        {
+            MovementKind.Loop    => $"running loop '{mv.Label}'",
+            MovementKind.Lair    => "auto-lair",
+            MovementKind.Walking => $"walking to {mv.Label}",
+            _                    => string.Empty,
+        };
+    }
+
+    // The "<name> (map M, room R)" room descriptor used by @status, @path, and (with
+    // an exits tail) @where. One formatter so the three replies never drift.
+    private static string FormatRoom(Room room) =>
+        $"{room.DisplayName} (map {room.Key.Map}, room {room.Key.Room})";
 
     // Status form of @party (no args, or any channel other than Local). Three
     // exclusive outcomes:
@@ -324,7 +398,7 @@ public sealed class PartyEssentialHandlers : IDisposable
         string exits = room.Exits.Count == 0
             ? "none"
             : string.Join(", ", room.Exits.Keys.OrderBy(d => (int)d).Select(d => d.ToLongName()));
-        ctx.Reply($"{room.DisplayName} (map {room.Key.Map}, room {room.Key.Room}); exits: {exits}");
+        ctx.Reply($"{FormatRoom(room)}; exits: {exits}");
     }
 
     // @who — reply with the other players and monsters sharing the current room.
@@ -356,10 +430,7 @@ public sealed class PartyEssentialHandlers : IDisposable
 
         string engine = MovementEnginePhrase(mv);
 
-        Room? room = _readCurrentRoom?.Invoke();
-        string where = room is null
-            ? "location unknown"
-            : $"{room.DisplayName} (map {room.Key.Map}, room {room.Key.Room})";
+        string where = DescribeRoom();
 
         // CurrentStep is the 0-based next-step index; report it 1-based and
         // clamp to TotalSteps for the tail where every step is sent but the

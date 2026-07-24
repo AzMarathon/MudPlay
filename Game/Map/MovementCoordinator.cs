@@ -51,6 +51,19 @@ public sealed class MovementCoordinator
     // Start/Pause/Stop never flip on it. Self-clears on its own timer.
     public const string DarkRoomSettleGate = "DarkRoomSettle";
 
+    // Asserted by CombatRedisplaySettle for a brief window when a combat line
+    // arrives in a LIT room our view shows empty — something is swinging at us
+    // that the room lost (a hostile that leapt in a beat after an empty render).
+    // The room re-render (a CR "where am I") lands after the move confirms, so
+    // without this the loop steps past the fight before the mob reveals. This
+    // holds the walker until the re-display resolves: a hostile surfaces and the
+    // Combat gate takes over the hold, or the room is truly empty and the settle
+    // clears so the loop steps on. The dark-room analogue is DarkRoomSettleGate;
+    // this is the lit-room twin (dark rooms suppress the CR, so the two never
+    // overlap). Engine-wait tier — never flips the toolbar Start/Pause/Stop.
+    // Self-clears on the next room observation or a short timeout.
+    public const string CombatRedisplaySettleGate = "CombatRedisplaySettle";
+
     // Asserted by HealthManager when HP drops below the configured rest
     // trigger; clears when HP recovers past the configured rest target.
     public const string HealthRecoveryGate = "HealthRecovery";

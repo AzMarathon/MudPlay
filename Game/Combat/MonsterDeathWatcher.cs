@@ -60,6 +60,10 @@ public sealed class MonsterDeathWatcher : IDisposable
     // standard PropertyChanged / event mechanism downstream).
     public event Action<MonsterDeathEvent>? MonsterDied;
 
+    // Test seam — overrides the wall clock for the exp / Combat-Off / specific-
+    // death correlation windows.
+    public Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.Now;
+
     public MonsterDeathWatcher(
         MessageRouter router,
         MonsterMessageStore monsters,
@@ -139,11 +143,11 @@ public sealed class MonsterDeathWatcher : IDisposable
         if (!_deathIndex.TryGetValue(trimmed, out List<MonsterDeathIdentity>? candidates))
             return;
 
-        _lastSpecificDeathAt = DateTimeOffset.Now;
+        _lastSpecificDeathAt = NowProvider();
         MonsterDeathEvent evt = new(
             Candidates:       candidates,
             ExperienceGained: null,
-            At:               DateTimeOffset.Now,
+            At:               NowProvider(),
             IsFallback:       false);
         _log?.Info(LogCategory,
             $"specific death matched — candidates={candidates.Count} first={candidates[0].Name}");
@@ -154,7 +158,28 @@ public sealed class MonsterDeathWatcher : IDisposable
     {
         if (m.Groups.Count == 0) return;
         if (!int.TryParse(m.Groups[0], out int exp)) return;
-        _lastExpAt = DateTimeOffset.Now;
+
+        // Wire ordering is death line → "You gain N exp." → *Combat Off*, so an
+        // exp landing right after a specific death belongs to that already-
+        // attributed kill. Don't arm the fallback for it: otherwise a later
+        // non-death *Combat Off* — thrown weapons and other non-sustaining
+        // attacks emit one every strike — fires a phantom fallback death on this
+        // stale exp a beat before the NEXT mob actually dies, dropping a live
+        // target and walking a loop-mode walker a room early (identical-exp mobs
+        // dying every few seconds keep the prior kill's exp inside the 5s window
+        // the whole time; the reported "monster didn't die but we moved on"). A
+        // monster with no DeathLine pattern never stamps _lastSpecificDeathAt, so
+        // its exp still arms the fallback normally — the path this heuristic
+        // exists for.
+        DateTimeOffset now = NowProvider();
+        if (now - _lastSpecificDeathAt < SpecificDeathSuppressionWindow)
+        {
+            _lastExpAt = null;
+            _lastExpAmount = null;
+            return;
+        }
+
+        _lastExpAt = now;
         _lastExpAmount = exp;
     }
 
@@ -164,7 +189,7 @@ public sealed class MonsterDeathWatcher : IDisposable
         if (!string.Equals(m.Groups[0], "Off", StringComparison.OrdinalIgnoreCase)) return;
         if (_lastExpAt is not { } expAt) return;
 
-        DateTimeOffset now = DateTimeOffset.Now;
+        DateTimeOffset now = NowProvider();
         if (now - expAt > ExpToCombatOffWindow) return;
         if (now - _lastSpecificDeathAt < SpecificDeathSuppressionWindow) return;
 

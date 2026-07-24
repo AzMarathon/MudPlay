@@ -42,6 +42,9 @@
 
         <!-- Action buttons -->
         <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="How did I Die?" Margin="0,0,6,6"
+                    Command="{Binding HowDidIDieCommand}"
+                    ToolTip.Tip="Replay the last ~200 lines of backscroll captured at the moment of this death — so you can see how you died even after the live scrollback has buffered out."/>
             <Button Content="Recover Now" Margin="0,0,6,6"
                     Command="{Binding RecoverNowCommand}"
                     ToolTip.Tip="Recover this deathpile: grab the recorded items in place if you're standing in the death room, otherwise walk there first and grab on arrival."/>
