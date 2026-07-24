@@ -64,16 +64,27 @@ public static class RouteChoicePrompt
             return;
         }
 
-        // Sole route (no gate-free alternative) whose gates are item/ticket, not a
-        // hazard: no picker — the item's AutoObtainForPath flag decides. Flagged
-        // arms the acquisition pipeline and crosses the gate; unflagged walks the
-        // plain route, whose BFS fails in place naming the missing item. Hazard
-        // sole routes fall through to the picker (carry / buy / use a counter).
+        // Sole route (no gate-free alternative) whose gates are item/ticket/key,
+        // not a hazard. When every gate is a single item/ticket the user flagged
+        // AutoObtainForPath, the acquisition pipeline can source it all: arm and
+        // cross, no prompt. Otherwise a gate the client can't auto-source is on the
+        // route — a door key (never auto-sourced), or an unflagged item — so
+        // surface the picker rather than silently walking a plain route that fails
+        // in place. The user SEES the requirement and chooses: Go walks the route
+        // and halts at the gate so they clear it by hand (open the door, summon /
+        // kill for the key), Cancel walks nothing. Any auto-sourceable item on the
+        // same route is still fetched en route (Go arms acquisition), leaving only
+        // the manual gate. Hazard-only sole routes skip this and fall through to the
+        // picker below (carry / buy / use a counter).
         if (!choice.HasFreeRoute
             && choice.Requirements.Any(r => r.Kind != RouteRequirementKind.HazardProtection))
         {
-            bool arm = services.ShouldAutoObtainSoleRoute(choice.Requirements);
-            CommitWalk(services, destination, gated: arm);
+            if (services.ShouldAutoObtainSoleRoute(choice.Requirements))
+            {
+                CommitWalk(services, destination, gated: true);
+                return;
+            }
+            await RunPickerAsync(services, destination, source.Key, choice, previewSink);
             return;
         }
 

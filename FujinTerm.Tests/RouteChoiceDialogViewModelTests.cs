@@ -347,6 +347,39 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Equal(RouteChoiceResult.GatedNoAcquire, closed);
     }
 
+    // ----- Sole-route wording (no gate-free detour) ------------------------
+
+    [Fact]
+    public void SoleDoorKeyRoute_UsesGateGenericWording_NotHazard()
+    {
+        // A locked-door sole route reaches the picker (a key is never auto-sourced).
+        // The wording must not call it a "hazard" — it's a gate cleared by hand.
+        var vm = new RouteChoiceDialogViewModel(
+            SoleChoice(new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 9 })),
+            "Vault (1/9)", id => "the iron key");
+
+        Assert.False(vm.HasFreeRoute);
+        Assert.False(vm.ShowSendItCard);
+        Assert.Contains("gated", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("hazard", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("hazard", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("gate", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
+        // The key names itself with no source tail (keys aren't sourced).
+        Assert.Equal("Requires the iron key", vm.RequirementSummary);
+    }
+
+    [Fact]
+    public void SoleHazardRoute_KeepsHazardWording()
+    {
+        var vm = new RouteChoiceDialogViewModel(
+            SoleChoice(new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 42 })),
+            "Sunbaked dune (1/9)", id => "a waterskin");
+
+        Assert.False(vm.HasFreeRoute);
+        Assert.Contains("hazard", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hazard", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void SwitchAcrossAllThree_RepreviewsEachSelection()
     {

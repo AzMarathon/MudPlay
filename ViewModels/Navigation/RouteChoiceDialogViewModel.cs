@@ -116,22 +116,46 @@ public sealed partial class RouteChoiceDialogViewModel
         }
         else
         {
-            Heading = HasFreeRoute
-                ? $"Two routes to {destinationLabel}"
-                : $"Only route to {destinationLabel} crosses a hazard";
-            FreeSummary = HasFreeRoute
-                ? $"Free route — {Steps(choice.FreeStepCount)}, no items needed"
-                : "No hazard-free route — every path there crosses a hazard you must counter";
-            GatedSummary = HasFreeRoute
-                ? $"Direct — acquire then go — {Steps(choice.GatedStepCount)}"
-                : $"Route — {Steps(choice.GatedStepCount)}";
+            // A sole route (no gate-free detour) reaching the picker is either a
+            // hazard-only crossing (carry / buy / use a counter) or a gate the
+            // client can't auto-source — a door key, or an unflagged item. The
+            // wording branches on which: a locked door isn't a "hazard you must
+            // counter", it's a gate you clear by hand, so don't mislabel it.
+            bool soleHazardOnly = !HasFreeRoute
+                && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
+
+            if (HasFreeRoute)
+            {
+                Heading = $"Two routes to {destinationLabel}";
+                FreeSummary = $"Free route — {Steps(choice.FreeStepCount)}, no items needed";
+                GatedSummary = $"Direct — acquire then go — {Steps(choice.GatedStepCount)}";
+                Footnote = "Click a route to preview it on the map, then Go to walk it. "
+                    + "\"Acquire then go\" sources any missing gate items first; \"send it\" walks "
+                    + "straight through without them.";
+            }
+            else if (soleHazardOnly)
+            {
+                Heading = $"Only route to {destinationLabel} crosses a hazard";
+                FreeSummary = "No hazard-free route — every path there crosses a hazard you must counter";
+                GatedSummary = $"Route — {Steps(choice.GatedStepCount)}";
+                Footnote = "Click the route to preview it on the map, then Go to walk it. "
+                    + "This is the only way there — Go walks it and stops at the hazard; "
+                    + "carry, buy, or use a counter to cross.";
+            }
+            else
+            {
+                Heading = $"Only route to {destinationLabel} is gated";
+                FreeSummary = "No open detour — the only way there crosses a gate you must clear yourself";
+                GatedSummary = $"Route — {Steps(choice.GatedStepCount)}";
+                Footnote = "Click the route to preview it on the map, then Go to walk it. "
+                    + "This is the only way there — Go walks it and stops at the gate; "
+                    + "clear what's shown to continue.";
+            }
+
             RequirementSummary = "Requires "
                 + DescribeRequirements(
                     choice.Requirements, itemName, giveNameForItem, shopNameForItem, dropNameForItem);
             TeleportCaveat = string.Empty;
-            Footnote = "Click a route to preview it on the map, then Go to walk it. "
-                + "\"Acquire then go\" sources any missing gate items first; \"send it\" walks "
-                + "straight through without them.";
         }
     }
 

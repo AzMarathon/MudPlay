@@ -9,6 +9,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Walk-to route ETA now shows in the Navigation window header ("~Nm Ss to arrive"), not just the program log
 - Walk-to now auto-collects a free gate item en route when a giver hands it over on a single fail-proof command (an NPC keyword ask or a room command): the walk detours to the nearest giver, asks, collects, and resumes — no buying or hunting, and preferred over both when it applies
 - Route picker names such a giver as "(ask <giver>)", taking precedence over the "(buy at …)" / "(dropped by …)" tails
+- Walk-to whose only route is locked behind a door key (or an item you didn't flag for auto-fetch) now surfaces the picker naming that gate, then walks to the door and halts for you to clear it — instead of silently walking a route that dead-ends at the lock
 - Post-kill loot re-survey sends a bare Enter instead of `look`, re-rendering ground drops without the room-description text
 - bug reports addressed: paradigm-20260723-151900, paradigm-20260723-162143, paradigm-20260723-180918
 
