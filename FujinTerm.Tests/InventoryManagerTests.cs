@@ -168,6 +168,8 @@ public sealed class InventoryManagerTests
         Assert.Equal(0, snap.Currency.TotalCopperValue);
         Assert.Equal(0, snap.Currency.TotalCoinCount);
         Assert.Equal(EncumbranceLevel.None, snap.Encumbrance.Category);
+        // The "nothing" carry line must not register a phantom "nothing" item.
+        Assert.Empty(snap.CarriedItems);
     }
 
     [Fact]

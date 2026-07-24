@@ -123,6 +123,10 @@ it isn't here and you're unsure, ask.
 - **[CONFIRMED]** `use <item>` readies a light (torch, lantern); `rem <item>` removes it.
   Lights follow the same trade-places rule as `eq` — `use`-ing a new light swaps out the
   current one (if usable).
+- **[CONFIRMED, user 2026-07-24]** A **readied light is visible to other players** — an onlooker
+  sees the lit source the way they see worn gear. So it counts as "shown," not hidden: the `@inv`
+  remote report (carried items an onlooker can't see) deliberately excludes the readied light,
+  reporting only the pack + key ring.
 - **[CONFIRMED, capture 2026-07-11]** **A readied light burning out prints exactly
   `Your <item> flickers and goes out.`** (e.g. `Your torch flickers and goes out.`) — one line,
   period-terminated, no name/exits. It is the *only* signal the light is gone: the inventory

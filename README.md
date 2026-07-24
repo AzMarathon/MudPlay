@@ -1,9 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.1.0**
-> - Character Workshop death list gains a "How did I Die?" button: each recorded death captures its backscroll to a per-character log, so a death that scrolls off the live buffer overnight stays reviewable
-> - @status reply overhauled — reports current activity and sub-state (idle / walking / looping / auto-lair, plus fighting / fleeing / resting), the room name with map/room numbers, walk ETA (steps left, or a countdown to the destination port when sailing), and active ailments
+> **Version 2.2.0**
+> - New @inv remote command reports the carried pack plus key ring — the inventory another player can't see by looking (worn/wielded gear and a readied light, which they can see, are excluded); gated by the Query inventory permission
+> - Inventory parse no longer registers a phantom "nothing" item from the "You are carrying nothing." dump line (it had leaked into @have / @drop-all)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

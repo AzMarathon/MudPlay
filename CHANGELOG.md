@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.2.0
+
+- New @inv remote command reports the carried pack plus key ring — the inventory another player can't see by looking (worn/wielded gear and a readied light, which they can see, are excluded); gated by the Query inventory permission
+- Inventory parse no longer registers a phantom "nothing" item from the "You are carrying nothing." dump line (it had leaked into @have / @drop-all)
+
 ## 2.1.0
 
 - Character Workshop death list gains a "How did I Die?" button: each recorded death captures its backscroll to a per-character log, so a death that scrolls off the live buffer overnight stays reviewable

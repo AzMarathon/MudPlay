@@ -85,6 +85,7 @@ public static class RemoteCommandCatalog
             ["@wealth"]       = PlayerRemoteControls.QueryInventory,
             ["@enc"]          = PlayerRemoteControls.QueryInventory,
             ["@have"]         = PlayerRemoteControls.QueryInventory,
+            ["@inv"]          = PlayerRemoteControls.QueryInventory,   // carried pack + keys — what a look can't see
             ["@suicide"]      = PlayerRemoteControls.SysopCommands,   // irreversible — gated under Elevated Commands
             ["@invite"]       = PlayerRemoteControls.RequestInvite,
             ["@join"]         = PlayerRemoteControls.RequestInvite,
