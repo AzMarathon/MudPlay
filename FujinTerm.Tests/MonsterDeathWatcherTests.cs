@@ -248,4 +248,68 @@ public sealed class MonsterDeathWatcherTests
         Assert.Single(h.Events);
         Assert.False(h.Events[0].IsFallback);
     }
+
+    [Fact]
+    public void SpecificDeath_StaleExp_DoesNotFalseFire_OnLaterCombatOff()
+    {
+        // Regression: in a party / thrown-weapon swarm, identical-exp mobs die
+        // every few seconds, so a prior kill's exp stays inside the 5s fallback
+        // window while the NEXT fight's non-death *Combat Off* cycles (thrown
+        // weapons emit one every strike). The specific death already attributed
+        // that kill; the fallback must not re-fire on the stale exp a beat before
+        // the next mob dies — that dropped a live target and walked a loop-mode
+        // walker a room early ("monster didn't die but we moved on").
+        using Harness h = new();
+        h.AddMonster(1, "giant toad",
+            "The toad croaks in agony, and collapses wetly.");
+
+        DateTimeOffset clock = DateTimeOffset.UnixEpoch;
+        h.Watcher.NowProvider = () => clock;
+
+        // Kill N: death line → exp → its own Combat Off, all near-instant.
+        h.EmitLine("The toad croaks in agony, and collapses wetly.");
+        h.FeedRouter("You gain 262 experience.");
+        clock += TimeSpan.FromMilliseconds(100);
+        h.FeedRouter("*Combat Off*");
+
+        Assert.Single(h.Events);
+        Assert.False(h.Events[0].IsFallback);
+
+        // 4s later — past the 3s specific-death window but still inside the 5s
+        // exp window — the next toad's fight cycles a non-death *Combat Off*. The
+        // prior kill's exp was claimed by the specific death, so no phantom
+        // fallback fires.
+        clock += TimeSpan.FromSeconds(4);
+        h.FeedRouter("*Combat Off*");
+
+        Assert.Single(h.Events);
+        Assert.False(h.Events[0].IsFallback);
+    }
+
+    [Fact]
+    public void Fallback_DeathLinelessMonster_StillFires_AfterOldSpecificDeath()
+    {
+        // The exp-disarm guard keys on a RECENT specific death only. A monster
+        // with no DeathLine pattern (the fallback's whole reason to exist) must
+        // still fire the fallback even when some unrelated specific death fired
+        // long ago — the stamp is stale, so the exp arms normally.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat",
+            "The giant rat falls to the ground with a tortured squeak.");
+
+        DateTimeOffset clock = DateTimeOffset.UnixEpoch;
+        h.Watcher.NowProvider = () => clock;
+
+        h.EmitLine("The giant rat falls to the ground with a tortured squeak.");
+
+        // 10s later a death-line-less mob dies: exp + Combat Off only.
+        clock += TimeSpan.FromSeconds(10);
+        h.FeedRouter("You gain 42 experience.");
+        clock += TimeSpan.FromMilliseconds(100);
+        h.FeedRouter("*Combat Off*");
+
+        Assert.Equal(2, h.Events.Count);
+        Assert.True(h.Events[1].IsFallback);
+        Assert.Equal(42, h.Events[1].ExperienceGained);
+    }
 }

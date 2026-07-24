@@ -434,6 +434,19 @@ guardsman (#757). This is a **partial** list — other mobs aggro the evil-title
 is a **guard** (casts `jail` 583, per above) **and** our title is Outlaw-or-worse. Our own title
 comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
 
+**Monster-kill message order** *([CONFIRMED] 2026-07-23, bug-report captures)*
+- A kill prints in a fixed order: the monster's **death line** (e.g. `The toad croaks in agony, and
+  collapses wetly.`) → `You gain N experience.` → `*Combat Off*`, all in the same server flush.
+- `*Combat Off*` is **not** a reliable death signal on its own — non-sustaining attacks (thrown
+  weapons, KAI pummel, a party member's throws) emit an off/engaged bounce **every strike**, so a
+  `*Combat Off*` fires many times per fight with no death. The "exp + Combat Off within a window"
+  fallback death is therefore a *weak* heuristic: only trust it for monsters whose specific death
+  line isn't in the data. Because a specific death line always precedes its exp, an exp that lands
+  right after a specific death belongs to that already-attributed kill and must not also arm the
+  fallback — otherwise, with identical-exp mobs dying every few seconds (a swarm), the prior kill's
+  exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback
+  death on it, a beat before the current mob actually dies.
+
 ## Vitality — HP, dropping, and death
 
 **Max-HP sources** *([CONFIRMED])*

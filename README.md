@@ -3,6 +3,7 @@
 <!-- current-version:start -->
 > **Version 2.0.0**
 > - Loop mode no longer walks past a hostile that leaps into an apparently-empty room: a combat line arriving while the room view shows no target now holds the walker for a beat so the mob reveals and the fight engages, instead of firing the next move mid-combat (the lit-room twin of 1.99.1's dark-room fix)
+> - Loop mode no longer bails off a freshly-engaged monster a beat before it dies: the "exp + Combat Off" fallback death no longer misfires on a prior kill's still-recent experience when a thrown-weapon Combat Off cycles mid-fight, which had dropped the live target and walked a room early even though the mob hadn't died yet
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
