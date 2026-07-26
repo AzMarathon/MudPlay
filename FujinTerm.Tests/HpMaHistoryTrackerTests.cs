@@ -25,6 +25,9 @@ public sealed class HpMaHistoryTrackerTests
         Assert.Equal(new double[] { 80, 70 }, s.HpHigh);
         Assert.Equal(new double[] { 30, 60 }, s.MaLow);
         Assert.Equal(new double[] { 90, 60 }, s.MaHigh);
+        // Trend = per-step mean: step 0 HP (80+40+60)/3 = 60, step 1 = 70.
+        Assert.Equal(60, s.HpAvg[0], 3);
+        Assert.Equal(70, s.HpAvg[1], 3);
         Assert.True(s.HasMana);
         Assert.Equal(40, s.LowestHpPercent);
     }
@@ -55,9 +58,10 @@ public sealed class HpMaHistoryTrackerTests
         HpMaHistoryStats s = t.Snapshot();
         Assert.False(s.HasMana);
         // No-mana class → mana arrays are empty, not a zero row, so the panel
-        // draws no mana bars at all.
+        // draws no mana bars or trend at all.
         Assert.Empty(s.MaLow);
         Assert.Empty(s.MaHigh);
+        Assert.Empty(s.MaAvg);
     }
 
     [Fact]

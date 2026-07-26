@@ -252,16 +252,16 @@
                         Height="120">
                     <Grid ColumnDefinitions="*,34">
                         <controls:RangeBarChart Grid.Column="0"
-                                                Low="{Binding HpLow}" High="{Binding HpHigh}"
-                                                SecondaryLow="{Binding MaLow}" SecondaryHigh="{Binding MaHigh}"
+                                                Low="{Binding HpLow}" High="{Binding HpHigh}" PrimaryTrend="{Binding HpAvg}"
+                                                SecondaryLow="{Binding MaLow}" SecondaryHigh="{Binding MaHigh}" SecondaryTrend="{Binding MaAvg}"
                                                 PrimaryBrush="{StaticResource AccentRedBrush}"
                                                 SecondaryBrush="{StaticResource AccentCyanBrush}"
-                                                Min="0" Max="100"
+                                                Min="{Binding AxisMin}" Max="100"
                                                 Offset="{Binding StepViewOffset}"
                                                 WindowSize="15"/>
                         <Grid Grid.Column="1" Margin="4,0,0,0">
                             <TextBlock VerticalAlignment="Top" Classes="scale" Text="100%"/>
-                            <TextBlock VerticalAlignment="Bottom" Classes="scale" Text="0%"/>
+                            <TextBlock VerticalAlignment="Bottom" Classes="scale" Text="{Binding AxisMinText}"/>
                         </Grid>
                     </Grid>
                 </Border>

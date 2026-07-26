@@ -33,6 +33,15 @@ public sealed class RangeBarChart : Control
     public static readonly StyledProperty<IReadOnlyList<double>?> SecondaryHighProperty =
         AvaloniaProperty.Register<RangeBarChart, IReadOnlyList<double>?>(nameof(SecondaryHigh));
 
+    // Optional per-slot trend value for each series (the mean), drawn as a line
+    // threaded through the bars — the trajectory, on top of the range. Null / wrong
+    // length simply omits the line. Same length as the matching Low/High.
+    public static readonly StyledProperty<IReadOnlyList<double>?> PrimaryTrendProperty =
+        AvaloniaProperty.Register<RangeBarChart, IReadOnlyList<double>?>(nameof(PrimaryTrend));
+
+    public static readonly StyledProperty<IReadOnlyList<double>?> SecondaryTrendProperty =
+        AvaloniaProperty.Register<RangeBarChart, IReadOnlyList<double>?>(nameof(SecondaryTrend));
+
     public static readonly StyledProperty<IBrush> PrimaryBrushProperty =
         AvaloniaProperty.Register<RangeBarChart, IBrush>(
             nameof(PrimaryBrush), new SolidColorBrush(Color.Parse("#E06060")));
@@ -84,6 +93,18 @@ public sealed class RangeBarChart : Control
         set => SetValue(SecondaryHighProperty, value);
     }
 
+    public IReadOnlyList<double>? PrimaryTrend
+    {
+        get => GetValue(PrimaryTrendProperty);
+        set => SetValue(PrimaryTrendProperty, value);
+    }
+
+    public IReadOnlyList<double>? SecondaryTrend
+    {
+        get => GetValue(SecondaryTrendProperty);
+        set => SetValue(SecondaryTrendProperty, value);
+    }
+
     public IBrush PrimaryBrush
     {
         get => GetValue(PrimaryBrushProperty);
@@ -124,6 +145,7 @@ public sealed class RangeBarChart : Control
     {
         AffectsRender<RangeBarChart>(
             LowProperty, HighProperty, SecondaryLowProperty, SecondaryHighProperty,
+            PrimaryTrendProperty, SecondaryTrendProperty,
             PrimaryBrushProperty, SecondaryBrushProperty, MinProperty, MaxProperty,
             OffsetProperty, WindowSizeProperty);
     }
@@ -171,20 +193,29 @@ public sealed class RangeBarChart : Control
             ? Math.Max((slotW * 0.72 - gap) / 2, 1.0)
             : Math.Max(slotW * 0.5, 1.0);
 
+        // Each metric's bar centre x within a slot (grouped left / right, or dead
+        // centre when solo). The trend line rides these same centres.
+        double PrimaryCenter(int k) => hasSecondary
+            ? (k + 0.5) * slotW - gap / 2 - barW / 2
+            : (k + 0.5) * slotW;
+        double SecondaryCenter(int k) => (k + 0.5) * slotW + gap / 2 + barW / 2;
+
+        // Bars carry the range as a translucent column so the solid trend line on
+        // top stays legible against them.
+        IBrush primaryFill = Translucent(PrimaryBrush, 140);
+        IBrush secondaryFill = Translucent(SecondaryBrush, 140);
         for (int k = 0; k < visible; k++)
         {
             int i = start + k;
-            double center = (k + 0.5) * slotW;
+            DrawBar(context, PrimaryCenter(k) - barW / 2, barW, high[i], low[i], primaryFill, Y);
             if (hasSecondary)
-            {
-                DrawBar(context, center - gap / 2 - barW, barW, high[i], low[i], PrimaryBrush, Y);
-                DrawBar(context, center + gap / 2, barW, secHigh![i], secLow![i], SecondaryBrush, Y);
-            }
-            else
-            {
-                DrawBar(context, center - barW / 2, barW, high[i], low[i], PrimaryBrush, Y);
-            }
+                DrawBar(context, SecondaryCenter(k) - barW / 2, barW, secHigh![i], secLow![i], secondaryFill, Y);
         }
+
+        // Trend lines (per-step mean) threaded through the bar centres, on top.
+        DrawTrend(context, PrimaryTrend, n, start, visible, PrimaryCenter, Y, PrimaryBrush);
+        if (hasSecondary)
+            DrawTrend(context, SecondaryTrend, n, start, visible, SecondaryCenter, Y, SecondaryBrush);
     }
 
     // One floating bar from high→low. A flat step (high == low) still shows a 1px
@@ -196,5 +227,36 @@ public sealed class RangeBarChart : Control
         double bottom = y(low);
         double h = Math.Max(bottom - top, 1.0);
         context.FillRectangle(brush, new Rect(x, top, w, h));
+    }
+
+    // Polyline through each visible step's trend value at its bar centre. Skipped
+    // when the series is absent or length-mismatched.
+    private static void DrawTrend(DrawingContext context, IReadOnlyList<double>? trend,
+        int n, int start, int visible, Func<int, double> centerX, Func<double, double> y, IBrush brush)
+    {
+        if (trend is null || trend.Count != n) return;
+        StreamGeometry geo = new();
+        using (StreamGeometryContext g = geo.Open())
+        {
+            g.BeginFigure(new Point(centerX(0), y(trend[start])), isFilled: false);
+            for (int k = 1; k < visible; k++) g.LineTo(new Point(centerX(k), y(trend[start + k])));
+            g.EndFigure(false);
+        }
+        context.DrawGeometry(null, new Pen(brush, 1.6)
+        {
+            LineJoin = PenLineJoin.Round,
+            LineCap = PenLineCap.Round,
+        }, geo);
+    }
+
+    // A translucent copy of a solid-colour brush; non-solid brushes pass through.
+    private static IBrush Translucent(IBrush brush, byte alpha)
+    {
+        if (brush is ISolidColorBrush s)
+        {
+            Color c = s.Color;
+            return new SolidColorBrush(Color.FromArgb(alpha, c.R, c.G, c.B));
+        }
+        return brush;
     }
 }

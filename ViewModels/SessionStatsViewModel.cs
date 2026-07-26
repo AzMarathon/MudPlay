@@ -35,6 +35,11 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // this window across a longer loop.
     private const int StepViewWindow = 15;
 
+    // Percentage points of headroom below the lowest recorded value for the HP/MA
+    // graph's axis floor — so the plot spreads over the range that matters instead
+    // of wasting the bottom half on values you never reach.
+    private const double AxisFloorHeadroom = 30;
+
     // Upper bound on the banked-level scan — same cap the auto-trainer and
     // level-up announcer use, so the time-to-level count stays in lock-step.
     private const int MaxLevelScan = 60;
@@ -105,21 +110,28 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // shared 0–100% axis. HasManaHistory is false for a no-mana class, hiding the
     // mana bars + legend. The step count (HpLow.Count) drives the slider bounds.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StepViewMax), nameof(IsStepSliderVisible), nameof(StepRangeText))]
+    [NotifyPropertyChangedFor(nameof(StepViewMax), nameof(IsStepSliderVisible), nameof(StepRangeText),
+        nameof(AxisMin), nameof(AxisMinText))]
     private IReadOnlyList<double> _hpLow = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _hpHigh = Array.Empty<double>();
+    [ObservableProperty] private IReadOnlyList<double> _hpAvg = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _maLow = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _maHigh = Array.Empty<double>();
-    [ObservableProperty] private bool _hasManaHistory;
+    [ObservableProperty] private IReadOnlyList<double> _maAvg = Array.Empty<double>();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AxisMin), nameof(AxisMinText))]
+    private bool _hasManaHistory;
 
     // Lowest HP / MA percent seen anywhere on the loop, shown in each series'
-    // legend label. 100 until the first on-loop sample lands.
+    // legend label and feeding the adaptive axis floor. 100 until the first on-loop
+    // sample lands.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HpLegendText))]
+    [NotifyPropertyChangedFor(nameof(HpLegendText), nameof(AxisMin), nameof(AxisMinText))]
     private double _lowestHpPercent = 100;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MaLegendText))]
+    [NotifyPropertyChangedFor(nameof(MaLegendText), nameof(AxisMin), nameof(AxisMinText))]
     private double _lowestMaPercent = 100;
 
     // First loop step shown in the graph window, driven by the panel's slider so a
@@ -333,6 +345,21 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     public double StepViewMax => Math.Max(0, HpLow.Count - StepViewWindow);
     public bool IsStepSliderVisible => HpLow.Count > StepViewWindow;
 
+    // Adaptive vertical floor for the graph (top is fixed at 100%): 30 points below
+    // the lowest value seen across the plotted series, clamped at 0. 0 before any
+    // data lands. AxisMinText labels the bottom scale tick.
+    public double AxisMin
+    {
+        get
+        {
+            if (HpLow.Count == 0) return 0;
+            double lowest = HasManaHistory ? Math.Min(LowestHpPercent, LowestMaPercent) : LowestHpPercent;
+            return Math.Max(0, lowest - AxisFloorHeadroom);
+        }
+    }
+
+    public string AxisMinText => $"{AxisMin:F0}%";
+
     // X-axis caption: which loop steps the window currently shows, of the total —
     // labels the step axis and tracks the slider. "steps 1–N" when the whole loop
     // fits.
@@ -476,8 +503,10 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         HpMaHistoryStats hpMa = _hpMaTracker.Snapshot();
         HpLow = hpMa.HpLow;
         HpHigh = hpMa.HpHigh;
+        HpAvg = hpMa.HpAvg;
         MaLow = hpMa.MaLow;
         MaHigh = hpMa.MaHigh;
+        MaAvg = hpMa.MaAvg;
         HasManaHistory = hpMa.HasMana;
         LowestHpPercent = hpMa.LowestHpPercent;
         LowestMaPercent = hpMa.LowestMaPercent;

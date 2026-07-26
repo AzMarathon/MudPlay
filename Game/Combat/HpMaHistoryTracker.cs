@@ -14,22 +14,37 @@ namespace FujinTerm.Game.Combat;
 // lock-free.
 public sealed class HpMaHistoryTracker
 {
-    // One loop step's accumulated HP / mana band (percent of max). HasHp / HasMa
+    // One loop step's accumulated HP / mana stats (percent of max): the min/max
+    // band plus a running sum + count for the mean (the trend line). HasHp / HasMa
     // gate the first fold (which seeds low = high = the sample) vs. later folds
-    // (which widen the band). Mana stays absent for a no-mana class.
+    // (which widen the band and accrue the mean). Mana stays absent for a no-mana
+    // class.
     private readonly record struct StepBand(
-        bool HasHp, double HpLow, double HpHigh,
-        bool HasMa, double MaLow, double MaHigh)
+        bool HasHp, double HpLow, double HpHigh, double HpSum, int HpCount,
+        bool HasMa, double MaLow, double MaHigh, double MaSum, int MaCount)
     {
-        public static StepBand Empty { get; } = new(false, 0, 0, false, 0, 0);
+        public static StepBand Empty { get; } = new(false, 0, 0, 0, 0, false, 0, 0, 0, 0);
 
-        public StepBand FoldHp(double pct) => HasHp
-            ? this with { HpLow = Math.Min(HpLow, pct), HpHigh = Math.Max(HpHigh, pct) }
-            : this with { HasHp = true, HpLow = pct, HpHigh = pct };
+        public StepBand FoldHp(double pct) => this with
+        {
+            HasHp = true,
+            HpLow = HasHp ? Math.Min(HpLow, pct) : pct,
+            HpHigh = HasHp ? Math.Max(HpHigh, pct) : pct,
+            HpSum = HpSum + pct,
+            HpCount = HpCount + 1,
+        };
 
-        public StepBand FoldMa(double pct) => HasMa
-            ? this with { MaLow = Math.Min(MaLow, pct), MaHigh = Math.Max(MaHigh, pct) }
-            : this with { HasMa = true, MaLow = pct, MaHigh = pct };
+        public StepBand FoldMa(double pct) => this with
+        {
+            HasMa = true,
+            MaLow = HasMa ? Math.Min(MaLow, pct) : pct,
+            MaHigh = HasMa ? Math.Max(MaHigh, pct) : pct,
+            MaSum = MaSum + pct,
+            MaCount = MaCount + 1,
+        };
+
+        public double HpAvg => HpCount > 0 ? HpSum / HpCount : 0;
+        public double MaAvg => MaCount > 0 ? MaSum / MaCount : 0;
     }
 
     // Per-step bands, indexed by loop step position. Grows to cover the largest
@@ -80,24 +95,27 @@ public sealed class HpMaHistoryTracker
         foreach (StepBand b in _steps) if (b.HasHp) { first = b; break; }
         if (!first.HasHp) return HpMaHistoryStats.Empty; // sized but no HP yet
 
-        double[] hpLow = new double[n], hpHigh = new double[n];
-        // Mana arrays stay empty for a no-mana class, so the panel's mana bars
+        double[] hpLow = new double[n], hpHigh = new double[n], hpAvg = new double[n];
+        // Mana arrays stay empty for a no-mana class, so the panel's mana series
         // vanish entirely rather than pinning to a phantom zero row.
         double[] maLow = _sawMana ? new double[n] : System.Array.Empty<double>();
         double[] maHigh = _sawMana ? new double[n] : System.Array.Empty<double>();
+        double[] maAvg = _sawMana ? new double[n] : System.Array.Empty<double>();
         StepBand carry = first;
         for (int i = 0; i < n; i++)
         {
             if (_steps[i].HasHp) carry = _steps[i];
             hpLow[i]  = carry.HpLow;
             hpHigh[i] = carry.HpHigh;
+            hpAvg[i]  = carry.HpAvg;
             if (_sawMana)
             {
                 maLow[i]  = carry.HasMa ? carry.MaLow  : 0;
                 maHigh[i] = carry.HasMa ? carry.MaHigh : 0;
+                maAvg[i]  = carry.HasMa ? carry.MaAvg  : 0;
             }
         }
-        return new HpMaHistoryStats(hpLow, hpHigh, maLow, maHigh, _sawMana);
+        return new HpMaHistoryStats(hpLow, hpHigh, hpAvg, maLow, maHigh, maAvg, _sawMana);
     }
 
     private static double Clamp(double pct) => pct < 0 ? 0 : pct > 100 ? 100 : pct;

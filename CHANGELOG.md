@@ -4,9 +4,9 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 2.3.0
 
-- New "HP/MA History" graph in Session Stats: a stock-chart-style high-low bar per loop step — HP (red) and mana (cyan) min/max on a fixed 0–100% axis — so you can spot which steps of the circuit dip your vitals lowest
-- Each step's bar accumulates its min/max across laps; records only while a loop is stepping and resets at each loop start; toggle it from the Session Stats context menu like the kills/hr and exp/hr graphs
-- The graph shows 15 steps at a time with a slider to pan a longer loop from step 1 to the tail; its legend names each series' lowest % seen
+- New "HP/MA History" graph in Session Stats: a per-loop-step range bar (HP red, mana cyan) showing the min/max your vitals hit at each step, with an average trend line threaded through so you can read your HP trajectory around the circuit at a glance
+- Each step's range + average accumulate across laps; records only while a loop is stepping and resets at each loop start; toggle it from the Session Stats context menu like the kills/hr and exp/hr graphs
+- Shows 15 steps at a time with a slider to pan a longer loop from step 1 to the tail; the vertical axis auto-floors 30 points below your lowest value to spread the plot, and the legend names each series' lowest % seen
 - Session Stats window now sizes its height to its visible content, so showing/hiding graphs and sections no longer leaves a gap or needs a manual resize
 
 ## 2.2.0
