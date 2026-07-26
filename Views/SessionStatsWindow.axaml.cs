@@ -40,6 +40,12 @@ public partial class SessionStatsWindow : Window
     // drag in PointerMoved, so hold the press args.
     private PointerPressedEventArgs? _pressArgs;
 
+    // Last panel-content height we re-fit the window to. SizeToContent="Height"
+    // sizes the window on open but doesn't reliably shrink it when a panel is
+    // collapsed / hidden at runtime, so we re-trigger it whenever the stacked
+    // panels' desired height changes (guarded to avoid a layout loop).
+    private double _lastContentHeight = -1;
+
     public SessionStatsWindow()
     {
         InitializeComponent();
@@ -63,6 +69,7 @@ public partial class SessionStatsWindow : Window
             host.AddHandler(DragDrop.DragOverEvent, OnPanelDragOver);
             host.AddHandler(DragDrop.DragLeaveEvent, OnPanelDragLeave);
             host.AddHandler(DragDrop.DropEvent, OnPanelDrop);
+            host.LayoutUpdated += (_, _) => RefitToContent(host);
         }
 
         // Show the HP/MA graph's scrub cursor while the step slider is held. Tunnel
@@ -82,6 +89,34 @@ public partial class SessionStatsWindow : Window
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    // ----- Auto-fit height to the stacked panels ---------------------
+
+    // Re-fit the window height to its content whenever the panels' total height
+    // changes (a panel expanded / collapsed / hidden). Avalonia's SizeToContent
+    // fits on open but doesn't reliably react to runtime content changes here, so
+    // we drive the height ourselves: measure the whole body unbounded to learn the
+    // height it wants, add the (constant) window chrome, clamp to Min/Max, and set
+    // it. Guarded on the measured content height so the resize's own layout pass —
+    // and the per-second stat refreshes — don't spin a loop.
+    private void RefitToContent(StackPanel host)
+    {
+        double contentH = host.DesiredSize.Height;
+        if (contentH <= 0 || Math.Abs(contentH - _lastContentHeight) < 1) return;
+        _lastContentHeight = contentH;
+
+        if (Content is not Control body || ClientSize.Height <= 0) return;
+
+        double width = ClientSize.Width > 0 ? ClientSize.Width : Width;
+        body.Measure(new Size(width, double.PositiveInfinity));
+        double neededClient = body.DesiredSize.Height;
+
+        // Height is the outer frame, ClientSize the inner area; the delta is the
+        // chrome (title bar / borders), constant regardless of content.
+        double chrome = Math.Max(0, Height - ClientSize.Height);
+        double target = Math.Clamp(neededClient + chrome, MinHeight, MaxHeight);
+        if (Math.Abs(Height - target) > 0.5) Height = target;
+    }
 
     // ----- HP/MA graph scrub cursor ---------------------------------
 

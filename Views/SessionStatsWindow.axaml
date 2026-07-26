@@ -8,9 +8,8 @@
         x:Class="FujinTerm.Views.SessionStatsWindow"
         x:DataType="vm:SessionStatsViewModel"
         Title="Session Stats"
-        Width="280"
+        Width="280" Height="480"
         MinWidth="240" MinHeight="160" MaxHeight="960"
-        SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
