@@ -265,16 +265,8 @@
                         </Grid>
                     </Grid>
                 </Border>
-                <!-- Pan slider — shown only once the loop is longer than the 15-step
-                     window; slides the view from step 1 to the tail. Right margin
-                     matches the scale-label column so it tracks the chart width. -->
-                <Slider IsVisible="{Binding IsStepSliderVisible}"
-                        Minimum="0" Maximum="{Binding StepViewMax}"
-                        Value="{Binding StepViewOffset, Mode=TwoWay}"
-                        SmallChange="1" LargeChange="5"
-                        TickFrequency="1" IsSnapToTickEnabled="True"
-                        Margin="0,0,38,0"
-                        ToolTip.Tip="Slide to view earlier / later loop steps."/>
+                <!-- X-axis caption: which loop steps the window shows, of the total. -->
+                <TextBlock Classes="ttl" Text="{Binding StepRangeText}"/>
                 <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
                     <TextBlock Classes="scale" HorizontalAlignment="Left"
                                Foreground="{StaticResource AccentRedBrush}" Text="{Binding HpLegendText}"
@@ -284,6 +276,15 @@
                                IsVisible="{Binding HasManaHistory}"
                                ToolTip.Tip="Lowest mana % seen across the loop's steps."/>
                 </StackPanel>
+                <!-- Pan slider — below the legend; compact + centred; shown only once
+                     the loop is longer than the 15-step window. -->
+                <Slider IsVisible="{Binding IsStepSliderVisible}"
+                        Minimum="0" Maximum="{Binding StepViewMax}"
+                        Value="{Binding StepViewOffset, Mode=TwoWay}"
+                        SmallChange="1" LargeChange="5"
+                        TickFrequency="1" IsSnapToTickEnabled="True"
+                        HorizontalAlignment="Center" Width="170" Height="22" MinHeight="0"
+                        ToolTip.Tip="Slide to view earlier / later loop steps."/>
             </StackPanel>
 
             <!-- ===== Player Statistics ===== -->

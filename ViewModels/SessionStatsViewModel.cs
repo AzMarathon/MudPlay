@@ -105,7 +105,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // shared 0–100% axis. HasManaHistory is false for a no-mana class, hiding the
     // mana bars + legend. The step count (HpLow.Count) drives the slider bounds.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StepViewMax), nameof(IsStepSliderVisible))]
+    [NotifyPropertyChangedFor(nameof(StepViewMax), nameof(IsStepSliderVisible), nameof(StepRangeText))]
     private IReadOnlyList<double> _hpLow = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _hpHigh = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _maLow = Array.Empty<double>();
@@ -124,7 +124,9 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     // First loop step shown in the graph window, driven by the panel's slider so a
     // long loop can be panned step 1 → tail; clamped to StepViewMax each refresh.
-    [ObservableProperty] private double _stepViewOffset;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StepRangeText))]
+    private double _stepViewOffset;
 
     // Per-panel visibility toggles — each of the five panels (the two rate
     // graphs and the three stat sections) can be shown or hidden via the
@@ -330,6 +332,21 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // pannable) once the loop is longer than one window.
     public double StepViewMax => Math.Max(0, HpLow.Count - StepViewWindow);
     public bool IsStepSliderVisible => HpLow.Count > StepViewWindow;
+
+    // X-axis caption: which loop steps the window currently shows, of the total —
+    // labels the step axis and tracks the slider. "steps 1–N" when the whole loop
+    // fits.
+    public string StepRangeText
+    {
+        get
+        {
+            int n = HpLow.Count;
+            if (n == 0) return "no loop steps recorded yet";
+            int first = (int)Math.Round(StepViewOffset) + 1;
+            int last = Math.Min(n, (int)Math.Round(StepViewOffset) + Math.Min(StepViewWindow, n));
+            return first <= 1 && last >= n ? $"steps 1–{n}" : $"steps {first}–{last} of {n}";
+        }
+    }
 
     // Current headline rate, printed in each graph header so the number is
     // legible without eyeballing the curve — it equals the curve's right-most
