@@ -2,8 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 2.3.0**
-> - New "HP/MA History" graph in Session Stats: per loop-step min/max HP (red) and mana (cyan) bands on a shared 0–100% axis, so you can spot which steps of the circuit dip your vitals lowest
-> - Records only while a loop is stepping and resets at each loop start; toggle it from the Session Stats context menu, same as the kills/hr and exp/hr graphs
+> - New "HP/MA History" graph in Session Stats: a stock-chart-style high-low bar per loop step — HP (red) and mana (cyan) min/max on a fixed 0–100% axis — so you can spot which steps of the circuit dip your vitals lowest
+> - Each step's bar accumulates its min/max across laps; records only while a loop is stepping and resets at each loop start; toggle it from the Session Stats context menu like the kills/hr and exp/hr graphs
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

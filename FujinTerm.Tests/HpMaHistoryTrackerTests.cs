@@ -54,8 +54,10 @@ public sealed class HpMaHistoryTrackerTests
 
         HpMaHistoryStats s = t.Snapshot();
         Assert.False(s.HasMana);
-        Assert.Equal(new double[] { 0, 0 }, s.MaLow);
-        Assert.Equal(new double[] { 0, 0 }, s.MaHigh);
+        // No-mana class → mana arrays are empty, not a zero row, so the panel
+        // draws no mana bars at all.
+        Assert.Empty(s.MaLow);
+        Assert.Empty(s.MaHigh);
     }
 
     [Fact]

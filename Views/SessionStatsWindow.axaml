@@ -234,10 +234,12 @@
             </StackPanel>
 
             <!-- ===== HP/MA History graph ===== -->
-            <!-- Per loop-step min/max HP (red) and mana (cyan) as bands on a shared
-                 0–100% axis, so a glance shows which steps of the circuit run the
-                 vitals lowest. Records only while a loop is stepping; resets at each
-                 new loop start. MA band hides for a no-mana class. -->
+            <!-- Stock-chart view: one vertical high-low bar per loop step on a fixed
+                 0–100% axis — HP (red) and mana (cyan) grouped side by side — so a
+                 glance shows the min/max range each step drove the vitals through,
+                 and which steps of the circuit dip lowest. Records only while a loop
+                 is stepping; resets at each new loop start. Mana bars vanish for a
+                 no-mana class. -->
             <StackPanel Tag="HpMaGraph" Classes="panel" Spacing="3"
                         IsVisible="{Binding IsHpMaGraphVisible}">
                 <Grid ColumnDefinitions="*,Auto">
@@ -254,24 +256,12 @@
                         Padding="4"
                         Height="60">
                     <Grid ColumnDefinitions="*,34">
-                        <!-- Mana band underneath, HP band on top: HP is the danger
-                             signal, so it wins the overlap. Both translucent so the
-                             other reads through. Fixed 0–100% axis. -->
-                        <Panel Grid.Column="0">
-                            <controls:SparklineControl Samples="{Binding MaLow}"
-                                                       HighSamples="{Binding MaHigh}"
-                                                       RangeMin="0" RangeMax="100"
-                                                       Stroke="{StaticResource AccentCyanBrush}"
-                                                       StrokeThickness="1"
-                                                       Fill="#335FB3D9"
-                                                       IsVisible="{Binding HasManaHistory}"/>
-                            <controls:SparklineControl Samples="{Binding HpLow}"
-                                                       HighSamples="{Binding HpHigh}"
-                                                       RangeMin="0" RangeMax="100"
-                                                       Stroke="{StaticResource AccentRedBrush}"
-                                                       StrokeThickness="1"
-                                                       Fill="#33E06060"/>
-                        </Panel>
+                        <controls:RangeBarChart Grid.Column="0"
+                                                Low="{Binding HpLow}" High="{Binding HpHigh}"
+                                                SecondaryLow="{Binding MaLow}" SecondaryHigh="{Binding MaHigh}"
+                                                PrimaryBrush="{StaticResource AccentRedBrush}"
+                                                SecondaryBrush="{StaticResource AccentCyanBrush}"
+                                                Min="0" Max="100"/>
                         <Grid Grid.Column="1" Margin="4,0,0,0">
                             <TextBlock VerticalAlignment="Top" Classes="scale" Text="100%"/>
                             <TextBlock VerticalAlignment="Bottom" Classes="scale" Text="0%"/>

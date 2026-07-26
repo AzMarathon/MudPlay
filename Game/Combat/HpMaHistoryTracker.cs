@@ -81,15 +81,21 @@ public sealed class HpMaHistoryTracker
         if (!first.HasHp) return HpMaHistoryStats.Empty; // sized but no HP yet
 
         double[] hpLow = new double[n], hpHigh = new double[n];
-        double[] maLow = new double[n], maHigh = new double[n];
+        // Mana arrays stay empty for a no-mana class, so the panel's mana bars
+        // vanish entirely rather than pinning to a phantom zero row.
+        double[] maLow = _sawMana ? new double[n] : System.Array.Empty<double>();
+        double[] maHigh = _sawMana ? new double[n] : System.Array.Empty<double>();
         StepBand carry = first;
         for (int i = 0; i < n; i++)
         {
             if (_steps[i].HasHp) carry = _steps[i];
             hpLow[i]  = carry.HpLow;
             hpHigh[i] = carry.HpHigh;
-            maLow[i]  = carry.HasMa ? carry.MaLow  : 0;
-            maHigh[i] = carry.HasMa ? carry.MaHigh : 0;
+            if (_sawMana)
+            {
+                maLow[i]  = carry.HasMa ? carry.MaLow  : 0;
+                maHigh[i] = carry.HasMa ? carry.MaHigh : 0;
+            }
         }
         return new HpMaHistoryStats(hpLow, hpHigh, maLow, maHigh, _sawMana);
     }
