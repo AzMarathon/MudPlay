@@ -69,6 +69,16 @@ public sealed class RangeBarChart : Control
     public static readonly StyledProperty<int> WindowSizeProperty =
         AvaloniaProperty.Register<RangeBarChart, int>(nameof(WindowSize), 15);
 
+    // Scrub cursor: a vertical line marking the centre of the visible window (the
+    // step CenterStep names). Shown while the user drags the pan slider so they can
+    // see exactly which step's bar they're centred on.
+    public static readonly StyledProperty<bool> ShowCursorProperty =
+        AvaloniaProperty.Register<RangeBarChart, bool>(nameof(ShowCursor));
+
+    public static readonly StyledProperty<IBrush> CursorBrushProperty =
+        AvaloniaProperty.Register<RangeBarChart, IBrush>(
+            nameof(CursorBrush), new SolidColorBrush(Color.Parse("#C0FFFFFF")));
+
     public IReadOnlyList<double>? Low
     {
         get => GetValue(LowProperty);
@@ -141,13 +151,25 @@ public sealed class RangeBarChart : Control
         set => SetValue(WindowSizeProperty, value);
     }
 
+    public bool ShowCursor
+    {
+        get => GetValue(ShowCursorProperty);
+        set => SetValue(ShowCursorProperty, value);
+    }
+
+    public IBrush CursorBrush
+    {
+        get => GetValue(CursorBrushProperty);
+        set => SetValue(CursorBrushProperty, value);
+    }
+
     static RangeBarChart()
     {
         AffectsRender<RangeBarChart>(
             LowProperty, HighProperty, SecondaryLowProperty, SecondaryHighProperty,
             PrimaryTrendProperty, SecondaryTrendProperty,
             PrimaryBrushProperty, SecondaryBrushProperty, MinProperty, MaxProperty,
-            OffsetProperty, WindowSizeProperty);
+            OffsetProperty, WindowSizeProperty, ShowCursorProperty, CursorBrushProperty);
     }
 
     public override void Render(DrawingContext context)
@@ -216,6 +238,16 @@ public sealed class RangeBarChart : Control
         DrawTrend(context, PrimaryTrend, n, start, visible, PrimaryCenter, Y, PrimaryBrush);
         if (hasSecondary)
             DrawTrend(context, SecondaryTrend, n, start, visible, SecondaryCenter, Y, SecondaryBrush);
+
+        // Scrub cursor: a dashed vertical line down the centre of the window (the
+        // step the readout names), drawn on top while the slider is held.
+        if (ShowCursor)
+        {
+            double cx = (visible / 2 + 0.5) * slotW;
+            context.DrawLine(
+                new Pen(CursorBrush, 1) { DashStyle = new DashStyle(new double[] { 3, 3 }, 0) },
+                new Point(cx, 0), new Point(cx, bounds.Height));
+        }
     }
 
     // One floating bar from high→low. A flat step (high == low) still shows a 1px

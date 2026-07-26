@@ -63,11 +63,34 @@ public partial class SessionStatsWindow : Window
             host.AddHandler(DragDrop.DropEvent, OnPanelDrop);
         }
 
+        // Show the HP/MA graph's scrub cursor while the step slider is held. Tunnel
+        // + handledEventsToo so the thumb's own pointer handling doesn't hide the
+        // press/release from us; capture-lost covers a drag that ends off-thumb.
+        if (this.FindControl<Slider>("StepSlider") is { } slider)
+        {
+            slider.AddHandler(PointerPressedEvent, OnSliderPressed,
+                RoutingStrategies.Tunnel, handledEventsToo: true);
+            slider.AddHandler(PointerReleasedEvent, OnSliderReleased,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+            slider.AddHandler(PointerCaptureLostEvent, OnSliderCaptureLost);
+        }
+
         // Apply the saved order once the children have materialised.
         Opened += (_, _) => ApplySavedOrder();
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    // ----- HP/MA graph scrub cursor ---------------------------------
+
+    private void OnSliderPressed(object? sender, PointerPressedEventArgs e) => SetScrubbing(true);
+    private void OnSliderReleased(object? sender, PointerReleasedEventArgs e) => SetScrubbing(false);
+    private void OnSliderCaptureLost(object? sender, PointerCaptureLostEventArgs e) => SetScrubbing(false);
+
+    private void SetScrubbing(bool on)
+    {
+        if (DataContext is SessionStatsViewModel vm) vm.IsScrubbing = on;
+    }
 
     private void OnClosed(object? sender, EventArgs e)
     {

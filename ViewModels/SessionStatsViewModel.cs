@@ -111,7 +111,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // mana bars + legend. The step count (HpLow.Count) drives the slider bounds.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StepViewMax), nameof(IsStepSliderVisible), nameof(StepRangeText),
-        nameof(AxisMin), nameof(AxisMinText))]
+        nameof(AxisMin), nameof(AxisMinText), nameof(CenterStep), nameof(CenterStepText))]
     private IReadOnlyList<double> _hpLow = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _hpHigh = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _hpAvg = Array.Empty<double>();
@@ -137,8 +137,12 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // First loop step shown in the graph window, driven by the panel's slider so a
     // long loop can be panned step 1 → tail; clamped to StepViewMax each refresh.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StepRangeText))]
+    [NotifyPropertyChangedFor(nameof(StepRangeText), nameof(CenterStep), nameof(CenterStepText))]
     private double _stepViewOffset;
+
+    // True while the user is holding / dragging the pan slider — drives the graph's
+    // vertical scrub cursor so they can see exactly which step they're centred on.
+    [ObservableProperty] private bool _isScrubbing;
 
     // Per-panel visibility toggles — each of the five panels (the two rate
     // graphs and the three stat sections) can be shown or hidden via the
@@ -374,6 +378,22 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
             return first <= 1 && last >= n ? $"steps 1–{n}" : $"steps {first}–{last} of {n}";
         }
     }
+
+    // The loop step the graph window is centred on (1-based), for the in-graph
+    // readout + the scrub cursor. 0 before any data.
+    public int CenterStep
+    {
+        get
+        {
+            int n = HpLow.Count;
+            if (n == 0) return 0;
+            int window = Math.Min(StepViewWindow, n);
+            int offset = (int)Math.Round(StepViewOffset);
+            return Math.Clamp(offset + window / 2, 0, n - 1) + 1;
+        }
+    }
+
+    public string CenterStepText => CenterStep > 0 ? $"step {CenterStep}" : string.Empty;
 
     // Current headline rate, printed in each graph header so the number is
     // legible without eyeballing the curve — it equals the curve's right-most

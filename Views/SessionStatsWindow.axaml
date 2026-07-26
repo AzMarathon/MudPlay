@@ -256,9 +256,20 @@
                                                 SecondaryLow="{Binding MaLow}" SecondaryHigh="{Binding MaHigh}" SecondaryTrend="{Binding MaAvg}"
                                                 PrimaryBrush="{StaticResource AccentRedBrush}"
                                                 SecondaryBrush="{StaticResource AccentCyanBrush}"
+                                                CursorBrush="{StaticResource ChromeFgBrush}"
+                                                ShowCursor="{Binding IsScrubbing}"
                                                 Min="{Binding AxisMin}" Max="100"
                                                 Offset="{Binding StepViewOffset}"
                                                 WindowSize="15"/>
+                        <!-- Centre-step readout overlaid at the bottom of the plot;
+                             the scrub cursor above marks this step while dragging. -->
+                        <Border Grid.Column="0" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                                Margin="0,0,0,2" Padding="4,0" CornerRadius="2"
+                                Background="{StaticResource ChromeBgElevBrush}"
+                                IsHitTestVisible="False"
+                                IsVisible="{Binding IsStepSliderVisible}">
+                            <TextBlock Classes="scale" HorizontalAlignment="Center" Text="{Binding CenterStepText}"/>
+                        </Border>
                         <Grid Grid.Column="1" Margin="4,0,0,0">
                             <TextBlock VerticalAlignment="Top" Classes="scale" Text="100%"/>
                             <TextBlock VerticalAlignment="Bottom" Classes="scale" Text="{Binding AxisMinText}"/>
@@ -278,7 +289,8 @@
                 </StackPanel>
                 <!-- Pan slider — below the legend; compact + centred; shown only once
                      the loop is longer than the 15-step window. -->
-                <Slider IsVisible="{Binding IsStepSliderVisible}"
+                <Slider x:Name="StepSlider"
+                        IsVisible="{Binding IsStepSliderVisible}"
                         Minimum="0" Maximum="{Binding StepViewMax}"
                         Value="{Binding StepViewOffset, Mode=TwoWay}"
                         SmallChange="1" LargeChange="5"
