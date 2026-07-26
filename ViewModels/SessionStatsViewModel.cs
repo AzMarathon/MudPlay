@@ -31,6 +31,10 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // Bucket count for the kills/hour sparkline across the rolling window.
     private const int SparklineBuckets = 30;
 
+    // How many loop steps the HP/MA History graph shows at once; the slider pans
+    // this window across a longer loop.
+    private const int StepViewWindow = 15;
+
     // Upper bound on the banked-level scan — same cap the auto-trainer and
     // level-up announcer use, so the time-to-level count stays in lock-step.
     private const int MaxLevelScan = 60;
@@ -96,19 +100,31 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [NotifyPropertyChangedFor(nameof(ExpPeakText), nameof(ExpFloorText))]
     private IReadOnlyList<double> _experiencePerHour = Array.Empty<double>();
 
-    // Per-loop-step HP/MA bands (percent of max), indexed by step position;
-    // reassigned each refresh. HP low/high draw one band, MA low/high another, on a
+    // Per-loop-step HP/MA min/max (percent of max), indexed by step position;
+    // reassigned each refresh. HP and MA each draw a per-step high-low bar on a
     // shared 0–100% axis. HasManaHistory is false for a no-mana class, hiding the
-    // mana band. LowestHpPercent drives the panel's "low N%" headline.
-    [ObservableProperty] private IReadOnlyList<double> _hpLow = Array.Empty<double>();
+    // mana bars + legend. The step count (HpLow.Count) drives the slider bounds.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StepViewMax), nameof(IsStepSliderVisible))]
+    private IReadOnlyList<double> _hpLow = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _hpHigh = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _maLow = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _maHigh = Array.Empty<double>();
     [ObservableProperty] private bool _hasManaHistory;
 
+    // Lowest HP / MA percent seen anywhere on the loop, shown in each series'
+    // legend label. 100 until the first on-loop sample lands.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HpLowText))]
+    [NotifyPropertyChangedFor(nameof(HpLegendText))]
     private double _lowestHpPercent = 100;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MaLegendText))]
+    private double _lowestMaPercent = 100;
+
+    // First loop step shown in the graph window, driven by the panel's slider so a
+    // long loop can be panned step 1 → tail; clamped to StepViewMax each refresh.
+    [ObservableProperty] private double _stepViewOffset;
 
     // Per-panel visibility toggles — each of the five panels (the two rate
     // graphs and the three stat sections) can be shown or hidden via the
@@ -303,10 +319,17 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     public string ExpPeakText    => RateLabel(Peak(ExperiencePerHour), compact: true);
     public string ExpFloorText   => RateLabel(Floor(ExperiencePerHour), compact: true);
 
-    // HP/MA-history headline: the worst HP dip across the loop's steps, so the
-    // scariest moment reads without eyeballing the band. 100% (no dip) until the
-    // first on-loop sample lands.
-    public string HpLowText => $"low {LowestHpPercent:F0}%";
+    // HP/MA-history legend labels — each names the series and its worst dip across
+    // the loop's steps ("HP (low 28%)"), so the scariest moment reads without
+    // eyeballing the bars. 100% until the first on-loop sample lands.
+    public string HpLegendText => $"HP (low {LowestHpPercent:F0}%)";
+    public string MaLegendText => $"MA (low {LowestMaPercent:F0}%)";
+
+    // HP/MA graph slider bounds: the window pans from step 1 to the tail, so the
+    // slider's max is the count past a full window; it's only shown (and only
+    // pannable) once the loop is longer than one window.
+    public double StepViewMax => Math.Max(0, HpLow.Count - StepViewWindow);
+    public bool IsStepSliderVisible => HpLow.Count > StepViewWindow;
 
     // Current headline rate, printed in each graph header so the number is
     // legible without eyeballing the curve — it equals the curve's right-most
@@ -440,6 +463,10 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         MaHigh = hpMa.MaHigh;
         HasManaHistory = hpMa.HasMana;
         LowestHpPercent = hpMa.LowestHpPercent;
+        LowestMaPercent = hpMa.LowestMaPercent;
+        // A shorter loop (or a reset) can pull the max in under the current offset;
+        // keep the window from stranding past the tail.
+        if (StepViewOffset > StepViewMax) StepViewOffset = StepViewMax;
 
         // The countdown reads live PlayerStats + the wall clock, so it must
         // re-fire every tick even when the Activity snapshot compares equal.

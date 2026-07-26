@@ -8,8 +8,9 @@
         x:Class="FujinTerm.Views.SessionStatsWindow"
         x:DataType="vm:SessionStatsViewModel"
         Title="Session Stats"
-        Width="280" Height="600"
-        MinWidth="240" MinHeight="320"
+        Width="280"
+        MinWidth="240" MinHeight="160" MaxHeight="960"
+        SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
@@ -242,38 +243,46 @@
                  no-mana class. -->
             <StackPanel Tag="HpMaGraph" Classes="panel" Spacing="3"
                         IsVisible="{Binding IsHpMaGraphVisible}">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Classes="lbl draghandle" Text="HP/MA per loop step"/>
-                    <TextBlock Grid.Column="1" Classes="valr"
-                               Foreground="{StaticResource AccentRedBrush}"
-                               Text="{Binding HpLowText}"
-                               ToolTip.Tip="Lowest HP % reached at any step of this loop."/>
-                </Grid>
+                <TextBlock Classes="lbl draghandle" Text="HP/MA per loop step"/>
                 <Border Background="{StaticResource ChromeBgSunkenBrush}"
                         BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                         BorderThickness="1"
                         CornerRadius="3"
                         Padding="4"
-                        Height="60">
+                        Height="120">
                     <Grid ColumnDefinitions="*,34">
                         <controls:RangeBarChart Grid.Column="0"
                                                 Low="{Binding HpLow}" High="{Binding HpHigh}"
                                                 SecondaryLow="{Binding MaLow}" SecondaryHigh="{Binding MaHigh}"
                                                 PrimaryBrush="{StaticResource AccentRedBrush}"
                                                 SecondaryBrush="{StaticResource AccentCyanBrush}"
-                                                Min="0" Max="100"/>
+                                                Min="0" Max="100"
+                                                Offset="{Binding StepViewOffset}"
+                                                WindowSize="15"/>
                         <Grid Grid.Column="1" Margin="4,0,0,0">
                             <TextBlock VerticalAlignment="Top" Classes="scale" Text="100%"/>
                             <TextBlock VerticalAlignment="Bottom" Classes="scale" Text="0%"/>
                         </Grid>
                     </Grid>
                 </Border>
+                <!-- Pan slider — shown only once the loop is longer than the 15-step
+                     window; slides the view from step 1 to the tail. Right margin
+                     matches the scale-label column so it tracks the chart width. -->
+                <Slider IsVisible="{Binding IsStepSliderVisible}"
+                        Minimum="0" Maximum="{Binding StepViewMax}"
+                        Value="{Binding StepViewOffset, Mode=TwoWay}"
+                        SmallChange="1" LargeChange="5"
+                        TickFrequency="1" IsSnapToTickEnabled="True"
+                        Margin="0,0,38,0"
+                        ToolTip.Tip="Slide to view earlier / later loop steps."/>
                 <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
                     <TextBlock Classes="scale" HorizontalAlignment="Left"
-                               Foreground="{StaticResource AccentRedBrush}" Text="HP"/>
+                               Foreground="{StaticResource AccentRedBrush}" Text="{Binding HpLegendText}"
+                               ToolTip.Tip="Lowest HP % seen across the loop's steps."/>
                     <TextBlock Classes="scale" HorizontalAlignment="Left"
-                               Foreground="{StaticResource AccentCyanBrush}" Text="MA"
-                               IsVisible="{Binding HasManaHistory}"/>
+                               Foreground="{StaticResource AccentCyanBrush}" Text="{Binding MaLegendText}"
+                               IsVisible="{Binding HasManaHistory}"
+                               ToolTip.Tip="Lowest mana % seen across the loop's steps."/>
                 </StackPanel>
             </StackPanel>
 

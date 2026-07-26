@@ -48,6 +48,18 @@ public sealed class RangeBarChart : Control
     public static readonly StyledProperty<double> MaxProperty =
         AvaloniaProperty.Register<RangeBarChart, double>(nameof(Max), 100);
 
+    // Windowing, so a long loop stays legible: only WindowSize slots are drawn at
+    // once, filling the full width, and Offset selects which run of steps that is —
+    // a slider drives Offset from step 1 to the tail. WindowSize <= 0 (or a loop
+    // already shorter than the window) shows every step from Offset. Offset is a
+    // double so it can bind straight to a Slider's Value; it's floored + clamped in
+    // Render.
+    public static readonly StyledProperty<double> OffsetProperty =
+        AvaloniaProperty.Register<RangeBarChart, double>(nameof(Offset), 0);
+
+    public static readonly StyledProperty<int> WindowSizeProperty =
+        AvaloniaProperty.Register<RangeBarChart, int>(nameof(WindowSize), 15);
+
     public IReadOnlyList<double>? Low
     {
         get => GetValue(LowProperty);
@@ -96,11 +108,24 @@ public sealed class RangeBarChart : Control
         set => SetValue(MaxProperty, value);
     }
 
+    public double Offset
+    {
+        get => GetValue(OffsetProperty);
+        set => SetValue(OffsetProperty, value);
+    }
+
+    public int WindowSize
+    {
+        get => GetValue(WindowSizeProperty);
+        set => SetValue(WindowSizeProperty, value);
+    }
+
     static RangeBarChart()
     {
         AffectsRender<RangeBarChart>(
             LowProperty, HighProperty, SecondaryLowProperty, SecondaryHighProperty,
-            PrimaryBrushProperty, SecondaryBrushProperty, MinProperty, MaxProperty);
+            PrimaryBrushProperty, SecondaryBrushProperty, MinProperty, MaxProperty,
+            OffsetProperty, WindowSizeProperty);
     }
 
     public override void Render(DrawingContext context)
@@ -119,10 +144,18 @@ public sealed class RangeBarChart : Control
         double range = Max - Min;
         if (range <= 0) return;
 
+        // Visible window: only WindowSize steps at once, starting at Offset, so a
+        // long loop reads a step at a time instead of a smear. The window fills the
+        // full width, so bars stay wide regardless of loop length.
+        int window = WindowSize > 0 ? Math.Min(WindowSize, n) : n;
+        int start = Math.Clamp((int)Math.Round(Offset), 0, n - window);
+        int visible = Math.Min(window, n - start);
+        if (visible <= 0) return;
+
         // Inset top/bottom so a bar at the extreme doesn't clip the frame.
         const double inset = 1.0;
         double plotH = Math.Max(bounds.Height - 2 * inset, 0);
-        double slotW = bounds.Width / n;
+        double slotW = bounds.Width / visible;
 
         double Y(double v)
         {
@@ -132,15 +165,16 @@ public sealed class RangeBarChart : Control
         }
 
         // Bar width per slot: one centred bar, or two grouped bars with a hairline
-        // gap. A minimum 1px keeps a dense circuit (many steps) legible.
+        // gap. A minimum 1px keeps it legible if the window is ever widened.
         double gap = slotW * 0.08;
         double barW = hasSecondary
             ? Math.Max((slotW * 0.72 - gap) / 2, 1.0)
             : Math.Max(slotW * 0.5, 1.0);
 
-        for (int i = 0; i < n; i++)
+        for (int k = 0; k < visible; k++)
         {
-            double center = (i + 0.5) * slotW;
+            int i = start + k;
+            double center = (k + 0.5) * slotW;
             if (hasSecondary)
             {
                 DrawBar(context, center - gap / 2 - barW, barW, high[i], low[i], PrimaryBrush, Y);
