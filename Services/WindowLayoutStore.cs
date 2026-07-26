@@ -50,6 +50,13 @@ public sealed class WindowLayoutStore
     private readonly Dictionary<string, Window> _open =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Ids whose height is content-driven (SizeToContent="Height"). Their saved
+    // width + position restore, but a saved height is never re-applied — pinning it
+    // would freeze SizeToContent, so the window couldn't shrink/grow as its panels
+    // are toggled.
+    private readonly HashSet<string> _autoHeightIds =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public WindowLayoutStore(ProfileService profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -59,11 +66,14 @@ public sealed class WindowLayoutStore
     }
 
     // Wire window's Opened / Closing / Closed handlers to the per-profile bounds
-    // store. Handlers register once per Window instance.
-    public void AttachWindow(Window window, string id)
+    // store. Handlers register once per Window instance. Pass autoHeight: true for
+    // a SizeToContent="Height" window so its saved height is never re-applied (its
+    // content owns the height).
+    public void AttachWindow(Window window, string id, bool autoHeight = false)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (autoHeight) _autoHeightIds.Add(id);
 
         window.Opened += (_, _) =>
         {
@@ -101,7 +111,13 @@ public sealed class WindowLayoutStore
     {
         if (!_bounds.TryGetValue(id, out WindowBounds? layout)) return;
 
-        if (layout.Width >= MinPersistedWidth && layout.Height >= MinPersistedHeight)
+        // Content-auto-height windows restore width only — setting Height would
+        // clobber SizeToContent and freeze the window at its last size.
+        if (_autoHeightIds.Contains(id))
+        {
+            if (layout.Width >= MinPersistedWidth) window.Width = layout.Width;
+        }
+        else if (layout.Width >= MinPersistedWidth && layout.Height >= MinPersistedHeight)
         {
             window.Width = layout.Width;
             window.Height = layout.Height;

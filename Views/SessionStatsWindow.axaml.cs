@@ -44,7 +44,9 @@ public partial class SessionStatsWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "session-stats");
+        // autoHeight: the window sizes its height to its visible content
+        // (SizeToContent="Height"), so the layout store must not pin a saved height.
+        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "session-stats", autoHeight: true);
         Closed += OnClosed;
 
         _dropIndicator.Background =
