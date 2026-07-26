@@ -111,7 +111,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // mana bars + legend. The step count (HpLow.Count) drives the slider bounds.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StepViewMax), nameof(IsStepSliderVisible), nameof(StepRangeText),
-        nameof(AxisMin), nameof(AxisMinText), nameof(CenterStep), nameof(CenterStepText))]
+        nameof(AxisMin), nameof(AxisMinText), nameof(CenterStepText), nameof(WindowOffset), nameof(CursorIndex))]
     private IReadOnlyList<double> _hpLow = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _hpHigh = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _hpAvg = Array.Empty<double>();
@@ -134,11 +134,14 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [NotifyPropertyChangedFor(nameof(MaLegendText), nameof(AxisMin), nameof(AxisMinText))]
     private double _lowestMaPercent = 100;
 
-    // First loop step shown in the graph window, driven by the panel's slider so a
-    // long loop can be panned step 1 → tail; clamped to StepViewMax each refresh.
+    // The loop step the slider is anchored on (0-based). The slider spans every
+    // step (0 … N-1), so the cursor reaches any step; the visible window follows it
+    // (WindowOffset), centring where it can and clamping at the head / tail.
+    // Clamped to StepViewMax each refresh.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StepRangeText), nameof(CenterStep), nameof(CenterStepText))]
-    private double _stepViewOffset;
+    [NotifyPropertyChangedFor(nameof(StepRangeText), nameof(CenterStepText),
+        nameof(WindowOffset), nameof(CursorIndex))]
+    private double _focusStep;
 
     // True while the user is holding / dragging the pan slider — drives the graph's
     // vertical scrub cursor so they can see exactly which step they're centred on.
@@ -346,8 +349,34 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // HP/MA graph slider bounds: the window pans from step 1 to the tail, so the
     // slider's max is the count past a full window; it's only shown (and only
     // pannable) once the loop is longer than one window.
-    public double StepViewMax => Math.Max(0, HpLow.Count - StepViewWindow);
+    // Slider spans every step (its max is the last step index), so the cursor can
+    // anchor anywhere; only shown once the loop is longer than one window (a loop
+    // that fits needs no panning).
+    public double StepViewMax => Math.Max(0, HpLow.Count - 1);
     public bool IsStepSliderVisible => HpLow.Count > StepViewWindow;
+
+    // The anchored step (0-based, clamped) the cursor + readout mark.
+    public int CursorIndex
+    {
+        get
+        {
+            int n = HpLow.Count;
+            return n == 0 ? 0 : Math.Clamp((int)Math.Round(FocusStep), 0, n - 1);
+        }
+    }
+
+    // First visible step: the window follows the cursor — centred on it where it
+    // can be, clamped so the head and tail steps stay reachable.
+    public int WindowOffset
+    {
+        get
+        {
+            int n = HpLow.Count;
+            if (n == 0) return 0;
+            int window = Math.Min(StepViewWindow, n);
+            return Math.Clamp(CursorIndex - window / 2, 0, n - window);
+        }
+    }
 
     // Adaptive vertical floor for the graph (top is fixed at 100%): 30 points below
     // the lowest value seen across the plotted series, clamped at 0. 0 before any
@@ -373,27 +402,14 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         {
             int n = HpLow.Count;
             if (n == 0) return "no loop steps recorded yet";
-            int first = (int)Math.Round(StepViewOffset) + 1;
-            int last = Math.Min(n, (int)Math.Round(StepViewOffset) + Math.Min(StepViewWindow, n));
+            int first = WindowOffset + 1;
+            int last = Math.Min(n, WindowOffset + Math.Min(StepViewWindow, n));
             return first <= 1 && last >= n ? $"steps 1–{n}" : $"steps {first}–{last} of {n}";
         }
     }
 
-    // The loop step the graph window is centred on (1-based), for the in-graph
-    // readout + the scrub cursor. 0 before any data.
-    public int CenterStep
-    {
-        get
-        {
-            int n = HpLow.Count;
-            if (n == 0) return 0;
-            int window = Math.Min(StepViewWindow, n);
-            int offset = (int)Math.Round(StepViewOffset);
-            return Math.Clamp(offset + window / 2, 0, n - 1) + 1;
-        }
-    }
-
-    public string CenterStepText => CenterStep > 0 ? $"step {CenterStep}" : string.Empty;
+    // The anchored step (1-based) for the in-graph readout + the scrub cursor.
+    public string CenterStepText => HpLow.Count > 0 ? $"step {CursorIndex + 1}" : string.Empty;
 
     // Current headline rate, printed in each graph header so the number is
     // legible without eyeballing the curve — it equals the curve's right-most
@@ -530,9 +546,9 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         HasManaHistory = hpMa.HasMana;
         LowestHpPercent = hpMa.LowestHpPercent;
         LowestMaPercent = hpMa.LowestMaPercent;
-        // A shorter loop (or a reset) can pull the max in under the current offset;
-        // keep the window from stranding past the tail.
-        if (StepViewOffset > StepViewMax) StepViewOffset = StepViewMax;
+        // A shorter loop (or a reset) can pull the max in under the current focus;
+        // keep the anchored step from stranding past the tail.
+        if (FocusStep > StepViewMax) FocusStep = StepViewMax;
 
         // The countdown reads live PlayerStats + the wall clock, so it must
         // re-fire every tick even when the Activity snapshot compares equal.

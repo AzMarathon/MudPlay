@@ -69,11 +69,15 @@ public sealed class RangeBarChart : Control
     public static readonly StyledProperty<int> WindowSizeProperty =
         AvaloniaProperty.Register<RangeBarChart, int>(nameof(WindowSize), 15);
 
-    // Scrub cursor: a vertical line marking the centre of the visible window (the
-    // step CenterStep names). Shown while the user drags the pan slider so they can
-    // see exactly which step's bar they're centred on.
+    // Scrub cursor: a vertical line marking the step at CursorIndex (a global step
+    // index, not a window position). Shown while the user drags the pan slider so
+    // they can see exactly which step's bar they're anchored on; skipped when that
+    // step is outside the visible window.
     public static readonly StyledProperty<bool> ShowCursorProperty =
         AvaloniaProperty.Register<RangeBarChart, bool>(nameof(ShowCursor));
+
+    public static readonly StyledProperty<int> CursorIndexProperty =
+        AvaloniaProperty.Register<RangeBarChart, int>(nameof(CursorIndex));
 
     public static readonly StyledProperty<IBrush> CursorBrushProperty =
         AvaloniaProperty.Register<RangeBarChart, IBrush>(
@@ -157,6 +161,12 @@ public sealed class RangeBarChart : Control
         set => SetValue(ShowCursorProperty, value);
     }
 
+    public int CursorIndex
+    {
+        get => GetValue(CursorIndexProperty);
+        set => SetValue(CursorIndexProperty, value);
+    }
+
     public IBrush CursorBrush
     {
         get => GetValue(CursorBrushProperty);
@@ -169,7 +179,8 @@ public sealed class RangeBarChart : Control
             LowProperty, HighProperty, SecondaryLowProperty, SecondaryHighProperty,
             PrimaryTrendProperty, SecondaryTrendProperty,
             PrimaryBrushProperty, SecondaryBrushProperty, MinProperty, MaxProperty,
-            OffsetProperty, WindowSizeProperty, ShowCursorProperty, CursorBrushProperty);
+            OffsetProperty, WindowSizeProperty, ShowCursorProperty, CursorBrushProperty,
+            CursorIndexProperty);
     }
 
     public override void Render(DrawingContext context)
@@ -239,14 +250,19 @@ public sealed class RangeBarChart : Control
         if (hasSecondary)
             DrawTrend(context, SecondaryTrend, n, start, visible, SecondaryCenter, Y, SecondaryBrush);
 
-        // Scrub cursor: a dashed vertical line down the centre of the window (the
-        // step the readout names), drawn on top while the slider is held.
+        // Scrub cursor: a dashed vertical line on the anchored step's slot (the step
+        // the readout names), drawn on top while the slider is held — as long as
+        // that step falls within the visible window.
         if (ShowCursor)
         {
-            double cx = (visible / 2 + 0.5) * slotW;
-            context.DrawLine(
-                new Pen(CursorBrush, 1) { DashStyle = new DashStyle(new double[] { 3, 3 }, 0) },
-                new Point(cx, 0), new Point(cx, bounds.Height));
+            int cursorK = CursorIndex - start;
+            if (cursorK >= 0 && cursorK < visible)
+            {
+                double cx = (cursorK + 0.5) * slotW;
+                context.DrawLine(
+                    new Pen(CursorBrush, 1) { DashStyle = new DashStyle(new double[] { 3, 3 }, 0) },
+                    new Point(cx, 0), new Point(cx, bounds.Height));
+            }
         }
     }
 

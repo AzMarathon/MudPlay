@@ -257,8 +257,9 @@
                                                 SecondaryBrush="{StaticResource AccentCyanBrush}"
                                                 CursorBrush="{StaticResource ChromeFgBrush}"
                                                 ShowCursor="{Binding IsScrubbing}"
+                                                CursorIndex="{Binding CursorIndex}"
                                                 Min="{Binding AxisMin}" Max="100"
-                                                Offset="{Binding StepViewOffset}"
+                                                Offset="{Binding WindowOffset}"
                                                 WindowSize="15"/>
                         <!-- Centre-step readout overlaid at the bottom of the plot;
                              the scrub cursor above marks this step while dragging. -->
@@ -291,11 +292,11 @@
                 <Slider x:Name="StepSlider"
                         IsVisible="{Binding IsStepSliderVisible}"
                         Minimum="0" Maximum="{Binding StepViewMax}"
-                        Value="{Binding StepViewOffset, Mode=TwoWay}"
+                        Value="{Binding FocusStep, Mode=TwoWay}"
                         SmallChange="1" LargeChange="5"
                         TickFrequency="1" IsSnapToTickEnabled="True"
                         HorizontalAlignment="Center" Width="170" Height="22" MinHeight="0"
-                        ToolTip.Tip="Slide to view earlier / later loop steps."/>
+                        ToolTip.Tip="Slide to anchor any loop step; the view pans to follow."/>
             </StackPanel>
 
             <!-- ===== Player Statistics ===== -->
