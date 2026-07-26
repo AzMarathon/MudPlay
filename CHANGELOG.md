@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.3.0
+
+- New "HP/MA History" graph in Session Stats: per loop-step min/max HP (red) and mana (cyan) bands on a shared 0–100% axis, so you can spot which steps of the circuit dip your vitals lowest
+- Records only while a loop is stepping and resets at each loop start; toggle it from the Session Stats context menu, same as the kills/hr and exp/hr graphs
+
 ## 2.2.0
 
 - New @inv remote command reports the carried pack plus key ring — the inventory another player can't see by looking (worn/wielded gear and a readied light, which they can see, are excluded); gated by the Query inventory permission

@@ -14,7 +14,7 @@ public sealed class SessionStatsLayoutTests
 {
     private static readonly string[] Default =
     {
-        "KillsGraph", "ExpGraph", "PlayerStatistics", "TimeAnalysis", "SessionStatistics",
+        "KillsGraph", "ExpGraph", "HpMaGraph", "PlayerStatistics", "TimeAnalysis", "SessionStatistics",
     };
 
     [Fact]
@@ -31,7 +31,7 @@ public sealed class SessionStatsLayoutTests
     {
         var saved = new SessionStatsLayout
         {
-            Order = new List<string> { "SessionStatistics", "ExpGraph", "KillsGraph", "TimeAnalysis", "PlayerStatistics" },
+            Order = new List<string> { "SessionStatistics", "ExpGraph", "HpMaGraph", "KillsGraph", "TimeAnalysis", "PlayerStatistics" },
         };
 
         var resolved = SessionStatsLayoutStore.Resolve(saved);
@@ -53,7 +53,7 @@ public sealed class SessionStatsLayoutTests
         var resolved = SessionStatsLayoutStore.Resolve(saved);
 
         Assert.Equal(
-            new[] { "TimeAnalysis", "KillsGraph", "ExpGraph", "PlayerStatistics", "SessionStatistics" },
+            new[] { "TimeAnalysis", "KillsGraph", "ExpGraph", "HpMaGraph", "PlayerStatistics", "SessionStatistics" },
             resolved.Select(p => p.Id));
     }
 
@@ -68,7 +68,7 @@ public sealed class SessionStatsLayoutTests
         var resolved = SessionStatsLayoutStore.Resolve(saved);
 
         Assert.Equal(
-            new[] { "ExpGraph", "KillsGraph", "PlayerStatistics", "TimeAnalysis", "SessionStatistics" },
+            new[] { "ExpGraph", "KillsGraph", "HpMaGraph", "PlayerStatistics", "TimeAnalysis", "SessionStatistics" },
             resolved.Select(p => p.Id));
     }
 

@@ -38,6 +38,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     private readonly CombatSessionTracker _combatTracker;
     private readonly TimeAnalysisTracker _timeTracker;
     private readonly SessionActivityTracker _activityTracker;
+    private readonly HpMaHistoryTracker _hpMaTracker;
     private readonly SessionStatsLayoutStore _layoutStore;
 
     // Resolves the per-BBS runic word for the currency denomination labels.
@@ -95,6 +96,20 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [NotifyPropertyChangedFor(nameof(ExpPeakText), nameof(ExpFloorText))]
     private IReadOnlyList<double> _experiencePerHour = Array.Empty<double>();
 
+    // Per-loop-step HP/MA bands (percent of max), indexed by step position;
+    // reassigned each refresh. HP low/high draw one band, MA low/high another, on a
+    // shared 0–100% axis. HasManaHistory is false for a no-mana class, hiding the
+    // mana band. LowestHpPercent drives the panel's "low N%" headline.
+    [ObservableProperty] private IReadOnlyList<double> _hpLow = Array.Empty<double>();
+    [ObservableProperty] private IReadOnlyList<double> _hpHigh = Array.Empty<double>();
+    [ObservableProperty] private IReadOnlyList<double> _maLow = Array.Empty<double>();
+    [ObservableProperty] private IReadOnlyList<double> _maHigh = Array.Empty<double>();
+    [ObservableProperty] private bool _hasManaHistory;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HpLowText))]
+    private double _lowestHpPercent = 100;
+
     // Per-panel visibility toggles — each of the five panels (the two rate
     // graphs and the three stat sections) can be shown or hidden via the
     // window's context menu. Each change is written through to the
@@ -105,6 +120,9 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     private bool _isExpGraphVisible = true;
+
+    [ObservableProperty]
+    private bool _isHpMaGraphVisible = true;
 
     [ObservableProperty]
     private bool _isPlayerStatsVisible = true;
@@ -129,6 +147,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         CombatSessionTracker combat,
         TimeAnalysisTracker time,
         SessionActivityTracker activity,
+        HpMaHistoryTracker hpMaHistory,
         SessionStatsLayoutStore layout,
         PlayerStats stats,
         GameDataCache gameData,
@@ -139,6 +158,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         ArgumentNullException.ThrowIfNull(combat);
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(activity);
+        ArgumentNullException.ThrowIfNull(hpMaHistory);
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -148,6 +168,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _combatTracker = combat;
         _timeTracker = time;
         _activityTracker = activity;
+        _hpMaTracker = hpMaHistory;
         _layoutStore = layout;
         _stats = stats;
         _gameData = gameData;
@@ -160,6 +181,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _combatTracker.Changed += OnChanged;
         _timeTracker.Changed += OnChanged;
         _activityTracker.Changed += OnChanged;
+        _hpMaTracker.Changed += OnChanged;
 
         _liveTick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _liveTick.Tick += (_, _) => Refresh();
@@ -200,6 +222,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         List<string> hidden = new();
         if (!IsKillsGraphVisible)   hidden.Add("KillsGraph");
         if (!IsExpGraphVisible)     hidden.Add("ExpGraph");
+        if (!IsHpMaGraphVisible)    hidden.Add("HpMaGraph");
         if (!IsPlayerStatsVisible)  hidden.Add("PlayerStatistics");
         if (!IsTimeAnalysisVisible) hidden.Add("TimeAnalysis");
         if (!IsSessionStatsVisible) hidden.Add("SessionStatistics");
@@ -212,6 +235,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         {
             case "KillsGraph":        IsKillsGraphVisible = visible; break;
             case "ExpGraph":          IsExpGraphVisible = visible; break;
+            case "HpMaGraph":         IsHpMaGraphVisible = visible; break;
             case "PlayerStatistics":  IsPlayerStatsVisible = visible; break;
             case "TimeAnalysis":      IsTimeAnalysisVisible = visible; break;
             case "SessionStatistics": IsSessionStatsVisible = visible; break;
@@ -220,6 +244,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     partial void OnIsKillsGraphVisibleChanged(bool value) => PersistLayout();
     partial void OnIsExpGraphVisibleChanged(bool value) => PersistLayout();
+    partial void OnIsHpMaGraphVisibleChanged(bool value) => PersistLayout();
     partial void OnIsPlayerStatsVisibleChanged(bool value) => PersistLayout();
     partial void OnIsTimeAnalysisVisibleChanged(bool value) => PersistLayout();
     partial void OnIsSessionStatsVisibleChanged(bool value) => PersistLayout();
@@ -277,6 +302,11 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     public string KillsFloorText => RateLabel(Floor(KillsPerHour), compact: false);
     public string ExpPeakText    => RateLabel(Peak(ExperiencePerHour), compact: true);
     public string ExpFloorText   => RateLabel(Floor(ExperiencePerHour), compact: true);
+
+    // HP/MA-history headline: the worst HP dip across the loop's steps, so the
+    // scariest moment reads without eyeballing the band. 100% (no dip) until the
+    // first on-loop sample lands.
+    public string HpLowText => $"low {LowestHpPercent:F0}%";
 
     // Current headline rate, printed in each graph header so the number is
     // legible without eyeballing the curve — it equals the curve's right-most
@@ -346,6 +376,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _combatTracker.Reset();
         _timeTracker.Reset();
         _activityTracker.Reset();
+        _hpMaTracker.Reset();
     }
 
     // Per-section resets, one per collapsible. Each wipes only its own section's
@@ -402,6 +433,14 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         KillsPerHour = _activityTracker.KillsPerHourSeries(SparklineBuckets);
         ExperiencePerHour = _activityTracker.ExperiencePerHourSeries(SparklineBuckets);
 
+        HpMaHistoryStats hpMa = _hpMaTracker.Snapshot();
+        HpLow = hpMa.HpLow;
+        HpHigh = hpMa.HpHigh;
+        MaLow = hpMa.MaLow;
+        MaHigh = hpMa.MaHigh;
+        HasManaHistory = hpMa.HasMana;
+        LowestHpPercent = hpMa.LowestHpPercent;
+
         // The countdown reads live PlayerStats + the wall clock, so it must
         // re-fire every tick even when the Activity snapshot compares equal.
         OnPropertyChanged(nameof(TimeToLevelText));
@@ -429,5 +468,6 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _combatTracker.Changed -= OnChanged;
         _timeTracker.Changed -= OnChanged;
         _activityTracker.Changed -= OnChanged;
+        _hpMaTracker.Changed -= OnChanged;
     }
 }

@@ -772,6 +772,12 @@ public sealed class AppServices
     // experience-gain line; reset on the session boundary.
     public Game.Combat.SessionActivityTracker SessionActivity { get; private set; } = null!;
 
+    // Per-loop-step HP/MA min-max profile for the Session Stats "HP/MA History"
+    // graph. Fed by the prompt scanner (gated on an actively-stepping loop) keyed
+    // by the live loop step index; cleared at each new loop start and the session
+    // boundary.
+    public Game.Combat.HpMaHistoryTracker HpMaHistory { get; private set; } = null!;
+
     // Per-session ledger of cash/item offloads (bank deposits +
     // stash-room hides) behind the Session Stats → Transaction history window.
     // Fed by AutoDeposit and Stash; reset on the
@@ -3229,6 +3235,15 @@ public sealed class AppServices
         });
         Profile.ProfileLoaded += _ => SessionActivity.Reset();
 
+        // HpMaHistoryTracker. Accumulates per-loop-step min/max HP + mana for the
+        // Session Stats "HP/MA History" band graph. Its inputs need LoopRunner
+        // (built later in the movement layer) to gate sampling and supply the step
+        // index, so the prompt-scanner subscription + loop-start reset are wired
+        // in the LoopRunner block below; here we just construct it and clear on the
+        // connect / character-switch boundary like the other session trackers.
+        HpMaHistory = new Game.Combat.HpMaHistoryTracker();
+        Profile.ProfileLoaded += _ => HpMaHistory.Reset();
+
         // TransactionHistory. A per-session ledger of cash/item
         // offloads: bank `dep`osits (AutoDeposit.Deposited) and stash-room
         // `hide`s (Stash.StashExecuted), wired to their events below. Feeds the
@@ -4018,6 +4033,11 @@ public sealed class AppServices
         LoopRunner.Event += e =>
         {
             if (e.Kind != Game.Map.LoopEventKind.ReachedFirstWaypoint) return;
+            // The HP/MA-history profile is per-loop by definition — a new circuit
+            // makes the old step-indexed bands meaningless — so it re-anchors on
+            // every loop start, independent of the ResetStatisticsOnLoopStart
+            // opt-out that gates the counter trackers below.
+            HpMaHistory.Reset();
             if (!PartyBroadcaster.AutoExpResetEnabled) return;
             CombatSession.Reset();
             TimeAnalysis.Reset();
@@ -4029,6 +4049,24 @@ public sealed class AppServices
             Log.Info("LoopRunner",
                 "loop start: session stats reset; broadcasting @reset to party.");
             PartyBroadcaster.BroadcastExpReset();
+        };
+
+        // HP/MA-history sampling. Every statline (finest-grained vitals feed —
+        // catches mid-combat dips PlayerState.PropertyChanged would coalesce away)
+        // folds the current HP/mana percent into the loop step being traversed,
+        // but only while a loop is actively stepping. CurrentIndex is the live step
+        // position (stable during a step, wraps 0 each lap), so the same circuit
+        // step accumulates across laps. Max comes from PlayerState, which the
+        // earlier-subscribed PromptParser has already ratcheted for this prompt.
+        PromptScanner.PromptObserved += obs =>
+        {
+            if (LoopRunner.State != Game.Map.LoopState.Running) return;
+            int maxHp = PlayerState.MaxHp, maxMa = PlayerState.MaxMa;
+            double hpPct = maxHp > 0 ? 100.0 * obs.Hp / maxHp : 0.0;
+            double? maPct = obs.ManaType != Game.ManaType.None && maxMa > 0
+                ? 100.0 * obs.Mana / maxMa
+                : null;
+            HpMaHistory.NoteVitals(LoopRunner.CurrentIndex, hpPct, maPct);
         };
 
         // Invite-as-wait-signal — AutoPartyManager holds the loop (via the

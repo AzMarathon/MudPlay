@@ -158,6 +158,8 @@
                               IsChecked="{Binding IsKillsGraphVisible, Mode=TwoWay}"/>
                     <MenuItem Header="Exp/hour graph" ToggleType="CheckBox"
                               IsChecked="{Binding IsExpGraphVisible, Mode=TwoWay}"/>
+                    <MenuItem Header="HP/MA History graph" ToggleType="CheckBox"
+                              IsChecked="{Binding IsHpMaGraphVisible, Mode=TwoWay}"/>
                     <Separator/>
                     <MenuItem Header="Player Statistics" ToggleType="CheckBox"
                               IsChecked="{Binding IsPlayerStatsVisible, Mode=TwoWay}"/>
@@ -229,6 +231,60 @@
                     </Grid>
                 </Border>
                 <TextBlock Classes="ttl" Text="{Binding TimeToLevelText}"/>
+            </StackPanel>
+
+            <!-- ===== HP/MA History graph ===== -->
+            <!-- Per loop-step min/max HP (red) and mana (cyan) as bands on a shared
+                 0–100% axis, so a glance shows which steps of the circuit run the
+                 vitals lowest. Records only while a loop is stepping; resets at each
+                 new loop start. MA band hides for a no-mana class. -->
+            <StackPanel Tag="HpMaGraph" Classes="panel" Spacing="3"
+                        IsVisible="{Binding IsHpMaGraphVisible}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Classes="lbl draghandle" Text="HP/MA per loop step"/>
+                    <TextBlock Grid.Column="1" Classes="valr"
+                               Foreground="{StaticResource AccentRedBrush}"
+                               Text="{Binding HpLowText}"
+                               ToolTip.Tip="Lowest HP % reached at any step of this loop."/>
+                </Grid>
+                <Border Background="{StaticResource ChromeBgSunkenBrush}"
+                        BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="4"
+                        Height="60">
+                    <Grid ColumnDefinitions="*,34">
+                        <!-- Mana band underneath, HP band on top: HP is the danger
+                             signal, so it wins the overlap. Both translucent so the
+                             other reads through. Fixed 0–100% axis. -->
+                        <Panel Grid.Column="0">
+                            <controls:SparklineControl Samples="{Binding MaLow}"
+                                                       HighSamples="{Binding MaHigh}"
+                                                       RangeMin="0" RangeMax="100"
+                                                       Stroke="{StaticResource AccentCyanBrush}"
+                                                       StrokeThickness="1"
+                                                       Fill="#335FB3D9"
+                                                       IsVisible="{Binding HasManaHistory}"/>
+                            <controls:SparklineControl Samples="{Binding HpLow}"
+                                                       HighSamples="{Binding HpHigh}"
+                                                       RangeMin="0" RangeMax="100"
+                                                       Stroke="{StaticResource AccentRedBrush}"
+                                                       StrokeThickness="1"
+                                                       Fill="#33E06060"/>
+                        </Panel>
+                        <Grid Grid.Column="1" Margin="4,0,0,0">
+                            <TextBlock VerticalAlignment="Top" Classes="scale" Text="100%"/>
+                            <TextBlock VerticalAlignment="Bottom" Classes="scale" Text="0%"/>
+                        </Grid>
+                    </Grid>
+                </Border>
+                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+                    <TextBlock Classes="scale" HorizontalAlignment="Left"
+                               Foreground="{StaticResource AccentRedBrush}" Text="HP"/>
+                    <TextBlock Classes="scale" HorizontalAlignment="Left"
+                               Foreground="{StaticResource AccentCyanBrush}" Text="MA"
+                               IsVisible="{Binding HasManaHistory}"/>
+                </StackPanel>
             </StackPanel>
 
             <!-- ===== Player Statistics ===== -->
