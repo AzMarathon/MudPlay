@@ -88,8 +88,9 @@ public sealed class RoomSearchService
     }
 
     // Resolve query against the active graph. Each tier accumulates into the
-    // returned list, deduped on (Key, MonsterTag). Results are sorted by step
-    // distance (closer first) then by primary line.
+    // returned list, deduped on (Key, MonsterTag). Results are sorted by match
+    // rank first (literal whole-word matches before buried-substring ones), then
+    // step distance (closer first), then primary line.
     //   source — player's current room for step distance; pass null to skip.
     //   cap — soft cap on total matches; tiers stop accumulating once reached.
     //   includeAcronyms — run the acronym tier (only @goto uses this).
@@ -149,7 +150,8 @@ public sealed class RoomSearchService
                 if (!AllTokensMatch(room.Name, tokens) && !AllTokensMatch(room.DisplayName, tokens))
                     continue;
                 if (matches.Any(x => x.MonsterTag is null && x.Key.Equals(room.Key))) continue;
-                matches.Add(BuildRoomMatch(room, source));
+                int rank = Math.Min(MatchRank(room.Name, tokens), MatchRank(room.DisplayName, tokens));
+                matches.Add(BuildRoomMatch(room, source) with { MatchRank = rank });
             }
         }
 
@@ -162,6 +164,7 @@ public sealed class RoomSearchService
                 if (matches.Count >= cap) break;
                 if (!AllTokensMatch(name, tokens)) continue;
                 string monsterTag = $"{name} · {tag}";
+                int rank = MatchRank(name, tokens);
 
                 if (!RoomsByMonsterId().TryGetValue(monsterId, out List<RoomKey>? lairs)
                     || lairs.Count == 0)
@@ -170,7 +173,8 @@ public sealed class RoomSearchService
                         Key:               new RoomKey(0, 0),
                         Name:              string.Empty,
                         StepsFromCurrent:  null,
-                        MonsterTag:        monsterTag));
+                        MonsterTag:        monsterTag,
+                        MatchRank:         rank));
                     continue;
                 }
 
@@ -180,13 +184,14 @@ public sealed class RoomSearchService
                     if (_blacklist.IsBlacklisted(lk)) continue;
                     if (_graph.GetRoom(lk) is not { } lroom) continue;
                     int? steps = source is { } src ? DistanceFrom(src, lroom.Key) : null;
-                    matches.Add(new RoomSearchResult(lroom.Key, lroom.DisplayName, steps, monsterTag));
+                    matches.Add(new RoomSearchResult(lroom.Key, lroom.DisplayName, steps, monsterTag, rank));
                 }
             }
         }
 
         return matches
-            .OrderBy(mm => mm.StepsFromCurrent ?? int.MaxValue)
+            .OrderBy(mm => mm.MatchRank)
+            .ThenBy(mm => mm.StepsFromCurrent ?? int.MaxValue)
             .ThenBy(mm => mm.PrimaryLine, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -336,6 +341,47 @@ public sealed class RoomSearchService
             if (!candidate.Contains(tok, StringComparison.OrdinalIgnoreCase))
                 return false;
         return true;
+    }
+
+    // Rank how literally a candidate matches the needle tokens, for result ordering:
+    // 0 when every token lands on a whole word, 1 when every token at least starts a
+    // word, 2 when any token only appears buried mid-word (e.g. "aged" in "Ravaged").
+    // Lower sorts first, so literal word matches lead partial substring matches. The
+    // worst-placed token sets the rank — one buried token demotes the whole candidate.
+    internal static int MatchRank(string candidate, string[] tokens)
+    {
+        int worst = 0;
+        foreach (string tok in tokens)
+        {
+            int q = TokenWordQuality(candidate, tok);
+            if (q > worst) worst = q;
+        }
+        return worst;
+    }
+
+    // Best (lowest) placement quality of a single token within a candidate:
+    //   0 = standalone word (non-alphanumeric boundary on both sides)
+    //   1 = starts a word (boundary before, letters after — a word prefix)
+    //   2 = only occurs buried mid-word
+    //   3 = not present (shouldn't happen for an AllTokensMatch candidate)
+    private static int TokenWordQuality(string candidate, string token)
+    {
+        if (token.Length == 0) return 3;
+        int best = 3;
+        int from = 0;
+        while (true)
+        {
+            int i = candidate.IndexOf(token, from, StringComparison.OrdinalIgnoreCase);
+            if (i < 0) break;
+            bool boundaryBefore = i == 0 || !char.IsLetterOrDigit(candidate[i - 1]);
+            int after = i + token.Length;
+            bool boundaryAfter = after >= candidate.Length || !char.IsLetterOrDigit(candidate[after]);
+            int q = boundaryBefore ? (boundaryAfter ? 0 : 1) : 2;
+            if (q < best) best = q;
+            if (best == 0) break;
+            from = i + 1;
+        }
+        return best;
     }
 
     private Dictionary<int, List<RoomKey>> RoomsByMonsterId()

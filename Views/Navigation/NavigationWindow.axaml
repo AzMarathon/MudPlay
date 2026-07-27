@@ -652,19 +652,21 @@
                            TextWrapping="Wrap"/>
             </Border>
 
-            <!-- Search dropdown — anchored under the search box,
-                 visible only when results exist. Code-behind sizes
-                 + positions via Margin. -->
-            <Border Grid.Column="0"
+            <!-- Search results dropdown — drops straight down over the right rail
+                 (nav / goto / loops collapsibles) under the search box, not over the
+                 map. Lives in the rail column and carries a high ZIndex so it paints
+                 above the rail Border, which is declared later in document order.
+                 Visible only when the search box has results. -->
+            <Border Grid.Column="1"
                     Name="SearchDropdown"
+                    ZIndex="100"
                     IsVisible="{Binding HasSearchResults}"
-                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,0,8,0"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Top"
                     Background="{StaticResource ChromeBgElevBrush}"
                     BorderBrush="{StaticResource ChromeBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="3"
-                    Width="260" MaxHeight="320">
+                    MaxHeight="320">
                 <ListBox ItemsSource="{Binding SearchResults}"
                          Background="Transparent"
                          BorderThickness="0">
