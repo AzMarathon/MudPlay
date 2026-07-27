@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.4.0
+
+- New "Unobtainable" table in the Game Data Browser lists the Items the game marks out of play (In Game = 0 — "bow of silver", placeholders, duplicate test rows) that the Item Finder skips, so they're inspectable instead of just hidden
+- New "Quest Flags" table shows every quest-flag reference in the set's TBInfo — the flag, whether a block grants / gates / advances / clears it, and the NPC / room / spell that reaches it (resolved via the block's Called-From provenance)
+- Both are computed live from the loaded game-data set, so they appear on every set without re-importing
+
 ## 2.3.0
 
 - New "HP/MA History" graph in Session Stats: a per-loop-step range bar (HP red, mana cyan) showing the min/max your vitals hit at each step, with an average trend line threaded through so you can read your HP trajectory around the circuit at a glance

@@ -290,8 +290,16 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
     private readonly GameDataCache _cache;
     private readonly SettingsResolver? _resolver;
 
+    // JSON-backed sections all belong in the browser's MDB-derived tables group.
+    public override bool ShowInTableGroup => true;
+
     // Underlying table name in the active set (e.g. "Monsters").
     protected abstract string TableName { get; }
+
+    // Row-level filter applied while populating from the raw table. Default keeps every
+    // row; a derived view (e.g. Unobtainable = Items with In Game == 0) overrides to
+    // include only the rows it wants without duplicating the whole populate loop.
+    protected virtual bool IncludeRow(JsonElement element) => true;
 
     // Column whose value identifies the record for tier-override lookup (default: the
     // primary-key column, typically "Number" on MajorMUD MDB tables). Subclasses can override
@@ -347,6 +355,7 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
         IReadOnlyDictionary<string, Func<string?, string?>>? formatters = ColumnFormatters;
         foreach (JsonElement el in doc.RootElement.EnumerateArray())
         {
+            if (!IncludeRow(el)) continue;
             // Sections may inject synthesised cells that aren't backed
             // by a real MDB field (e.g. Races / Classes synthesise an
             // "Abilities" column from Abil-N / AbilVal-N pairs).

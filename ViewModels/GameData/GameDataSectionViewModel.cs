@@ -22,6 +22,11 @@ public abstract partial class GameDataSectionViewModel : ObservableObject, IDisp
     // "ability" → Items.
     public virtual IEnumerable<string> SearchableLabels => new[] { Title };
 
+    // Sidebar grouping: true places the section in the bottom "MDB-derived tables" group,
+    // false in the top "engine-backed" group. JSON tables and their derived views
+    // (Unobtainable, Quest Flags) belong with the tables; engine tabs / placeholders don't.
+    public virtual bool ShowInTableGroup => false;
+
     // The editor UserControl rendered in the shell's content pane. Lazy — constructed on
     // first access so an unselected section pays no UI cost.
     public abstract Control View { get; }
