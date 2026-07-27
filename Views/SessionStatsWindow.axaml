@@ -271,14 +271,16 @@
                             <TextBlock Classes="scale" HorizontalAlignment="Center" Text="{Binding CenterStepText}"/>
                         </Border>
                         <!-- Y-axis ticks: 100% top, adaptive floor bottom, plus three
-                             evenly-spaced marks between (row boundaries of four equal
-                             rows put them at 0 / ¼ / ½ / ¾ / full height). -->
+                             evenly-spaced marks between (four equal rows put them at
+                             0 / ¼ / ½ / ¾ / full height). Each label is nudged so its
+                             centre — not its top or bottom edge — sits on its tick
+                             line, so the five read as evenly spaced. -->
                         <Grid Grid.Column="1" Margin="4,0,0,0" RowDefinitions="*,*,*,*">
-                            <TextBlock Grid.Row="0" VerticalAlignment="Top" Classes="scale" Text="100%"/>
-                            <TextBlock Grid.Row="0" VerticalAlignment="Bottom" Classes="scale" Text="{Binding AxisQ3Text}"/>
-                            <TextBlock Grid.Row="1" VerticalAlignment="Bottom" Classes="scale" Text="{Binding AxisMidText}"/>
-                            <TextBlock Grid.Row="2" VerticalAlignment="Bottom" Classes="scale" Text="{Binding AxisQ1Text}"/>
-                            <TextBlock Grid.Row="3" VerticalAlignment="Bottom" Classes="scale" Text="{Binding AxisMinText}"/>
+                            <TextBlock Grid.Row="0" VerticalAlignment="Top"    Margin="0,-6,0,0" Classes="scale" Text="100%"/>
+                            <TextBlock Grid.Row="0" VerticalAlignment="Bottom" Margin="0,0,0,-6" Classes="scale" Text="{Binding AxisQ3Text}"/>
+                            <TextBlock Grid.Row="1" VerticalAlignment="Bottom" Margin="0,0,0,-6" Classes="scale" Text="{Binding AxisMidText}"/>
+                            <TextBlock Grid.Row="2" VerticalAlignment="Bottom" Margin="0,0,0,-6" Classes="scale" Text="{Binding AxisQ1Text}"/>
+                            <TextBlock Grid.Row="3" VerticalAlignment="Bottom" Margin="0,0,0,-6" Classes="scale" Text="{Binding AxisMinText}"/>
                         </Grid>
                     </Grid>
                 </Border>

@@ -38,7 +38,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // Percentage points of headroom below the lowest recorded value for the HP/MA
     // graph's axis floor — so the plot spreads over the range that matters instead
     // of wasting the bottom half on values you never reach.
-    private const double AxisFloorHeadroom = 30;
+    private const double AxisFloorHeadroom = 15;
 
     // Upper bound on the banked-level scan — same cap the auto-trainer and
     // level-up announcer use, so the time-to-level count stays in lock-step.
