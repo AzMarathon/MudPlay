@@ -406,6 +406,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         AvoidedRooms = new HashSet<RoomKey>(_services.Movement.Avoided);
         // RoomSearchService subscribes to MovementFilter.AvoidedChanged
         // directly and flushes its own distance cache.
+        // Keep the right-click menu's avoid state in sync when the set changes
+        // externally — same stale-context-menu trap as favourites (see OnFavoritesChanged).
+        OnPropertyChanged(nameof(ContextIsAvoided));
     }
 
     private void OnStashChanged()
@@ -414,6 +417,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Log?.Debug("Navigation",
             $"stash set changed — count={next.Count}");
         StashRooms = next;
+        OnPropertyChanged(nameof(ContextIsStash));
     }
 
     // The DEATH aggregator broadcasts a bulk Records change (add / mark-recovered
@@ -1245,7 +1249,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // drives tree-vs-placeholder visibility.
     public bool HasFavoriteTree => FavoriteTree.Count > 0;
 
-    private void OnFavoritesChanged() => RefreshFavorites();
+    private void OnFavoritesChanged()
+    {
+        RefreshFavorites();
+        // The map right-click menu reads favourite state live but only re-evaluates
+        // on notification, and re-right-clicking the same room doesn't re-fire
+        // OnContextRoomKeyChanged (the key is unchanged). Without this, deleting a
+        // favourite from the GOTO list leaves the menu showing a stale "Remove from
+        // favorites" that then re-adds the room. Refresh it on every favourites change.
+        OnPropertyChanged(nameof(ContextIsFavorite));
+    }
 
     private void RefreshFavorites()
     {
