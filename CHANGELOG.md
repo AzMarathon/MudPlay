@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.6.0
+
+- Web links (http / https) in the Conversation window are now clickable — a click opens the URL in your OS default browser; surrounding text stays selectable and trailing sentence punctuation isn't swallowed
+
 ## 2.5.0
 
 - Navigation overlay toggles (lairs / shops / spells / legend) collapse into one "Overlays ▾" flyout to reclaim toolbar room

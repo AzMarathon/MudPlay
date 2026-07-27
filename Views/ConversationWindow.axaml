@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FujinTerm.ViewModels"
+        xmlns:views="using:FujinTerm.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="780" d:DesignHeight="520"
@@ -10,6 +11,27 @@
         Width="780" Height="520"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
+
+    <Window.Styles>
+        <!-- Inline web link inside a chat message: underlined accent hot-text that
+             opens the URL in the OS default browser. Font is inherited from the
+             message block so the link matches the user's message font size. -->
+        <Style Selector="Button.ChatLink">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.ChatLink /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="TextBlock.ChatLinkText">
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
+    </Window.Styles>
 
     <DockPanel LastChildFill="True">
 
@@ -159,7 +181,7 @@
                                        VerticalAlignment="Center"
                                        Margin="0,0,8,0"/>
                             <SelectableTextBlock Grid.Column="3"
-                                                 Text="{Binding MessageText}"
+                                                 views:ConversationMessageInlines.Message="{Binding MessageText}"
                                                  Foreground="{Binding MessageBrush}"
                                                  FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
                                                  FontSize="{Binding DataContext.MessageFontSize, ElementName=RowsList}"
