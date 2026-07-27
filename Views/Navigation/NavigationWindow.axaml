@@ -305,9 +305,11 @@
 
                 <!-- Goto button — rides just left of the search box. Shows the armed
                      destination (or "Go to…"); resolving the search box flips it to a
-                     room. Click opens the recent-destination history flyout. -->
+                     room. Click opens the recent-destination flyout, which is anchored
+                     to the search box (below) so it drops down over the right rail. -->
                 <Button Grid.Column="3"
                         IsVisible="{Binding MapExpanded}"
+                        Click="OnGotoButtonClick"
                         Background="{StaticResource ChromeBgElevBrush}"
                         BorderBrush="{StaticResource ChromeBorderBrush}"
                         BorderThickness="1"
@@ -327,9 +329,30 @@
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
                                    VerticalAlignment="Center"/>
                     </StackPanel>
-                    <Button.Flyout>
+                </Button>
+
+                <!-- Search box — top-right corner of the header. Hidden while the
+                     map is collapsed (search has no target rail to show results
+                     against in that mode). -->
+                <TextBox Grid.Column="4"
+                         Name="SearchBox"
+                         IsVisible="{Binding MapExpanded}"
+                         Text="{Binding SearchQuery, Mode=TwoWay}"
+                         KeyDown="OnSearchBoxKeyDown"
+                         PlaceholderText="Search rooms, lairs, loops…"
+                         Width="150"
+                         MinHeight="24"
+                         Height="24"
+                         Padding="7,2"
+                         FontSize="11"
+                         VerticalAlignment="Center">
+                    <!-- Recent-destinations flyout lives on the search box (not the
+                         goto button) so it drops straight down over the right rail,
+                         matching its 290-wide column. The goto button's Click opens it
+                         via FlyoutBase.ShowAttachedFlyout. -->
+                    <FlyoutBase.AttachedFlyout>
                         <Flyout Placement="BottomEdgeAlignedRight">
-                            <StackPanel MinWidth="200" MaxWidth="280" Spacing="3">
+                            <StackPanel Width="290" Spacing="3">
                                 <Button Content="Clear destination"
                                         Command="{Binding ClearQueuedDestinationCommand}"
                                         IsVisible="{Binding HasQueuedDestination}"
@@ -358,24 +381,8 @@
                                            IsVisible="{Binding !HasGotoHistory}"/>
                             </StackPanel>
                         </Flyout>
-                    </Button.Flyout>
-                </Button>
-
-                <!-- Search box — top-right corner of the header. Hidden while the
-                     map is collapsed (search has no target rail to show results
-                     against in that mode). -->
-                <TextBox Grid.Column="4"
-                         Name="SearchBox"
-                         IsVisible="{Binding MapExpanded}"
-                         Text="{Binding SearchQuery, Mode=TwoWay}"
-                         KeyDown="OnSearchBoxKeyDown"
-                         PlaceholderText="Search rooms, lairs, loops…"
-                         Width="150"
-                         MinHeight="24"
-                         Height="24"
-                         Padding="7,2"
-                         FontSize="11"
-                         VerticalAlignment="Center"/>
+                    </FlyoutBase.AttachedFlyout>
+                </TextBox>
 
                 <!-- Collapse / expand the side chrome so the map can fill the
                      window (and the window shrink narrower than the rail).
