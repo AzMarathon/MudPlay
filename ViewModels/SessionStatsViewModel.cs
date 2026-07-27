@@ -111,7 +111,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // mana bars + legend. The step count (HpLow.Count) drives the slider bounds.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StepViewMax), nameof(IsStepSliderVisible), nameof(StepRangeText),
-        nameof(AxisMin), nameof(AxisMinText), nameof(AnchoredStepText), nameof(WindowOffset), nameof(CursorIndex))]
+        nameof(AxisMin), nameof(AxisMinText), nameof(AxisQ1Text), nameof(AxisMidText), nameof(AxisQ3Text), nameof(CenterStepText), nameof(WindowOffset), nameof(CursorIndex))]
     private IReadOnlyList<double> _hpLow = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _hpHigh = Array.Empty<double>();
     [ObservableProperty] private IReadOnlyList<double> _hpAvg = Array.Empty<double>();
@@ -120,18 +120,18 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private IReadOnlyList<double> _maAvg = Array.Empty<double>();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AxisMin), nameof(AxisMinText))]
+    [NotifyPropertyChangedFor(nameof(AxisMin), nameof(AxisMinText), nameof(AxisQ1Text), nameof(AxisMidText), nameof(AxisQ3Text))]
     private bool _hasManaHistory;
 
     // Lowest HP / MA percent seen anywhere on the loop, shown in each series'
     // legend label and feeding the adaptive axis floor. 100 until the first on-loop
     // sample lands.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HpLegendText), nameof(AxisMin), nameof(AxisMinText))]
+    [NotifyPropertyChangedFor(nameof(HpLegendText), nameof(AxisMin), nameof(AxisMinText), nameof(AxisQ1Text), nameof(AxisMidText), nameof(AxisQ3Text))]
     private double _lowestHpPercent = 100;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MaLegendText), nameof(AxisMin), nameof(AxisMinText))]
+    [NotifyPropertyChangedFor(nameof(MaLegendText), nameof(AxisMin), nameof(AxisMinText), nameof(AxisQ1Text), nameof(AxisMidText), nameof(AxisQ3Text))]
     private double _lowestMaPercent = 100;
 
     // The loop step the slider is anchored on (0-based). The slider spans every
@@ -139,7 +139,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // (WindowOffset), centring where it can and clamping at the head / tail.
     // Clamped to StepViewMax each refresh.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StepRangeText), nameof(AnchoredStepText),
+    [NotifyPropertyChangedFor(nameof(StepRangeText), nameof(CenterStepText),
         nameof(WindowOffset), nameof(CursorIndex))]
     private double _focusStep;
 
@@ -408,22 +408,15 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         }
     }
 
-    // The in-graph readout for the anchored step: its number plus that step's HP
-    // (and mana) as min/max/avg percent. Indexing is length-guarded against a
-    // transient mid-refresh state.
-    public string AnchoredStepText
-    {
-        get
-        {
-            int i = CursorIndex;
-            if (HpLow.Count == 0 || i >= HpLow.Count || i >= HpHigh.Count || i >= HpAvg.Count)
-                return string.Empty;
-            string detail = $"HP {HpLow[i]:F0}/{HpHigh[i]:F0}/{HpAvg[i]:F0}";
-            if (HasManaHistory && i < MaLow.Count && i < MaHigh.Count && i < MaAvg.Count)
-                detail += $"   MA {MaLow[i]:F0}/{MaHigh[i]:F0}/{MaAvg[i]:F0}";
-            return $"step {i + 1}\n{detail}";
-        }
-    }
+    // The anchored step (1-based) for the in-graph readout + the scrub cursor.
+    public string CenterStepText => HpLow.Count > 0 ? $"step {CursorIndex + 1}" : string.Empty;
+
+    // Intermediate y-axis tick labels between the adaptive floor (AxisMin) and 100%,
+    // at quarter, half, and three-quarter of the range, so the graph reads at a
+    // glance rather than only at its two ends.
+    public string AxisQ1Text  => $"{AxisMin + 0.25 * (100 - AxisMin):F0}%";
+    public string AxisMidText => $"{AxisMin + 0.50 * (100 - AxisMin):F0}%";
+    public string AxisQ3Text  => $"{AxisMin + 0.75 * (100 - AxisMin):F0}%";
 
     // Current headline rate, printed in each graph header so the number is
     // legible without eyeballing the curve — it equals the curve's right-most
@@ -563,10 +556,6 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         // A shorter loop (or a reset) can pull the max in under the current focus;
         // keep the anchored step from stranding past the tail.
         if (FocusStep > StepViewMax) FocusStep = StepViewMax;
-
-        // Notified explicitly (not off a single series) so the anchored-step
-        // readout re-reads only once every series array for this refresh is set.
-        OnPropertyChanged(nameof(AnchoredStepText));
 
         // The countdown reads live PlayerStats + the wall clock, so it must
         // re-fire every tick even when the Activity snapshot compares equal.
