@@ -3,6 +3,7 @@ using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using FujinTerm.Game;
 using FujinTerm.Game.Map;
+using FujinTerm.Game.Quests;
 using FujinTerm.Services;
 using FujinTerm.ViewModels.GameData.Tables;
 
@@ -62,6 +63,10 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
     private readonly PlayerStats? _playerStats;
     private readonly ItemSourceIndex? _itemSources;
 
+    // Derived from the active set's TBInfo for the Quest Flags table; browser-scoped and
+    // self-caching per set (only GameDataCache needed, so no injection).
+    private readonly QuestFlagIndex _questFlags;
+
     public GameDataBrowserViewModel(GameDataCache gameData, string? initialSectionId = null)
         : this(gameData, triggers: null, aliases: null, players: null, macros: null, messages: null, monsterMessages: null, monsterOverlaySeed: null, itemOverlaySeed: null, resolver: null, dialogs: null, keybindings: null, profile: null, roomGraph: null, playerStats: null, itemSources: null, initialSectionId: initialSectionId) { }
 
@@ -101,6 +106,7 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         _roomGraph = roomGraph;
         _playerStats = playerStats;
         _itemSources = itemSources;
+        _questFlags = new QuestFlagIndex(gameData);
         _gameData.ActiveSetChanged += OnActiveSetChanged;
 
         SeedSections();
@@ -159,12 +165,11 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
                 s.SearchableLabels.Any(l => l.Contains(filter, StringComparison.OrdinalIgnoreCase));
             if (!matches) continue;
 
-            // Engine-backed sections live in EngineGroup; everything
-            // else is a JSON table — split by the concrete base type
-            // so the sidebar can render two groups with a visual
-            // separator between them.
-            if (s is JsonTableSectionViewModel) TableSections.Add(s);
-            else                                EngineSections.Add(s);
+            // Engine-backed sections live in EngineGroup; MDB-derived JSON tables and
+            // their derived views (Unobtainable / Quest Flags) live in TableGroup — the
+            // sidebar renders the two groups with a visual separator between them.
+            if (s.ShowInTableGroup) TableSections.Add(s);
+            else                    EngineSections.Add(s);
         }
     }
 
@@ -221,6 +226,11 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         Sections.Add(new ClassesSectionViewModel(_gameData, _resolver));
         Sections.Add(new TextBlocksSectionViewModel(_gameData, _resolver));
         Sections.Add(new InfoSectionViewModel(_gameData, _resolver));
+
+        // Derived views over the MDB tables (not backed by their own JSON): the unobtainable
+        // Items and the quest-flag → source index.
+        Sections.Add(new UnobtainableSectionViewModel(_gameData, _resolver));
+        Sections.Add(new QuestFlagsSectionViewModel(_questFlags, _gameData));
 
         // Hook every section's NavigationRequested event so cross-section
         // jumps (e.g. Shops → Rooms double-click) can route through the

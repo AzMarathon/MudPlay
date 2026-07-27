@@ -44,6 +44,18 @@ public sealed class GameDataBrowserViewModelTests : IDisposable
         Assert.Contains(vm.Sections, s => s.Id == "classes");
         Assert.Contains(vm.Sections, s => s.Id == "textblocks");
         Assert.Contains(vm.Sections, s => s.Id == "info");
+        Assert.Contains(vm.Sections, s => s.Id == "unobtainable");
+        Assert.Contains(vm.Sections, s => s.Id == "questflags");
+    }
+
+    [Fact]
+    public void DerivedTables_LandInTheTableGroup()
+    {
+        GameDataBrowserViewModel vm = new(_cache);
+        Assert.Contains(vm.TableSections, s => s.Id == "unobtainable");
+        Assert.Contains(vm.TableSections, s => s.Id == "questflags");
+        // Not among the engine-backed group.
+        Assert.DoesNotContain(vm.EngineSections, s => s.Id == "questflags");
     }
 
     [Fact]

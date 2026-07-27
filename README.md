@@ -1,12 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.3.0**
-> - New "HP/MA History" graph in Session Stats: a per-loop-step range bar (HP red, mana cyan) showing the min/max your vitals hit at each step, with an average trend line threaded through so you can read your HP trajectory around the circuit at a glance
-> - Each step's range + average accumulate across laps; records only while a loop is stepping and resets at each loop start; toggle it from the Session Stats context menu like the kills/hr and exp/hr graphs
-> - Shows 15 steps at a time with a slider to pan a longer loop from step 1 to the tail; an in-graph readout names the centred step, and dragging the slider drops a cursor line onto it so you know exactly which step you're viewing
-> - The graph's vertical axis auto-floors 15 points below your lowest value (top stays 100%) to spread the plot, and the legend names each series' lowest % seen
-> - Session Stats window now sizes its height to its visible content, so showing/hiding graphs and sections no longer leaves a gap or needs a manual resize
+> **Version 2.4.0**
+> - New "Unobtainable" table in the Game Data Browser lists the Items the game marks out of play (In Game = 0 — "bow of silver", placeholders, duplicate test rows) that the Item Finder skips, so they're inspectable instead of just hidden
+> - New "Quest Flags" table shows every quest-flag reference in the set's TBInfo — the flag, whether a block grants / gates / advances / clears it, and the NPC / room / spell that reaches it (resolved via the block's Called-From provenance)
+> - Both are computed live from the loaded game-data set, so they appear on every set without re-importing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
