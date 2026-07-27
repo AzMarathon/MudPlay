@@ -261,14 +261,16 @@
                                                 Min="{Binding AxisMin}" Max="100"
                                                 Offset="{Binding WindowOffset}"
                                                 WindowSize="15"/>
-                        <!-- Centre-step readout overlaid at the bottom of the plot;
-                             the scrub cursor above marks this step while dragging. -->
+                        <!-- Anchored-step readout overlaid at the bottom of the plot:
+                             the step number + its HP/MA min/max/avg. The scrub cursor
+                             above marks this step while dragging. -->
                         <Border Grid.Column="0" VerticalAlignment="Bottom" HorizontalAlignment="Center"
-                                Margin="0,0,0,2" Padding="4,0" CornerRadius="2"
+                                Margin="0,0,0,2" Padding="5,1" CornerRadius="2"
                                 Background="{StaticResource ChromeBgElevBrush}"
                                 IsHitTestVisible="False"
-                                IsVisible="{Binding IsStepSliderVisible}">
-                            <TextBlock Classes="scale" HorizontalAlignment="Center" Text="{Binding CenterStepText}"/>
+                                IsVisible="{Binding IsStepSliderVisible}"
+                                ToolTip.Tip="Anchored step — HP/MA as min/max/avg (% of max).">
+                            <TextBlock Classes="scale" TextAlignment="Center" Text="{Binding AnchoredStepText}"/>
                         </Border>
                         <Grid Grid.Column="1" Margin="4,0,0,0">
                             <TextBlock VerticalAlignment="Top" Classes="scale" Text="100%"/>
@@ -295,7 +297,7 @@
                         Value="{Binding FocusStep, Mode=TwoWay}"
                         SmallChange="1" LargeChange="5"
                         TickFrequency="1" IsSnapToTickEnabled="True"
-                        HorizontalAlignment="Center" Width="170" Height="22" MinHeight="0"
+                        HorizontalAlignment="Stretch" Margin="0,0,38,0" Height="22" MinHeight="0"
                         ToolTip.Tip="Slide to anchor any loop step; the view pans to follow."/>
             </StackPanel>
 
