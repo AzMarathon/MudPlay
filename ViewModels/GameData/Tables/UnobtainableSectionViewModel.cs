@@ -21,9 +21,13 @@ public sealed class UnobtainableSectionViewModel : JsonTableSectionViewModel
 
     protected override string TableName => "Items";
 
+    // The full Items column set — an unobtainable row carries the same fields as any item, so
+    // the table shows them all (read-only) rather than a curated slice. Mirrors
+    // ItemsSectionViewModel.Columns.
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Number", "Name", "ItemType", "Worn", "WeaponType", "ArmourType",
+        "Number", "Name", "ItemType", "Worn", "WeaponType", "ArmourType", "Min", "Max",
+        "ArmourClass", "DamageResist", "Speed", "Accy", "StrReq", "Encum", "Price", "Currency",
     };
 
     public override string SearchKeyColumn => "Name";
@@ -40,6 +44,7 @@ public sealed class UnobtainableSectionViewModel : JsonTableSectionViewModel
             ["Worn"]       = LookupEnums.FormatWornSlot,
             ["WeaponType"] = LookupEnums.FormatWeaponType,
             ["ArmourType"] = LookupEnums.FormatArmourType,
+            ["Currency"]   = LookupEnums.FormatCurrency,
         };
 
     // The inverse of ItemFinderEntry.IsObtainable: keep only rows whose "In Game" is
