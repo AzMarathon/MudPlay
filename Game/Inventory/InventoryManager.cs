@@ -600,10 +600,13 @@ public sealed partial class InventoryManager : IDisposable
         // of it. Item tokens are ignored in this slice — only coins matter.
         string itemsText = string.Join(" ", CollectItemLines());
         const string prefix = "You are carrying ";
-        if (itemsText.StartsWith(prefix, StringComparison.Ordinal))
-            itemsText = itemsText[prefix.Length..];
-        else if (itemsText.StartsWith("You are carrying nothing", StringComparison.Ordinal))
+        // Check the "nothing" form first: it also starts with the prefix, so
+        // stripping the prefix would leave the literal "nothing" to be split into a
+        // phantom carried item (which then leaks into @have, @drop-all, etc.).
+        if (itemsText.StartsWith("You are carrying nothing", StringComparison.Ordinal))
             itemsText = string.Empty;
+        else if (itemsText.StartsWith(prefix, StringComparison.Ordinal))
+            itemsText = itemsText[prefix.Length..];
 
         // The dump's items sentence ends with a period ("... 5 copper
         // farthings."). Drop it so the final ", "-split token is the bare

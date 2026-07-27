@@ -21,6 +21,7 @@ public sealed class SessionStatsLayoutStore
     {
         "KillsGraph",
         "ExpGraph",
+        "HpMaGraph",
         "PlayerStatistics",
         "TimeAnalysis",
         "SessionStatistics",

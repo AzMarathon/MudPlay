@@ -8,8 +8,8 @@
         x:Class="FujinTerm.Views.SessionStatsWindow"
         x:DataType="vm:SessionStatsViewModel"
         Title="Session Stats"
-        Width="280" Height="600"
-        MinWidth="240" MinHeight="320"
+        Width="280" Height="480"
+        MinWidth="240" MinHeight="160" MaxHeight="960"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
@@ -158,6 +158,8 @@
                               IsChecked="{Binding IsKillsGraphVisible, Mode=TwoWay}"/>
                     <MenuItem Header="Exp/hour graph" ToggleType="CheckBox"
                               IsChecked="{Binding IsExpGraphVisible, Mode=TwoWay}"/>
+                    <MenuItem Header="HP/MA History graph" ToggleType="CheckBox"
+                              IsChecked="{Binding IsHpMaGraphVisible, Mode=TwoWay}"/>
                     <Separator/>
                     <MenuItem Header="Player Statistics" ToggleType="CheckBox"
                               IsChecked="{Binding IsPlayerStatsVisible, Mode=TwoWay}"/>
@@ -229,6 +231,80 @@
                     </Grid>
                 </Border>
                 <TextBlock Classes="ttl" Text="{Binding TimeToLevelText}"/>
+            </StackPanel>
+
+            <!-- ===== HP/MA History graph ===== -->
+            <!-- Stock-chart view: one vertical high-low bar per loop step on a fixed
+                 0–100% axis — HP (red) and mana (cyan) grouped side by side — so a
+                 glance shows the min/max range each step drove the vitals through,
+                 and which steps of the circuit dip lowest. Records only while a loop
+                 is stepping; resets at each new loop start. Mana bars vanish for a
+                 no-mana class. -->
+            <StackPanel Tag="HpMaGraph" Classes="panel" Spacing="3"
+                        IsVisible="{Binding IsHpMaGraphVisible}">
+                <TextBlock Classes="lbl draghandle" Text="HP/MA per loop step"/>
+                <Border Background="{StaticResource ChromeBgSunkenBrush}"
+                        BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="4"
+                        Height="120">
+                    <Grid ColumnDefinitions="*,34">
+                        <controls:RangeBarChart Grid.Column="0"
+                                                Low="{Binding HpLow}" High="{Binding HpHigh}" PrimaryTrend="{Binding HpAvg}"
+                                                SecondaryLow="{Binding MaLow}" SecondaryHigh="{Binding MaHigh}" SecondaryTrend="{Binding MaAvg}"
+                                                PrimaryBrush="{StaticResource AccentRedBrush}"
+                                                SecondaryBrush="{StaticResource AccentCyanBrush}"
+                                                CursorBrush="{StaticResource ChromeFgBrush}"
+                                                ShowCursor="{Binding IsScrubbing}"
+                                                CursorIndex="{Binding CursorIndex}"
+                                                Min="{Binding AxisMin}" Max="100"
+                                                Offset="{Binding WindowOffset}"
+                                                WindowSize="15"/>
+                        <!-- Anchored-step readout overlaid at the bottom of the plot;
+                             the scrub cursor above marks this step while dragging. -->
+                        <Border Grid.Column="0" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                                Margin="0,0,0,2" Padding="4,0" CornerRadius="2"
+                                Background="{StaticResource ChromeBgElevBrush}"
+                                IsHitTestVisible="False"
+                                IsVisible="{Binding IsStepSliderVisible}">
+                            <TextBlock Classes="scale" HorizontalAlignment="Center" Text="{Binding CenterStepText}"/>
+                        </Border>
+                        <!-- Y-axis ticks: 100% top, adaptive floor bottom, plus three
+                             evenly-spaced marks between (four equal rows put them at
+                             0 / ¼ / ½ / ¾ / full height). Each label is nudged so its
+                             centre — not its top or bottom edge — sits on its tick
+                             line, so the five read as evenly spaced. -->
+                        <Grid Grid.Column="1" Margin="4,0,0,0" RowDefinitions="*,*,*,*">
+                            <TextBlock Grid.Row="0" VerticalAlignment="Top"    Margin="0,-6,0,0" Classes="scale" Text="100%"/>
+                            <TextBlock Grid.Row="0" VerticalAlignment="Bottom" Margin="0,0,0,-6" Classes="scale" Text="{Binding AxisQ3Text}"/>
+                            <TextBlock Grid.Row="1" VerticalAlignment="Bottom" Margin="0,0,0,-6" Classes="scale" Text="{Binding AxisMidText}"/>
+                            <TextBlock Grid.Row="2" VerticalAlignment="Bottom" Margin="0,0,0,-6" Classes="scale" Text="{Binding AxisQ1Text}"/>
+                            <TextBlock Grid.Row="3" VerticalAlignment="Bottom" Margin="0,0,0,-6" Classes="scale" Text="{Binding AxisMinText}"/>
+                        </Grid>
+                    </Grid>
+                </Border>
+                <!-- X-axis caption: which loop steps the window shows, of the total. -->
+                <TextBlock Classes="ttl" Text="{Binding StepRangeText}"/>
+                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+                    <TextBlock Classes="scale" HorizontalAlignment="Left"
+                               Foreground="{StaticResource AccentRedBrush}" Text="{Binding HpLegendText}"
+                               ToolTip.Tip="Lowest HP % seen across the loop's steps."/>
+                    <TextBlock Classes="scale" HorizontalAlignment="Left"
+                               Foreground="{StaticResource AccentCyanBrush}" Text="{Binding MaLegendText}"
+                               IsVisible="{Binding HasManaHistory}"
+                               ToolTip.Tip="Lowest mana % seen across the loop's steps."/>
+                </StackPanel>
+                <!-- Pan slider — below the legend; compact + centred; shown only once
+                     the loop is longer than the 15-step window. -->
+                <Slider x:Name="StepSlider"
+                        IsVisible="{Binding IsStepSliderVisible}"
+                        Minimum="0" Maximum="{Binding StepViewMax}"
+                        Value="{Binding FocusStep, Mode=TwoWay}"
+                        SmallChange="1" LargeChange="5"
+                        TickFrequency="1" IsSnapToTickEnabled="True"
+                        HorizontalAlignment="Stretch" Margin="19,0,19,0" Height="22" MinHeight="0"
+                        ToolTip.Tip="Slide to anchor any loop step; the view pans to follow."/>
             </StackPanel>
 
             <!-- ===== Player Statistics ===== -->

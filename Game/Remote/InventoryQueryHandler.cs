@@ -1,3 +1,4 @@
+using System.Text;
 using FujinTerm.Game.Cash;
 using FujinTerm.Game.Inventory;
 using FujinTerm.Models.GameData;
@@ -10,15 +11,26 @@ namespace FujinTerm.Game.Remote;
 //   - @enc — current / max carry weight, percentage, bracket.
 //   - @have <item> — yes + count, or no, for a name substring across carried and
 //     worn items.
+//   - @inv — the carried pack items + key ring: everything on us that another
+//     player CAN'T see by looking. Worn/wielded gear (EquippedItems) and a readied
+//     light are deliberately excluded — an onlooker sees those, so they add no
+//     hidden-inventory signal a partymate couldn't get with a look.
 //   - @what — the items visible on the room floor, off the GroundItemTracker's
 //     last "You notice" survey.
-// The wealth / carry / have trio read the immutable InventoryManager.Snapshot,
+// The wealth / carry / have / inv set read the immutable InventoryManager.Snapshot,
 // each replying a friendly "parse inventory first" line until the first full i
 // dump lands (IsLoaded); @what reads the room-scoped ground snapshot instead. The
 // engine gates authorisation via RemoteCommandCatalog before the handler runs.
 public sealed class InventoryQueryHandler : IDisposable
 {
-    private static readonly string[] RegisteredCommands = { "@wealth", "@enc", "@have", "@what" };
+    private static readonly string[] RegisteredCommands = { "@wealth", "@enc", "@have", "@inv", "@what" };
+
+    // Per-reply char budget for the @inv item / key lists before the engine wraps
+    // the payload in { } and prefixes the recipient — mirrors HelpHandler's cap so
+    // a full pack can't produce a wire line the game truncates mid-word. Overflow
+    // is summarised as "(+N more, type i)" rather than split across replies.
+    private const int PackBudget = 170;
+    private const int KeysBudget = 60;
 
     private readonly RemoteCommandManager _engine;
     private readonly InventoryManager _inventory;
@@ -42,6 +54,7 @@ public sealed class InventoryQueryHandler : IDisposable
         Register("@wealth", OnWealth);
         Register("@enc", OnEnc);
         Register("@have", OnHave);
+        Register("@inv", OnInv);
         Register("@what", OnWhat);
     }
 
@@ -100,6 +113,44 @@ public sealed class InventoryQueryHandler : IDisposable
             if (item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) count++;
 
         ctx.Reply(count > 0 ? $"yes - {count}x matching '{query}'" : $"no - nothing matching '{query}'");
+    }
+
+    // @inv — the carried pack + keys, the inventory an onlooker can't see. Reads
+    // CarriedItems (no slot suffix; coins already excluded) and the separate key
+    // ring; worn/wielded gear and the readied light are visible on a look, so both
+    // are left out. Each list is length-capped so a big pack can't overrun the wire.
+    private void OnInv(RemoteCommandContext ctx)
+    {
+        if (!_inventory.IsLoaded) { ctx.Reply("inventory not parsed yet (type i)"); return; }
+
+        InventorySnapshot snap = _inventory.Snapshot;
+        List<string> parts = new(2);
+        if (snap.CarriedItems.Count > 0)
+            parts.Add($"carrying: {JoinCapped(snap.CarriedItems, PackBudget)}");
+        if (snap.Keys is { Count: > 0 } keys)
+            parts.Add($"keys: {JoinCapped(keys, KeysBudget)}");
+
+        ctx.Reply(parts.Count == 0 ? "carrying nothing" : string.Join("; ", parts));
+    }
+
+    // Comma-join item names while the running length stays within budget; the first
+    // item always goes in (even if it alone exceeds budget) so a reply is never
+    // empty, and any names that don't fit are summarised as "(+N more, type i)".
+    private static string JoinCapped(IReadOnlyList<string> items, int budget)
+    {
+        StringBuilder sb = new();
+        int shown = 0;
+        foreach (string item in items)
+        {
+            if (sb.Length > 0 && sb.Length + 2 + item.Length > budget) break;
+            if (sb.Length > 0) sb.Append(", ");
+            sb.Append(item);
+            shown++;
+        }
+        int remaining = items.Count - shown;
+        if (remaining > 0)
+            sb.Append(sb.Length > 0 ? $" (+{remaining} more, type i)" : $"(+{remaining} more, type i)");
+        return sb.ToString();
     }
 
     // @what — the items on the room floor from the latest "You notice" survey

@@ -199,6 +199,85 @@ public sealed class InventoryQueryHandlerTests
         Assert.Equal("no - nothing matching 'longsword'", Assert.Single(Replies(engine)));
     }
 
+    // ----- @inv --------------------------------------------------------
+
+    [Fact]
+    public void Inv_BeforeParse_PointsAtInventory()
+    {
+        var (engine, _, _, players, _, _) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryInventory);
+
+        engine.DispatchForTests(Telepath("Bob", "@inv"));
+
+        Assert.Contains("inventory not parsed yet", Assert.Single(Replies(engine)));
+    }
+
+    [Fact]
+    public void Inv_ReportsCarriedPack_ExcludingWornAndCurrency()
+    {
+        var (engine, _, lines, players, _, _) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryInventory);
+        // Worn piece (Torso) and a readied light are excluded; coins never
+        // land in CarriedItems. Only the two unworn pack items report.
+        Feed(lines, "You are carrying a rusty dagger, a healing potion, "
+                  + "padded vest (Torso), lantern (Readied/240), 5 copper farthings.");
+        Feed(lines, "You have no keys.");
+        Feed(lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        engine.DispatchForTests(Telepath("Bob", "@inv"));
+
+        Assert.Equal("carrying: a rusty dagger, a healing potion", Assert.Single(Replies(engine)));
+    }
+
+    [Fact]
+    public void Inv_AppendsKeyRing_WhenKeysHeld()
+    {
+        var (engine, _, lines, players, _, _) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryInventory);
+        Feed(lines, "You are carrying a brass lantern.");
+        Feed(lines, "You have the following keys:  black star key, brass key.");
+        Feed(lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        engine.DispatchForTests(Telepath("Bob", "@inv"));
+
+        Assert.Equal("carrying: a brass lantern; keys: black star key, brass key",
+            Assert.Single(Replies(engine)));
+    }
+
+    [Fact]
+    public void Inv_EmptyPackNoKeys_ReportsCarryingNothing()
+    {
+        var (engine, _, lines, players, _, _) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryInventory);
+        Feed(lines, "You are carrying nothing.");
+        Feed(lines, "You have no keys.");
+        Feed(lines, "Encumbrance:    0/2880  -  Light  [0%]");
+
+        engine.DispatchForTests(Telepath("Bob", "@inv"));
+
+        Assert.Equal("carrying nothing", Assert.Single(Replies(engine)));
+    }
+
+    [Fact]
+    public void Inv_LongPack_CapsWithOverflowSummary()
+    {
+        var (engine, _, lines, players, _, _) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryInventory);
+        // 40 padded item names blow past the pack budget; the reply must cap
+        // and summarise the remainder rather than emit a giant wire line.
+        string many = string.Join(", ", Enumerable.Range(1, 40).Select(i => $"a padded widget number {i}"));
+        Feed(lines, $"You are carrying {many}.");
+        Feed(lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        engine.DispatchForTests(Telepath("Bob", "@inv"));
+
+        string reply = Assert.Single(Replies(engine));
+        Assert.Contains("more, type i)", reply);
+        // Budget is 170 chars of item list; the whole reply stays well under a
+        // MajorMUD input line even after the "carrying: " label.
+        Assert.True(reply.Length < 200, $"reply too long ({reply.Length}): {reply}");
+    }
+
     // ----- @what -------------------------------------------------------
 
     [Fact]

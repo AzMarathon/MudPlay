@@ -40,11 +40,19 @@ public partial class SessionStatsWindow : Window
     // drag in PointerMoved, so hold the press args.
     private PointerPressedEventArgs? _pressArgs;
 
+    // Last panel-content height we re-fit the window to. SizeToContent="Height"
+    // sizes the window on open but doesn't reliably shrink it when a panel is
+    // collapsed / hidden at runtime, so we re-trigger it whenever the stacked
+    // panels' desired height changes (guarded to avoid a layout loop).
+    private double _lastContentHeight = -1;
+
     public SessionStatsWindow()
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "session-stats");
+        // autoHeight: the window sizes its height to its visible content
+        // (SizeToContent="Height"), so the layout store must not pin a saved height.
+        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "session-stats", autoHeight: true);
         Closed += OnClosed;
 
         _dropIndicator.Background =
@@ -61,6 +69,19 @@ public partial class SessionStatsWindow : Window
             host.AddHandler(DragDrop.DragOverEvent, OnPanelDragOver);
             host.AddHandler(DragDrop.DragLeaveEvent, OnPanelDragLeave);
             host.AddHandler(DragDrop.DropEvent, OnPanelDrop);
+            host.LayoutUpdated += (_, _) => RefitToContent(host);
+        }
+
+        // Show the HP/MA graph's scrub cursor while the step slider is held. Tunnel
+        // + handledEventsToo so the thumb's own pointer handling doesn't hide the
+        // press/release from us; capture-lost covers a drag that ends off-thumb.
+        if (this.FindControl<Slider>("StepSlider") is { } slider)
+        {
+            slider.AddHandler(PointerPressedEvent, OnSliderPressed,
+                RoutingStrategies.Tunnel, handledEventsToo: true);
+            slider.AddHandler(PointerReleasedEvent, OnSliderReleased,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+            slider.AddHandler(PointerCaptureLostEvent, OnSliderCaptureLost);
         }
 
         // Apply the saved order once the children have materialised.
@@ -68,6 +89,47 @@ public partial class SessionStatsWindow : Window
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    // ----- Auto-fit height to the stacked panels ---------------------
+
+    // Re-fit the window height to its content whenever the panels' total height
+    // changes (a panel expanded / collapsed / hidden). Avalonia's SizeToContent
+    // fits on open but doesn't reliably react to runtime content changes here, so
+    // we drive the height ourselves: measure the whole body unbounded to learn the
+    // height it wants, add the (constant) window chrome, clamp to Min/Max, and set
+    // it. Guarded on the measured content height so the resize's own layout pass —
+    // and the per-second stat refreshes — don't spin a loop.
+    private void RefitToContent(StackPanel host)
+    {
+        double contentH = host.DesiredSize.Height;
+        if (contentH <= 0 || Math.Abs(contentH - _lastContentHeight) < 1) return;
+        _lastContentHeight = contentH;
+
+        if (Content is not Control body || ClientSize.Height <= 0) return;
+
+        double width = ClientSize.Width > 0 ? ClientSize.Width : Width;
+        body.Measure(new Size(width, double.PositiveInfinity));
+        double neededClient = body.DesiredSize.Height;
+
+        // Height is the outer frame, ClientSize the inner area; the delta is the
+        // chrome (title bar / borders), constant regardless of content. A small
+        // bottom buffer keeps the last panel off the window's bottom edge.
+        const double BottomBuffer = 5;
+        double chrome = Math.Max(0, Height - ClientSize.Height);
+        double target = Math.Clamp(neededClient + chrome + BottomBuffer, MinHeight, MaxHeight);
+        if (Math.Abs(Height - target) > 0.5) Height = target;
+    }
+
+    // ----- HP/MA graph scrub cursor ---------------------------------
+
+    private void OnSliderPressed(object? sender, PointerPressedEventArgs e) => SetScrubbing(true);
+    private void OnSliderReleased(object? sender, PointerReleasedEventArgs e) => SetScrubbing(false);
+    private void OnSliderCaptureLost(object? sender, PointerCaptureLostEventArgs e) => SetScrubbing(false);
+
+    private void SetScrubbing(bool on)
+    {
+        if (DataContext is SessionStatsViewModel vm) vm.IsScrubbing = on;
+    }
 
     private void OnClosed(object? sender, EventArgs e)
     {

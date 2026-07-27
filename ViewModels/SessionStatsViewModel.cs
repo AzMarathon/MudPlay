@@ -31,6 +31,15 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // Bucket count for the kills/hour sparkline across the rolling window.
     private const int SparklineBuckets = 30;
 
+    // How many loop steps the HP/MA History graph shows at once; the slider pans
+    // this window across a longer loop.
+    private const int StepViewWindow = 15;
+
+    // Percentage points of headroom below the lowest recorded value for the HP/MA
+    // graph's axis floor — so the plot spreads over the range that matters instead
+    // of wasting the bottom half on values you never reach.
+    private const double AxisFloorHeadroom = 15;
+
     // Upper bound on the banked-level scan — same cap the auto-trainer and
     // level-up announcer use, so the time-to-level count stays in lock-step.
     private const int MaxLevelScan = 60;
@@ -38,6 +47,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     private readonly CombatSessionTracker _combatTracker;
     private readonly TimeAnalysisTracker _timeTracker;
     private readonly SessionActivityTracker _activityTracker;
+    private readonly HpMaHistoryTracker _hpMaTracker;
     private readonly SessionStatsLayoutStore _layoutStore;
 
     // Resolves the per-BBS runic word for the currency denomination labels.
@@ -95,6 +105,48 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [NotifyPropertyChangedFor(nameof(ExpPeakText), nameof(ExpFloorText))]
     private IReadOnlyList<double> _experiencePerHour = Array.Empty<double>();
 
+    // Per-loop-step HP/MA min/max (percent of max), indexed by step position;
+    // reassigned each refresh. HP and MA each draw a per-step high-low bar on a
+    // shared 0–100% axis. HasManaHistory is false for a no-mana class, hiding the
+    // mana bars + legend. The step count (HpLow.Count) drives the slider bounds.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StepViewMax), nameof(IsStepSliderVisible), nameof(StepRangeText),
+        nameof(AxisMin), nameof(AxisMinText), nameof(AxisQ1Text), nameof(AxisMidText), nameof(AxisQ3Text), nameof(CenterStepText), nameof(WindowOffset), nameof(CursorIndex))]
+    private IReadOnlyList<double> _hpLow = Array.Empty<double>();
+    [ObservableProperty] private IReadOnlyList<double> _hpHigh = Array.Empty<double>();
+    [ObservableProperty] private IReadOnlyList<double> _hpAvg = Array.Empty<double>();
+    [ObservableProperty] private IReadOnlyList<double> _maLow = Array.Empty<double>();
+    [ObservableProperty] private IReadOnlyList<double> _maHigh = Array.Empty<double>();
+    [ObservableProperty] private IReadOnlyList<double> _maAvg = Array.Empty<double>();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AxisMin), nameof(AxisMinText), nameof(AxisQ1Text), nameof(AxisMidText), nameof(AxisQ3Text))]
+    private bool _hasManaHistory;
+
+    // Lowest HP / MA percent seen anywhere on the loop, shown in each series'
+    // legend label and feeding the adaptive axis floor. 100 until the first on-loop
+    // sample lands.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HpLegendText), nameof(AxisMin), nameof(AxisMinText), nameof(AxisQ1Text), nameof(AxisMidText), nameof(AxisQ3Text))]
+    private double _lowestHpPercent = 100;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MaLegendText), nameof(AxisMin), nameof(AxisMinText), nameof(AxisQ1Text), nameof(AxisMidText), nameof(AxisQ3Text))]
+    private double _lowestMaPercent = 100;
+
+    // The loop step the slider is anchored on (0-based). The slider spans every
+    // step (0 … N-1), so the cursor reaches any step; the visible window follows it
+    // (WindowOffset), centring where it can and clamping at the head / tail.
+    // Clamped to StepViewMax each refresh.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StepRangeText), nameof(CenterStepText),
+        nameof(WindowOffset), nameof(CursorIndex))]
+    private double _focusStep;
+
+    // True while the user is holding / dragging the pan slider — drives the graph's
+    // vertical scrub cursor so they can see exactly which step they're centred on.
+    [ObservableProperty] private bool _isScrubbing;
+
     // Per-panel visibility toggles — each of the five panels (the two rate
     // graphs and the three stat sections) can be shown or hidden via the
     // window's context menu. Each change is written through to the
@@ -105,6 +157,9 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     private bool _isExpGraphVisible = true;
+
+    [ObservableProperty]
+    private bool _isHpMaGraphVisible = true;
 
     [ObservableProperty]
     private bool _isPlayerStatsVisible = true;
@@ -129,6 +184,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         CombatSessionTracker combat,
         TimeAnalysisTracker time,
         SessionActivityTracker activity,
+        HpMaHistoryTracker hpMaHistory,
         SessionStatsLayoutStore layout,
         PlayerStats stats,
         GameDataCache gameData,
@@ -139,6 +195,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         ArgumentNullException.ThrowIfNull(combat);
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(activity);
+        ArgumentNullException.ThrowIfNull(hpMaHistory);
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -148,6 +205,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _combatTracker = combat;
         _timeTracker = time;
         _activityTracker = activity;
+        _hpMaTracker = hpMaHistory;
         _layoutStore = layout;
         _stats = stats;
         _gameData = gameData;
@@ -160,6 +218,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _combatTracker.Changed += OnChanged;
         _timeTracker.Changed += OnChanged;
         _activityTracker.Changed += OnChanged;
+        _hpMaTracker.Changed += OnChanged;
 
         _liveTick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _liveTick.Tick += (_, _) => Refresh();
@@ -200,6 +259,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         List<string> hidden = new();
         if (!IsKillsGraphVisible)   hidden.Add("KillsGraph");
         if (!IsExpGraphVisible)     hidden.Add("ExpGraph");
+        if (!IsHpMaGraphVisible)    hidden.Add("HpMaGraph");
         if (!IsPlayerStatsVisible)  hidden.Add("PlayerStatistics");
         if (!IsTimeAnalysisVisible) hidden.Add("TimeAnalysis");
         if (!IsSessionStatsVisible) hidden.Add("SessionStatistics");
@@ -212,6 +272,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         {
             case "KillsGraph":        IsKillsGraphVisible = visible; break;
             case "ExpGraph":          IsExpGraphVisible = visible; break;
+            case "HpMaGraph":         IsHpMaGraphVisible = visible; break;
             case "PlayerStatistics":  IsPlayerStatsVisible = visible; break;
             case "TimeAnalysis":      IsTimeAnalysisVisible = visible; break;
             case "SessionStatistics": IsSessionStatsVisible = visible; break;
@@ -220,6 +281,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     partial void OnIsKillsGraphVisibleChanged(bool value) => PersistLayout();
     partial void OnIsExpGraphVisibleChanged(bool value) => PersistLayout();
+    partial void OnIsHpMaGraphVisibleChanged(bool value) => PersistLayout();
     partial void OnIsPlayerStatsVisibleChanged(bool value) => PersistLayout();
     partial void OnIsTimeAnalysisVisibleChanged(bool value) => PersistLayout();
     partial void OnIsSessionStatsVisibleChanged(bool value) => PersistLayout();
@@ -277,6 +339,84 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     public string KillsFloorText => RateLabel(Floor(KillsPerHour), compact: false);
     public string ExpPeakText    => RateLabel(Peak(ExperiencePerHour), compact: true);
     public string ExpFloorText   => RateLabel(Floor(ExperiencePerHour), compact: true);
+
+    // HP/MA-history legend labels — each names the series and its worst dip across
+    // the loop's steps ("HP (low 28%)"), so the scariest moment reads without
+    // eyeballing the bars. 100% until the first on-loop sample lands.
+    public string HpLegendText => $"HP (low {LowestHpPercent:F0}%)";
+    public string MaLegendText => $"MA (low {LowestMaPercent:F0}%)";
+
+    // HP/MA graph slider bounds: the window pans from step 1 to the tail, so the
+    // slider's max is the count past a full window; it's only shown (and only
+    // pannable) once the loop is longer than one window.
+    // Slider spans every step (its max is the last step index), so the cursor can
+    // anchor anywhere; only shown once the loop is longer than one window (a loop
+    // that fits needs no panning).
+    public double StepViewMax => Math.Max(0, HpLow.Count - 1);
+    public bool IsStepSliderVisible => HpLow.Count > StepViewWindow;
+
+    // The anchored step (0-based, clamped) the cursor + readout mark.
+    public int CursorIndex
+    {
+        get
+        {
+            int n = HpLow.Count;
+            return n == 0 ? 0 : Math.Clamp((int)Math.Round(FocusStep), 0, n - 1);
+        }
+    }
+
+    // First visible step: the window follows the cursor — centred on it where it
+    // can be, clamped so the head and tail steps stay reachable.
+    public int WindowOffset
+    {
+        get
+        {
+            int n = HpLow.Count;
+            if (n == 0) return 0;
+            int window = Math.Min(StepViewWindow, n);
+            return Math.Clamp(CursorIndex - window / 2, 0, n - window);
+        }
+    }
+
+    // Adaptive vertical floor for the graph (top is fixed at 100%): 30 points below
+    // the lowest value seen across the plotted series, clamped at 0. 0 before any
+    // data lands. AxisMinText labels the bottom scale tick.
+    public double AxisMin
+    {
+        get
+        {
+            if (HpLow.Count == 0) return 0;
+            double lowest = HasManaHistory ? Math.Min(LowestHpPercent, LowestMaPercent) : LowestHpPercent;
+            return Math.Max(0, lowest - AxisFloorHeadroom);
+        }
+    }
+
+    public string AxisMinText => $"{AxisMin:F0}%";
+
+    // X-axis caption: which loop steps the window currently shows, of the total —
+    // labels the step axis and tracks the slider. "steps 1–N" when the whole loop
+    // fits.
+    public string StepRangeText
+    {
+        get
+        {
+            int n = HpLow.Count;
+            if (n == 0) return "no loop steps recorded yet";
+            int first = WindowOffset + 1;
+            int last = Math.Min(n, WindowOffset + Math.Min(StepViewWindow, n));
+            return first <= 1 && last >= n ? $"steps 1–{n}" : $"steps {first}–{last} of {n}";
+        }
+    }
+
+    // The anchored step (1-based) for the in-graph readout + the scrub cursor.
+    public string CenterStepText => HpLow.Count > 0 ? $"step {CursorIndex + 1}" : string.Empty;
+
+    // Intermediate y-axis tick labels between the adaptive floor (AxisMin) and 100%,
+    // at quarter, half, and three-quarter of the range, so the graph reads at a
+    // glance rather than only at its two ends.
+    public string AxisQ1Text  => $"{AxisMin + 0.25 * (100 - AxisMin):F0}%";
+    public string AxisMidText => $"{AxisMin + 0.50 * (100 - AxisMin):F0}%";
+    public string AxisQ3Text  => $"{AxisMin + 0.75 * (100 - AxisMin):F0}%";
 
     // Current headline rate, printed in each graph header so the number is
     // legible without eyeballing the curve — it equals the curve's right-most
@@ -346,6 +486,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _combatTracker.Reset();
         _timeTracker.Reset();
         _activityTracker.Reset();
+        _hpMaTracker.Reset();
     }
 
     // Per-section resets, one per collapsible. Each wipes only its own section's
@@ -402,6 +543,20 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         KillsPerHour = _activityTracker.KillsPerHourSeries(SparklineBuckets);
         ExperiencePerHour = _activityTracker.ExperiencePerHourSeries(SparklineBuckets);
 
+        HpMaHistoryStats hpMa = _hpMaTracker.Snapshot();
+        HpLow = hpMa.HpLow;
+        HpHigh = hpMa.HpHigh;
+        HpAvg = hpMa.HpAvg;
+        MaLow = hpMa.MaLow;
+        MaHigh = hpMa.MaHigh;
+        MaAvg = hpMa.MaAvg;
+        HasManaHistory = hpMa.HasMana;
+        LowestHpPercent = hpMa.LowestHpPercent;
+        LowestMaPercent = hpMa.LowestMaPercent;
+        // A shorter loop (or a reset) can pull the max in under the current focus;
+        // keep the anchored step from stranding past the tail.
+        if (FocusStep > StepViewMax) FocusStep = StepViewMax;
+
         // The countdown reads live PlayerStats + the wall clock, so it must
         // re-fire every tick even when the Activity snapshot compares equal.
         OnPropertyChanged(nameof(TimeToLevelText));
@@ -429,5 +584,6 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         _combatTracker.Changed -= OnChanged;
         _timeTracker.Changed -= OnChanged;
         _activityTracker.Changed -= OnChanged;
+        _hpMaTracker.Changed -= OnChanged;
     }
 }

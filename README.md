@@ -1,9 +1,12 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.1.0**
-> - Character Workshop death list gains a "How did I Die?" button: each recorded death captures its backscroll to a per-character log, so a death that scrolls off the live buffer overnight stays reviewable
-> - @status reply overhauled — reports current activity and sub-state (idle / walking / looping / auto-lair, plus fighting / fleeing / resting), the room name with map/room numbers, walk ETA (steps left, or a countdown to the destination port when sailing), and active ailments
+> **Version 2.3.0**
+> - New "HP/MA History" graph in Session Stats: a per-loop-step range bar (HP red, mana cyan) showing the min/max your vitals hit at each step, with an average trend line threaded through so you can read your HP trajectory around the circuit at a glance
+> - Each step's range + average accumulate across laps; records only while a loop is stepping and resets at each loop start; toggle it from the Session Stats context menu like the kills/hr and exp/hr graphs
+> - Shows 15 steps at a time with a slider to pan a longer loop from step 1 to the tail; an in-graph readout names the centred step, and dragging the slider drops a cursor line onto it so you know exactly which step you're viewing
+> - The graph's vertical axis auto-floors 15 points below your lowest value (top stays 100%) to spread the plot, and the legend names each series' lowest % seen
+> - Session Stats window now sizes its height to its visible content, so showing/hiding graphs and sections no longer leaves a gap or needs a manual resize
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
