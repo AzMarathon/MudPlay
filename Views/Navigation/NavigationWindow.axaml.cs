@@ -193,6 +193,20 @@ public partial class NavigationWindow : Window
         e.Handled = true;
     }
 
+    // Enter in the search box resolves the typed text: when it lands on exactly one
+    // (walkable) match, arm it — flipping the goto button to that room, same as
+    // clicking the row. Ambiguous (0 or >1 results) does nothing; the user picks.
+    private void OnSearchBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        if (DataContext is not NavigationViewModel vm) return;
+        if (vm.SearchResults.Count == 1 && !vm.SearchResults[0].IsInformational)
+        {
+            vm.SelectSearchResultCommand.Execute(vm.SearchResults[0]);
+            e.Handled = true;
+        }
+    }
+
     // ----- Building-loop click list ---------------------------------
 
     private void WireBuilderClicksList(ListBox list)

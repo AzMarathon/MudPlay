@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.5.0
+
+- Navigation overlay toggles (lairs / shops / spells / legend) collapse into one "Overlays ▾" flyout to reclaim toolbar room
+- Lairs overlay gains a "count" mode that labels each lair room with its max monster spawn (a 3-spawn room shows a 3), cycling Uniform → Heat → Count → Off
+- Search box now arms a "Go to…" button on a resolved match (Enter or single result), and clicking it drops a per-character history of your last 10 destinations
+- Loops / Auto-Lairs list gains a filter box above the folders that live-narrows loops and lairs as you type
+- Room search is more forgiving (whitespace/punctuation-insensitive, any-order word tokens) and now finds unique "max 1" monsters like aged titan
+
 ## 2.4.0
 
 - New "Unobtainable" table in the Game Data Browser lists the Items the game marks out of play (In Game = 0 — "bow of silver", placeholders, duplicate test rows) that the Item Finder skips, so they're inspectable instead of just hidden

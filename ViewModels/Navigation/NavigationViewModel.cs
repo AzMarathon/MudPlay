@@ -63,6 +63,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.TBInfo.StoreReloaded    += RefreshTeleportRooms;
         _services.Loops.LoopsChanged += OnLoopsChanged;
         _services.Favorites.Changed += OnFavoritesChanged;
+        _services.GotoHistory.Changed += RefreshGotoHistory;
         _services.LoopRunner.Event += OnLoopRunnerEvent;
         _services.Movement.AvoidedChanged += OnAvoidedChanged;
         OnAvoidedChanged();
@@ -92,6 +93,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshLoopOverlays();
         RefreshLayout();
         RefreshFavorites();
+        RefreshGotoHistory();
         RefreshCrawlerChords();
         RefreshTeleportRooms();
         RefreshDeathRooms();
@@ -533,10 +535,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     // ----- Highlight chips + legend ---------------------------------
 
-    // Lairs chip is a three-stage toggle: Uniform (all lairs one colour) ->
-    // Heat (shaded by respawn time) -> Off (no lair highlight) -> Uniform.
-    // HighlightLairs (the chip's active-fill flag) is derived: lit for Uniform
-    // + Heat, dark for Off.
+    // Lairs chip is a four-stage toggle: Uniform (all lairs one colour) ->
+    // Heat (shaded by respawn time) -> Count (labelled with max monsters) -> Off
+    // (no lair highlight) -> Uniform. HighlightLairs (the chip's active-fill flag)
+    // is derived: lit for anything but Off.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HighlightLairs))]
     [NotifyPropertyChangedFor(nameof(LairButtonLabel))]
@@ -546,9 +548,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     public string LairButtonLabel => LairMode switch
     {
-        LairDisplayMode.Heat => "Lairs: heat",
-        LairDisplayMode.Off  => "Lairs: off",
-        _                    => "Lairs",
+        LairDisplayMode.Heat  => "Lairs: heat",
+        LairDisplayMode.Count => "Lairs: count",
+        LairDisplayMode.Off   => "Lairs: off",
+        _                     => "Lairs",
     };
 
     [ObservableProperty] private bool _highlightShops = true;
@@ -567,10 +570,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // matter which rooms are drawn.
     [ObservableProperty] private int _lairMaxRespawnSeconds;
 
+    // Per-room max monster count ("(Max N)" from the lair tag) for the visible
+    // layout, keyed by RoomKey. Bound to MapControl for the Count display mode;
+    // rooms whose max can't be parsed are absent (no label).
+    [ObservableProperty] private IReadOnlyDictionary<RoomKey, int>? _lairMonsterCounts;
+
     [RelayCommand] private void ToggleLairs() => LairMode = LairMode switch
     {
         LairDisplayMode.Uniform => LairDisplayMode.Heat,
-        LairDisplayMode.Heat    => LairDisplayMode.Off,
+        LairDisplayMode.Heat    => LairDisplayMode.Count,
+        LairDisplayMode.Count   => LairDisplayMode.Off,
         _                       => LairDisplayMode.Uniform,
     };
     [RelayCommand] private void ToggleShops()  => HighlightShops  = !HighlightShops;
@@ -606,17 +615,24 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (layout is null)
         {
             LairRespawnSeconds = null;
+            LairMonsterCounts = null;
             return;
         }
 
-        Dictionary<RoomKey, int>? map = null;
+        Dictionary<RoomKey, int>? respawn = null;
+        Dictionary<RoomKey, int>? counts = null;
         foreach (RoomKey key in layout.Positions.Keys)
         {
-            if (_services.RoomGraph.GetRoom(key) is not { HasLair: true }) continue;
-            if (_services.LairTimers.DefaultRespawnSeconds(key) is not { } secs) continue;
-            (map ??= new()).Add(key, secs);
+            if (_services.RoomGraph.GetRoom(key) is not { HasLair: true } room) continue;
+            if (_services.LairTimers.DefaultRespawnSeconds(key) is { } secs)
+                (respawn ??= new()).Add(key, secs);
+            // Max monsters the lair spawns, from the "(Max N)" on the lair tag.
+            if (room.RawLairTag is { } tag
+                && RoomTooltipBuilder.TryParseLairMax(tag, out int max) && max > 0)
+                (counts ??= new()).Add(key, max);
         }
-        LairRespawnSeconds = map;
+        LairRespawnSeconds = respawn;
+        LairMonsterCounts = counts;
         LairMaxRespawnSeconds = _services.LairTimers.MaxDefaultRespawnSeconds() ?? 0;
     }
 
@@ -752,6 +768,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(QueuedDestinationLabel))]
     [NotifyPropertyChangedFor(nameof(HasQueuedDestination))]
+    [NotifyPropertyChangedFor(nameof(GotoButtonLabel))]
     [NotifyPropertyChangedFor(nameof(CanRun))]
     [NotifyPropertyChangedFor(nameof(RunStopLabel))]
     private RoomKey? _queuedDestination;
@@ -793,6 +810,44 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Click handler for the queued-destination chip — discards the queued target + clears the preview line.
     [RelayCommand]
     private void ClearQueuedDestination() => QueuedDestination = null;
+
+    // ----- Goto button + recent-destination history -----------------
+
+    // The goto button's caption: the armed destination when one is queued, else a
+    // prompt. Clicking the button opens the recent-gotos flyout.
+    public string GotoButtonLabel => HasQueuedDestination ? QueuedDestinationLabel : "Go to…";
+
+    // Recent walk-to destinations for the goto-button flyout, newest first. Rebuilt
+    // from GotoHistoryStore on its Changed signal.
+    public ObservableCollection<GotoHistoryRowViewModel> GotoHistoryRows { get; } = new();
+
+    public bool HasGotoHistory => GotoHistoryRows.Count > 0;
+
+    private void RefreshGotoHistory()
+    {
+        GotoHistoryRows.Clear();
+        foreach (RoomKey key in _services.GotoHistory.All)
+        {
+            string name = Graph?.GetRoom(key)?.DisplayName ?? "???";
+            GotoHistoryRows.Add(new GotoHistoryRowViewModel(key, $"{name} {key.Map}/{key.Room}"));
+        }
+        OnPropertyChanged(nameof(HasGotoHistory));
+    }
+
+    // Bound TwoWay to the history flyout's ListBox SelectedItem. Picking a row arms
+    // it (like a search pick / favourite), then resets so the same row can be
+    // re-picked; the ListBox selection avoids a per-item command binding inside the
+    // flyout popup.
+    [ObservableProperty] private GotoHistoryRowViewModel? _selectedGotoHistory;
+
+    partial void OnSelectedGotoHistoryChanged(GotoHistoryRowViewModel? value)
+    {
+        if (value is null) return;
+        Layout = _services.Bfs.BuildLayout(value.Key);
+        SelectedRoomKey = value.Key;
+        QueuedDestination = value.Key;
+        SelectedGotoHistory = null;
+    }
 
     // ----- Section expand/collapse state (right rail) ---------------
     //
@@ -904,6 +959,21 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // True when the combined tree has any node (leaf or empty folder).
     public bool HasNavTree => NavTree.Count > 0;
 
+    // Free-text filter over the Loops + Auto-Lairs tree (leaf names). Empty shows
+    // the full folder tree; a value keeps only matching loops/setups and expands
+    // their folders. Rebuilds the tree only (not the flat backing lists).
+    [ObservableProperty] private string _loopFilter = string.Empty;
+
+    partial void OnLoopFilterChanged(string value) => RebuildNavTree();
+
+    // Any loop or lair setup exists before filtering — gates the filter box and
+    // tells "nothing saved" apart from "nothing matches the filter".
+    public bool HasAnyLoopsOrSetups => Loops.Count > 0 || Setups.Count > 0;
+
+    // Loops/setups exist but the current filter matches none — drives the
+    // "no matches" empty state (distinct from "nothing saved").
+    public bool HasNoLoopMatches => HasAnyLoopsOrSetups && NavTree.Count == 0;
+
     private void OnLoopsChanged() => RefreshLoopsAndLairs();
 
     private void OnSetupsChanged() => RefreshLoopsAndLairs();
@@ -916,17 +986,38 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         Setups.Clear();
         foreach (Models.Profile.LairSetup s in _services.Lairs.Setups)
             Setups.Add(new LairSetupRowViewModel(s));
+        OnPropertyChanged(nameof(HasAnyLoopsOrSetups));
+        RebuildNavTree();
+    }
 
-        // Both leaf kinds feed one tree keyed off the shared
-        // NavFolderManager folder set; NavTreeBuilder orders folders
-        // first then leaves alphabetically by type-aware sort key.
+    // Rebuild the folder tree from the flat Loops + Setups, honouring LoopFilter.
+    // Both leaf kinds feed one tree keyed off the shared NavFolderManager folder
+    // set; NavTreeBuilder orders folders first then leaves. With a filter active
+    // only matching leaves survive, empty folders are dropped (allFolders empty),
+    // and folders auto-expand so hits are visible; unfiltered, folders start
+    // collapsed so the compact rail opens tidy (per-folder expand overrides survive).
+    private void RebuildNavTree()
+    {
+        string filter = (LoopFilter ?? string.Empty).Trim();
         var rows = new List<object>(Setups.Count + Loops.Count);
-        rows.AddRange(Setups);
-        rows.AddRange(Loops);
-        // Rail Loops+Lairs folders start collapsed so the compact rail opens
-        // tidy; the user's per-folder expand overrides survive rebuilds.
-        NavTreeBuilder.Sync<object>(NavTree, rows, FolderOfNavRow, _services.NavFolders.AllFolders, defaultExpanded: false);
+        if (filter.Length == 0)
+        {
+            rows.AddRange(Setups);
+            rows.AddRange(Loops);
+        }
+        else
+        {
+            foreach (LairSetupRowViewModel s in Setups)
+                if (s.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(s);
+            foreach (LoopRowViewModel l in Loops)
+                if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(l);
+        }
+
+        bool filtering = filter.Length > 0;
+        IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.NavFolders.AllFolders;
+        NavTreeBuilder.Sync<object>(NavTree, rows, FolderOfNavRow, folders, defaultExpanded: filtering);
         OnPropertyChanged(nameof(HasNavTree));
+        OnPropertyChanged(nameof(HasNoLoopMatches));
     }
 
     private static string FolderOfNavRow(object row) => row switch
@@ -1657,6 +1748,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // shorter gated shortcut exists (falls straight through to WalkTo when
         // it doesn't). The preview sink draws the picked route on the map while
         // the dialog decides.
+        _services.GotoHistory.Record(k);
         await RouteChoicePrompt.WalkAsync(_services, k, path => PreviewPath = path);
     }
 
@@ -2887,6 +2979,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // favourites list, and the map right-click all funnel through the
             // same shared engine here; only how the walk is confirmed differs.
             QueuedDestination = null;
+            _services.GotoHistory.Record(queued);
             await RouteChoicePrompt.WalkAsync(_services, queued, path => PreviewPath = path);
             return;
         }

@@ -1347,6 +1347,10 @@ public sealed class AppServices
     // persisted via ProfileService.
     public FavoritesStore Favorites { get; private set; } = null!;
 
+    // Per-character recent walk-to destinations for the Navigation goto button.
+    // Persisted via ProfileService.
+    public GotoHistoryStore GotoHistory { get; private set; } = null!;
+
     // Shared pause-gate aggregator for every movement engine
     // (walker, loop runner, auto-lair scheduler). A pause from any
     // source halts whichever engine is active.
@@ -2405,6 +2409,7 @@ public sealed class AppServices
         Movement.RoomEntrySpellProbe = key => RoomGraph.GetRoom(key)?.Spell ?? 0;
         Movement.Hazards = RoomHazards;
         Favorites = new FavoritesStore(Profile, Log);
+        GotoHistory = new GotoHistoryStore(Profile);
 
         // Coordinator + walker. Coordinator is the
         // single pause-gate hub for every movement engine (walker now,

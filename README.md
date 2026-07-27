@@ -1,10 +1,12 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.4.0**
-> - New "Unobtainable" table in the Game Data Browser lists the Items the game marks out of play (In Game = 0 — "bow of silver", placeholders, duplicate test rows) that the Item Finder skips, so they're inspectable instead of just hidden
-> - New "Quest Flags" table shows every quest-flag reference in the set's TBInfo — the flag, whether a block grants / gates / advances / clears it, and the NPC / room / spell that reaches it (resolved via the block's Called-From provenance)
-> - Both are computed live from the loaded game-data set, so they appear on every set without re-importing
+> **Version 2.5.0**
+> - Navigation overlay toggles (lairs / shops / spells / legend) collapse into one "Overlays ▾" flyout to reclaim toolbar room
+> - Lairs overlay gains a "count" mode that labels each lair room with its max monster spawn (a 3-spawn room shows a 3), cycling Uniform → Heat → Count → Off
+> - Search box now arms a "Go to…" button on a resolved match (Enter or single result), and clicking it drops a per-character history of your last 10 destinations
+> - Loops / Auto-Lairs list gains a filter box above the folders that live-narrows loops and lairs as you type
+> - Room search is more forgiving (whitespace/punctuation-insensitive, any-order word tokens) and now finds unique "max 1" monsters like aged titan
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

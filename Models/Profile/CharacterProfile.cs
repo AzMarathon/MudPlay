@@ -172,6 +172,11 @@ public sealed class CharacterProfile
     // empty = no empty folders to remember. Maintained by FavoritesStore.
     public List<string>? FavoriteFolders { get; set; }
 
+    // Recent walk-to destinations, newest first, capped at 10. Each entry is a
+    // "map/room" coordinate string. Maintained by GotoHistoryStore; drives the
+    // Navigation goto-button dropdown. null or empty = no history yet.
+    public List<string>? GotoHistory { get; set; }
+
     // Last room the character was known to be standing in. Hydrated from
     // Game.Map.RoomTracker on a successful manual or auto locate; saved with the
     // rest of the profile and used as the initial Navigation map origin on the
