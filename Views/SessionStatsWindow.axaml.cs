@@ -112,9 +112,11 @@ public partial class SessionStatsWindow : Window
         double neededClient = body.DesiredSize.Height;
 
         // Height is the outer frame, ClientSize the inner area; the delta is the
-        // chrome (title bar / borders), constant regardless of content.
+        // chrome (title bar / borders), constant regardless of content. A small
+        // bottom buffer keeps the last panel off the window's bottom edge.
+        const double BottomBuffer = 5;
         double chrome = Math.Max(0, Height - ClientSize.Height);
-        double target = Math.Clamp(neededClient + chrome, MinHeight, MaxHeight);
+        double target = Math.Clamp(neededClient + chrome + BottomBuffer, MinHeight, MaxHeight);
         if (Math.Abs(Height - target) > 0.5) Height = target;
     }
 
