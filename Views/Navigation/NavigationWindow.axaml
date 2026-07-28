@@ -303,12 +303,13 @@
                            Margin="0,0,10,0"
                            TextTrimming="CharacterEllipsis"/>
 
-                <!-- Selected-room chip — appears when a room is queued as a
-                     destination (via search pick / context menu). Rides just
-                     left of the search box. Click clears the queue + preview. -->
+                <!-- Goto button — rides just left of the search box. Shows the armed
+                     destination (or "Go to…"); resolving the search box flips it to a
+                     room. Click opens the recent-destination flyout, which is anchored
+                     to the search box (below) so it drops down over the right rail. -->
                 <Button Grid.Column="3"
-                        IsVisible="{Binding HasQueuedDestination}"
-                        Command="{Binding ClearQueuedDestinationCommand}"
+                        IsVisible="{Binding MapExpanded}"
+                        Click="OnGotoButtonClick"
                         Background="{StaticResource ChromeBgElevBrush}"
                         BorderBrush="{StaticResource ChromeBorderBrush}"
                         BorderThickness="1"
@@ -316,14 +317,14 @@
                         Padding="8,3"
                         VerticalAlignment="Center"
                         Margin="0,0,6,0"
-                        ToolTip.Tip="Click to clear queued destination">
+                        ToolTip.Tip="Recent destinations — click to pick one; type in the search box to set a new target.">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="{Binding QueuedDestinationLabel}"
+                        <TextBlock Text="{Binding GotoButtonLabel}"
                                    FontSize="11"
                                    Foreground="{StaticResource ChromeFgBrush}"
                                    TextTrimming="CharacterEllipsis"
-                                   MaxWidth="220"/>
-                        <TextBlock Text="✕"
+                                   MaxWidth="200"/>
+                        <TextBlock Text="▾"
                                    FontSize="10"
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
                                    VerticalAlignment="Center"/>
@@ -337,13 +338,51 @@
                          Name="SearchBox"
                          IsVisible="{Binding MapExpanded}"
                          Text="{Binding SearchQuery, Mode=TwoWay}"
+                         KeyDown="OnSearchBoxKeyDown"
                          PlaceholderText="Search rooms, lairs, loops…"
                          Width="150"
                          MinHeight="24"
                          Height="24"
                          Padding="7,2"
                          FontSize="11"
-                         VerticalAlignment="Center"/>
+                         VerticalAlignment="Center">
+                    <!-- Recent-destinations flyout lives on the search box (not the
+                         goto button) so it drops straight down over the right rail,
+                         matching its 290-wide column. The goto button's Click opens it
+                         via FlyoutBase.ShowAttachedFlyout. -->
+                    <FlyoutBase.AttachedFlyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <StackPanel Width="290" Spacing="3">
+                                <Button Content="Clear destination"
+                                        Command="{Binding ClearQueuedDestinationCommand}"
+                                        IsVisible="{Binding HasQueuedDestination}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                        FontSize="11"/>
+                                <TextBlock Text="Recent destinations"
+                                           FontSize="10"
+                                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                                           IsVisible="{Binding HasGotoHistory}"/>
+                                <ListBox ItemsSource="{Binding GotoHistoryRows}"
+                                         SelectedItem="{Binding SelectedGotoHistory, Mode=TwoWay}"
+                                         MaxHeight="240"
+                                         IsVisible="{Binding HasGotoHistory}"
+                                         Background="Transparent">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="vm:GotoHistoryRowViewModel">
+                                            <TextBlock Text="{Binding Label}"
+                                                       FontSize="11"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Text="No recent destinations."
+                                           FontSize="11"
+                                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                                           IsVisible="{Binding !HasGotoHistory}"/>
+                            </StackPanel>
+                        </Flyout>
+                    </FlyoutBase.AttachedFlyout>
+                </TextBox>
 
                 <!-- Collapse / expand the side chrome so the map can fill the
                      window (and the window shrink narrower than the rail).
@@ -374,25 +413,37 @@
             <Grid ColumnDefinitions="Auto,*,Auto"
                   Margin="12,6"
                   ColumnSpacing="6">
-                <!-- Display-toggle chips. The Manage button lives down
-                     in the loops-rail footer (already wired to
-                     OpenManagerCommand) — putting it here too would be
-                     redundant. -->
+                <!-- Map-overlay toggles, tucked into a flyout to save bar room.
+                     The Manage button lives down in the loops-rail footer
+                     (already wired to OpenManagerCommand). -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
                             IsVisible="{Binding MapExpanded}">
-                    <Button Classes="ToggleChip" Content="{Binding LairButtonLabel}"
-                            Command="{Binding ToggleLairsCommand}"
-                            ToolTip.Tip="Lair highlight: click to cycle uniform colour → respawn heat-map → off."
-                            Classes.LairFill="{Binding HighlightLairs}"/>
-                    <Button Classes="ToggleChip" Content="Shops"
-                            Command="{Binding ToggleShopsCommand}"
-                            Classes.ShopFill="{Binding HighlightShops}"/>
-                    <Button Classes="ToggleChip" Content="Spells"
-                            Command="{Binding ToggleSpellsCommand}"
-                            Classes.SpellFill="{Binding HighlightSpells}"/>
-                    <Button Classes="ToggleChip" Content="Legend"
-                            Command="{Binding ToggleLegendCommand}"
-                            Classes.LegendFill="{Binding LegendVisible}"/>
+                    <Button Classes="ToggleChip" Content="Overlays ▾"
+                            ToolTip.Tip="Map overlays — lairs, shops, spells, legend.">
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedLeft">
+                                <StackPanel Orientation="Vertical" Spacing="4" Margin="2" MinWidth="120">
+                                    <Button Classes="ToggleChip" Content="{Binding LairButtonLabel}"
+                                            Command="{Binding ToggleLairsCommand}"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            ToolTip.Tip="Lair highlight: click to cycle uniform colour → respawn heat-map → max-monster count → off."
+                                            Classes.LairFill="{Binding HighlightLairs}"/>
+                                    <Button Classes="ToggleChip" Content="Shops"
+                                            Command="{Binding ToggleShopsCommand}"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            Classes.ShopFill="{Binding HighlightShops}"/>
+                                    <Button Classes="ToggleChip" Content="Spells"
+                                            Command="{Binding ToggleSpellsCommand}"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            Classes.SpellFill="{Binding HighlightSpells}"/>
+                                    <Button Classes="ToggleChip" Content="Legend"
+                                            Command="{Binding ToggleLegendCommand}"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            Classes.LegendFill="{Binding LegendVisible}"/>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
                 </StackPanel>
 
                 <!-- Centred readouts filling the flex gap between the toggle
@@ -496,6 +547,7 @@
                                  LairMode="{Binding LairMode}"
                                  LairRespawnSeconds="{Binding LairRespawnSeconds}"
                                  LairMaxRespawnSeconds="{Binding LairMaxRespawnSeconds}"
+                                 LairMonsterCounts="{Binding LairMonsterCounts}"
                                  HighlightShops="{Binding HighlightShops}"
                                  HighlightSpells="{Binding HighlightSpells}"
                                  WalkPath="{Binding WalkPath}"
@@ -600,19 +652,21 @@
                            TextWrapping="Wrap"/>
             </Border>
 
-            <!-- Search dropdown — anchored under the search box,
-                 visible only when results exist. Code-behind sizes
-                 + positions via Margin. -->
-            <Border Grid.Column="0"
+            <!-- Search results dropdown — drops straight down over the right rail
+                 (nav / goto / loops collapsibles) under the search box, not over the
+                 map. Lives in the rail column and carries a high ZIndex so it paints
+                 above the rail Border, which is declared later in document order.
+                 Visible only when the search box has results. -->
+            <Border Grid.Column="1"
                     Name="SearchDropdown"
+                    ZIndex="100"
                     IsVisible="{Binding HasSearchResults}"
-                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,0,8,0"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Top"
                     Background="{StaticResource ChromeBgElevBrush}"
                     BorderBrush="{StaticResource ChromeBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="3"
-                    Width="260" MaxHeight="320">
+                    MaxHeight="320">
                 <ListBox ItemsSource="{Binding SearchResults}"
                          Background="Transparent"
                          BorderThickness="0">
@@ -1110,13 +1164,26 @@
                                     </TextBlock>
                                 </Expander.Header>
                                 <StackPanel Spacing="2" HorizontalAlignment="Stretch">
+                                    <!-- Filter box first, then folders, then loops. -->
+                                    <TextBox Text="{Binding LoopFilter, Mode=TwoWay}"
+                                             PlaceholderText="Filter loops / lairs…"
+                                             FontSize="11"
+                                             Margin="0,0,0,2"
+                                             IsVisible="{Binding HasAnyLoopsOrSetups}"/>
                                     <TextBlock Text="No loops or Auto-Lair setups saved on this BBS."
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                FontSize="11"
                                                TextWrapping="Wrap"
                                                MaxWidth="250"
                                                HorizontalAlignment="Left"
-                                               IsVisible="{Binding !HasNavTree}"/>
+                                               IsVisible="{Binding !HasAnyLoopsOrSetups}"/>
+                                    <TextBlock Text="No loops or lairs match the filter."
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               MaxWidth="250"
+                                               HorizontalAlignment="Left"
+                                               IsVisible="{Binding HasNoLoopMatches}"/>
                                     <!-- Loops + Auto-Lair setups share ONE on-disk Loops
                                          directory tree and render as a single combined
                                          list: Auto-Lair leaves amber, loop leaves green.

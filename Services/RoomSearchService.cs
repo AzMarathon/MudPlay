@@ -19,13 +19,14 @@ namespace FujinTerm.Services;
 //   2. Acronym (opt-in via Search's includeAcronyms flag) — "Frozen Cavern,
 //      Cave Opening" → FCCO. First letter of each whitespace/punctuation-
 //      delimited word, uppercased.
-//   3. Room-name substring — case-insensitive match against Room.Name +
-//      Room.DisplayName. Requires >= 2 chars to avoid flooding on a single
-//      keystroke.
-//   4. Monster-name substring — limited to monsters with RegenTime > 0 (i.e.
-//      lair-respawning mobs). One RoomSearchResult per (monster, lair-room)
-//      pair; mobs whose spawn rooms aren't recorded surface as informational
-//      rows.
+//   3. Room-name token match — every whitespace/punctuation-delimited word of the
+//      query must appear in Room.Name or Room.DisplayName (case-insensitive,
+//      order-independent, so "titan aged" finds "aged titan"). Requires >= 2 chars
+//      to avoid flooding on a single keystroke.
+//   4. Monster-name token match — lair-respawning mobs (RegenTime > 0) plus unique
+//      spawns (GameLimit == 1, e.g. "aged titan"). One RoomSearchResult per
+//      (monster, room) pair; mobs whose spawn rooms aren't recorded surface as
+//      informational rows.
 //
 // Caches: the regen-monster list + monster→rooms index live on the service and
 // invalidate on GameDataCache.ActiveSetChanged + RoomGraphManager.GraphReloaded.
@@ -49,7 +50,7 @@ public sealed class RoomSearchService
     private readonly MovementFilter? _movement;
     private readonly LogService? _log;
 
-    private List<(int Id, string Name, int RegenHours)>? _regenMonsterCache;
+    private List<(int Id, string Name, string Tag)>? _searchableMonsterCache;
     private Dictionary<int, List<RoomKey>>? _roomsByMonsterIdCache;
     private Dictionary<int, IReadOnlyList<RoomKey>>? _questKillRoomsCache;
     // Single-source distance cache. Each Search call reuses it when
@@ -87,8 +88,9 @@ public sealed class RoomSearchService
     }
 
     // Resolve query against the active graph. Each tier accumulates into the
-    // returned list, deduped on (Key, MonsterTag). Results are sorted by step
-    // distance (closer first) then by primary line.
+    // returned list, deduped on (Key, MonsterTag). Results are sorted by match
+    // rank first (literal whole-word matches before buried-substring ones), then
+    // step distance (closer first), then primary line.
     //   source — player's current room for step distance; pass null to skip.
     //   cap — soft cap on total matches; tiers stop accumulating once reached.
     //   includeAcronyms — run the acronym tier (only @goto uses this).
@@ -137,30 +139,32 @@ public sealed class RoomSearchService
             }
         }
 
-        // ----- Tier 3: room-name substring (≥ 2 chars) -----
+        // ----- Tier 3: room-name token match (≥ 2 chars) -----
+        string[] tokens = TokenizeNeedle(needle);
         if (needle.Length >= 2 && matches.Count < cap)
         {
             foreach (Room room in _graph.Rooms)
             {
                 if (matches.Count >= cap) break;
                 if (_blacklist.IsBlacklisted(room.Key)) continue;
-                if (!room.Name.Contains(needle, StringComparison.OrdinalIgnoreCase)
-                 && !room.DisplayName.Contains(needle, StringComparison.OrdinalIgnoreCase))
+                if (!AllTokensMatch(room.Name, tokens) && !AllTokensMatch(room.DisplayName, tokens))
                     continue;
                 if (matches.Any(x => x.MonsterTag is null && x.Key.Equals(room.Key))) continue;
-                matches.Add(BuildRoomMatch(room, source));
+                int rank = Math.Min(MatchRank(room.Name, tokens), MatchRank(room.DisplayName, tokens));
+                matches.Add(BuildRoomMatch(room, source) with { MatchRank = rank });
             }
         }
 
-        // ----- Tier 4: monster-name substring (regen-bearing mobs only) -----
+        // ----- Tier 4: monster-name token match (lair-respawning + unique mobs) -----
         if (needle.Length >= 2 && matches.Count < cap)
         {
-            foreach ((int monsterId, string name, int regenHours)
-                     in EnumerateRegenMonsters())
+            foreach ((int monsterId, string name, string tag)
+                     in EnumerateSearchableMonsters())
             {
                 if (matches.Count >= cap) break;
-                if (!name.Contains(needle, StringComparison.OrdinalIgnoreCase)) continue;
-                string monsterTag = $"{name} · regen {regenHours}h";
+                if (!AllTokensMatch(name, tokens)) continue;
+                string monsterTag = $"{name} · {tag}";
+                int rank = MatchRank(name, tokens);
 
                 if (!RoomsByMonsterId().TryGetValue(monsterId, out List<RoomKey>? lairs)
                     || lairs.Count == 0)
@@ -169,7 +173,8 @@ public sealed class RoomSearchService
                         Key:               new RoomKey(0, 0),
                         Name:              string.Empty,
                         StepsFromCurrent:  null,
-                        MonsterTag:        monsterTag));
+                        MonsterTag:        monsterTag,
+                        MatchRank:         rank));
                     continue;
                 }
 
@@ -179,13 +184,14 @@ public sealed class RoomSearchService
                     if (_blacklist.IsBlacklisted(lk)) continue;
                     if (_graph.GetRoom(lk) is not { } lroom) continue;
                     int? steps = source is { } src ? DistanceFrom(src, lroom.Key) : null;
-                    matches.Add(new RoomSearchResult(lroom.Key, lroom.DisplayName, steps, monsterTag));
+                    matches.Add(new RoomSearchResult(lroom.Key, lroom.DisplayName, steps, monsterTag, rank));
                 }
             }
         }
 
         return matches
-            .OrderBy(mm => mm.StepsFromCurrent ?? int.MaxValue)
+            .OrderBy(mm => mm.MatchRank)
+            .ThenBy(mm => mm.StepsFromCurrent ?? int.MaxValue)
             .ThenBy(mm => mm.PrimaryLine, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -269,7 +275,7 @@ public sealed class RoomSearchService
 
     private void InvalidateCaches()
     {
-        _regenMonsterCache = null;
+        _searchableMonsterCache = null;
         _roomsByMonsterIdCache = null;
         _questKillRoomsCache = null;
         InvalidateDistanceCache();
@@ -282,30 +288,100 @@ public sealed class RoomSearchService
         _distanceCacheSource = null;
     }
 
-    private IEnumerable<(int Id, string Name, int RegenHours)> EnumerateRegenMonsters()
+    // Monsters the search can resolve to a room: lair-respawning mobs (RegenTime > 0)
+    // AND unique / limited spawns (GameLimit == 1, e.g. "aged titan"), which the
+    // regen-only gate used to drop when they don't respawn. The tag distinguishes them
+    // in the result row ("regen 24h" vs "unique"); a unique that also respawns leads
+    // with "unique". RoomsByMonsterId already resolves both via lair tags + Summoned By.
+    private IEnumerable<(int Id, string Name, string Tag)> EnumerateSearchableMonsters()
     {
-        if (_regenMonsterCache is not null) return _regenMonsterCache;
+        if (_searchableMonsterCache is not null) return _searchableMonsterCache;
 
-        List<(int, string, int)> list = new();
+        List<(int, string, string)> list = new();
         JsonDocument? doc = _gameData.GetRawTable("Monsters");
-        if (doc is null) { _regenMonsterCache = list; return list; }
+        if (doc is null) { _searchableMonsterCache = list; return list; }
 
         foreach (JsonElement row in doc.RootElement.EnumerateArray())
         {
-            if (!row.TryGetProperty("RegenTime", out JsonElement regenEl)) continue;
-            if (regenEl.ValueKind != JsonValueKind.Number) continue;
-            if (!regenEl.TryGetInt32(out int regen) || regen <= 0) continue;
-            if (!row.TryGetProperty("Number", out JsonElement numEl)
-                || numEl.ValueKind != JsonValueKind.Number
-                || !numEl.TryGetInt32(out int id)) continue;
+            TryInt(row, "RegenTime", out int regen);
+            TryInt(row, "GameLimit", out int limit);
+            bool isUnique = limit == 1;
+            if (regen <= 0 && !isUnique) continue;
+            if (!TryInt(row, "Number", out int id)) continue;
             if (!row.TryGetProperty("Name", out JsonElement nameEl)
                 || nameEl.ValueKind != JsonValueKind.String) continue;
             string? name = nameEl.GetString();
             if (string.IsNullOrEmpty(name)) continue;
-            list.Add((id, name, regen));
+
+            string tag = isUnique
+                ? (regen > 0 ? $"unique · regen {regen}h" : "unique")
+                : $"regen {regen}h";
+            list.Add((id, name, tag));
         }
-        _regenMonsterCache = list;
+        _searchableMonsterCache = list;
         return list;
+    }
+
+    // Split a search needle into word tokens on whitespace + punctuation, so extra
+    // spaces / commas / apostrophes don't defeat a match and multi-word queries can
+    // match in any order (see AllTokensMatch).
+    private static string[] TokenizeNeedle(string needle)
+        => needle.Split(s_tokenSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static readonly char[] s_tokenSeparators =
+        { ' ', '\t', ',', '/', '-', '\'', '.', ';', ':', '(', ')', '[', ']' };
+
+    // A candidate name matches when every needle token is a substring of it
+    // (case-insensitive, order-independent) — "titan aged" finds "aged titan". An
+    // empty token set (a needle of only separators) never matches.
+    private static bool AllTokensMatch(string candidate, string[] tokens)
+    {
+        if (tokens.Length == 0) return false;
+        foreach (string tok in tokens)
+            if (!candidate.Contains(tok, StringComparison.OrdinalIgnoreCase))
+                return false;
+        return true;
+    }
+
+    // Rank how literally a candidate matches the needle tokens, for result ordering:
+    // 0 when every token lands on a whole word, 1 when every token at least starts a
+    // word, 2 when any token only appears buried mid-word (e.g. "aged" in "Ravaged").
+    // Lower sorts first, so literal word matches lead partial substring matches. The
+    // worst-placed token sets the rank — one buried token demotes the whole candidate.
+    internal static int MatchRank(string candidate, string[] tokens)
+    {
+        int worst = 0;
+        foreach (string tok in tokens)
+        {
+            int q = TokenWordQuality(candidate, tok);
+            if (q > worst) worst = q;
+        }
+        return worst;
+    }
+
+    // Best (lowest) placement quality of a single token within a candidate:
+    //   0 = standalone word (non-alphanumeric boundary on both sides)
+    //   1 = starts a word (boundary before, letters after — a word prefix)
+    //   2 = only occurs buried mid-word
+    //   3 = not present (shouldn't happen for an AllTokensMatch candidate)
+    private static int TokenWordQuality(string candidate, string token)
+    {
+        if (token.Length == 0) return 3;
+        int best = 3;
+        int from = 0;
+        while (true)
+        {
+            int i = candidate.IndexOf(token, from, StringComparison.OrdinalIgnoreCase);
+            if (i < 0) break;
+            bool boundaryBefore = i == 0 || !char.IsLetterOrDigit(candidate[i - 1]);
+            int after = i + token.Length;
+            bool boundaryAfter = after >= candidate.Length || !char.IsLetterOrDigit(candidate[after]);
+            int q = boundaryBefore ? (boundaryAfter ? 0 : 1) : 2;
+            if (q < best) best = q;
+            if (best == 0) break;
+            from = i + 1;
+        }
+        return best;
     }
 
     private Dictionary<int, List<RoomKey>> RoomsByMonsterId()

@@ -18,7 +18,12 @@ public sealed record RoomSearchResult(
     RoomKey Key,
     string Name,
     int? StepsFromCurrent,
-    string? MonsterTag = null)
+    string? MonsterTag = null,
+    // Relevance rank for result ordering (lower sorts first): 0 = exact / literal
+    // whole-word match, higher = the query only appears as a buried substring (e.g.
+    // "aged" inside "Ravaged"). Set by RoomSearchService's token tiers; coordinate /
+    // acronym matches keep the default 0 so they lead.
+    int MatchRank = 0)
 {
     // Legacy alias for older bindings — same as PrimaryLine's room form.
     public string DisplayName => $"{Key.Map}/{Key.Room} - {Name}";

@@ -48,6 +48,11 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<int> LairMaxRespawnSecondsProperty =
         AvaloniaProperty.Register<MapControl, int>(nameof(LairMaxRespawnSeconds));
 
+    // Per-room max monster count, consulted only in the Count display mode to label
+    // each lair with its "(Max N)". Rooms absent from this map draw no number.
+    public static readonly StyledProperty<IReadOnlyDictionary<RoomKey, int>?> LairMonsterCountsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlyDictionary<RoomKey, int>?>(nameof(LairMonsterCounts));
+
     public static readonly StyledProperty<bool> HighlightShopsProperty =
         AvaloniaProperty.Register<MapControl, bool>(nameof(HighlightShops), defaultValue: true);
 
@@ -195,6 +200,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(LairMaxRespawnSecondsProperty);
         set => SetValue(LairMaxRespawnSecondsProperty, value);
+    }
+
+    public IReadOnlyDictionary<RoomKey, int>? LairMonsterCounts
+    {
+        get => GetValue(LairMonsterCountsProperty);
+        set => SetValue(LairMonsterCountsProperty, value);
     }
 
     public bool HighlightShops
@@ -652,7 +663,8 @@ public sealed class MapControl : Control
             });
         _hoverTimer.Stop();
         AffectsRender<MapControl>(LayoutProperty, CurrentRoomKeyProperty, DestinationRoomKeyProperty, GraphProperty,
-            LairModeProperty, LairRespawnSecondsProperty, LairMaxRespawnSecondsProperty, HighlightShopsProperty, HighlightSpellsProperty,
+            LairModeProperty, LairRespawnSecondsProperty, LairMaxRespawnSecondsProperty, LairMonsterCountsProperty,
+            HighlightShopsProperty, HighlightSpellsProperty,
             WalkPathProperty, LoopPathProperty, LoopBuilderPathProperty, LoopBuilderWaypointsProperty,
             AutoLairWaypointsProperty, AutoLairApproachPathProperty,
             LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, LoopSequenceNumbersProperty,
@@ -1095,6 +1107,12 @@ public sealed class MapControl : Control
                 && LoopSequenceNumbers.TryGetValue(kvp.Value, out int seq)
                 && tilePixels >= 16)
                 DrawSequenceNumber(context, cell, seq);
+
+            if (LairMode == LairDisplayMode.Count
+                && LairMonsterCounts is not null
+                && LairMonsterCounts.TryGetValue(kvp.Value, out int lairCount)
+                && tilePixels >= 16)
+                DrawSequenceNumber(context, cell, lairCount);
 
             // Crawler selection ring — drawn inside the cell with a
             // small inset so it sits between the cell border and the

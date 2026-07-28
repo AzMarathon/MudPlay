@@ -1,10 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.4.0**
-> - New "Unobtainable" table in the Game Data Browser lists the Items the game marks out of play (In Game = 0 — "bow of silver", placeholders, duplicate test rows) that the Item Finder skips, so they're inspectable instead of just hidden
-> - New "Quest Flags" table shows every quest-flag reference in the set's TBInfo — the flag, whether a block grants / gates / advances / clears it, and the NPC / room / spell that reaches it (resolved via the block's Called-From provenance)
-> - Both are computed live from the loaded game-data set, so they appear on every set without re-importing
+> **Version 2.7.0**
+> - Walking to a loop's start now shows the full walk-to readout (step X of Y, remaining, ~ETA) instead of a bare "Walking to … then looping …", switching to the loop's step/lap state once it starts cycling
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
