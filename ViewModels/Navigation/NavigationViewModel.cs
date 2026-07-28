@@ -2586,6 +2586,41 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         return s == 0 ? $"{m}m" : $"{m}m {s}s";
     }
 
+    // Shared walk-to progress readout — the sailing countdown, or the
+    // "Walking to X on step A of B, remaining C, ~ETA to arrive" line. Reused by a
+    // plain walk-to and by a loop's approach leg: the walker drives both, so its
+    // step / ETA data is live either way. The approach passes a suffix
+    // (" then looping <loop>") so it reads exactly like a walk-to until the loop
+    // actually starts cycling.
+    private string WalkToStatus(string dest, string suffix = "")
+    {
+        Game.Map.AutoWalkManager w = _services.Walker;
+
+        // Mid-sail: a sea-captain voyage is in flight (boarded, not yet landed).
+        // Swap the step readout for a high-seas countdown to the arrival shore; the
+        // 1 s _sailingTick drives the refresh and normal walk status resumes once
+        // the walker lands and clears IsSailing.
+        if (w.IsSailing)
+        {
+            string place = string.IsNullOrWhiteSpace(w.SailingDestinationName)
+                ? "port"
+                : w.SailingDestinationName!;
+            TimeSpan left = w.SailingArrivalEta - DateTimeOffset.UtcNow;
+            if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+            return $"Sailing the high seas, reaching {place} in {left:mm\\:ss}{suffix}";
+        }
+
+        // Spell out progress like the loop readout does: step is the next-to-send
+        // index 1-based, clamped to the path length; remaining counts that step and
+        // everything past it.
+        int total = w.StepCount;
+        if (total <= 0) return $"Walking to {dest}{suffix}";
+        int step = Math.Min(total, w.CurrentStepIndex + 1);
+        int remaining = Math.Max(0, total - w.CurrentStepIndex);
+        return $"Walking to {dest} on step {step} of {total}, remaining {remaining}, "
+             + $"~{FormatEta(CurrentWalkEta())} to arrive{suffix}";
+    }
+
     // ----- Run / Stop + mode-button state ---------------------------
 
     // Which engine is currently driving — feeds top-bar status badge,
@@ -2678,35 +2713,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             {
                 case NavigationEngineKind.Walking:
                 {
-                    Game.Map.AutoWalkManager w = _services.Walker;
-
-                    // Mid-sail: a sea-captain voyage is in flight (boarded, not yet
-                    // landed). Swap the step readout for a high-seas countdown to
-                    // the arrival shore; the 1 s _sailingTick drives the refresh and
-                    // normal walk status resumes once the walker lands and clears
-                    // IsSailing.
-                    if (w.IsSailing)
-                    {
-                        string place = string.IsNullOrWhiteSpace(w.SailingDestinationName)
-                            ? "port"
-                            : w.SailingDestinationName!;
-                        TimeSpan left = w.SailingArrivalEta - DateTimeOffset.UtcNow;
-                        if (left < TimeSpan.Zero) left = TimeSpan.Zero;
-                        return $"Sailing the high seas, reaching {place} in {left:mm\\:ss}";
-                    }
-
-                    string dest = w.Destination is { } k
+                    string dest = _services.Walker.Destination is { } k
                         ? FormatRoomRef(k)
                         : "?";
-                    // Spell out progress like the loop readout does: step is the
-                    // next-to-send index 1-based, clamped to the path length;
-                    // remaining counts that step and everything past it.
-                    int total = w.StepCount;
-                    if (total <= 0) return $"Walking to {dest}";
-                    int step = Math.Min(total, w.CurrentStepIndex + 1);
-                    int remaining = Math.Max(0, total - w.CurrentStepIndex);
-                    return $"Walking to {dest} on step {step} of {total}, remaining {remaining}, "
-                         + $"~{FormatEta(CurrentWalkEta())} to arrive";
+                    return WalkToStatus(dest);
                 }
                 case NavigationEngineKind.Looping:
                 {
@@ -2720,7 +2730,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                         string target = lr.ApproachTarget is { } t
                             ? FormatRoomRef(t)
                             : "first waypoint";
-                        return $"Walking to {target} then looping {name}";
+                        // Same step/ETA readout as a plain walk-to (the walker drives
+                        // the approach), with the loop intent appended until the loop
+                        // starts cycling.
+                        return WalkToStatus(target, $" then looping {name}");
                     }
                     // Running circle — spell out where in the cycle we are. Step
                     // is CurrentIndex (next-to-send) as 1-based, clamped to the

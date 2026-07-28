@@ -1,9 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.6.0**
-> - Web links (http / https) in the Conversation window are now clickable — a click opens the URL in your OS default browser; surrounding text stays selectable and trailing sentence punctuation isn't swallowed
-> - Conversation gossip channel chip shortened from "GOSS" to "GOS"
+> **Version 2.7.0**
+> - Walking to a loop's start now shows the full walk-to readout (step X of Y, remaining, ~ETA) instead of a bare "Walking to … then looping …", switching to the loop's step/lap state once it starts cycling
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
