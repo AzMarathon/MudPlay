@@ -52,7 +52,7 @@ public sealed class ConversationRowViewModel
 
     private static string ChannelAbbrev(ChatChannel c) => c switch
     {
-        ChatChannel.Gossip            => "GOSS",
+        ChatChannel.Gossip            => "GOS",
         ChatChannel.Local             => "SAY",
         // Mirror the arrow so the two directions read as opposites at a
         // glance: an incoming telepath leads with the arrow (pointing in),

@@ -3,6 +3,7 @@
 <!-- current-version:start -->
 > **Version 2.6.0**
 > - Web links (http / https) in the Conversation window are now clickable — a click opens the URL in your OS default browser; surrounding text stays selectable and trailing sentence punctuation isn't swallowed
+> - Conversation gossip channel chip shortened from "GOSS" to "GOS"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

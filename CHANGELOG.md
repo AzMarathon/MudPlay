@@ -5,6 +5,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 ## 2.6.0
 
 - Web links (http / https) in the Conversation window are now clickable — a click opens the URL in your OS default browser; surrounding text stays selectable and trailing sentence punctuation isn't swallowed
+- Conversation gossip channel chip shortened from "GOSS" to "GOS"
 
 ## 2.5.0
 
