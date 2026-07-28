@@ -45,9 +45,10 @@ public sealed class AutoSearchManager : IDisposable
     // Keep the Search gate held this long after the post-fight `sea` goes out,
     // bridging the search's server round-trip so the revealed "You notice" survey
     // lands and the get engines take over the hold (their Acquisition gate) before
-    // this releases. Slightly longer than the acquisition settle so the reveal has
-    // arrived by the time we let go.
-    private static readonly TimeSpan SearchSettle = TimeSpan.FromMilliseconds(600);
+    // this releases. The `sea` reply is just the command→reply latency (~150 ms, no
+    // server-side delay) and the get path parses the survey immediately, so this
+    // only has to outlast that round-trip plus a little parse margin.
+    private static readonly TimeSpan SearchSettle = TimeSpan.FromMilliseconds(350);
 
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _isDemandActive;
@@ -114,15 +115,14 @@ public sealed class AutoSearchManager : IDisposable
     {
         if (_hasEngageableHostiles())
         {
-            // Fight in the room — defer the search past it and hold the walker so
-            // it can't step out before we've searched the cleared room. Re-arm even
-            // if a clear-room search already fired (a fight that wandered in, or a
-            // late-parsed occupant line): searching after it clears is correct.
+            // Fight in the room — defer the still-owed search past it and hold the
+            // walker so it can't step out before we've searched the cleared room.
+            // Only one search per room: once it has fired (_owed cleared), a fight
+            // that wanders in later doesn't re-arm another.
             _classify.Stop();
-            if (!_deferredForCombat && ShouldSearch())
+            if (_owed && !_deferredForCombat)
             {
                 _deferredForCombat = true;
-                _owed = true;
                 AssertGate("hostiles present — search deferred");
             }
             return;

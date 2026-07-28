@@ -186,6 +186,33 @@ public sealed class AutoSearchManagerTests
     }
 
     [Fact]
+    public void SearchesOncePerRoom_NoResearchWhenFightArrivesAfterClearSearch()
+    {
+        var coord = new MovementCoordinator();
+        bool hostiles = false;
+        var mgr = new AutoSearchManager(
+            isEnabled: () => true,
+            hasEngageableHostiles: () => hostiles,
+            coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged();
+        mgr.OnClassifyElapsed();      // clear room → one sea
+        Assert.Single(mgr.LastSentForTests);
+
+        // A monster wanders in after the clear-room search: must not re-arm/hold
+        // or fire a second search for this room.
+        hostiles = true;
+        mgr.OnRoomObserved();
+        Assert.False(SearchHeld(coord));
+        Assert.Single(mgr.LastSentForTests);
+
+        hostiles = false;
+        mgr.OnRoomObserved();         // that fight clears — still no second search
+        Assert.Single(mgr.LastSentForTests);
+    }
+
+    [Fact]
     public void RoomChange_DiscardsHeldSearch_ReleasesGate()
     {
         var coord = new MovementCoordinator();
