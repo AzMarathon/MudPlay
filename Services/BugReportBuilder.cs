@@ -133,6 +133,10 @@ public static class BugReportBuilder
         Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
         Kv(sb, "Character", svc.Profile.CurrentProfileName ?? "(none loaded)");
         Kv(sb, "BBS", svc.Profile.CurrentBbsName ?? "(none)");
+        // Startup profile-load setting — diagnoses "it didn't reopen my profile".
+        Kv(sb, "Auto-load last profile", svc.Settings.Current.AutoLoadLastProfile ? "on" : "off");
+        Kv(sb, "Last-used profile", svc.Settings.Current.LastUsedProfile is { } lp
+            ? $"{lp.Name} on {lp.Bbs}" : "(none)");
         // Diagnostic-channel state gates whether the Program-log tail carries any
         // decision trail: both flags default off, and every _log?.Debug/Combat
         // site is skipped at generation time when off, so a report captured with

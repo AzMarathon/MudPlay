@@ -1,8 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.7.1**
-> - Auto-search now waits until a room is clear of hostiles before searching, instead of firing a `sea` mid-combat where it was lost; it then holds briefly so revealed items are collected before the loop sneaks and moves on (empty rooms still search on entry)
+> **Version 2.8.0**
+> - New File-menu "Auto-load last profile on startup" toggle: when on, launch reopens the profile you loaded last instead of a blank draft (falls back to blank if that profile was since deleted); off by default, preserving the current blank-draft start
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

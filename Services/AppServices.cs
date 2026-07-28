@@ -4380,14 +4380,32 @@ public sealed class AppServices
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
             LoopRunner, AutoLair, PartyState, Party, Log);
 
-        // Always start with a blank draft. Auto-loading the most recently used
-        // profile is a deliberate opt-in feature that ships in a later PR
-        // (Settings → General toggle); until then the user picks the profile
-        // they want via File → Open profile / Recent profiles.
-        Profile.LoadBlank();
+        // Startup profile: with Settings → General "Auto-load last profile" on,
+        // reopen the last session; otherwise (the default) open a blank draft and
+        // let the user pick / build one via File → Open profile / Recent profiles.
+        // A last-used profile that was since deleted / renamed throws on Load, so
+        // fall back to the blank draft rather than failing startup.
+        if (Settings.Current.StartupProfile() is { } startup)
+        {
+            try
+            {
+                Profile.Load(startup.Bbs, startup.Name);
+            }
+            catch (Exception ex)
+            {
+                Log.Info("Startup",
+                    $"Auto-load of last profile '{startup.Name}' on '{startup.Bbs}' failed " +
+                    $"({ex.GetType().Name}); opening a blank draft instead.");
+                Profile.LoadBlank();
+            }
+        }
+        else
+        {
+            Profile.LoadBlank();
+        }
 
-        // Track which profile was last loaded so the future "auto-load last"
-        // setting has a value to read.
+        // Track which profile was last loaded so "auto-load last" has a value to
+        // read next launch.
         Profile.ProfileLoaded += OnProfileLoaded;
 
         // Best-effort startup prune of the Players table — drops records the
