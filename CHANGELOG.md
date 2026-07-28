@@ -2,6 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.8.0
+
+- New File-menu "Auto-load last profile on startup" toggle: when on, launch reopens the profile you loaded last instead of a blank draft (falls back to blank if that profile was since deleted); off by default, preserving the current blank-draft start
+
+## 2.7.1
+
+- Auto-search now waits until a room is clear of hostiles before searching, instead of firing a `sea` mid-combat where it was lost; it then holds briefly so revealed items are collected before the loop sneaks and moves on (empty rooms still search on entry)
+- bug reports addressed: paradigm-20260727-185836
+
 ## 2.7.0
 
 - Walking to a loop's start now shows the full walk-to readout (step X of Y, remaining, ~ETA) instead of a bare "Walking to … then looping …", switching to the loop's step/lap state once it starts cycling

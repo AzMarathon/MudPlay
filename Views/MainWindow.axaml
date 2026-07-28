@@ -97,6 +97,11 @@
                           Command="{Binding SaveProfileCommand}"/>
                 <MenuItem Header="Save profile as…" InputGesture="{Binding SaveProfileAsGesture}"
                           Command="{Binding SaveProfileAsCommand}"/>
+                <Separator/>
+                <MenuItem Header="Auto-load last profile on startup"
+                          ToggleType="CheckBox"
+                          IsChecked="{Binding AutoLoadLastProfile, Mode=TwoWay}"
+                          ToolTip.Tip="When checked, FujinTerm reopens the profile you loaded last time on launch instead of a blank draft (falls back to blank if that profile was deleted). Applies app-wide."/>
                 <Separator IsVisible="{Binding HasRecents}"/>
                 <!-- Recent profiles. Header shows "<profile> - <BBS>"
                      when the profile has a pinned BBS, else just the

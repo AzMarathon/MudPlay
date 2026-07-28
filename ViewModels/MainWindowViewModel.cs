@@ -3945,6 +3945,21 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ToggleDisableHangups() => IsDisableHangupsActive = !IsDisableHangupsActive;
 
+    // File-menu toggle for the app-level "reopen last profile on startup" setting.
+    // Reads / writes GlobalSettings directly (it's global, not per-profile) so the
+    // check state always reflects what startup will do; the getter needs no reseed.
+    public bool AutoLoadLastProfile
+    {
+        get => AppServices.Current.Settings.Current.AutoLoadLastProfile;
+        set
+        {
+            if (value == AppServices.Current.Settings.Current.AutoLoadLastProfile) return;
+            AppServices.Current.Settings.Current.AutoLoadLastProfile = value;
+            AppServices.Current.Settings.Save();
+            OnPropertyChanged();
+        }
+    }
+
     // Master "Auto-All" kill-switch. Delegates to the shared
     // Game.AutoModeController so the toolbar button, the Action-menu item,
     // and the @auto-all remote command all drive one session snapshot. The

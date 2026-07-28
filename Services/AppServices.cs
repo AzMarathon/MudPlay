@@ -3647,15 +3647,25 @@ public sealed class AppServices
         Movement.PartyWealthProvider = PartyWealth.MinWealth;
         Movement.WealthWarmProbe = PartyWealth.Probe;
 
-        // Base auto-search — a bare `sea` on each genuine room entry reveals
-        // hidden items for the auto-get engines. Armed by the persisted
-        // master toggle OR the transient path-item demand gate above.
-        // Wire-sender bound by MainWindowViewModel after connect.
+        // Base auto-search — a room-wide `sea` reveals hidden items for the
+        // auto-get engines. Armed by the persisted master toggle OR the transient
+        // path-item demand gate above. A search won't run mid-combat, so the engine
+        // defers past a fight and holds the walker via the Search gate until the
+        // room clears (see AutoSearchManager). Wire-sender bound by
+        // MainWindowViewModel after connect.
         AutoSearch = new Game.Map.AutoSearchManager(
             isEnabled: () => ReadAutoModeFlag(d => d.AutoSearch),
             isDemandActive: () =>
                 PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
+            hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
+            coordinator: MovementCoordinator,
             log: Log);
+
+        // Combat-clear seam: fires the deferred `sea` once the room is clear.
+        // Wired after AutoGetItems.OnRoomObserved (above) so the search's revealed
+        // loot is collected after the fight's own drops; CombatStateTracker's
+        // handler ran first, so the hostile flag is current.
+        RoomClassifier.EntitiesObserved += _ => AutoSearch.OnRoomObserved();
 
         // Drop the stale queue / ground snapshot when we actually change rooms.
         RoomTracker.StateChanged += t =>
@@ -4370,14 +4380,32 @@ public sealed class AppServices
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
             LoopRunner, AutoLair, PartyState, Party, Log);
 
-        // Always start with a blank draft. Auto-loading the most recently used
-        // profile is a deliberate opt-in feature that ships in a later PR
-        // (Settings → General toggle); until then the user picks the profile
-        // they want via File → Open profile / Recent profiles.
-        Profile.LoadBlank();
+        // Startup profile: with Settings → General "Auto-load last profile" on,
+        // reopen the last session; otherwise (the default) open a blank draft and
+        // let the user pick / build one via File → Open profile / Recent profiles.
+        // A last-used profile that was since deleted / renamed throws on Load, so
+        // fall back to the blank draft rather than failing startup.
+        if (Settings.Current.StartupProfile() is { } startup)
+        {
+            try
+            {
+                Profile.Load(startup.Bbs, startup.Name);
+            }
+            catch (Exception ex)
+            {
+                Log.Info("Startup",
+                    $"Auto-load of last profile '{startup.Name}' on '{startup.Bbs}' failed " +
+                    $"({ex.GetType().Name}); opening a blank draft instead.");
+                Profile.LoadBlank();
+            }
+        }
+        else
+        {
+            Profile.LoadBlank();
+        }
 
-        // Track which profile was last loaded so the future "auto-load last"
-        // setting has a value to read.
+        // Track which profile was last loaded so "auto-load last" has a value to
+        // read next launch.
         Profile.ProfileLoaded += OnProfileLoaded;
 
         // Best-effort startup prune of the Players table — drops records the

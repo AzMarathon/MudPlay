@@ -19,6 +19,18 @@ public sealed class GlobalSettings
     // key.
     public Profile.ProfileRef? LastUsedProfile { get; set; }
 
+    // When true, startup loads LastUsedProfile instead of opening a blank draft
+    // (Settings → General). Off by default — the app opens blank and the user
+    // picks / builds a profile, the historical behaviour.
+    public bool AutoLoadLastProfile { get; set; }
+
+    // The profile to auto-load at startup, or null to open the blank draft: the
+    // last-used profile when AutoLoadLastProfile is on, else null. Stays null on
+    // first run (no LastUsedProfile yet) even with the toggle on, so a fresh
+    // install still opens blank.
+    public Profile.ProfileRef? StartupProfile()
+        => AutoLoadLastProfile ? LastUsedProfile : null;
+
     // Up to RecentProfilesLimit profiles the user has loaded recently,
     // ordered most-recent-first. Each entry is a (BBS, character)
     // reference. Drives the File → Recent profiles submenu.

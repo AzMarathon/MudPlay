@@ -1416,6 +1416,16 @@ flag). These are hard eligibility gates, independent of resistance and level imm
   count for a stack, exactly one for the article/lone form). Count parsing mirrors
   `ItemNameStore.Normalize`, which strips the same leading count/article token when matching the
   item name.
+- **[CONFIRMED]** (2026-07-27, user, report `paradigm-20260727-185836`) **A room-wide `search`
+  (`sea`) is blocked only while you're *actively engaged* in combat.** Sent mid-fight — right after
+  the attack-announcement lines — it's lost; the game won't process a whole-room search until the
+  room is clear of hostiles. Out of combat it's a quick command→reply (just the ~150 ms network
+  latency, no server-side delay), and the reveal doesn't always surface *everything* hidden (that's
+  fine). Auto-search therefore holds the `sea` past the fight and fires it **once** the room clears,
+  then keeps the walker held briefly so the revealed `You notice … here.` survey lands and the get
+  engines collect it **before** the loop sets up sneaking and steps on. One search per room; empty
+  rooms (no fight) search on entry as before. (Targeted `sea <dir>` hidden-exit reveals are a
+  separate path, above.)
 
 ### Item-cast triggers — how a `CastsSp` fires *([CONFIRMED] 2026-07-18, user)*
 

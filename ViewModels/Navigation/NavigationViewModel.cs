@@ -2326,6 +2326,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return ("Waiting — following leader", NavActivityKind.Waiting);
         if (gates.Contains(Game.Map.MovementCoordinator.CorpseRecoveryGate))
             return ("Waiting — recovering corpse", NavActivityKind.Waiting);
+        if (gates.Contains(Game.Map.MovementCoordinator.SearchGate))
+            return ("Waiting — searching the room", NavActivityKind.Waiting);
         if (gates.Contains(Game.Map.MovementCoordinator.AcquisitionGate))
             return ("Waiting — looting", NavActivityKind.Waiting);
         // Brief per-room hold while a dark room reveals its occupant. It's a beat
