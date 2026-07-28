@@ -78,6 +78,14 @@ public sealed class MovementCoordinator
     // movement gate (fight-clear ∧ get-clear ∧ vitals-OK).
     public const string AcquisitionGate = "Acquisition";
 
+    // Asserted by AutoSearchManager while a room-wide `sea` is owed after a fight:
+    // a search won't run mid-combat, so the engine defers it, holds here through
+    // the fight, fires the `sea` the moment the room clears, and keeps holding a
+    // short settle so the revealed "You notice" survey comes back and the get
+    // engines collect it before the loop sneaks and steps on. Engine-wait tier —
+    // never flips the toolbar Start/Pause/Stop; self-clears on the settle timer.
+    public const string SearchGate = "Search";
+
     // Asserted by DeathRecoveryManager while the corpse-recovery loop is
     // running. Clears when recovery finishes.
     public const string CorpseRecoveryGate = "CorpseRecovery";

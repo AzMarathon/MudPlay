@@ -1,8 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.7.0**
-> - Walking to a loop's start now shows the full walk-to readout (step X of Y, remaining, ~ETA) instead of a bare "Walking to … then looping …", switching to the loop's step/lap state once it starts cycling
+> **Version 2.7.1**
+> - Auto-search now waits until a room is clear of hostiles before searching, instead of firing a `sea` mid-combat where it was lost; it then holds briefly so revealed items are collected before the loop sneaks and moves on (empty rooms still search on entry)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

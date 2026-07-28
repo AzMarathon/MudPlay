@@ -3647,15 +3647,25 @@ public sealed class AppServices
         Movement.PartyWealthProvider = PartyWealth.MinWealth;
         Movement.WealthWarmProbe = PartyWealth.Probe;
 
-        // Base auto-search — a bare `sea` on each genuine room entry reveals
-        // hidden items for the auto-get engines. Armed by the persisted
-        // master toggle OR the transient path-item demand gate above.
-        // Wire-sender bound by MainWindowViewModel after connect.
+        // Base auto-search — a room-wide `sea` reveals hidden items for the
+        // auto-get engines. Armed by the persisted master toggle OR the transient
+        // path-item demand gate above. A search won't run mid-combat, so the engine
+        // defers past a fight and holds the walker via the Search gate until the
+        // room clears (see AutoSearchManager). Wire-sender bound by
+        // MainWindowViewModel after connect.
         AutoSearch = new Game.Map.AutoSearchManager(
             isEnabled: () => ReadAutoModeFlag(d => d.AutoSearch),
             isDemandActive: () =>
                 PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
+            hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
+            coordinator: MovementCoordinator,
             log: Log);
+
+        // Combat-clear seam: fires the deferred `sea` once the room is clear.
+        // Wired after AutoGetItems.OnRoomObserved (above) so the search's revealed
+        // loot is collected after the fight's own drops; CombatStateTracker's
+        // handler ran first, so the hostile flag is current.
+        RoomClassifier.EntitiesObserved += _ => AutoSearch.OnRoomObserved();
 
         // Drop the stale queue / ground snapshot when we actually change rooms.
         RoomTracker.StateChanged += t =>
