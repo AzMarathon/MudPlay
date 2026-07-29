@@ -975,6 +975,20 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
      (item 283, `Abil 43` CastsSp→711, 3 uses). **Client encoding:** `RoomHazardIndex.ScanTextBlock` parses
      both `checkspell` and `failspell` into the same buff-counter, guarded on an item actually casting the
      buff (so a `failspell` on a buff no carried item raises is ignored).
+     - **[CONFIRMED by user 2026-07-28, report `paradigm-20260728-201619`] The desert spell does two
+       things — damage AND a random teleport — and the two protections are NOT equivalent.** The waterskin
+       buff (711) only stops the **damage** portion; it does not stop the random teleport. The **sunstone
+       wristband** (item 1180, worn) prevents the **entire** interaction (damage + teleport), so **if you
+       have the sunstone you don't need a waterskin at all.** In the data the wristband is a `failitem 1180`
+       guard sitting one-to-two `random` hops below the `failspell` (e.g. `2653 → random 2655 → random 2700`
+       and `2658 → random 2660`), guarding the sandstorm/sinkhole casts (713/714/743) — which are the only
+       desert damage that fires above `maxlevel 19`, i.e. what actually hits a high-level character. (Its
+       `NegateSpell` covers only 713; the reliable signal is the `failitem`, not the negator.) **Client
+       encoding:** a `failitem` guard found by chasing a buff-gate's `random`-linked failure branch is
+       folded into the SAME requirement group as the buff source, so carrying **either** the waterskin **or**
+       the sunstone clears the desert for routing; the buff-refresh provisioner still only ever `use`s the
+       waterskin (the sunstone is passive/worn). This mirrors how the river raft/canoe `failitem` guards
+       (top-level, not nested) let a boat-carrier route the river.
      - **[CONFIRMED by user]** Protection is *duration-based*, not carry-based. `use waterskin` applies
        buff 711, which lasts its listed `Dur` (600 = 10 min game-time). You are protected only **while
        the buff is up** — carrying the item alone does nothing. If you're still in a desert/hazard room

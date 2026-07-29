@@ -264,6 +264,7 @@ public sealed class RoomHazardIndex
 
         List<int> failItems = new();
         List<int> checkspellCasters = new();
+        List<int> randomTargets = new();
         int buffSpellSeen = 0;
         int lapseSpellSeen = 0;
 
@@ -277,6 +278,14 @@ public sealed class RoomHazardIndex
                 {
                     int itemId = FirstIntAfter(tok, "failitem");
                     if (itemId > 0 && !failItems.Contains(itemId)) failItems.Add(itemId);
+                }
+                else if (StartsWith(tok, "random"))
+                {
+                    // A buff-gate's damage/teleport outcome table is reached via
+                    // `random <block>`; remember the target so we can chase it for a
+                    // full-immunity guard item below (see the failure-branch scan).
+                    int target = FirstIntAfter(tok, "random");
+                    if (target > 0 && !randomTargets.Contains(target)) randomTargets.Add(target);
                 }
                 else if (StartsWith(tok, "checkspell") || StartsWith(tok, "failspell"))
                 {
@@ -308,10 +317,61 @@ public sealed class RoomHazardIndex
         if (failItems.Count > 0) groups.Add(failItems);
         if (checkspellCasters.Count > 0)
         {
-            groups.Add(checkspellCasters);
+            // A buff-gate room's failure branch (the `random`-linked outcome table
+            // where the damage/teleport fires without the buff) can itself be guarded
+            // by `failitem <item>` — hold that item and the whole interaction is
+            // skipped, making it a FULL alternative to the buff. The Scorching Desert's
+            // sunstone wristband (failitem 1180, one or two random hops below the
+            // failspell) works this way: carry it and no waterskin is needed
+            // (user-confirmed — the waterskin only stops the damage, the sunstone stops
+            // the damage AND the random teleport). Fold such guards into the SAME
+            // requirement group as the buff source so carrying EITHER clears the route.
+            List<int> immunityItems = new();
+            if (buffSpellSeen > 0 && randomTargets.Count > 0)
+            {
+                HashSet<int> branchVisited = new();
+                foreach (int target in randomTargets)
+                    CollectFailureBranchGuards(target, 0, tbActions, branchVisited, immunityItems);
+            }
+
+            List<int> group = new(checkspellCasters);
+            foreach (int item in immunityItems)
+                if (!group.Contains(item)) group.Add(item);
+            groups.Add(group);
+
             durationSecondsBySpell.TryGetValue(buffSpellSeen, out int durSec);
+            // Only the buff-SOURCE items drive the use-the-item provisioner; the
+            // immunity guards are passive (worn) and route-satisfy without a `use`.
             buffCounters.Add(new BuffCounter(buffSpellSeen, lapseSpellSeen, durSec, checkspellCasters));
         }
+    }
+
+    // Chase a buff-gate's failure branch — the `random`-linked outcome blocks where
+    // the damage / teleport fires when the buff is absent — for `failitem <item>`
+    // guards. Holding such an item skips that outcome, so it's a full alternative to
+    // the buff (the desert sunstone wristband). Follows `random <block>` links only
+    // (how the desert's guard is reached: 2653→2655→2700, 2658→2660), bounded by
+    // depth + a visited set so a cyclic table can't loop.
+    private void CollectFailureBranchGuards(
+        int tb, int depth, Dictionary<int, string> tbActions,
+        HashSet<int> visited, List<int> into)
+    {
+        if (depth > MaxChainDepth || tb <= 0 || !visited.Add(tb)) return;
+        if (!tbActions.TryGetValue(tb, out string? action) || string.IsNullOrWhiteSpace(action))
+            return;
+
+        foreach (string line in action.Split('\n'))
+            foreach (string raw in line.Split(':'))
+            {
+                string tok = raw.Trim();
+                if (StartsWith(tok, "failitem"))
+                {
+                    int itemId = FirstIntAfter(tok, "failitem");
+                    if (itemId > 0 && !into.Contains(itemId)) into.Add(itemId);
+                }
+                else if (StartsWith(tok, "random"))
+                    CollectFailureBranchGuards(FirstIntAfter(tok, "random"), depth + 1, tbActions, visited, into);
+            }
     }
 
     // The first `cast <spell>` directive inside a TB action, or 0. Used to reach

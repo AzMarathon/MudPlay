@@ -6,7 +6,7 @@
 > - Picking a recent destination from the Navigation "Go to…" history closes the flyout immediately instead of lingering until you click elsewhere
 > - A confusion wear-off now clears every source of confusion at once, so navigation no longer stays stuck "confused" after the confuse ends
 > - Redundant levers that open the same gate are pulled once en route instead of both
-> - Desert-heat rooms gated by the `failspell` buff directive are now recognized as hazards, so the walker raises the waterskin buff (`use waterskin`) before crossing instead of walking in unprotected
+> - Desert-heat rooms gated by the `failspell` buff directive are now recognized as hazards, so the walker raises the waterskin buff (`use waterskin`) before crossing instead of walking in unprotected — and carrying a sunstone wristband (full desert immunity) clears the route with no waterskin needed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
