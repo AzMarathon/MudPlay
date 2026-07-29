@@ -1,8 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.8.0**
-> - New File-menu "Auto-load last profile on startup" toggle: when on, launch reopens the profile you loaded last instead of a blank draft (falls back to blank if that profile was since deleted); off by default, preserving the current blank-draft start
+> **Version 2.10.0**
+> - Game Data → Items filter now recognizes flag keywords — type "collect" (or discard / open / buy / sell / stash) to show only items with that auto-flag set, hiding the rest
+> - Player Workshop → Quest Status gains a quest-name search box (far left of the "Edit Quests…" row) to narrow the quest list as you type
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

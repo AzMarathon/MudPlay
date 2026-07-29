@@ -261,6 +261,66 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
         Assert.True(lastPull >= 0 && lastPull < firstHostArrival);
     }
 
+    // Two guardroom levers with IDENTICAL commands both open the same gate, each a
+    // bare "Action" (StepNumber 1) and the gate a plain Door with NO "Needs N
+    // Actions" modifier — the real Paradigm Chancellor-Annora layout. One pull opens
+    // it; the levers are redundant alternatives.
+    private const string RedundantLeverDoorGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Junction",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/5", "S": "1/6", "E": "1/3", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Corridor",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/4", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "DoorRoom",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9 (Door [301 picklocks/strength])", "S": "0", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Lever1",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action [on the N exit of room 1/4]: pull lever" },
+          { "Map Number": 1, "Room Number": 6, "Name": "Lever2",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action [on the N exit of room 1/4]: pull lever" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "1/4" }
+        ]
+        """;
+
+    [Fact]
+    public void RedundantLevers_SameStep_NoCountModifier_PullOnlyOne()
+    {
+        RoomGraphManager graph = NewGraph(RedundantLeverDoorGraphJson);
+        BfsMapper bfs = new(graph);
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1),
+            new[] { Direction.E, Direction.E, Direction.E, Direction.N }, bfs);
+
+        int pulls = 0;
+        foreach (WalkStep s in steps)
+            if (s is CommandStep c && c.Command == "pull lever") pulls++;
+        Assert.Equal(1, pulls);   // redundant alternatives — one lever, not both
+
+        // The gated exit is still primed and crossed.
+        MoveStep cross = Assert.IsType<MoveStep>(steps[^1]);
+        Assert.Equal(new RoomKey(1, 9), cross.ExpectedTarget);
+        Assert.True(cross.SkipSpecialDispatch);
+    }
+
     [Fact]
     public void CrossRoomMultiAction_NoMapper_FallsBackToSingleStep()
     {

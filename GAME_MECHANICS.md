@@ -963,11 +963,32 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
      (`failitem` is used 139× across TBInfo — many are quest "don't re-give" guards like
      `failitem 622:giveitem 622`; only the ones ending in a harmful `cast` are hazards.)
 
-  3. **TextBlock action guarded by `checkspell <spellNum> <tbTarget>`** (a buff check, not an item
-     check). `checkspell S T` = "if effect/buff S is active, branch to TBInfo T (safe); else fall
-     through (damage)." Worked example — Scorching Desert `12/1047` `Spell:683` → TextBlock **2653**:
-     `checkspell 711 2654:random 2655`. Buff 711 "waterskin" (`Dur 600`) is conferred by **using** the
-     *waterskin* (item 283, `Abil 43` CastsSp→711, 3 uses).
+  3. **TextBlock action guarded by a buff check — `checkspell` OR `failspell`** (a buff check, not an item
+     check). `checkspell S T` = "if buff S is active, branch to TBInfo T (safe); else fall through
+     (damage)." **[CONFIRMED by user 2026-07-28]** `failspell S T` is the sibling directive: "if buff S is
+     **not** active, the damage fires." Either way the survival model is identical — the room punishes you
+     unless buff S is up. Worked example — Scorching Desert `12/853` `Spell:683` → TextBlock **2653**:
+     `failspell 711 2654:random 2655` — **`failspell`, not `checkspell`** (an earlier draft of this entry
+     misread the directive, which is why the client's hazard parser first handled only `checkspell` and
+     walked the desert unprotected; report `paradigm-20260728-201619`). Map 12 also has a `failspell 711`
+     variant on `Spell:684`. Buff 711 "waterskin" (`Dur 600`) is conferred by **using** the *waterskin*
+     (item 283, `Abil 43` CastsSp→711, 3 uses). **Client encoding:** `RoomHazardIndex.ScanTextBlock` parses
+     both `checkspell` and `failspell` into the same buff-counter, guarded on an item actually casting the
+     buff (so a `failspell` on a buff no carried item raises is ignored).
+     - **[CONFIRMED by user 2026-07-28, report `paradigm-20260728-201619`] The desert spell does two
+       things — damage AND a random teleport — and the two protections are NOT equivalent.** The waterskin
+       buff (711) only stops the **damage** portion; it does not stop the random teleport. The **sunstone
+       wristband** (item 1180, worn) prevents the **entire** interaction (damage + teleport), so **if you
+       have the sunstone you don't need a waterskin at all.** In the data the wristband is a `failitem 1180`
+       guard sitting one-to-two `random` hops below the `failspell` (e.g. `2653 → random 2655 → random 2700`
+       and `2658 → random 2660`), guarding the sandstorm/sinkhole casts (713/714/743) — which are the only
+       desert damage that fires above `maxlevel 19`, i.e. what actually hits a high-level character. (Its
+       `NegateSpell` covers only 713; the reliable signal is the `failitem`, not the negator.) **Client
+       encoding:** a `failitem` guard found by chasing a buff-gate's `random`-linked failure branch is
+       folded into the SAME requirement group as the buff source, so carrying **either** the waterskin **or**
+       the sunstone clears the desert for routing; the buff-refresh provisioner still only ever `use`s the
+       waterskin (the sunstone is passive/worn). This mirrors how the river raft/canoe `failitem` guards
+       (top-level, not nested) let a boat-carrier route the river.
      - **[CONFIRMED by user]** Protection is *duration-based*, not carry-based. `use waterskin` applies
        buff 711, which lasts its listed `Dur` (600 = 10 min game-time). You are protected only **while
        the buff is up** — carrying the item alone does nothing. If you're still in a desert/hazard room
@@ -1032,20 +1053,23 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   - **Walker takeaway:** walk-to-action-room → send the command(s) in `StepNumber` order → walk-back to
     the exit's room → send the cardinal. The generous open window makes normal walk distances safe; do
     not gate on a data-supplied timer (there isn't one) or on parsing a confirmation line.
-- **[CONFIRMED, capture 2026-07-13 report 195552]** **A portcullis/gate raised by levers in guardrooms
-  needs *every* listed lever pulled — the action cells enumerate all of them.** Some `Door` exits are
-  raised not by a same-room verb but by a `pull lever` performed in one or more *other* rooms — the game
-  data annotates the door exit with an `Action#N [on the {dir} exit of room M/R]: pull lever` cell per
-  lever room. The confirmed case is the Newhaven castle gate `1/1331 N`, whose two guardrooms `1/1345`
-  and `1/1339` each carry a lever; the user's own words on the failed run were "we didnt pull both
-  levers opening it" — **both** levers must be pulled to raise it (a single pull is not enough). Because
-  each lever is a distinct action cell with `StepNumber 1` and the door cell carries no `Needs N`
-  modifier, the required-action count falls back to the number of cells (2), so the detour visits both
-  guardrooms before crossing. A same-room lever variant also exists (`1/1375 S`, the courtyard, whose
-  lever is on this room's own W slot — one action, no remote detour). **Client encoding:** a lever `Door`
-  (or `KeyLocked`) exit that carries action cells is promoted to `MultiActionHidden` at graph-build so it
-  reuses the same dispatch/tooltip/detour machinery as a native hidden multi-action exit — the promotion
-  is the single change point (RoomGraphManager attach pass).
+- **[CONFIRMED, capture 2026-07-28 report 180730 — SUPERSEDES the earlier report-195552 "both needed" claim]**
+  **Two guardroom levers with identical commands on one gate are REDUNDANT alternatives — one pull raises
+  it.** Some `Door` exits are raised not by a same-room verb but by a `pull lever` performed in one or
+  more *other* rooms — the game data annotates the door exit with an `Action[#N] [on the {dir} exit of
+  room M/R]: pull lever` cell per lever room. At the Newhaven castle inner gate `1/1331 N`, the two
+  guardrooms `1/1345` and `1/1339` each carry a lever, and **both cells carry the identical command list
+  and a bare `Action` (StepNumber 1)** with **no `Needs N` modifier** on the door. Scrollback proves one
+  suffices: the exits line went `closed gate north` → `open gate north` after the *first* `pull lever`
+  and stayed open through the redundant second pull. So same-command, same-StepNumber levers on one exit
+  are interchangeable — pulling either raises it. (An earlier run misread a failure as "both must be
+  pulled"; this direct capture retracts that.) A **genuine** multi-step gate is one whose data declares
+  an explicit `Needs N Actions` modifier or distinct `Action#1`/`Action#2` StepNumbers — those pull every
+  step. A same-room lever variant also exists (`1/1375 S`, the courtyard, whose lever is on this room's
+  own W slot — one action, no remote detour). **Client encoding:** a lever `Door`/`KeyLocked` exit carrying
+  action cells is promoted to `MultiActionHidden` at graph-build; the required-action count is the number
+  of DISTINCT StepNumbers (same-StepNumber levers count as one), and the path expander pulls one cheapest
+  alternative per StepNumber — so a redundant pair pulls once, a declared multi-step gate pulls all.
 - **[CONFIRMED, capture 2026-07-14 report 091244]** **A lever-raised gate renders in the live room
   display as a *gate*, not a *door*.** At `1/1331` the `Obvious exits:` line reads `closed gate north,
   south, east, west`; after `pull lever` ("you hear the loud nearby rumbling of a gate") it becomes
@@ -1806,6 +1830,16 @@ glass jug               5               2 gold crowns
   unattacked until the user manually re-sends — the reported symptom of "monsters in
   room but not attacking unless I manually send attack commands" (report
   `paradigm-20260714-093614`).
+- **[CONFIRMED] 2026-07-28, report `paradigm-20260728-173036`: confusion is a single state — any
+  confusion wear-off clears it entirely.** More than one record can hold `Confused` at once: a specific
+  source (a monster confuse spell with its own wear-off line, matched by a user-defined message entry
+  incl. caster/target/witness cases) plus the generic `fumble` record, which also carries `Confused` so a
+  confuse whose *set*-line was missed is still recognised. When ANY real confusion wears off you are no
+  longer confused, so **every** latched `Confused` source clears — not just the record whose wear-off
+  fired. Clearing only the wearing-off record (or its applied-line aliases) strands the flag: a death-dog
+  shriek that wore off left the co-latched `fumble` still holding `Confused`, keeping the nav
+  ConfusionGate stuck. **Client encoding:** `ConditionTracker` clears every active `Confused` record when
+  a `Confused`-carrying record's wear-off matches.
 
 ## Guarded monsters redirect attacks *([CONFIRMED] 2026-07-14, user + wire capture)*
 

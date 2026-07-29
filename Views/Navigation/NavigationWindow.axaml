@@ -364,6 +364,7 @@
                                            IsVisible="{Binding HasGotoHistory}"/>
                                 <ListBox ItemsSource="{Binding GotoHistoryRows}"
                                          SelectedItem="{Binding SelectedGotoHistory, Mode=TwoWay}"
+                                         SelectionChanged="OnGotoHistorySelected"
                                          MaxHeight="240"
                                          IsVisible="{Binding HasGotoHistory}"
                                          Background="Transparent">

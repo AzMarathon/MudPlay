@@ -169,6 +169,67 @@ public sealed class RoomHazardIndexTests : IDisposable
         Assert.Equal(1800, counter.DurationSeconds);   // 600 rounds × 3s
     }
 
+    // The Scorching Desert gates its heat-buff with `failspell` (not `checkspell`):
+    // no waterskin buff up → heat damage (user-confirmed). RoomHazardIndex must treat
+    // failspell as the same protective-buff gate, or the walk-time provisioner never
+    // raises the buff — the "pathed into the desert without using a waterskin" report.
+    [Fact]
+    public void FailSpell_BuildsBuffCounter_LikeCheckSpell()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(700),
+            // Room spell 700 → TextBlock; buff 300 (Dur 600 → 1800s); item 60 casts 300.
+            """
+            [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 50 },
+              { "Number": 300, "Dur": 600 } ]
+            """,
+            """ [ { "Number": 60, "Abil-0": 43, "AbilVal-0": 300 } ] """,
+            // The desert shape: `failspell <buff> <block>:random <block>`.
+            """ [ { "Number": 50, "Action": "failspell 300 51:random 52" } ] """);
+
+        RoomHazardIndex.RoomHazard? h = idx.HazardForSpell(700);
+        Assert.NotNull(h);
+        RoomHazardIndex.BuffCounter counter = Assert.Single(h!.BuffCounters);
+        Assert.Equal(300, counter.BuffSpell);
+        Assert.Contains(60, counter.SourceItems);   // waterskin analogue
+        Assert.Equal(1800, counter.DurationSeconds);
+    }
+
+    // The sunstone-wristband case: the failspell's random-linked failure branch is
+    // guarded by `failitem <wristband>` a couple of `random` hops down — holding it
+    // skips the whole desert interaction (damage + teleport), so it's a FULL
+    // alternative to the waterskin buff. Both must land in ONE requirement group
+    // (carry either clears the route); the buff-refresh provisioner stays tied to the
+    // waterskin only.
+    [Fact]
+    public void FailSpell_FailureBranchFailitem_IsBuffAlternative()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(700),
+            """
+            [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 50 },
+              { "Number": 300, "Dur": 600 } ]
+            """,
+            """ [ { "Number": 60, "Abil-0": 43, "AbilVal-0": 300 } ] """,
+            // failspell 300 → random 51 → random 52 → failitem 99 (wristband analogue),
+            // mirroring the desert's 2653→2655→2700 nesting.
+            """
+            [ { "Number": 50, "Action": "failspell 300 49:random 51" },
+              { "Number": 51, "Action": "86:cast 713\n100:random 52" },
+              { "Number": 52, "Action": "30:failitem 99:cast 743" } ]
+            """);
+
+        RoomHazardIndex.RoomHazard? h = idx.HazardForSpell(700);
+        Assert.NotNull(h);
+        IReadOnlyList<int> group = Assert.Single(h!.RequirementGroups);
+        Assert.Contains(60, group);   // waterskin
+        Assert.Contains(99, group);   // sunstone wristband analogue
+        Assert.True(h.IsSatisfiedBy(item => item == 99));   // wristband alone clears the route
+        Assert.True(h.IsSatisfiedBy(item => item == 60));   // waterskin alone clears the route
+        // The use-the-item provisioner stays tied to the buff source, not the passive guard.
+        Assert.Equal(new[] { 60 }, Assert.Single(h.BuffCounters).SourceItems);
+    }
+
     // A checkspell whose buff spell has no Dur in the data → DurationSeconds 0.
     // The provisioner falls back to a periodic refresh rather than once-and-never.
     [Fact]

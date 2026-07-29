@@ -212,14 +212,33 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             // carries its own specific wear-off (a monster confusion vs. the
             // generic spell) is stranded active when the shared generic wear-off
             // fires, leaving the flag — and the nav pause it drives — stuck.
-            if (string.IsNullOrEmpty(r.AppliedMessage)
-                || !_appliedAliases.TryGetValue(r.AppliedMessage, out List<MessageRecord>? group))
-                continue;
-            foreach (MessageRecord alias in group)
+            if (!string.IsNullOrEmpty(r.AppliedMessage)
+                && _appliedAliases.TryGetValue(r.AppliedMessage, out List<MessageRecord>? group))
             {
-                if (alias.Id == r.Id) continue;
-                if (_active.Remove(alias.Id))
-                    endedThisLine.Add(alias);
+                foreach (MessageRecord alias in group)
+                {
+                    if (alias.Id == r.Id) continue;
+                    if (_active.Remove(alias.Id))
+                        endedThisLine.Add(alias);
+                }
+            }
+
+            // Confusion is a single state: any confusion wear-off clears EVERY
+            // latched Confused source, not just this record's applied-line aliases.
+            // A source-specific wear-off (the death dog's shriek) thus also releases
+            // a co-latched generic "you fumble in confusion" — which carries Confused
+            // (so it can flag a confuse whose set-line we missed) but never emits its
+            // own wear-off — instead of leaving the flag, and the nav pause it drives,
+            // stuck. The fumble record keeps latching as that fallback indicator; this
+            // just guarantees the clear reaches it once any real confusion wears off.
+            if (r.Flags.HasFlag(MessageFlags.Confused))
+            {
+                foreach (MessageRecord other in _messages.Messages)
+                {
+                    if (!other.Flags.HasFlag(MessageFlags.Confused)) continue;
+                    if (_active.Remove(other.Id))
+                        endedThisLine.Add(other);
+                }
             }
         }
 

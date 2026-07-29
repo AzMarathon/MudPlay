@@ -217,6 +217,21 @@ public partial class NavigationWindow : Window
             FlyoutBase.ShowAttachedFlyout(searchBox);
     }
 
+    // Picking a recent destination arms it (VM OnSelectedGotoHistoryChanged) and
+    // should dismiss the flyout — otherwise it lingers until a click elsewhere.
+    // Only a real pick closes it (the VM resets the selection to null afterwards,
+    // which re-fires this with no added item); the Hide is deferred so the
+    // SelectedItem binding + arming finish before the popup tears down.
+    private void OnGotoHistorySelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (e.AddedItems.Count == 0) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (this.FindControl<TextBox>("SearchBox") is { } searchBox)
+                FlyoutBase.GetAttachedFlyout(searchBox)?.Hide();
+        });
+    }
+
     // ----- Building-loop click list ---------------------------------
 
     private void WireBuilderClicksList(ListBox list)

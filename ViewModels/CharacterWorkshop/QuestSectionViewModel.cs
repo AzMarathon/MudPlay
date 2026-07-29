@@ -52,12 +52,26 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     public override string Title => "Quest Status";
     public override Control View => _view ??= new QuestSectionView { DataContext = this };
 
-    // Visible, class-resolved quest cards: incomplete first, completed at the bottom;
-    // within each group ordered by required level (low→high), then quest name.
+    // Visible, class-resolved quest cards after the name filter: incomplete first,
+    // completed at the bottom; within each group ordered by required level (low→high),
+    // then quest name. Rebuilt from _allCards whenever QuestSearchText changes.
     public ObservableCollection<QuestCardViewModel> Quests { get; } = new();
+
+    // Full sorted card set behind the QuestSearchText filter. Quests is this list
+    // narrowed to the search; kept so filtering doesn't re-crawl.
+    private readonly List<QuestCardViewModel> _allCards = new();
+
+    // Live name filter for the quest list (the search box left of "Edit Quests…").
+    [ObservableProperty] private string _questSearchText = string.Empty;
+
+    partial void OnQuestSearchTextChanged(string value) => ApplyQuestFilter();
 
     // False when no visible quest resolves (no set / no character) — drives the empty-state hint.
     [ObservableProperty] private bool _hasQuests;
+
+    // True when quests exist but the current name filter matches none — drives a
+    // "no matches" hint distinct from the "load a character" empty state.
+    public bool HasNoQuestMatches => HasQuests && Quests.Count == 0;
 
     public QuestSectionViewModel(PlayerStats stats, GameDataCache gameData,
                                  ProfileService profile, QuestStore quests, QuestBonusState bonusState)
@@ -87,7 +101,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         _suppress = true;
         try
         {
-            Quests.Clear();
+            _allCards.Clear();
             _bonusesByCard.Clear();
             LoadProgressFromProfile();
 
@@ -146,16 +160,16 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
                 // filtered to the band's give-step range by the crawl + StepLines).
                 PopulateSteps(card, q, def, prog, monsterRooms, itemSources);
 
-                Quests.Add(card);
+                _allCards.Add(card);
             }
 
             // User-added quests the crawl never produces — self-contained from the overlay.
             foreach (QuestDefinition def in _quests.ManualQuests())
                 if (BuildManualCard(def) is { } card)
-                    Quests.Add(card);
+                    _allCards.Add(card);
 
-            SortQuests();
-            HasQuests = Quests.Count > 0;
+            HasQuests = _allCards.Count > 0;
+            SortQuests();   // sorts _allCards, then rebuilds the filtered Quests view
         }
         finally { _suppress = false; }
 
@@ -168,16 +182,28 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     // toggle so a card slides to its group as it's checked, not only on rebuild.
     private void SortQuests()
     {
-        List<QuestCardViewModel> sorted = Quests
-            .OrderBy(c => c.IsComplete)
-            .ThenBy(c => c.RequiredLevel)
-            .ThenBy(c => c.Title, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-        for (int i = 0; i < sorted.Count; i++)
+        _allCards.Sort(static (a, b) =>
         {
-            int current = Quests.IndexOf(sorted[i]);
-            if (current != i) Quests.Move(current, i);
-        }
+            int c = a.IsComplete.CompareTo(b.IsComplete);   // incomplete (false) first
+            if (c != 0) return c;
+            c = a.RequiredLevel.CompareTo(b.RequiredLevel);
+            if (c != 0) return c;
+            return string.Compare(a.Title, b.Title, StringComparison.CurrentCultureIgnoreCase);
+        });
+        ApplyQuestFilter();
+    }
+
+    // Rebuild the visible Quests collection from the sorted _allCards, keeping only
+    // cards whose name contains the QuestSearchText (case-insensitive; empty = all).
+    private void ApplyQuestFilter()
+    {
+        string filter = (QuestSearchText ?? string.Empty).Trim();
+        Quests.Clear();
+        foreach (QuestCardViewModel card in _allCards)
+            if (filter.Length == 0
+                || card.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase))
+                Quests.Add(card);
+        OnPropertyChanged(nameof(HasNoQuestMatches));
     }
 
     // Build the followable checklist from the quest's step markdown: the user-edited

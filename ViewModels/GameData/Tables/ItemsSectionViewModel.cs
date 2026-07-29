@@ -63,6 +63,10 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
 
     public override string SearchKeyColumn => "Name";
 
+    public override string? FilterHint =>
+        "Type text to match name / columns, or a flag keyword to show only items with that " +
+        "flag set: collect, discard, open, buy, sell, stash.";
+
     public override IEnumerable<string> SearchableLabels => new[]
     {
         Title, "item", "weapon", "armor", "armour", "worn", "slot",
@@ -103,6 +107,42 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
         // silently dropped instead of swapping the open item menu.
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(
             OpenEditAsync, AsyncRelayCommandOptions.AllowConcurrentExecutions);
+    }
+
+    // Recognized flag keywords → the ItemOverlay flag they filter on. Typing one of
+    // these (exact, case-insensitive) narrows the table to items with that auto-* /
+    // stash flag set instead of the normal column / name substring match, so "collect"
+    // shows only auto-collect items, "discard" only auto-discard, and so on.
+    private static readonly IReadOnlyDictionary<string, Func<ItemOverlay, bool?>> FlagKeywords =
+        new Dictionary<string, Func<ItemOverlay, bool?>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["collect"] = o => o.AutoCollect,
+            ["discard"] = o => o.AutoDiscard,
+            ["open"]    = o => o.AutoOpen,
+            ["buy"]     = o => o.AutoBuy,
+            ["sell"]    = o => o.AutoSell,
+            ["stash"]   = o => o.AutoStash,
+        };
+
+    protected override bool RowMatches(GameDataRow row, string filter)
+    {
+        // A recognized flag keyword filters by the item's resolved auto-* / stash
+        // overlay flag; anything else falls back to the column / tier substring match.
+        if (FlagKeywords.TryGetValue(filter, out Func<ItemOverlay, bool?>? flag))
+            return ResolveOverlay(row) is { } overlay && flag(overlay) == true;
+        return base.RowMatches(row, filter);
+    }
+
+    // Resolve a row's 4-tier ItemOverlay (Char → BBS → Global → seed Defaults) — the
+    // flags the runtime engines actually see for this item — for the flag filter.
+    private ItemOverlay? ResolveOverlay(GameDataRow row)
+    {
+        string? wcc = row.Get("Number");
+        if (string.IsNullOrEmpty(wcc)) return null;
+        ItemOverlay seed = (_overlaySeed is not null && int.TryParse(wcc, out int n))
+            ? _overlaySeed.GetOverlay(n)
+            : new ItemOverlay();
+        return _resolverRef?.ResolveGameData<ItemOverlay>("Items", wcc, seed) ?? seed;
     }
 
     private async Task OpenEditAsync(GameDataRow? row)

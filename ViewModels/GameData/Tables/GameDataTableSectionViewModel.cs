@@ -50,6 +50,10 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // Column the search box filters against by default (kept for status-bar display only).
     public abstract string SearchKeyColumn { get; }
 
+    // Optional tooltip for the row-filter box — a section overrides it to advertise a
+    // richer query it accepts (e.g. Items' auto-* / stash flag keywords). Null = no tip.
+    public virtual string? FilterHint => null;
+
     // Optional muted-info banner shown directly under the tab header — used by sections that
     // need a one-liner note for the user (e.g. Aliases: "fires from the Conversation window's
     // input field only"). null hides the banner row.
