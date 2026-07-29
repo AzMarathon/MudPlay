@@ -2,6 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.9.0
+
+- Toolbar auto-combat icon is now a sword and auto-nuke a fireball
+- Picking a recent destination from the Navigation "Go to…" history closes the flyout immediately instead of lingering until you click elsewhere
+- A confusion wear-off now clears every source of confusion at once, so a spell's wear-off also releases the co-latched "you fumble in confusion" state — navigation no longer stays stuck "confused" after the confuse ends
+- Redundant levers that open the same gate (identical command, no explicit action count) are pulled once en route instead of both
+- Desert-heat rooms gated by the `failspell` buff directive are now recognized as hazards, so the walker raises the waterskin buff (`use waterskin`) before crossing instead of walking in unprotected
+- bug reports addressed: paradigm-20260728-173036, paradigm-20260728-180730, paradigm-20260728-180815, paradigm-20260728-201619
+
 ## 2.8.0
 
 - New File-menu "Auto-load last profile on startup" toggle: when on, launch reopens the profile you loaded last instead of a blank draft (falls back to blank if that profile was since deleted); off by default, preserving the current blank-draft start

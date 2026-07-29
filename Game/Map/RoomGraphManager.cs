@@ -429,10 +429,15 @@ public sealed class RoomGraphManager
             bool leverDoor = exit.Hint is RoomExitHint.Door or RoomExitHint.KeyLocked;
             if (exit.Hint != RoomExitHint.MultiActionHidden && !leverDoor) continue;
 
+            // With no explicit "Needs N Actions" modifier, actions that share a
+            // StepNumber are redundant alternatives (e.g. two guardroom levers that
+            // open the same gate), so the required count is the number of DISTINCT
+            // steps, not the raw cell count — one lever per step suffices. A genuine
+            // multi-step gate declares its own count via the modifier.
             (int count, bool specific) = perRoomModifiers.TryGetValue(roomKey, out var mods)
                 && mods.TryGetValue(dir, out string? modCell)
                 ? MultiActionExitData.ParseModifier(modCell)
-                : (actions.Count, false);
+                : (actions.Select(a => a.StepNumber).Distinct().Count(), false);
 
             actions.Sort(static (a, b) => a.StepNumber.CompareTo(b.StepNumber));
             var data = new MultiActionExitData(count, specific, actions);

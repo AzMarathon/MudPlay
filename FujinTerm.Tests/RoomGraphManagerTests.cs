@@ -887,7 +887,10 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.Equal(RoomExitHint.MultiActionHidden, ex.Hint);          // promoted off Door
         Assert.Equal(new RoomKey(1, 1375), ex.Target);
         Assert.NotNull(ex.MultiAction);
-        Assert.Equal(2, ex.MultiAction!.RequiredActionCount);           // both levers
+        // Both bare "Action" cells share StepNumber 1, so they're redundant
+        // alternatives — one lever opens the gate. The required count reflects the
+        // distinct steps (1), though both cells are still recorded as the choices.
+        Assert.Equal(1, ex.MultiAction!.RequiredActionCount);
         Assert.Equal(2, ex.MultiAction.Actions.Count);
         Assert.True(ex.MultiAction.HasRemoteActions);
         // Both action steps live in the guardrooms, not the gate room.
@@ -916,15 +919,18 @@ public sealed class RoomGraphManagerTests : IDisposable
     }
 
     [Fact]
-    public void LeverGate_FullRoute_FindsPath_AndEmitsTwoLeverPulls()
+    public void LeverGate_FullRoute_FindsPath_AndEmitsOneLeverPull()
     {
         // End-to-end regression for the inner-gate lever route (bug reports
         // paradigm-20260714-091000 / -091244): with the gate room's N Door
         // promoted to a lever-operated MultiActionHidden exit, BFS must find a
         // path from the gate (1/1331) out to 1/1367, and the path expander must
-        // splice in the two guardroom lever pulls as a go-act-return detour.
-        // A raw 301-picklock Door with Strength 100 / Picklocks 0 would block —
-        // a found route + two lever CommandSteps proves the promotion + detour.
+        // splice in a guardroom lever pull as a go-act-return detour. A raw
+        // 301-picklock Door with Strength 100 / Picklocks 0 would block — a found
+        // route + a lever CommandStep proves the promotion + detour. The two
+        // guardroom levers are redundant alternatives (same StepNumber, identical
+        // commands, no "Needs N Actions" count), so only ONE is pulled
+        // (paradigm-20260728-180730).
         const string json = """
             [
               { "Map Number": 1, "Room Number": 1322, "Name": "Monastery Entrance",
@@ -996,7 +1002,7 @@ public sealed class RoomGraphManagerTests : IDisposable
         var expanded = RemoteActionPathExpander.Expand(
             graph, new RoomKey(1, 1331), path!, bfs, filter);
         int leverPulls = expanded.Count(s => s is CommandStep cs && cs.Command.Contains("lever"));
-        Assert.Equal(2, leverPulls);
+        Assert.Equal(1, leverPulls);   // redundant levers — one suffices
 
         // Approaching from the alignment-gated entrance (1/1322) routes too.
         Assert.NotNull(bfs.FindPath(new RoomKey(1, 1322), new RoomKey(1, 1367), filter));

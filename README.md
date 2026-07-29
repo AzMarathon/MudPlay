@@ -1,8 +1,12 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.8.0**
-> - New File-menu "Auto-load last profile on startup" toggle: when on, launch reopens the profile you loaded last instead of a blank draft (falls back to blank if that profile was since deleted); off by default, preserving the current blank-draft start
+> **Version 2.9.0**
+> - Toolbar auto-combat icon is now a sword and auto-nuke a fireball
+> - Picking a recent destination from the Navigation "Go to…" history closes the flyout immediately instead of lingering until you click elsewhere
+> - A confusion wear-off now clears every source of confusion at once, so navigation no longer stays stuck "confused" after the confuse ends
+> - Redundant levers that open the same gate are pulled once en route instead of both
+> - Desert-heat rooms gated by the `failspell` buff directive are now recognized as hazards, so the walker raises the waterskin buff (`use waterskin`) before crossing instead of walking in unprotected
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

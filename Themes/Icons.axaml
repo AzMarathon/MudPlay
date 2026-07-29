@@ -82,10 +82,10 @@
     <StreamGeometry x:Key="IconKillSwitch">M12 4 V12 M6 8 A7.5 7.5 0 1 0 18 8</StreamGeometry>
 
     <!-- Auto-* engines -->
-    <!-- Diagonal sword: blade TL→BR, crossguard near hilt, small pommel. -->
-    <StreamGeometry x:Key="IconAutoCombat">M6 18 L18 6 M4 16 L8 20 M16 4 L20 8 M14 6 L18 10</StreamGeometry>
-    <!-- 8-point starburst — area-effect / nuke. -->
-    <StreamGeometry x:Key="IconAutoNuke">M12 3 V8 M12 16 V21 M3 12 H8 M16 12 H21 M6 6 L9 9 M15 15 L18 18 M6 18 L9 15 M15 9 L18 6</StreamGeometry>
+    <!-- Sword — blade hilt(TL)→tip(BR), crossguard, handle, pommel. -->
+    <StreamGeometry x:Key="IconAutoCombat">M14.5 17.5 L3 6 L3 3 L6 3 L17.5 14.5 M13 19 L19 13 M16 16 L20 20 M19 21 L21 19</StreamGeometry>
+    <!-- Fireball — flame outline with an inner lick, for the nuke toggle. -->
+    <StreamGeometry x:Key="IconAutoNuke">M8.5 14.5 A2.5 2.5 0 0 0 11 12 C11 10.62 10.5 10 10 9 C8.928 6.857 9.776 4.946 12 3 C12.5 5.5 14 7.9 16 9.5 C18 11.1 19 13 19 15 A7 7 0 1 1 5 15 C5 13.847 5.433 12.706 6 12 A2.5 2.5 0 0 0 8.5 14.5 Z</StreamGeometry>
     <!-- Medical cross inside a circle — heal / rest. -->
     <StreamGeometry x:Key="IconAutoHeal">M12 5 A7 7 0 1 1 12 19 A7 7 0 1 1 12 5 Z M12 9 V15 M9 12 H15</StreamGeometry>
     <!-- Sparkle/asterisk — buffs & bless. -->

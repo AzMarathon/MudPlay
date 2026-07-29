@@ -160,6 +160,35 @@ public sealed class ConditionTrackerTests
     }
 
     [Fact]
+    public void ConfusionWearOff_ClearsAllConfusedSources_IncludingCoLatchedFumble()
+    {
+        // A monster confuse with its own wear-off, plus the generic "you fumble in
+        // confusion" (which also carries Confused so it can flag a confuse whose
+        // set-line we missed), both latch. When the monster confuse wears off, the
+        // fumble-held confusion must clear too — otherwise the flag (and the nav
+        // pause it drives) stays stuck, because fumble's own generic wear-off never
+        // fired. The two records do NOT share an applied line, so the alias-group
+        // clear alone wouldn't reach fumble.
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("high-pitched scream",
+            MessageFlags.Confused,
+            applied: "You feel confused!",
+            endsWith: "The effects of the death dog's shriek wear off!"));
+        h.Messages.Messages.Add(MakeRecord("fumble",
+            MessageFlags.Confused | MessageFlags.LastActionFailed,
+            applied: "You fumble in confusion",
+            endsWith: "The effects of confusion wear off"));
+
+        h.Feed("You feel confused!");         // spell latches Confused
+        h.Feed("You fumble in confusion!");   // fumble co-latches Confused
+        Assert.True(h.Tracker.IsConfused);
+
+        h.Feed("The effects of the death dog's shriek wear off!");   // spell wears off
+
+        Assert.False(h.Tracker.IsConfused);   // both Confused sources cleared
+    }
+
+    [Fact]
     public void MultipleConditions_OrFlags()
     {
         using Harness h = new();

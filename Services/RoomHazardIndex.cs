@@ -278,9 +278,18 @@ public sealed class RoomHazardIndex
                     int itemId = FirstIntAfter(tok, "failitem");
                     if (itemId > 0 && !failItems.Contains(itemId)) failItems.Add(itemId);
                 }
-                else if (StartsWith(tok, "checkspell"))
+                else if (StartsWith(tok, "checkspell") || StartsWith(tok, "failspell"))
                 {
-                    int buffSpell = FirstIntAfter(tok, "checkspell");
+                    // Both gate the room on the player holding a buff. `checkspell`
+                    // branches to a damage block when the buff is ABSENT; `failspell`
+                    // fires its damage directly when the buff is absent (the Scorching
+                    // Desert's `failspell 711` — no waterskin buff up, heat damage,
+                    // user-confirmed). Either way the counter is identical: carry an
+                    // item that casts the buff and keep it raised. Both are guarded on
+                    // an item actually casting the buff, so a `failspell` on a spell no
+                    // carried item raises (e.g. TB 2687's `failspell 734`) is ignored.
+                    string kw = StartsWith(tok, "checkspell") ? "checkspell" : "failspell";
+                    int buffSpell = FirstIntAfter(tok, kw);
                     if (buffSpell > 0 && castersBySpell.TryGetValue(buffSpell, out List<int>? casters))
                     {
                         buffSpellSeen = buffSpell;
@@ -288,7 +297,7 @@ public sealed class RoomHazardIndex
                         // the buff is ABSENT; that block's `cast <spell>` is the
                         // lapse-damage spell whose message re-triggers the `use`.
                         if (lapseSpellSeen == 0)
-                            lapseSpellSeen = FindCastSpell(SecondIntAfter(tok, "checkspell"), tbActions);
+                            lapseSpellSeen = FindCastSpell(SecondIntAfter(tok, kw), tbActions);
                         foreach (int itemId in casters)
                             if (!checkspellCasters.Contains(itemId)) checkspellCasters.Add(itemId);
                     }

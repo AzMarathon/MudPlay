@@ -72,8 +72,15 @@ public static class RemoteActionPathExpander
                 && exit.MultiAction is { HasRemoteActions: true } maData
                 && bfs is not null)
             {
+                // Actions sharing a StepNumber are interchangeable alternatives (e.g.
+                // two guardroom levers that open the same gate); only one per step is
+                // needed. Keep the cheapest-to-reach alternative in each step so a
+                // redundant lever pair pulls once, while a genuine multi-step gate
+                // (distinct StepNumbers) still pulls every step.
+                MultiActionExitData effective = SelectCheapestPerStep(bfs, filter, current, maData);
+
                 (int InsertAt, List<WalkStep> Steps)? detour =
-                    BuildAnchoredDetour(graph, bfs, filter, roomBefore, current, maData);
+                    BuildAnchoredDetour(graph, bfs, filter, roomBefore, current, effective);
                 if (detour is null) break;
                 if (detour.Value.Steps.Count > 0) detours.Add(detour.Value);
 
@@ -235,6 +242,34 @@ public static class RemoteActionPathExpander
         }
 
         return steps;
+    }
+
+    // Reduce a multi-action exit to one action per StepNumber. Actions that share a
+    // StepNumber are redundant alternatives (the same gate reachable from more than
+    // one lever room), so only the one whose lever is cheapest to reach from the
+    // gated room is kept; distinct StepNumbers are genuine sequence steps and all
+    // survive. Returns maData unchanged when every action already has a distinct
+    // step — nothing is redundant, so a real multi-step gate pulls every lever.
+    private static MultiActionExitData SelectCheapestPerStep(
+        BfsMapper bfs, IRoomFilter? filter, RoomKey host, MultiActionExitData maData)
+    {
+        var best = new Dictionary<int, (ExitAction Action, int Cost)>();
+        foreach (ExitAction a in maData.Actions)
+        {
+            int cost = a.RemoteSourceRoom is { } r
+                ? Dist(bfs, filter, host, r) ?? int.MaxValue
+                : 0;   // typed at the gated room itself — nothing to walk to
+            if (!best.TryGetValue(a.StepNumber, out (ExitAction Action, int Cost) cur) || cost < cur.Cost)
+                best[a.StepNumber] = (a, cost);
+        }
+
+        if (best.Count == maData.Actions.Count) return maData;   // no redundant step
+
+        var reduced = new List<ExitAction>(best.Count);
+        foreach (KeyValuePair<int, (ExitAction Action, int Cost)> kv in best)
+            reduced.Add(kv.Value.Action);
+        reduced.Sort(static (x, y) => x.StepNumber.CompareTo(y.StepNumber));
+        return maData with { Actions = reduced, RequiredActionCount = reduced.Count };
     }
 
     // BFS hop count from→to (0 when equal), or null when unroutable. Used only

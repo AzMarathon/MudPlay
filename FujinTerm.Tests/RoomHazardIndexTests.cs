@@ -169,6 +169,32 @@ public sealed class RoomHazardIndexTests : IDisposable
         Assert.Equal(1800, counter.DurationSeconds);   // 600 rounds × 3s
     }
 
+    // The Scorching Desert gates its heat-buff with `failspell` (not `checkspell`):
+    // no waterskin buff up → heat damage (user-confirmed). RoomHazardIndex must treat
+    // failspell as the same protective-buff gate, or the walk-time provisioner never
+    // raises the buff — the "pathed into the desert without using a waterskin" report.
+    [Fact]
+    public void FailSpell_BuildsBuffCounter_LikeCheckSpell()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(700),
+            // Room spell 700 → TextBlock; buff 300 (Dur 600 → 1800s); item 60 casts 300.
+            """
+            [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 50 },
+              { "Number": 300, "Dur": 600 } ]
+            """,
+            """ [ { "Number": 60, "Abil-0": 43, "AbilVal-0": 300 } ] """,
+            // The desert shape: `failspell <buff> <block>:random <block>`.
+            """ [ { "Number": 50, "Action": "failspell 300 51:random 52" } ] """);
+
+        RoomHazardIndex.RoomHazard? h = idx.HazardForSpell(700);
+        Assert.NotNull(h);
+        RoomHazardIndex.BuffCounter counter = Assert.Single(h!.BuffCounters);
+        Assert.Equal(300, counter.BuffSpell);
+        Assert.Contains(60, counter.SourceItems);   // waterskin analogue
+        Assert.Equal(1800, counter.DurationSeconds);
+    }
+
     // A checkspell whose buff spell has no Dur in the data → DurationSeconds 0.
     // The provisioner falls back to a periodic refresh rather than once-and-never.
     [Fact]
