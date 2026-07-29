@@ -43,6 +43,7 @@
         <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
             <TextBox Text="{Binding SearchText, Mode=TwoWay}"
                      PlaceholderText="Filter…"
+                     ToolTip.Tip="{Binding FilterHint}"
                      Width="320"/>
             <Button x:Name="AddButton"    Content="Add"    IsVisible="False"/>
             <Button x:Name="RemoveButton" Content="Remove" IsVisible="False"/>

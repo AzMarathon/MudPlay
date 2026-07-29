@@ -59,10 +59,17 @@
 
     <Grid Margin="22" RowDefinitions="Auto,*">
 
-        <!-- Header strip: launch the modeless name / show-hide / step editor. -->
-        <Button Grid.Row="0" Content="Edit Quests…"
-                Command="{Binding EditQuestsCommand}"
-                HorizontalAlignment="Right" Margin="0,0,0,10"/>
+        <!-- Header strip: quest name filter on the far left, the modeless name /
+             show-hide / step editor launcher on the right. -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,0,0,10">
+            <TextBox Grid.Column="0"
+                     Text="{Binding QuestSearchText, Mode=TwoWay}"
+                     PlaceholderText="Search quests by name…"
+                     MaxWidth="300" HorizontalAlignment="Left"
+                     VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="Edit Quests…"
+                    Command="{Binding EditQuestsCommand}"/>
+        </Grid>
 
         <!-- Empty-state: no visible quest resolved from the active set / character. -->
         <TextBlock Grid.Row="1"
@@ -71,6 +78,13 @@
                    TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
                    Foreground="{StaticResource ChromeFgMutedBrush}"
                    Text="Load a character and game-data set to list its quests. Mark a quest complete (or tick every step of a followable quest) to fold its permanent bonus into Character Info. Use “Edit Quests…” to name, hide, or annotate them."/>
+
+        <!-- Filter matched no quests (distinct from the no-character empty state). -->
+        <TextBlock Grid.Row="1"
+                   IsVisible="{Binding HasNoQuestMatches}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   Text="No quests match the filter."/>
 
         <ScrollViewer Grid.Row="1"
                       IsVisible="{Binding HasQuests}"

@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.10.0
+
+- Game Data → Items filter now recognizes flag keywords — type "collect" (or discard / open / buy / sell / stash) to show only items with that auto-flag set, hiding the rest
+- Player Workshop → Quest Status gains a quest-name search box (far left of the "Edit Quests…" row) to narrow the quest list as you type
+
 ## 2.9.0
 
 - Toolbar auto-combat icon is now a sword and auto-nuke a fireball
