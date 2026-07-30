@@ -629,6 +629,19 @@ public sealed class AutoDepositManager : IDisposable
 
     private void Resume()
     {
+        // Re-arm the single-fire deposit guard on every reroute that completes and
+        // returns through here — not just the explicit abort paths. A reroute can
+        // reach the bank, attempt the deposit and STILL leave wealth above the
+        // threshold (a partial deposit, a KeepOnHandWealth floor, or a deposit that
+        // didn't land), then walk back and Resume() with no abort signal. Without
+        // re-arming, the guard clears only when wealth falls below threshold —
+        // which never happens — so auto-deposit wedges for the session and the
+        // character loops forever, full and never depositing (report
+        // paradigm-20260730-125716). A genuine success (wealth now below threshold)
+        // re-arms naturally on the next inventory line, which also clears the
+        // retry cooldown this sets, so the extra call is harmless there.
+        _cash.NotifyAutoDepositAborted();
+
         ResumeTarget r = _resume;
         GoIdle();
         switch (r.Kind)
