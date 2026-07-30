@@ -1753,6 +1753,60 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
+    public void WeaponNoEffect_WholeChainExhausted_MarksUnactionable_AndMovesOn()
+    {
+        // No caster wired → the chain is just the two weapons. Once BOTH have drawn
+        // "no effect" (the alt after its forced retry), the species' whole configured
+        // chain is exhausted: the engine drops the target, fires a CR to re-pick /
+        // move on, and CanEngageMonster reports it un-killable so the walker gate
+        // releases instead of halting on it forever.
+        using Harness h = new();
+        h.Settings.NormalWeapon = "throwing hammers";
+        h.Settings.AlternateWeapon = "golden broadsword";
+        h.Settings.AlternateAttackCommand = "aa";
+        h.AddMonster(1, "margoyle", killable: true);
+        h.Feed("Also here: margoyle.");
+
+        Assert.True(h.Combat.CanEngageMonster(1));       // actionable before any failure
+
+        h.Feed("Your weapon has no effect against this monster!");   // normal → swap to alt
+        h.Feed("Your weapon has no effect against this monster!");   // alt 1st → force-retry
+        h.Sent.Clear();
+        h.Feed("Your weapon has no effect against this monster!");   // alt 2nd → concede
+
+        Assert.False(h.Combat.CanEngageMonster(1));      // whole chain exhausted this room
+        Assert.Null(h.Combat.CurrentTarget);             // target dropped so we re-pick
+        Assert.True(h.CrRefreshSends >= 1);              // CR fired to force a re-observe
+    }
+
+    [Fact]
+    public void ExhaustedMonster_Skipped_EngineRetargetsAnotherHostile()
+    {
+        // With a second, killable hostile present, exhausting the first monster's
+        // chain must not strand the engine — the next observation skips the
+        // un-actionable one and attacks the other.
+        using Harness h = new();
+        h.Settings.NormalWeapon = "throwing hammers";
+        h.Settings.AlternateWeapon = "golden broadsword";
+        h.Settings.AlternateAttackCommand = "aa";
+        h.AddMonster(1, "margoyle", killable: true);
+        h.AddMonster(2, "giant rat", killable: true);
+        h.Feed("Also here: margoyle, giant rat.");       // engages margoyle (first)
+
+        h.Feed("Your weapon has no effect against this monster!");   // normal → alt
+        h.Feed("Your weapon has no effect against this monster!");   // alt 1st → retry
+        h.Feed("Your weapon has no effect against this monster!");   // alt 2nd → concede
+        h.Sent.Clear();
+
+        // Fresh room view (what the concede CR would draw): the retarget loop skips
+        // the exhausted margoyle and swings at the giant rat.
+        h.Feed("Also here: margoyle, giant rat.");
+
+        Assert.Equal("a giant rat", h.LastSent);
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+    }
+
+    [Fact]
     public void Snapshot_ReflectsTargetAndAltFlag()
     {
         // Backs the bug-report engine-state dump. The worn weapon is no longer

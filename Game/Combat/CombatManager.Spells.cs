@@ -638,7 +638,54 @@ public sealed partial class CombatManager
     // OnEntitiesObserved (retarget / move-past) and, via the delegate AppServices
     // injects, by CombatStateTracker (walker-gate release).
     public bool CanEngageMonster(int monsterNumber) =>
-        UnengageableReason(_readSettings(), monsterNumber) is null;
+        UnactionableReason(_readSettings(), monsterNumber) is null;
+
+    // The reason we can't kill monsterNumber, or null when it's actionable —
+    // combining the deterministic game-data prediction (UnengageableReason) with
+    // the OBSERVED runtime chain-exhaustion (RuntimeChainExhausted): either one
+    // marking it un-actionable is enough. The optional species override lets the
+    // retarget loop pass EngageableCandidate.ResolvedName directly (so an
+    // unresolved -1 Number still gets its runtime check); the walker-gate path
+    // passes only a Number and resolves the species from _speciesByNumber.
+    private string? UnactionableReason(CombatSettings settings, int monsterNumber, string? species = null)
+    {
+        if (UnengageableReason(settings, monsterNumber) is { } dataReason) return dataReason;
+        species ??= _speciesByNumber.GetValueOrDefault(monsterNumber);
+        if (species is { Length: > 0 } sp && RuntimeChainExhausted(settings, sp) is { } runtimeReason)
+            return runtimeReason;
+        return null;
+    }
+
+    // Runtime (observed) actionability: has THIS room's combat proven the whole
+    // configured chain can't hurt this species? True only when both weapons have
+    // drawn a "no effect" line (an un-configured alternate counts as out) AND —
+    // when a caster is wired — every configured attack spell has drawn a "no
+    // effect on X" line too (an un-configured slot counts as out; no caster at all
+    // means the spell side is trivially exhausted). Returns a reason string when
+    // exhausted, else null (fail-open: a weapon or spell that hasn't yet been
+    // proven ineffective keeps the monster actionable, so we never abandon a mob
+    // we simply haven't finished trying). Distinct from UnengageableReason, which
+    // predicts the same from game data before a single swing.
+    private string? RuntimeChainExhausted(CombatSettings settings, string species)
+    {
+        bool normalOut = _normalWeaponFailedMonsters.Contains(species);
+        bool altOut = string.IsNullOrWhiteSpace(settings.AlternateWeapon)
+                      || _alternateWeaponFailedMonsters.Contains(species);
+        if (!normalOut || !altOut) return null;          // a weapon may still hit
+
+        if (CombatSpellsWired)
+        {
+            HashSet<CombatSpellAction>? immune = _attackSpellImmuneSpecies.GetValueOrDefault(species);
+            bool normalSpellOut = string.IsNullOrWhiteSpace(settings.NormalAttackSpell.SpellName)
+                                  || (immune?.Contains(CombatSpellAction.NormalAttackSpell) ?? false);
+            bool altSpellOut = string.IsNullOrWhiteSpace(settings.AlternateAttackSpell.SpellName)
+                               || (immune?.Contains(CombatSpellAction.AlternateAttackSpell) ?? false);
+            if (!normalSpellOut || !altSpellOut) return null;   // a spell may still land
+        }
+
+        return $"observed chain exhausted vs {species} " +
+               "(both weapons and every attack spell ineffective this room)";
+    }
 
     // The reason we can't kill monsterNumber, or null when it's actionable.
     // Physical eligibility is checked first (deterministic, fails open); only when
