@@ -726,4 +726,42 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Assert.True(posRLight < posDesc);
         Assert.True(posDesc < posRegen);
     }
+
+    // ----- Door / key pick+bash requirement in the exit hint --------
+
+    [Fact]
+    public void FormatExitHint_Door_PicklocksAndStrength_SurfacesRequirement()
+    {
+        Assert.True(RoomExit.TryParseWire("9/177 (Door [11 picklocks/strength])", out RoomExit exit));
+        Assert.Equal("Door: 11 picklocks/strength", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    [Fact]
+    public void FormatExitHint_Door_PicklocksOnly_OmitsStrength()
+    {
+        Assert.True(RoomExit.TryParseWire("3/14 (Door [50 picklocks])", out RoomExit exit));
+        Assert.Equal("Door: 50 picklocks", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    [Fact]
+    public void FormatExitHint_Door_NoRequirement_RendersBareDoor()
+    {
+        Assert.True(RoomExit.TryParseWire("1/2666 (Door)", out RoomExit exit));
+        Assert.Equal("Door", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    [Fact]
+    public void FormatExitHint_KeyLocked_WithPicklockAlt_AppendsAlternative()
+    {
+        Assert.True(RoomExit.TryParseWire("1/1224 (Key: 172 [or 100 picklocks])", out RoomExit exit));
+        // No Items table supplied → the key falls back to "#172"; the pick alt tails on.
+        Assert.Equal("Key: #172, or 100 picklocks", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    [Fact]
+    public void FormatExitHint_KeyLocked_NoPicklockAlt_JustKey()
+    {
+        Assert.True(RoomExit.TryParseWire("1/1224 (Key: 172)", out RoomExit exit));
+        Assert.Equal("Key: #172", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
 }

@@ -389,10 +389,24 @@ public static class RoomTooltipBuilder
                     _                   => "Key",
                 };
                 string? itemName = LookupName(data, "Items", exit.KeyItemId);
-                return itemName is { Length: > 0 }
+                string baseText = itemName is { Length: > 0 }
                     ? $"{label}: {itemName}"
                     : $"{label}: #{exit.KeyItemId}";
+                // A key-locked door that can also be picked / bashed carries the
+                // skill alternative ("or 50 picklocks/strength") — surface it so
+                // the user knows they needn't have the key.
+                if (exit.Hint == RoomExitHint.KeyLocked
+                    && FormatDoorRequirement(exit) is { Length: > 0 } alt)
+                    baseText += $", or {alt}";
+                return baseText;
             }
+
+            // A plain (keyless) door: surface the pick / bash skill requirement
+            // so the user sees what it takes to open it.
+            case RoomExitHint.Door:
+                return FormatDoorRequirement(exit) is { Length: > 0 } req
+                    ? $"Door: {req}"
+                    : "Door";
 
             case RoomExitHint.Toll when exit.TollGold > 0:
                 return $"Toll: {exit.TollGold} gold";
@@ -449,6 +463,19 @@ public static class RoomTooltipBuilder
             default:
                 return exit.Hint.ToString();
         }
+    }
+
+    // A door's pick / bash skill requirement, from the parsed StatRequirement +
+    // CanBash flags. "50 picklocks/strength" when both verbs work (the MDB's own
+    // "picklocks/strength" phrasing — one figure serves as both the picklock
+    // skill and the bash strength), "50 picklocks" when the door is pick-only.
+    // Empty when no figure was parsed (older exports omit the number).
+    private static string FormatDoorRequirement(RoomExit exit)
+    {
+        if (exit.StatRequirement <= 0) return string.Empty;
+        return exit.CanBash
+            ? $"{exit.StatRequirement} picklocks/strength"
+            : $"{exit.StatRequirement} picklocks";
     }
 
     public static string DirectionLabel(Direction d) => d switch
