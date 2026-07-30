@@ -185,4 +185,18 @@ public sealed class ItemUseCastEffectTests : IDisposable
 
         Assert.Empty(ShopSalesFor("201"));
     }
+
+    [Fact]
+    public void DroppedBy_CarriesDropPercent()
+    {
+        // Item #300 drops from monster #42 at 10%; the "Dropped By" row must show
+        // the drop rate — "Prismatic Dragon(10%)" — not just the monster name.
+        Seed("Monsters", "[{\"Number\":42,\"Name\":\"Prismatic Dragon\"}]");
+        Seed("Items", "[{\"Number\":300,\"Name\":\"Dragon Scale\",\"ItemType\":0,\"Obtained From\":\"Monster #42(10%)\"}]");
+        _cache.SwitchSet("v1.11p");
+
+        IReadOnlyList<KeyValuePair<string, string>> info = OtherInfoFor("300");
+
+        Assert.Contains(info, kv => kv.Key == "Dropped By" && kv.Value == "Prismatic Dragon(10%)");
+    }
 }
