@@ -638,53 +638,94 @@ public sealed partial class CombatManager
     // OnEntitiesObserved (retarget / move-past) and, via the delegate AppServices
     // injects, by CombatStateTracker (walker-gate release).
     public bool CanEngageMonster(int monsterNumber) =>
-        UnactionableReason(_readSettings(), monsterNumber) is null;
+        AssessEngage(_readSettings(), monsterNumber, species: null) == EngageAssessment.CanAct;
 
-    // The reason we can't kill monsterNumber, or null when it's actionable —
-    // combining the deterministic game-data prediction (UnengageableReason) with
-    // the OBSERVED runtime chain-exhaustion (RuntimeChainExhausted): either one
-    // marking it un-actionable is enough. The optional species override lets the
-    // retarget loop pass EngageableCandidate.ResolvedName directly (so an
-    // unresolved -1 Number still gets its runtime check); the walker-gate path
-    // passes only a Number and resolves the species from _speciesByNumber.
-    private string? UnactionableReason(CombatSettings settings, int monsterNumber, string? species = null)
+    // How the engine can act against a monster THIS round.
+    internal enum EngageAssessment
     {
-        if (UnengageableReason(settings, monsterNumber) is { } dataReason) return dataReason;
-        species ??= _speciesByNumber.GetValueOrDefault(monsterNumber);
-        if (species is { Length: > 0 } sp && RuntimeChainExhausted(settings, sp) is { } runtimeReason)
-            return runtimeReason;
-        return null;
+        // A weapon can still hit it, or an attack spell is castable right now.
+        CanAct,
+        // Nothing is castable this round only because MA is short — transient.
+        // Re-assessed on every observation, so once MA regenerates the spell
+        // becomes castable and it reads CanAct again ("retry the cast chain if we
+        // regen"). The walker still moves on rather than stand getting beaten
+        // waiting for a mana tick, but we do NOT permanently write the mob off.
+        StuckOnMana,
+        // Permanently un-actionable this room: weapons can't hit (game-data or
+        // observed) AND every attack spell is blocked (immune / level / element-
+        // resist) or unconfigured. No amount of waiting helps.
+        Unkillable,
     }
 
-    // Runtime (observed) actionability: has THIS room's combat proven the whole
-    // configured chain can't hurt this species? True only when both weapons have
-    // drawn a "no effect" line (an un-configured alternate counts as out) AND —
-    // when a caster is wired — every configured attack spell has drawn a "no
-    // effect on X" line too (an un-configured slot counts as out; no caster at all
-    // means the spell side is trivially exhausted). Returns a reason string when
-    // exhausted, else null (fail-open: a weapon or spell that hasn't yet been
-    // proven ineffective keeps the monster actionable, so we never abandon a mob
-    // we simply haven't finished trying). Distinct from UnengageableReason, which
-    // predicts the same from game data before a single swing.
-    private string? RuntimeChainExhausted(CombatSettings settings, string species)
+    // Assess whether we can do anything to monsterNumber this round. Consumed by
+    // the retarget loop (which skips anything but CanAct, and only announces
+    // "cannot attack" on Unkillable) and, via CanEngageMonster, by the walker gate
+    // (which releases on StuckOnMana OR Unkillable — move on, don't sit and take
+    // hits waiting for mana). The optional species override lets the retarget loop
+    // pass EngageableCandidate.ResolvedName directly (so an unresolved -1 Number
+    // still gets its runtime check); the gate path passes only a Number and
+    // resolves the species from _speciesByNumber.
+    internal EngageAssessment AssessEngage(CombatSettings settings, int monsterNumber, string? species)
     {
-        bool normalOut = _normalWeaponFailedMonsters.Contains(species);
-        bool altOut = string.IsNullOrWhiteSpace(settings.AlternateWeapon)
-                      || _alternateWeaponFailedMonsters.Contains(species);
-        if (!normalOut || !altOut) return null;          // a weapon may still hit
+        // Game data proves it un-killable (weapons can't hit + spells level/immu-blocked).
+        if (UnengageableReason(settings, monsterNumber) is not null)
+            return EngageAssessment.Unkillable;
 
-        if (CombatSpellsWired)
+        species ??= _speciesByNumber.GetValueOrDefault(monsterNumber);
+        if (string.IsNullOrEmpty(species)) return EngageAssessment.CanAct;   // can't assess → assume actionable
+
+        // A weapon that can still hit (not observed-failed, not game-data-blocked)
+        // keeps it actionable — swing.
+        if (!WeaponPathExhausted(settings, species, monsterNumber)) return EngageAssessment.CanAct;
+
+        // Both weapons are out. With no caster there's nothing left to try.
+        if (!CombatSpellsWired) return EngageAssessment.Unkillable;
+
+        (int ma, int maxMa) = _readMana!();
+        IReadOnlySet<CombatSpellAction>? immune = _attackSpellImmuneSpecies.GetValueOrDefault(species);
+        IReadOnlySet<CombatSpellAction>? levelBlocked = LevelBlockedFor(settings, monsterNumber);
+        IReadOnlySet<CombatSpellAction>? resistBlocked = ResistBlockedFor(settings, monsterNumber);
+
+        bool anyUnaffordable = false;
+        foreach ((CombatSpellSlot slot, CombatSpellAction action) in AttackSpellSlots(settings))
         {
-            HashSet<CombatSpellAction>? immune = _attackSpellImmuneSpecies.GetValueOrDefault(species);
-            bool normalSpellOut = string.IsNullOrWhiteSpace(settings.NormalAttackSpell.SpellName)
-                                  || (immune?.Contains(CombatSpellAction.NormalAttackSpell) ?? false);
-            bool altSpellOut = string.IsNullOrWhiteSpace(settings.AlternateAttackSpell.SpellName)
-                               || (immune?.Contains(CombatSpellAction.AlternateAttackSpell) ?? false);
-            if (!normalSpellOut || !altSpellOut) return null;   // a spell may still land
+            if (string.IsNullOrWhiteSpace(slot.SpellName)) continue;          // unconfigured
+            if (immune?.Contains(action) == true) continue;                  // observed immune
+            if (levelBlocked?.Contains(action) == true) continue;            // level-blocked
+            if (resistBlocked?.Contains(action) == true) continue;           // element-resisted
+            if (!ManaMeets(slot, ma, maxMa, settings.SpellManaThresholdMode))
+            {
+                anyUnaffordable = true;                                        // would work with more MA
+                continue;
+            }
+            return EngageAssessment.CanAct;                                   // castable this round
         }
 
-        return $"observed chain exhausted vs {species} " +
-               "(both weapons and every attack spell ineffective this room)";
+        // Nothing castable now: unaffordable-only means a mana tick fixes it
+        // (transient); otherwise every spell is permanently blocked / unconfigured.
+        return anyUnaffordable ? EngageAssessment.StuckOnMana : EngageAssessment.Unkillable;
+    }
+
+    // The single-target attack-spell slots, in cascade order — the kill means the
+    // affordability check weighs. Multi-attack (a room nuke gated on enemy count)
+    // isn't a reliable single-target kill means, so it's excluded here, matching
+    // the observed-immunity map which only records the single-target slots.
+    private static IEnumerable<(CombatSpellSlot Slot, CombatSpellAction Action)> AttackSpellSlots(
+        CombatSettings settings)
+    {
+        yield return (settings.NormalAttackSpell, CombatSpellAction.NormalAttackSpell);
+        yield return (settings.AlternateAttackSpell, CombatSpellAction.AlternateAttackSpell);
+    }
+
+    // Whether the live MA meets a slot's per-cast mana floor — the same gate the
+    // chooser applies, lifted here so the actionability assessment can tell a
+    // transient mana stall from a permanent block. No floor → always affordable.
+    private bool ManaMeets(CombatSpellSlot slot, int ma, int maxMa, ThresholdMode mode)
+    {
+        if (slot.MinManaPerCast <= 0) return true;
+        if (mode == ThresholdMode.Absolute) return ma >= slot.MinManaPerCast;
+        if (maxMa <= 0) return false;
+        return ma * 100.0 / maxMa >= slot.MinManaPerCast;
     }
 
     // The reason we can't kill monsterNumber, or null when it's actionable.

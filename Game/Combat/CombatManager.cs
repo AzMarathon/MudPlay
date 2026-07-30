@@ -885,11 +885,15 @@ public sealed partial class CombatManager : IDisposable
         EngageableCandidate? actionableFallback = null;
         foreach (EngageableCandidate cand in ordered)
         {
-            if (UnactionableReason(settings, cand.MonsterNumber, cand.ResolvedName) is { } reason)
+            EngageAssessment assess = AssessEngage(settings, cand.MonsterNumber, cand.ResolvedName);
+            if (assess != EngageAssessment.CanAct)
             {
                 _log?.Combat(LogCategory,
-                    $"skip un-actionable {cand.RawName} (#{cand.MonsterNumber}) — {reason}");
-                AnnounceCannotAttack(cand.ResolvedName);
+                    $"skip un-actionable {cand.RawName} (#{cand.MonsterNumber}) — {assess}");
+                // Only a permanent give-up surfaces the "cannot attack" line; a
+                // transient mana stall stays quiet (it's retryable once MA regens).
+                if (assess == EngageAssessment.Unkillable)
+                    AnnounceCannotAttack(cand.ResolvedName);
                 continue;
             }
             actionableFallback ??= cand;
@@ -1160,16 +1164,16 @@ public sealed partial class CombatManager : IDisposable
             // configured spell can still take the round.
             if (physicalFirst && TryFallBackToSpellAfterWeaponFail(settings)) return;
 
-            // Weapons AND spells are exhausted for this species: the whole configured
-            // chain failed. Surface it, drop the target, and force a fresh room view
-            // so the next observation re-picks another actionable hostile — or, if
-            // none remain, releases the walker gate and moves on (RuntimeChain-
-            // Exhausted now reports this species un-actionable to CanEngageMonster).
-            _log?.Warn(LogCategory,
-                $"weapon-no-effect on ALT against {species} — whole combat chain exhausted");
-            AnnounceCannotAttack(species);
+            // The weapon is out and the spell cascade didn't take the round. Drop
+            // the target and force a fresh room view; the retarget loop then
+            // re-assesses (AssessEngage) — attack another hostile, cast if MA has
+            // regenerated, or, if nothing here is actionable, release the walker to
+            // move on. It owns the "cannot attack" announce so a transient mana
+            // stall (retryable) isn't mislabelled as a permanent give-up.
+            _log?.Combat(LogCategory,
+                $"weapon-no-effect on ALT against {species} — weapon exhausted, re-assessing");
             _currentTarget = null;
-            TrySendRoomRefresh($"combat chain exhausted vs {species} — re-pick / move on");
+            TrySendRoomRefresh($"weapon exhausted vs {species} — re-pick / move on");
             return;
         }
 

@@ -8,7 +8,7 @@
 > - Map room tooltips surface the Dwarven Mines "mine ore" gather commands
 > - Map room tooltips surface paid room-command costs (gambling, healer/summon buys, passage fares, the jail bribe-guard)
 > - Navigation lair highlight gains a combined heat+count mode, and the chosen mode is now saved per character
-> - Auto-combat no longer stalls on a monster it can't hurt: once every hostile in a room fails the whole configured chain (both weapons + every attack spell ineffective), it moves to the next room and logs "cannot attack <monster>"
+> - Auto-combat no longer stalls on a monster it can't hurt: with both weapons ineffective and no attack spell castable, it moves to the next hostile or room instead of standing there getting beaten — a mana shortage is retried once MA regenerates, a true dead-end logs "cannot attack <monster>"
 > - Physical-first combat now fully exhausts the weapon (forcing the alternate swap) before falling back to spells
 > - Fixed a stale teleport route-preview lingering after a re-route, and a mid-walk replan dropping the "walk it, no teleport" choice
 > - On "your weapon has no effect", auto-combat now force-swaps to the alternate weapon (or falls back to a spell) and retries instead of stalling
