@@ -1,14 +1,17 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.11.0**
-> - Navigation can now climb the Great Pyramid puzzle: walking to a pyramid room drives the party leader up all five floors (push-blocks, sphinx keywords, timed/chaos/door/footpath floors) to the top room, stopping there for the player to finish
-> - Pyramid climb pre-flights the floor-1 timer against the leader's encumbrance/speed and refuses a run that would scatter; a mid-climb scatter halts and reports
-> - Pyramid climb waits out combat and undead-priest holds on the paced floors (3–5), forces the golden lion key to the leader, and paces floor 4 slower for reaction time
-> - Pyramid floating key now defaults to enemy so party auto-combat clears it for its golden lion key
-> - Game-data messages carrying a Response now auto-send it (desert heat → "use water"); removed the no-op waterskin message
-> - Settings → Other gains master on/off toggles for the Great Pyramid climb solver and the asylum (random-teleport maze) solver, both default on
-> - Fixed a word-wrapped inventory "keys" line stranding "key" onto the last carried item (e.g. "3 waterskin key" instead of "large iron key")
+> **Version 2.12.0**
+> - Game Data → Items "Dropped By" now lists each monster's drop rate, e.g. "Prismatic Dragon(10%)"
+> - Route picker shows an approximate ETA per route (steps + lair-fight time), matching the live walk status
+> - Map room tooltips surface locked-door pick/bash requirements (e.g. "Door: 50 picklocks/strength")
+> - Map room tooltips surface the Dwarven Mines "mine ore" gather commands
+> - Map room tooltips surface paid room-command costs (gambling, healer/summon buys, passage fares, the jail bribe-guard)
+> - Navigation lair highlight gains a combined heat+count mode, and the chosen mode is now saved per character
+> - Fixed a stale teleport route-preview lingering after a re-route, and a mid-walk replan dropping the "walk it, no teleport" choice
+> - On "your weapon has no effect", auto-combat now force-swaps to the alternate weapon (or falls back to a spell) and retries instead of stalling
+> - Killing a summon-on-death monster now rechecks the room before the walker steps on, so a fresh summon isn't dragged into the next room
+> - Fixed WalkTo failing to route out of some rooms (e.g. ganghouse 15/945) whose CMD was misread as a teleport
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
