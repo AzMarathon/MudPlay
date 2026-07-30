@@ -14,6 +14,9 @@
 > - On "your weapon has no effect", auto-combat now force-swaps to the alternate weapon (or falls back to a spell) and retries instead of stalling
 > - Killing a summon-on-death monster now rechecks the room before the walker steps on, so a fresh summon isn't dragged into the next room
 > - Fixed WalkTo failing to route out of some rooms (e.g. ganghouse 15/945) whose CMD was misread as a teleport
+> - Auto-collect no longer fires doomed coin `get`s at 100% encumbrance — the hard weight cap now always applies, not only when a "skip if makes …" flag is set
+> - Auto-deposit no longer wedges: a bank reroute that returns without dropping wealth below the threshold now re-arms instead of looping forever
+> - Equipment manager no longer auto-applies a gear set while the Auto-All kill-switch is engaged (manual "Apply Now" / "Equip All" / @equip still work)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
