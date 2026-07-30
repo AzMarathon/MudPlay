@@ -17,6 +17,7 @@
 > - Auto-collect no longer fires doomed coin `get`s at 100% encumbrance — the hard weight cap now always applies, not only when a "skip if makes …" flag is set
 > - Auto-deposit no longer wedges: a bank reroute that returns without dropping wealth below the threshold now re-arms instead of looping forever
 > - Equipment manager no longer auto-applies a gear set while the Auto-All kill-switch is engaged (manual "Apply Now" / "Equip All" / @equip still work)
+> - No-mana classes (warriors/ninjas) no longer break combat and run when you type `exp` — the Health tab's mana/kai settings now stay inert for a character with no mana
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

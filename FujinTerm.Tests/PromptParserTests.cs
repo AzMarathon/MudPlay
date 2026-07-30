@@ -127,6 +127,24 @@ public sealed class PromptParserTests
     }
 
     [Fact]
+    public void StatScreenMax_NoManaClass_DoesNotApplyPhantomMaxMa()
+    {
+        // A no-mana class (ManaType.None) whose stat / exp screen lists a latent
+        // MaxMana must NOT get it pushed into MaxMa — a Ninja reads MaxMana 8 on
+        // `exp` yet has no live pool. A phantom MaxMa > 0, even for one tick,
+        // defeats HealthManager's `MaxMa > 0` guards and trips a spurious MA-flee
+        // ("break combat and run") the moment the player types `exp` mid-combat
+        // (reports stock-20260730-150957 / -151145).
+        var (scanner, state, parser) = Setup();
+        Feed(scanner, "[HP=44]:");                   // HP-only → ManaType None, MaxMa 0
+        Assert.Equal(ManaType.None, state.ManaType);
+
+        parser.ApplyStatScreenMax(44, 8);            // exp screen lists MaxMana 8
+        Assert.Equal(44, state.MaxHp);               // HP ceiling still applies
+        Assert.Equal(0, state.MaxMa);                // ...but no phantom mana pool
+    }
+
+    [Fact]
     public void NoPromptDataYet_HasPromptDataIsFalse()
     {
         var (_, state, _) = Setup();

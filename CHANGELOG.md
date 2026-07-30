@@ -19,7 +19,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Auto-collect no longer fires doomed coin `get`s at 100% encumbrance — the hard weight cap now always applies, not only when a "skip if makes …" flag is set
 - Auto-deposit no longer wedges: a bank reroute that returns without dropping wealth below the threshold now re-arms instead of looping forever, and logs why it's holding
 - Equipment manager no longer auto-applies a gear set while the Auto-All kill-switch is engaged (manual "Apply Now" / "Equip All" / @equip still work)
-- bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949
+- No-mana classes (warriors/ninjas) no longer break combat and run when you type `exp` — a latent MaxMana on the stat/exp screen is no longer applied as a live mana pool, so the Health tab's mana/kai settings (run/rest below mana) stay inert for a character with no mana
+- bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949, stock-20260730-150957, stock-20260730-151145
 
 ## 2.11.0
 

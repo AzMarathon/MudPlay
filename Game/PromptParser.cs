@@ -66,7 +66,18 @@ public sealed class PromptParser : IDisposable
     public void ApplyStatScreenMax(int maxHp, int maxMa)
     {
         if (maxHp > 0) State.MaxHp = maxHp;
-        if (maxMa > 0) State.MaxMa = maxMa;
+        // A no-mana class (ManaType.None — warriors, ninjas) has no live mana
+        // pool, yet its stat / exp screen can list a latent MaxMana (a Ninja reads
+        // 8). Applying it would flip MaxMa 0 → N until the next None prompt resets
+        // it, defeating the `MaxMa > 0` guards that keep every mana / kai health
+        // setting inert for a no-mana character — which is what let a manual `exp`
+        // poll trip a spurious MA-flee ("break combat and run") mid-combat
+        // (reports stock-20260730-150957 / -151145). Skip the mana ceiling once a
+        // prompt has CONFIRMED the class carries no mana; before any prompt
+        // (HasPromptData false) the stat screen stays authoritative, so a caster
+        // read before its first prompt still learns its max.
+        bool knownNoMana = State.HasPromptData && State.ManaType == ManaType.None;
+        if (maxMa > 0 && !knownNoMana) State.MaxMa = maxMa;
     }
 
     public void Dispose()
