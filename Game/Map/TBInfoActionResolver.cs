@@ -58,4 +58,49 @@ public static class TBInfoActionResolver
             if (hasRemote) yield return keyword;
         }
     }
+
+    // Yields the player-typed keyword from each line whose directive chain performs
+    // an in-place effect — a `giveitem` or `random` directive — the mine / gather
+    // commands in the Dwarven Mines ("mine ore", "mine vein", …, which yield ore
+    // via a checkitem/testskill gate). Lines that teleport, cast, or fire a
+    // remoteaction are surfaced by their own resolvers (TBInfoTeleportResolver /
+    // TBInfoCastTeleportResolver / EnumerateRemoteActionKeywords), so they're
+    // excluded here to keep a keyword from being listed twice. Order preserved
+    // (recognised verbs first, synonyms second); duplicates left for the caller to
+    // dedupe.
+    public static IEnumerable<string> EnumerateRoomActionKeywords(TBInfoStore store, int roomCmd)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (roomCmd <= 0) yield break;
+
+        TBInfoEntry? entry = store.GetEntry(roomCmd);
+        if (entry is null || string.IsNullOrWhiteSpace(entry.Action)) yield break;
+
+        foreach (string raw in entry.Action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string line = raw.Trim();
+            if (line.Length == 0) continue;
+
+            string[] parts = line.Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length < 2) continue;
+
+            string keyword = parts[0];
+            if (string.IsNullOrWhiteSpace(keyword)) continue;
+
+            bool yieldsItem = false;
+            bool routedElsewhere = false;
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string directive = parts[i];
+                if (directive.StartsWith("giveitem", StringComparison.OrdinalIgnoreCase)
+                 || directive.StartsWith("random", StringComparison.OrdinalIgnoreCase))
+                    yieldsItem = true;
+                else if (directive.StartsWith("teleport", StringComparison.OrdinalIgnoreCase)
+                      || directive.StartsWith("cast", StringComparison.OrdinalIgnoreCase)
+                      || directive.StartsWith("remoteaction", StringComparison.OrdinalIgnoreCase))
+                    routedElsewhere = true;
+            }
+            if (yieldsItem && !routedElsewhere) yield return keyword;
+        }
+    }
 }

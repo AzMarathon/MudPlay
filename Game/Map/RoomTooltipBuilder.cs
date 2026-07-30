@@ -570,6 +570,14 @@ public static class RoomTooltipBuilder
                     actionKeywords.Add(kw);
         }
 
+        // Item-yielding room actions — the Dwarven Mines "mine ore" / "mine vein"
+        // gather commands (giveitem / random directives). These never unlock an
+        // exit, so unlike the remoteaction keywords above they surface regardless
+        // of the MultiActionHidden guard.
+        foreach (string kw in TBInfoActionResolver.EnumerateRoomActionKeywords(tbinfo, room.Cmd))
+            if (!actionKeywords.Contains(kw, StringComparer.OrdinalIgnoreCase))
+                actionKeywords.Add(kw);
+
         if (byDest.Count == 0 && castGroups.Count == 0 && actionKeywords.Count == 0)
             return string.Empty;
 
