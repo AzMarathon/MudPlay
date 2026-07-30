@@ -563,6 +563,18 @@ public static class BugReportBuilder
         Kv(sb, "Goal", maze.Goal is { } mg ? $"{mg.Map}/{mg.Room}" : "(none)");
         Kv(sb, "Reshuffle attempts", maze.Attempts.ToString());
 
+        // Great Pyramid climb solver — a "walker won't climb the pyramid / scattered
+        // out" report needs whether it engaged, which floor + phase it reached, its
+        // goal, and how many steps it drove before halting.
+        sb.Append("\n**Pyramid solver**\n\n");
+        Game.Map.PyramidSolver pyr = svc.PyramidSolver;
+        Kv(sb, "Enabled", pyr.Enabled.ToString());
+        Kv(sb, "Active", pyr.Active.ToString());
+        Kv(sb, "Floor", pyr.FloorName);
+        Kv(sb, "Phase", pyr.PhaseName);
+        Kv(sb, "Goal", pyr.Goal is { } pg ? $"{pg.Map}/{pg.Room}" : "(none)");
+        Kv(sb, "Steps driven", pyr.StepsDriven.ToString());
+
         return sb.ToString();
     }
 

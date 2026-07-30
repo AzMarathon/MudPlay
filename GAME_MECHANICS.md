@@ -1275,6 +1275,65 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
     recovery, deposits, party comeback, trainer routing) never prompt — they keep the default
     teleport-allowed shortest route.
 
+## Great Pyramid puzzle climb *([CONFIRMED] 2026-07-29, user + capture `follower log of going up the pyramid.log` + hand-drawn map + game-data trace, Paradigm 1.9.1)*
+
+- **Geography.** Starts at `Scorched Cavern, Firepit` = `12/1239` (its `up` casts spell 685 =
+  timer). Great Pyramid = `12/1800–2085`, contiguous, 6 floors: F1 `1800–1920`, F2 `1921–2001`,
+  F3 `2002–2051`, F4 `2052–2076`, F5 `2077–2084`, top `2085` (→ Tomb via `2085 U→2250`). Every
+  room displays only as `Great Pyramid`, so room **number** is the sole identity.
+- **Solver scope.** The solver only delivers the party to `12/2085` and stops there. The `e`
+  sphinx at 2085, the Tomb, Pharaoh Rastep, and the Dao Lord portions are all player-handled.
+- **Sphinx ascensions are in game data (on the monster, not the room).** Each floor's ascension
+  exit is `Hidden/Needs 1 Action` with no command on the *exit*; the action is delivered by the
+  **stone-sphinx monster's `GreetTXT` textblock** as a keyword → `remoteaction <top-room>`:
+  `fire` (mon #548 @ 1920 → 1921), `sun` (#549 @ 2001 → 2002), `stars` (#550 @ 2051 → 2052),
+  `e`/`letter e`/`the letter e` (#552 @ 2085 → 2250). The F4-entry sphinx (#551 @ 2052) is
+  **`riddle`-only** — the footpath hint, no ascension word. `ask sphinx riddle` returns the clue
+  on any sphinx. Success broadcast: `With a loud grinding noise, a concealed passage opens in the
+  ceiling!` → `u`. (The hand-drawn "time" is the riddle mnemonic; the accepted keyword is `e`.)
+  Not walker-BFS-routable — the graph builder doesn't synthesise monster-greet `remoteaction`
+  edges — so the climb runs a **canned per-floor script**; game-data room numbers position /
+  detect floor / read door state.
+- **Fall/scatter.** The pyramid room-spells `691`/`692`/`700` (`cleanup`/`cleanup 2`/`cleanup 3`)
+  each carry `Abil 115 = 66` with `MinBase/MaxBase = 1239/1278` — ability 115 reads Min/Max as a
+  **random room range**, so a fail scatters you to a **random room in `12/1239–1278`** (the
+  Scorched Cavern firepit cluster). A secondary path, `dao scatter` (742, cast only from
+  `12/2251` `Elemental Plane of Earth`), drops to the single desert room `12/335` `Scorching
+  Desert, Pyramid`. **Detection:** landing in a `Scorched Cavern` room (`12/1239–1278`) or `12/335`
+  mid-climb = failed → halt+report.
+- **F1 — timed, blind-fast.** Entry: `You have a strange feeling that time is running out!`; finish
+  within ~5 min of the first firepit `up` or scatter. Lateral gates open with `push block` (encoded
+  `push block, push square block, move block`; broadcast `<leader> pushes the stone block, and it
+  slides into the wall.`). Never stop on F1.
+- **Pre-flight timer gate.** F1 ≈ **126 moves + 6 actions** (5 push-blocks + `ask sphinx fire`),
+  ~250 ms/action, under 5 min. **Stock:** `Heavy` (>66%) leader = guaranteed timeout → refuse.
+  **Paradigm:** estimate `126·per-move + 6·250 ms` via `MovementSpeedCalculator` (live enc% +
+  quickness, floored at the 1 s cap); over 5 min → refuse (crosses ~>80% enc, no quickness). Drives
+  **leader/solo only**.
+- **F2 — chaos, blind-fast.** Pitch-black (`The room is pitch black - you can't see anything`), wall
+  darts/blades (poison), room spells whose damage **scales the longer you dwell** → keep everyone
+  healed, don't stop for blind/poison/confuse. Undead priests may `hold person` a member; moving on
+  leaves a held member behind (party cohesion is human-managed here in v1).
+- **F3 — door-maze, paced.** Doors cycle on spell 700 → TB 2528/2529 (weighted `remoteaction … 0 0
+  2/1` = open/close); timer broadcast `Doors on this level creak and thump!`, per-door `The door to
+  <dir> just opened.`, exits carry state (`open/closed door <dir>`). **Per-door:** `(Door [1000
+  picklocks/strength])` = unbashable → **wait** for the timer; lesser door on-path = **bash
+  `<dir>`**. Golden lion key drops from a neutral `floating key` monster (auto-grab; if a member
+  grabs, leader forces `@party give golden lion key to <leader>`; **no-drop bug** → exit E, re-enter
+  W to respawn, retry). Key door: `unlock` → `The key breaks and crumbles apart.` → `open` → move.
+- **F4 — footpath, forward-only.** Spell "fourteen" by walking the correct arches (`ask sphinx
+  riddle` @ 2052 gives the clue). Each arch casts **701 (pass)** / **702 (fail)**; **702 →
+  TB 2640→2641** = weighted teleport down; a **backtrack also falls** (backtracking = unsolved).
+  Solver runs the footpath strictly forward; **pause for monsters**; on `hold person`, **freeze
+  until cured/worn off** (forward-only makes a left-behind member unrecoverable); any deviation →
+  halt+report (never back up). Pass internally gates on ability 134 = 9 (Dao/Sunstone flag) —
+  climbers already hold it, so the client doesn't check/encode it.
+- **F5 — standard, paced.** `go shaft`/`go pit` (room CMD textblocks, e.g. 1800/2524, 1857/2521)
+  escape **down** to the firepit.
+- **Correction to earlier notes:** spell **698 = "crushing blocks" (damage), NOT a teleport**;
+  F4 fail = spell **702**; scatter range = `12/1239–1278` (room-spells 691/692/700), desert
+  secondary = spell **742** → `12/335`.
+
 ## Attack spells: why one fails to damage a monster
 
 **Three independent mechanics** decide whether an attack spell damages a monster — do not

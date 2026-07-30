@@ -1293,6 +1293,13 @@ public sealed class AppServices
     // to the goal exists, then hands the final walk back to the walker.
     public Game.Map.TeleportMazeSolver MazeSolver { get; private set; } = null!;
 
+    // Great Pyramid puzzle-climb solver. When the walker can't source a route to a
+    // pyramid room (the floors are joined only by sphinx teleports BFS never plans
+    // through), this plays the canned per-floor climb script from the firepit to
+    // 12/2085. Its wire-sender, room-display feed, and line feed are bound
+    // per-session by MainWindowViewModel after connect.
+    public Game.Map.PyramidSolver PyramidSolver { get; private set; } = null!;
+
     // Writer that persists tracker-learned room names back into the
     // active set's Rooms.json. Consumed by the
     // MainWindowViewModel name-learned prompt handler after the user
@@ -3693,6 +3700,20 @@ public sealed class AppServices
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             paradigmResolver: ParadigmResync);
         Walker.SetMazeSolver(MazeSolver);
+        // Great Pyramid climb solver — same no-route hand-off as the maze solver,
+        // on its own slot. Drives the leader only, and only when leading or solo
+        // (canDrive), pre-flighting the floor-1 timer against live encumbrance +
+        // quickness. Wire-sender / RoomParsed / line feeds bound per-session.
+        PyramidSolver = new Game.Map.PyramidSolver(
+            RoomTracker, Walker,
+            snapshot: () => Inventory.Snapshot,
+            quickness: () => Game.Calculators.CharacterCalculator
+                .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.PlusQuickness,
+            log: Log,
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            canDrive: () => PartyState.SelfIsLeader || PartyState.Members.Count <= 1,
+            leaderName: () => PartyState.SelfIsLeader ? PartyState.LeaderName : null);
+        Walker.SetPyramidSolver(PyramidSolver);
         // Data-driven boat routing. When a walk's goal is cheaper (or only)
         // reachable by a sea-captain sailing, the planner stitches the two land
         // legs around the boat hop and the walker inserts a BoatStep. The planner

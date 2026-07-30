@@ -54,6 +54,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Func<RoomKey, IReadOnlyList<int>>? _hazardItemResolver;
     private Func<int, string?>? _itemNameResolver;
     private IMazeSolver? _mazeSolver;
+    private IPyramidSolver? _pyramidSolver;
     private BoatRoutePlanner? _boatPlanner;
     private Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private readonly LogService? _log;
@@ -330,6 +331,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _mazeSolver = solver;
     }
 
+    // The Great Pyramid climb is likewise not graph-routable — its floors are
+    // disconnected clusters joined only by sphinx `remoteaction` teleports BFS
+    // never plans through — so it plugs in the same no-route hand-off as the maze
+    // solver, but on its own slot (a distinct destination range and driving model).
+    // Left unset on realms without the pyramid.
+    public void SetPyramidSolver(IPyramidSolver solver)
+    {
+        ArgumentNullException.ThrowIfNull(solver);
+        _pyramidSolver = solver;
+    }
+
     // Bind the boat-route planner. When a WalkTo's destination is reachable more
     // cheaply (or only) by a sea-captain sailing than by walking, the planner
     // stitches the two land legs around the boat hop and the walker inserts a
@@ -368,6 +380,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // WalkTo caller sees a maze solve arrive exactly like any other route.
     internal void ReportMazeSolveSucceeded(RoomKey destination)
         => Raise(new WalkEvent(WalkEventKind.Finished, "maze solve: arrived", destination));
+
+    // The pyramid solver's failure / success channels, routed through the walker
+    // (not a solver-owned event) so every WalkTo caller sees a pyramid climb give
+    // up or arrive exactly like any other route. It drives the climb itself, so the
+    // walker never raised its own Finished/Failed for the leg.
+    internal void ReportPyramidSolveFailed(RoomKey destination, string reason)
+        => Raise(new WalkEvent(WalkEventKind.Failed, $"pyramid climb: {reason}", destination));
+
+    internal void ReportPyramidSolveSucceeded(RoomKey destination)
+        => Raise(new WalkEvent(WalkEventKind.Finished, "pyramid climb: arrived", destination));
 
     // Bind the trap-disarm enqueuer. Production wires this to
     // TrapDisarmManager.Enqueue with trapKnown=true — a walker step only reaches
@@ -703,6 +725,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 && lostSolver.CanSolve(destination) && lostSolver.TryBegin(destination))
                 return true;
 
+            if (_pyramidSolver is { } lostPyramid
+                && lostPyramid.CanSolve(destination) && lostPyramid.TryBegin(destination))
+                return true;
+
             Raise(new WalkEvent(WalkEventKind.Failed, "no known source room", destination));
             return false;
         }
@@ -757,6 +783,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 // the solver, which enters the pocket / reshuffles / relocalizes.
                 if (_mazeSolver is { } mazeSolver
                     && mazeSolver.CanSolve(destination) && mazeSolver.TryBegin(destination))
+                    return true;
+
+                if (_pyramidSolver is { } pyramidSolver
+                    && pyramidSolver.CanSolve(destination) && pyramidSolver.TryBegin(destination))
                     return true;
 
                 // Name the obstacle on the route the crosser would actually

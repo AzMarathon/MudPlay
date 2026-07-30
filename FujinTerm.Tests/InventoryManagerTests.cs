@@ -129,6 +129,32 @@ public sealed class InventoryManagerTests
         Assert.Null(h.Inv.Snapshot.ReadiedLight);
     }
 
+    [Fact]
+    public void FullParse_WrappedKeysLine_KeepsKeyTailOffCarriedItems()
+    {
+        using Harness h = new();
+
+        // A long keys ring word-wraps at ~80 cols: the trailing "key." of
+        // "large iron key" lands on the next row. That continuation used to be
+        // stranded — the last key lost its "key" and the orphaned tail bled into
+        // the last carried item ("3 waterskin" → "3 waterskin key").
+        h.Feed("You are carrying a mine pass, black keyring, turquoise potion, 3 waterskin.");
+        h.Feed("You have the following keys:  2 black star key, 2 black serpent key, large iron");
+        h.Feed("key.");
+        h.Feed("Wealth:    0 copper farthings");
+        h.Feed("Encumbrance:    18/2880  -  None  [0%]");
+
+        InventorySnapshot snap = h.Inv.Snapshot;
+
+        Assert.Contains("3 waterskin", snap.CarriedItems);
+        Assert.DoesNotContain(snap.CarriedItems, s => s.EndsWith(" key", StringComparison.OrdinalIgnoreCase));
+
+        Assert.NotNull(snap.Keys);
+        Assert.Equal(
+            new[] { "2 black star key", "2 black serpent key", "large iron key" },
+            snap.Keys!);
+    }
+
     [Theory]
     [InlineData("copper", 7, 7L)]
     [InlineData("silver", 3, 30L)]

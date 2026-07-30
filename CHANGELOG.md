@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.11.0
+
+- Navigation can now climb the Great Pyramid puzzle: walking to a pyramid room drives the party leader up all five floors (push-blocks, sphinx keywords, timed/chaos/door/footpath floors) to the top room, stopping there for the player to finish
+- Pyramid climb pre-flights the floor-1 timer against the leader's encumbrance/speed and refuses a run that would scatter; a mid-climb scatter halts and reports
+- Fixed a word-wrapped inventory "keys" line stranding "key" onto the last carried item (e.g. "3 waterskin key" instead of "large iron key")
+- bug reports addressed: paradigm-20260729-165133
+
 ## 2.10.0
 
 - Game Data → Items filter now recognizes flag keywords — type "collect" (or discard / open / buy / sell / stash) to show only items with that auto-flag set, hiding the rest

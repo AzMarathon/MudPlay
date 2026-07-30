@@ -1,9 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.10.0**
-> - Game Data → Items filter now recognizes flag keywords — type "collect" (or discard / open / buy / sell / stash) to show only items with that auto-flag set, hiding the rest
-> - Player Workshop → Quest Status gains a quest-name search box (far left of the "Edit Quests…" row) to narrow the quest list as you type
+> **Version 2.11.0**
+> - Navigation can now climb the Great Pyramid puzzle: walking to a pyramid room drives the party leader up all five floors (push-blocks, sphinx keywords, timed/chaos/door/footpath floors) to the top room, stopping there for the player to finish
+> - Pyramid climb pre-flights the floor-1 timer against the leader's encumbrance/speed and refuses a run that would scatter; a mid-climb scatter halts and reports
+> - Fixed a word-wrapped inventory "keys" line stranding "key" onto the last carried item (e.g. "3 waterskin key" instead of "large iron key")
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
