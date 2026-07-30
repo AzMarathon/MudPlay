@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Text.Json;
+using FujinTerm.Game.Map;
 using FujinTerm.Models.Profile;
 using FujinTerm.Services;
 using Xunit;
@@ -41,5 +43,21 @@ public sealed class ProfileServiceTests
         var profile = new CharacterProfile();
         ProfileService.NormalizeForLoad(profile);
         Assert.Null(profile.BbsCredentials);
+    }
+
+    [Fact]
+    public void NavLairMode_DefaultsUniform_AndRoundTripsByName()
+    {
+        Assert.Equal(LairDisplayMode.Uniform, new CharacterProfile().NavLairMode);
+
+        var profile = new CharacterProfile { NavLairMode = LairDisplayMode.HeatCount };
+        string json = JsonSerializer.Serialize(profile, JsonStore.Options);
+
+        // Persisted by member name (JsonStringEnumConverter), so reordering the
+        // enum can never remap a saved profile's mode to the wrong value.
+        Assert.Contains("\"HeatCount\"", json);
+
+        CharacterProfile back = JsonSerializer.Deserialize<CharacterProfile>(json, JsonStore.Options)!;
+        Assert.Equal(LairDisplayMode.HeatCount, back.NavLairMode);
     }
 }

@@ -31,6 +31,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_services.Profile.Current is { NavMapCollapsed: true })
             _mapExpanded = false;
 
+        // Restore the lair-highlight mode the user last left. Seed the backing
+        // field directly so this doesn't loop back through OnLairModeChanged and
+        // re-save during construction.
+        if (_services.Profile.Current is { } lairProfile)
+            _lairMode = lairProfile.NavLairMode;
+
         // 1 s tick — keeps the CURRENT NAV lair countdowns + the
         // BUILDING-LAIR strip in sync as time passes. Only runs while
         // the user cares (build mode OR active run); idle Navigation
@@ -552,11 +558,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     public string LairButtonLabel => LairMode switch
     {
-        LairDisplayMode.Heat  => "Lairs: heat",
-        LairDisplayMode.Count => "Lairs: count",
-        LairDisplayMode.Off   => "Lairs: off",
-        _                     => "Lairs",
+        LairDisplayMode.Heat      => "Lairs: heat",
+        LairDisplayMode.Count     => "Lairs: count",
+        LairDisplayMode.HeatCount => "Lairs: heat+count",
+        LairDisplayMode.Off       => "Lairs: off",
+        _                         => "Lairs",
     };
+
+    // Persist the lair-highlight mode per-character so the map reopens the way
+    // the user left it. Write-through-on-change, mirroring OnMapExpandedChanged.
+    partial void OnLairModeChanged(LairDisplayMode value)
+    {
+        if (_services.Profile.Current is not { } profile) return;
+        if (profile.NavLairMode == value) return;
+        profile.NavLairMode = value;
+        _services.Profile.Save();
+    }
 
     [ObservableProperty] private bool _highlightShops = true;
     [ObservableProperty] private bool _highlightSpells = true;
@@ -583,7 +600,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         LairDisplayMode.Uniform => LairDisplayMode.Heat,
         LairDisplayMode.Heat    => LairDisplayMode.Count,
-        LairDisplayMode.Count   => LairDisplayMode.Off,
+        LairDisplayMode.Count   => LairDisplayMode.HeatCount,
+        LairDisplayMode.HeatCount => LairDisplayMode.Off,
         _                       => LairDisplayMode.Uniform,
     };
     [RelayCommand] private void ToggleShops()  => HighlightShops  = !HighlightShops;

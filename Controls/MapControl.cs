@@ -1108,7 +1108,7 @@ public sealed class MapControl : Control
                 && tilePixels >= 16)
                 DrawSequenceNumber(context, cell, seq);
 
-            if (LairMode == LairDisplayMode.Count
+            if (LairMode is LairDisplayMode.Count or LairDisplayMode.HeatCount
                 && LairMonsterCounts is not null
                 && LairMonsterCounts.TryGetValue(kvp.Value, out int lairCount)
                 && tilePixels >= 16)
@@ -1773,7 +1773,7 @@ public sealed class MapControl : Control
         }
         else if (LairMode != LairDisplayMode.Off && room is { HasLair: true })
         {
-            if (LairMode == LairDisplayMode.Heat
+            if (LairMode is LairDisplayMode.Heat or LairDisplayMode.HeatCount
                 && LairRespawnSeconds is { } respawn
                 && respawn.TryGetValue(key, out int secs))
             {
