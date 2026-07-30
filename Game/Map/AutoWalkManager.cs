@@ -641,6 +641,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // shortcut) across the tracker-Pending deferral.
     private bool _deferredWalkAvoidTeleports;
 
+    // The active walk's planning flags, captured when a route is committed in
+    // WalkToImmediate and reset in Reset(). A mid-walk replan (TryReplanOrFail)
+    // must re-issue WalkTo with these, or a no-teleport (or gate-planned) walk
+    // silently reverts to the defaults and takes a teleport it was told to avoid.
+    private bool _activeAvoidTeleports;
+    private bool _activeThroughGates;
+    private bool _activeArmAcquisition = true;
+
     // planThroughAcquirableGates: when true, BFS plans the route as if every
     // acquirable gate item (raft / ticket / door key / hazard counter) were
     // already carried — the route picker's "direct" choice. Default false
@@ -834,6 +842,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _path = new List<WalkStep>(expanded);
         _index = 0;
         _destination = destination;
+        _activeAvoidTeleports = avoidTeleports;
+        _activeThroughGates = planThroughAcquirableGates;
+        _activeArmAcquisition = armItemAcquisition;
         _origin = source.Key;
         _retryCount = 0;
         _stepInFlight = false;
@@ -1718,7 +1729,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _replanningInPlace = true;
         try
         {
-            WalkTo(dest);
+            // Preserve the walk's planning flags — a bare WalkTo(dest) reverts to
+            // defaults, so a no-teleport walk would replan through a teleport.
+            // (Args evaluate before WalkTo's internal Reset clears the fields.)
+            WalkTo(dest,
+                planThroughAcquirableGates: _activeThroughGates,
+                armItemAcquisition: _activeArmAcquisition,
+                avoidTeleports: _activeAvoidTeleports);
         }
         finally
         {
@@ -2026,6 +2043,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
+        _activeAvoidTeleports = false;
+        _activeThroughGates = false;
+        _activeArmAcquisition = true;
         _retryCount = 0;
         _replanCount = 0;
         // Drop any AbandonedCombat hold this walk was carrying so a stopped /

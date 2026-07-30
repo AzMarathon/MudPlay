@@ -778,6 +778,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private RoomKey? _queuedDestination;
 
     partial void OnQueuedDestinationChanged(RoomKey? value) => RefreshPreviewPath();
+    // Drop the armed preview the instant a walk starts (the live WalkPath takes
+    // over), and restore it if the walk stops with a destination still armed.
+    partial void OnIsWalkingChanged(bool value) => RefreshPreviewPath();
 
     // Red preview line drawn on the map while a destination is queued but not
     // yet running. Bound to MapControl.PreviewPath. Cleared when no
@@ -788,7 +791,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     private void RefreshPreviewPath()
     {
-        if (Graph is null
+        // While a walk is underway the live WalkPath is the route the walker will
+        // actually take (it honours the walk's no-teleport / gate choices); the
+        // armed-destination preview is redundant and would otherwise redraw a
+        // teleport-allowed line on every room change over the top of it (the stale
+        // "preview through a teleport" left behind on a no-teleport walk).
+        if (IsWalking
+            || Graph is null
             || CurrentRoomKey is not { } src
             || QueuedDestination is not { } dest
             || src.Equals(dest))
