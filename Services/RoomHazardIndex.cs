@@ -24,9 +24,11 @@ namespace FujinTerm.Services;
 //   • TextBlock → TBInfo with `checkspell <spell#>` — a buff gate; safe while the
 //     buff is active, which the player gets by carrying+using an item that casts
 //     it (the desert's waterskin).
-// Spells that harm but ship no counter (plain magma damage) are deliberately NOT
-// indexed: routing around survivable terrain would strand legitimate paths, and
-// the router only ever asks about a room it could actually make safe.
+// Spells that harm but ship no counter item are deliberately NOT indexed:
+// routing around survivable terrain would strand legitimate paths, and the
+// router only ever asks about a room it could actually make safe. (Lava / magma
+// heat is NOT such a case — spell 526 is countered by the magma amulet or
+// phoenix feather and is indexed like any other protectable hazard.)
 //
 // Mirrors ShopStockIndex / MonsterDropIndex: subscribes to
 // GameDataCache.ActiveSetChanged, reads the raw tables it needs once (Rooms for
