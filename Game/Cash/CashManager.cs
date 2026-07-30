@@ -687,15 +687,19 @@ public sealed class CashManager : IDisposable
         InventorySnapshot snap = _getSnapshot();
         EncumbranceReading enc = snap.Encumbrance;
 
-        bool gateActive = slot >= 0
-            && enc.MaxWeight > 0
-            && (settings.SkipCollectIfMakesLight
-             || settings.SkipCollectIfMakesMedium
-             || settings.SkipCollectIfMakesHeavy);
+        // The weight budget applies whenever we know the currency slot and the
+        // carry capacity — the hard MaxWeight cap is always on. The
+        // SkipCollectIfMakes{Light,Medium,Heavy} flags only *tighten* the ceiling
+        // to a bracket boundary (via ComputeCapWeight); without them the cap is
+        // MaxWeight, so we never send a `get` for coin we can't hold (which the
+        // server just rejects — and, because the failed get emits no pickup echo,
+        // that also strands the event-driven auto-deposit re-check).
+        bool gateActive = slot >= 0 && enc.MaxWeight > 0;
 
         if (!gateActive)
         {
-            // Ungated path — nothing to gate against, collect the full amount.
+            // Unknown currency slot or unknown capacity → nothing to budget
+            // against, collect the full amount (fail-open).
             _gate?.NoteGetSent();
             Send($"get {count} {WireNoun(currency)}");
             return;
@@ -766,6 +770,12 @@ public sealed class CashManager : IDisposable
         {
             _log?.Info(LogCategory,
                 $"collect skipped currency={currency} want={count} — at/over encumbrance gate");
+            // We're at the weight cap, so no `get`/pickup echo will fire to re-run
+            // the event-driven auto-deposit check. Re-evaluate it here: if wealth
+            // already exceeds the deposit threshold this arms the bank reroute to
+            // shed weight — otherwise a full character loops forever, never
+            // depositing (report paradigm-20260730-125716).
+            CheckAutoDeposit();
             return;
         }
 
@@ -1000,12 +1010,29 @@ public sealed class CashManager : IDisposable
         // OR logic: either gate firing triggers the deposit. The single-fire
         // guard re-arms only once BOTH gates fall back below their thresholds,
         // so a deposit that clears wealth but not coin count doesn't re-fire.
-        if ((wealthGate || coinGate) && !_autoDepositFiredThisCrossing)
+        if (wealthGate || coinGate)
         {
+            // Over threshold but already fired this crossing: won't re-fire until a
+            // completed deposit drops wealth below the gate or the reroute aborts
+            // and re-arms. Logged so a "why isn't it depositing?" capture shows the
+            // latch — not the gate — is what's holding it (report 20260730-125716).
+            if (_autoDepositFiredThisCrossing)
+            {
+                _log?.Debug(LogCategory,
+                    $"auto-deposit held: already fired this crossing, awaiting a completed deposit "
+                    + $"or reroute abort (wealth={wealthValue} gate={wealthThreshold} coins={coinCount})");
+                return;
+            }
             // A recent reroute aborted without depositing; hold off re-firing
             // until the cooldown elapses so an unreachable bank can't thrash the
             // movement engine on every inventory line.
-            if (AutoDepositClock() < _autoDepositRetryNotBefore) return;
+            if (AutoDepositClock() < _autoDepositRetryNotBefore)
+            {
+                _log?.Debug(LogCategory,
+                    $"auto-deposit held: retry cooldown after an aborted reroute "
+                    + $"(wealth={wealthValue} gate={wealthThreshold})");
+                return;
+            }
 
             _autoDepositFiredThisCrossing = true;
             _log?.Info(LogCategory,
@@ -1013,7 +1040,7 @@ public sealed class CashManager : IDisposable
                 $"coins={coinCount} (gate={coinThreshold})");
             AutoDepositRequested?.Invoke(wealthValue);
         }
-        else if (!wealthGate && !coinGate)
+        else
         {
             // Both gates below threshold: this crossing is over. Drop any pending
             // retry hold from an earlier aborted reroute (unconditionally — the

@@ -1131,6 +1131,46 @@ public sealed class CashManagerTests
     }
 
     [Fact]
+    public void Collect_AtMaxWeight_NoFlag_SkipsDoomedGet()
+    {
+        // 100% weight with NO SkipCollectIfMakes flag: the hard MaxWeight cap is
+        // always on now, so a `get` we can't hold is never sent (previously the
+        // no-flag path was ungated and fired doomed gets — report 20260730-124104).
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Snapshot = Snap(0, 0, 0, 0, 0, currentWeight: 1000, maxWeight: 1000);
+
+        h.Feed("There are 100 gold pieces here.");
+
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void Collect_AtMaxWeight_OverDepositThreshold_ArmsDeposit()
+    {
+        // Full AND wealth over the deposit threshold: suppressing the doomed get
+        // must re-check the auto-deposit so the bank reroute arms — otherwise a
+        // full character loops forever, never depositing (report 20260730-125716,
+        // coupled to the at-max-weight get suppression above).
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Settings.AutoDepositIfWealthExceeds = 100;
+        h.Settings.BankRoomKey = "bank";
+        h.Snapshot = new InventorySnapshot(
+            new CurrencyHoldings(0, 0, 0, 0, 0, 150),   // TotalCopperValue 150 > 100
+            new EncumbranceReading(1000, 1000, 0, EncumbranceLevel.None),
+            Array.Empty<EquippedItem>(),
+            Array.Empty<string>(),
+            DateTimeOffset.UtcNow);
+
+        h.Feed("There are 100 gold pieces here.");
+
+        Assert.Empty(h.Sent);                 // doomed get suppressed
+        Assert.Single(h.AutoDeposits);        // ...and the deposit re-check armed
+        Assert.Equal(150, h.AutoDeposits[0]);
+    }
+
+    [Fact]
     public void Gate_Light_ClampsPickupToHeadroom()
     {
         // MaxWeight 1000, Light starts at 17%. GateBoundaryCap = 169 weight

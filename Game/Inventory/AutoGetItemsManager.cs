@@ -317,7 +317,10 @@ public sealed class AutoGetItemsManager : IDisposable
                 }
 
                 // Weight gate — skip a pickup that would breach the cap. Weight 0
-                // (unknown) and an unknown carry weight both mean "don't gate".
+                // (unknown OR genuinely weightless) means "don't gate": a weightless
+                // item fits even at capacity, and an unknown-weight get is
+                // self-correcting (the server picks up a weightless item and rejects
+                // an over-cap one), so there's no reliable signal to suppress on.
                 if (encKnown && item.Weight > 0 && projectedWeight + item.Weight > capWeight)
                 {
                     _log?.Info(LogCategory,
