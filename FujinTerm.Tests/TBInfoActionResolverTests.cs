@@ -97,4 +97,51 @@ public sealed class TBInfoActionResolverTests : IDisposable
 
         Assert.Empty(TBInfoActionResolver.EnumerateRemoteActionKeywords(store, 1061));
     }
+
+    [Fact]
+    public void PricedCommands_SinglePrice_ParsesCost_SkipsFailTextblock()
+    {
+        // The real Paradigm dice game (TB#997): "price 10000 1560" — 10000 copper
+        // is the cost, 1560 is the can't-afford textblock, not a second price.
+        const string json = """
+            [ { "Number": 400, "LinkTo": 0,
+                "Action": "roll dice:price 10000 1560:random 998\nplay dice:price 10000 1560:random 998\n",
+                "Called From": "Room 1/2" } ]
+            """;
+        TBInfoStore store = NewStore(json);
+
+        var cmds = TBInfoActionResolver.EnumeratePricedCommands(store, 400).ToArray();
+
+        Assert.Equal(2, cmds.Length);
+        Assert.Equal("roll dice", cmds[0].Keyword);
+        Assert.Equal(10000L, cmds[0].MaxCopper);
+        Assert.False(cmds[0].Tiered);
+    }
+
+    [Fact]
+    public void PricedCommands_BribeGuard_IsTiered_MaxIsCeiling()
+    {
+        // The jail bribe-guard's six escalating prices (1 gold → 10 runic): the
+        // charge is the largest tier the player can afford, so only the ceiling
+        // (10,000,000 copper = 10 runic) is meaningful, and Tiered is set.
+        const string json = """
+            [ { "Number": 500, "LinkTo": 0,
+                "Action": "bribe guard:cast 5432:cast 5434:price 100:price 1000:price 10000:price 100000:price 1000000:price 10000000\n",
+                "Called From": "Room 1/541" } ]
+            """;
+        TBInfoStore store = NewStore(json);
+
+        var pc = Assert.Single(TBInfoActionResolver.EnumeratePricedCommands(store, 500).ToArray());
+
+        Assert.Equal("bribe guard", pc.Keyword);
+        Assert.Equal(10000000L, pc.MaxCopper);
+        Assert.True(pc.Tiered);
+    }
+
+    [Fact]
+    public void PricedCommands_NoPrice_YieldsNothing()
+    {
+        TBInfoStore store = NewStore(MineOreJson);
+        Assert.Empty(TBInfoActionResolver.EnumeratePricedCommands(store, 1061));
+    }
 }

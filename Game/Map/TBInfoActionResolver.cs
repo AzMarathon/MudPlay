@@ -103,4 +103,62 @@ public static class TBInfoActionResolver
             if (yieldsItem && !routedElsewhere) yield return keyword;
         }
     }
+
+    // One paid room command: the player keyword, the highest `price` it charges
+    // (in copper, the base coin), and whether the line carries several DISTINCT
+    // escalating prices. The tiered case is the jail "bribe guard" — its six
+    // powers-of-ten prices mean "the guard takes the largest tier you can afford,
+    // up to the max" (confirmed by the user), so only the ceiling is meaningful.
+    public readonly record struct PricedCommand(string Keyword, long MaxCopper, bool Tiered);
+
+    // Yields the paid commands in a room's CMD chain — every keyword line that
+    // carries at least one `price <copper> [failTextblock]` directive (gambling,
+    // healer / summon buys, passage fares, bribe guard). The first integer after
+    // `price` is the copper cost; a second integer is the can't-afford textblock,
+    // not a cost. MaxCopper is the largest price on the line; Tiered is set when
+    // the line lists more than one distinct price.
+    public static IEnumerable<PricedCommand> EnumeratePricedCommands(TBInfoStore store, int roomCmd)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (roomCmd <= 0) yield break;
+
+        TBInfoEntry? entry = store.GetEntry(roomCmd);
+        if (entry is null || string.IsNullOrWhiteSpace(entry.Action)) yield break;
+
+        foreach (string raw in entry.Action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string line = raw.Trim();
+            if (line.Length == 0) continue;
+
+            string[] parts = line.Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length < 2) continue;
+
+            string keyword = parts[0];
+            if (string.IsNullOrWhiteSpace(keyword)) continue;
+
+            long max = 0;
+            var distinct = new HashSet<long>();
+            for (int i = 1; i < parts.Length; i++)
+            {
+                if (!parts[i].StartsWith("price", StringComparison.OrdinalIgnoreCase)) continue;
+                if (TryFirstAmount(parts[i], out long copper) && copper > 0)
+                {
+                    distinct.Add(copper);
+                    if (copper > max) max = copper;
+                }
+            }
+            if (distinct.Count == 0) continue;
+            yield return new PricedCommand(keyword, max, distinct.Count > 1);
+        }
+    }
+
+    // First whole number in a `price 100 1560` token (skips the `price` word,
+    // returns 100 — the copper cost, not the trailing fail-textblock id).
+    private static bool TryFirstAmount(string token, out long value)
+    {
+        foreach (string word in token.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            if (long.TryParse(word, out value)) return true;
+        value = 0;
+        return false;
+    }
 }

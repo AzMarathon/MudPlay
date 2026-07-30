@@ -910,6 +910,18 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   and waits for the arrival room to render. A member the captain rejected (minlevel / fare / attunement)
   **never boards** — detected as *no teleport into a ship room within a short window of firing the
   verb*, which is the fail signal.
+- **[CONFIRMED by user 2026-07-30] Jail `bribe guard` is a cell-hop helper with an escalating "take
+  the most you can afford" toll.** In the jail rooms (Paradigm `1/541–545`, `14/1326–1333`) the
+  `bribe guard` command casts a jail-teleport (moves the player between cells so a jailed player can
+  reach their gear when they can't bash / picklock the cell door or lack the jail key). The TBInfo
+  `Action` lists **six escalating `price` tiers** — `100 / 1000 / 10000 / 100000 / 1000000 / 10000000`
+  copper (1 Gold → 10 Runic). The guard charges the **largest tier the player can currently afford**,
+  capped at 10 Runic per bribe: carry 11 Runic → charged 10 Runic; carry 8 Runic → charged 1 Runic
+  (the next tier, 10 Runic, is unaffordable). The escalating cost *is* the catch. Only the ceiling is
+  meaningful to surface, so the room tooltip renders it as "bribe guard — costs up to 10 Runic (takes
+  the most you can afford)". This tiered multi-`price` shape is unique to bribe guard among room-`CMD`
+  commands; ordinary paid services (`roll dice`, `buy <spell>`, `summon <x>`, `secure passage`) carry a
+  single `price <copper> [failTextblockId]`.
 - **[CONFIRMED]** **`look <dir>` peeks the adjacent room with a full room display, but the player never
   moves.** Looking into an exit (`look north`, `l e`, `peer …`) renders the neighbouring room exactly
   like walking in would — its title, its `You notice … here.` item/cash survey, and its `Also here:`

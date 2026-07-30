@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using FujinTerm.Game.Calculators;
 using FujinTerm.Game.Light;
 using FujinTerm.Services;
 
@@ -550,6 +551,18 @@ public static class RoomTooltipBuilder
         // west" / "jump east" → bridge jump) collapse to one entry.
         List<CastTeleportGroup> castGroups = ResolveCastGroups(room, tbinfo, spellCatalog);
 
+        // Paid commands (a `price` directive): gambling, healer / summon buys,
+        // passage fares, the jail "bribe guard". Keyed by keyword so a teleport /
+        // cast / action line that shares the keyword can append the cost, and any
+        // priced command not otherwise surfaced still gets listed with its price.
+        List<TBInfoActionResolver.PricedCommand> priced =
+            TBInfoActionResolver.EnumeratePricedCommands(tbinfo, room.Cmd).ToList();
+        Dictionary<string, TBInfoActionResolver.PricedCommand> pricedByKeyword =
+            new(StringComparer.OrdinalIgnoreCase);
+        foreach (TBInfoActionResolver.PricedCommand pc in priced)
+            pricedByKeyword[pc.Keyword] = pc;
+        HashSet<string> pricedShown = new(StringComparer.OrdinalIgnoreCase);
+
         // Room-action keywords (`remoteaction` CMD lines — "pull drawer",
         // "clear rubble", etc.) that change the world in place rather than
         // teleporting. These already surface beneath a MultiActionHidden exit
@@ -558,7 +571,8 @@ public static class RoomTooltipBuilder
         // keyword twice. A room whose only special interaction is a standalone
         // room action (e.g. 1/381's "pull drawer", with just a normal door
         // exit) has no MultiActionHidden exit, so the fallback never fired and
-        // the keyword would go unshown without this.
+        // the keyword would go unshown without this. Priced keywords are held
+        // back — they render on their own line with the cost attached.
         List<string> actionKeywords = new();
         bool shownByExit = room.Exits.Values.Any(e =>
             e.Hint == RoomExitHint.MultiActionHidden
@@ -566,7 +580,8 @@ public static class RoomTooltipBuilder
         if (!shownByExit)
         {
             foreach (string kw in TBInfoActionResolver.EnumerateRemoteActionKeywords(tbinfo, room.Cmd))
-                if (!actionKeywords.Contains(kw, StringComparer.OrdinalIgnoreCase))
+                if (!pricedByKeyword.ContainsKey(kw)
+                    && !actionKeywords.Contains(kw, StringComparer.OrdinalIgnoreCase))
                     actionKeywords.Add(kw);
         }
 
@@ -575,11 +590,27 @@ public static class RoomTooltipBuilder
         // exit, so unlike the remoteaction keywords above they surface regardless
         // of the MultiActionHidden guard.
         foreach (string kw in TBInfoActionResolver.EnumerateRoomActionKeywords(tbinfo, room.Cmd))
-            if (!actionKeywords.Contains(kw, StringComparer.OrdinalIgnoreCase))
+            if (!pricedByKeyword.ContainsKey(kw)
+                && !actionKeywords.Contains(kw, StringComparer.OrdinalIgnoreCase))
                 actionKeywords.Add(kw);
 
-        if (byDest.Count == 0 && castGroups.Count == 0 && actionKeywords.Count == 0)
+        if (byDest.Count == 0 && castGroups.Count == 0
+            && actionKeywords.Count == 0 && priced.Count == 0)
             return string.Empty;
+
+        // Append the cost of any priced keyword in a rendered group (marking it
+        // shown so it isn't also listed standalone). Synonyms share the price.
+        string CostSuffix(IReadOnlyList<string> keywords)
+        {
+            TBInfoActionResolver.PricedCommand? found = null;
+            foreach (string kw in keywords)
+                if (pricedByKeyword.TryGetValue(kw, out TBInfoActionResolver.PricedCommand pc))
+                {
+                    found ??= pc;
+                    pricedShown.Add(kw);
+                }
+            return found is { } f ? " — " + FormatPricedCost(f) : string.Empty;
+        }
 
         StringBuilder sb = new();
         sb.Append("Room commands:");
@@ -591,9 +622,11 @@ public static class RoomTooltipBuilder
             int ml = minLevelByDest.GetValueOrDefault(entry.Key);
             if (ml > 0)
                 sb.Append(" (").Append(RoomExit.FormatLevelGate(ml, 0)).Append(')');
+            sb.Append(CostSuffix(entry.Value));
         }
         foreach (CastTeleportGroup g in castGroups)
         {
+            string castCost = CostSuffix(g.Keywords);
             sb.Append('\n').Append("  ")
               .Append(string.Join(" / ", g.Keywords)).Append(" → ");
             if (g.Destinations.Count == 1)
@@ -601,6 +634,7 @@ public static class RoomTooltipBuilder
                 sb.Append(FormatDest(graph, g.Destinations[0]));
                 if (g.MinLevel > 0)
                     sb.Append(" (").Append(RoomExit.FormatLevelGate(g.MinLevel, 0)).Append(')');
+                sb.Append(castCost);
             }
             else
             {
@@ -612,6 +646,7 @@ public static class RoomTooltipBuilder
                     : $"{g.Destinations.Count} rooms");
                 if (g.MinLevel > 0)
                     sb.Append(" (").Append(RoomExit.FormatLevelGate(g.MinLevel, 0)).Append(')');
+                sb.Append(castCost);
                 sb.Append(':');
                 foreach (RoomKey d in g.Destinations)
                     sb.Append('\n').Append("      ").Append(FormatDest(graph, d));
@@ -620,7 +655,28 @@ public static class RoomTooltipBuilder
         if (actionKeywords.Count > 0)
             sb.Append('\n').Append("  ").Append(string.Join(" / ", actionKeywords))
               .Append(" (room action)");
+
+        // Paid commands not already surfaced above (a healer's buy list, a
+        // summoner's services, the jail bribe) get one line each with the cost.
+        foreach (TBInfoActionResolver.PricedCommand pc in priced)
+        {
+            if (pricedShown.Contains(pc.Keyword)) continue;
+            pricedShown.Add(pc.Keyword);
+            sb.Append('\n').Append("  ").Append(pc.Keyword)
+              .Append(" — ").Append(FormatPricedCost(pc));
+        }
         return sb.ToString();
+    }
+
+    // "costs 100 Gold", or for a tiered charge (the jail bribe-guard's escalating
+    // prices) "costs up to 10 Runic (takes the most you can afford)". Copper is
+    // reduced to its friendliest coin by the shared shop formatter.
+    private static string FormatPricedCost(TBInfoActionResolver.PricedCommand pc)
+    {
+        string amount = ShopPriceCalculator.FormatCopper(pc.MaxCopper);
+        return pc.Tiered
+            ? $"costs up to {amount} (takes the most you can afford)"
+            : $"costs {amount}";
     }
 
     private static string FormatDest(RoomGraphManager graph, RoomKey key)
