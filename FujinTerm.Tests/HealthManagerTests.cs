@@ -1032,6 +1032,15 @@ public sealed class HealthManagerTests
         public FakeFleeEngine? Engine { get; set; } = new();
         public Game.Map.Direction? LastSent { get; set; } = Game.Map.Direction.N;
         public bool HostilesPresent { get; set; }
+        public bool HostileInRoom { get; set; } = true;
+
+        // When true, the flee's deferred reaction is queued (into Posted) instead
+        // of running inline — lets a test simulate the room clearing between the
+        // flee-trigger and the deferred commit (the killing-blow race). Default
+        // false keeps the synchronous flee for the existing flee tests.
+        public bool DeferFlee { get; set; }
+        public Queue<Action> Posted { get; } = new();
+        public void DrainPost() { while (Posted.Count > 0) Posted.Dequeue()(); }
 
         // Reverse-path selector for the Backward flee. Null (the default) exercises
         // the fallback (invert the last sent direction); a test can set it to a
@@ -1052,7 +1061,9 @@ public sealed class HealthManagerTests
                 readGeneralSettings: null,
                 hasEngageableHostiles: () => HostilesPresent,
                 log: Log,
-                findReversePath: (from, to) => ReversePath?.Invoke(from, to));
+                hasHostileInRoom: () => HostileInRoom,
+                findReversePath: (from, to) => ReversePath?.Invoke(from, to),
+                post: a => { if (DeferFlee) Posted.Enqueue(a); else a(); });
             Health.SetWireSender(b => Sent.Add(b));
         }
 
@@ -1075,6 +1086,54 @@ public sealed class HealthManagerTests
 
         Assert.True(h.Health.FledThisCombat);
         Assert.DoesNotContain("break", h.SentLines);
+    }
+
+    [Fact]
+    public void Flee_KillingBlowEmptiesRoom_StandsDown_NoBacktrack()
+    {
+        // The round that dropped HP into flee territory also killed the last
+        // monster; the death registers a tick AFTER the prompt that fires the
+        // flee. The deferred flee must re-check and stand down — stay and rest,
+        // not run from an empty room (report stock-20260730-160706).
+        using FleeHarness h = new() { DeferFlee = true };
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.RunDistance = 1;
+        h.LastSent = Game.Map.Direction.N;
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.HostileInRoom = true;
+
+        h.State.Hp = 30;                              // 15% → below the run trigger; flee QUEUED
+        Assert.Empty(h.Engine!.SentBacktrackMoves);   // not fired yet — deferred a tick
+
+        // The round settles: the last monster died, room clears, InCombat flips
+        // false and no hostile remains.
+        h.HostileInRoom = false;
+        h.State.InCombat = false;
+        h.DrainPost();                                // run the queued flee reaction
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);   // stood down — stayed to rest
+    }
+
+    [Fact]
+    public void Flee_HostileSurvivesTheSettle_StillFlees()
+    {
+        // A genuine low-HP flee with a monster still alive after the settle: the
+        // deferred reaction proceeds and flees.
+        using FleeHarness h = new() { DeferFlee = true };
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.RunDistance = 1;
+        h.LastSent = Game.Map.Direction.N;
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.HostileInRoom = true;
+
+        h.State.Hp = 30;                              // flee queued
+        h.DrainPost();                                // still in combat + hostile → flees
+
+        Assert.NotEmpty(h.Engine!.SentBacktrackMoves);
     }
 
     [Fact]

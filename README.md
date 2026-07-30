@@ -18,6 +18,7 @@
 > - Auto-deposit no longer wedges: a bank reroute that returns without dropping wealth below the threshold now re-arms instead of looping forever
 > - Equipment manager no longer auto-applies a gear set while the Auto-All kill-switch is engaged (manual "Apply Now" / "Equip All" / @equip still work)
 > - No-mana classes (warriors/ninjas) no longer break combat and run when you type `exp` — the Health tab's mana/kai settings now stay inert for a character with no mana
+> - Killing the last monster no longer triggers a flee: if the killing blow drops HP into flee territory but empties the room, the client stays and rests instead of running from nothing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

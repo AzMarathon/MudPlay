@@ -2784,7 +2784,11 @@ public sealed class AppServices
             // Reverse-flee routing: BFS from the current room back to the active
             // engine's start. No filter so gates / avoided rooms never block an
             // escape — a flee just needs to physically retreat along the graph.
-            findReversePath: (from, to) => Bfs.FindPath(from, to));
+            findReversePath: (from, to) => Bfs.FindPath(from, to),
+            // Defer the flee one UI-thread hop so the round's death line (parsed
+            // after the prompt in the same wire read) settles before we commit —
+            // a killing blow that empties the room then rests instead of running.
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
 
         // Late-wire the classifier's flee probe now that Health exists (it's
         // built after RoomClassifier). While fleeing, a monster that pursues us
