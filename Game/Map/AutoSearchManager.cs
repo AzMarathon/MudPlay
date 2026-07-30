@@ -105,7 +105,18 @@ public sealed class AutoSearchManager : IDisposable
         ReleaseGate("room changed");
         _deferredForCombat = false;
         _owed = ShouldSearch();
-        if (_owed) _classify.Start();
+        if (_owed)
+        {
+            // Hold the walker for THIS room while we classify + search. Without the
+            // gate a zero-dwell loop steps out in the same synchronous dispatch as
+            // the room-confirm — before the classify-delayed `sea` fires — so the
+            // room is never searched in place (report stock-20260730-163244).
+            // AutoSearch's RoomTracker.StateChanged handler is registered ahead of
+            // the loop's, so this pauses the coordinator before the loop's
+            // SendNextStep runs.
+            AssertGate("room entered — holding to search");
+            _classify.Start();
+        }
     }
 
     // Each room-entity observation (wired after the combat tracker so the hostile
@@ -140,7 +151,14 @@ public sealed class AutoSearchManager : IDisposable
     {
         _classify.Stop();
         if (!_owed || _deferredForCombat) return;
-        if (_hasEngageableHostiles()) return;   // last-moment reveal — defer path takes over
+        if (_hasEngageableHostiles())
+        {
+            // A fight revealed right at the classify boundary — hand off to the
+            // defer path. The Search gate we're already holding stays asserted and
+            // is released after the post-fight `sea` settles.
+            _deferredForCombat = true;
+            return;
+        }
         FireSearch(postCombat: false);
     }
 
@@ -170,15 +188,12 @@ public sealed class AutoSearchManager : IDisposable
             : _isEnabled() ? "sent 'sea' on room entry"
                            : "sent 'sea' on room entry (path-item demand)");
 
-        // Post-fight: keep the walker held through the reveal (the gate was already
-        // asserted while fighting) so the get path collects what the search
-        // surfaces before the loop sneaks / steps on. A clear-room search never
-        // held the walker, so there's nothing to settle.
-        if (postCombat)
-        {
-            _settle.Stop();
-            _settle.Start();
-        }
+        // Keep the walker held through the reveal round-trip so the get engines
+        // collect what the search surfaces before the loop sneaks / steps on. Both
+        // the clear-room and post-fight paths now hold the Search gate (asserted in
+        // OnRoomChanged / OnRoomObserved), so both settle before releasing it.
+        _settle.Stop();
+        _settle.Start();
     }
 
     private void AssertGate(string reason)
