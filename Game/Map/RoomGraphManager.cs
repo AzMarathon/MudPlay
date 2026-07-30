@@ -596,10 +596,14 @@ public sealed class RoomGraphManager
     // the target of a hard cardinal exit — a stat-gated Door or a KeyLocked
     // exit — gets that exit re-hinted Teleport, so the walker crosses it with
     // the CMD keyword (e.g. `ring chime`) via SpecialExitDispatch instead of
-    // trying to bash / pick a door it may not be able to open. TryReadRoom's
-    // Item->Teleport promotion covers the (Item: N) variant; this covers the
-    // door-bypass variant, which the exit cell alone can't detect — it needs the
-    // TBInfo destination to know WHICH exit the teleport stands in for. Reusing
+    // trying to bash / pick a door it may not be able to open. This also covers
+    // the `(Item: N)` variant (an emblem/chime teleport gated on carrying an item):
+    // promoting it here — TBInfo-gated on the CMD actually teleporting to the
+    // exit's target — instead of blanket-promoting every `(Item: N)` exit in a
+    // CMD room (which mis-fired on non-teleport CMDs like a make-emblem chain,
+    // stranding a walkable item-gated passage; report paradigm-20260729-221044).
+    // The exit cell alone can't detect any of this — it needs the TBInfo
+    // destination to know WHICH exit the teleport stands in for. Reusing
     // the existing cardinal slot (rather than synthesising a directionless edge)
     // keeps graph connectivity and the planar map layout unchanged. No-op
     // without a TBInfo source (parameterless / test construction).
@@ -620,11 +624,11 @@ public sealed class RoomGraphManager
             Dictionary<Direction, RoomExit>? rebuilt = null;
             foreach ((Direction dir, RoomExit exit) in room.Exits)
             {
-                if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) continue;
+                if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked or RoomExitHint.Item)) continue;
                 if (!destinations.Contains(exit.Target)) continue;
                 (rebuilt ??= new(room.Exits))[dir] = exit with { Hint = RoomExitHint.Teleport };
                 _log?.Log(LogSeverity.Debug, "RoomGraph",
-                    $"Room {key} {dir} → {exit.Target}: door re-hinted Teleport (CMD {room.Cmd} teleport bypass).");
+                    $"Room {key} {dir} → {exit.Target}: {exit.Hint} re-hinted Teleport (CMD {room.Cmd} teleport bypass).");
             }
             if (rebuilt is not null) _rooms[key] = room with { Exits = rebuilt };
         }
@@ -973,16 +977,14 @@ public sealed class RoomGraphManager
             string? cell = TryReadString(row, s_exitPropertyNames[(int)dir]);
             if (!RoomExit.TryParseWire(cell, out RoomExit exit)) continue;
 
-            // Item → Teleport promotion: an (Item: N) exit on a room
-            // whose CMD field is non-zero is the party-breaking
-            // teleport pattern (TBInfo chain → text keyword →
-            // teleport directive). The exit parser can't see Room.Cmd,
-            // so the promotion happens here.
-            if (exit.Hint == RoomExitHint.Item && cmd > 0)
-            {
-                exit = exit with { Hint = RoomExitHint.Teleport };
-            }
-
+            // NOTE: the Item → Teleport promotion is NOT done here. A blanket
+            // "(Item: N) exit + non-zero CMD → Teleport" test mis-fires on rooms
+            // whose CMD is an unrelated action (e.g. a make-emblem chain, CMD 1618
+            // at 15/945), turning a walkable item-gated passage into a teleport the
+            // walker can't resolve — the walk dies on step 1 (report
+            // paradigm-20260729-221044). The real promotion runs in the instance
+            // pass PromoteCmdTeleportExits, which can see _tbinfo and only promotes
+            // exits whose CMD chain genuinely teleports to the exit's target.
             exits[dir] = exit;
             mask |= 1u << (int)dir;
         }
