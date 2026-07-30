@@ -1905,7 +1905,7 @@
   {
     "Number": 598,
     "Name": "floating key",
-    "Relationship": "Flee",
+    "Relationship": "Enemy",
     "Priority": "Normal"
   },
   {

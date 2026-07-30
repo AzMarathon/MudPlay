@@ -14746,31 +14746,12 @@
     ]
   },
   {
-    "Id": "82e222dcb3cd19da",
-    "Name": "waterskin",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You take a swig of water from your waterskin.",
-    "TargetMessage": "",
-    "WitnessMessage": "{s} takes a swig of water from a waterskin.",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 711
-      }
-    ]
-  },
-  {
     "Id": "f66ad2a64af54275",
     "Name": "desert damage",
     "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
+    "Flags": "LosingHp",
+    "RawFlagsHex": 8,
+    "Response": "use water",
     "CasterMessage": "You suffer in the desert heat... you need water, soon!",
     "TargetMessage": "",
     "WitnessMessage": "",

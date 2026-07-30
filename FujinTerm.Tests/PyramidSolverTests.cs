@@ -37,6 +37,7 @@ public sealed class PyramidSolverTests : IDisposable
     {
         public required RoomTracker Tracker { get; init; }
         public required AutoWalkManager Walker { get; init; }
+        public required MovementCoordinator Coord { get; init; }
         public required PyramidSolver Solver { get; init; }
         public List<byte[]> Sent { get; } = new();
         public List<WalkEvent> Events { get; } = new();
@@ -47,7 +48,8 @@ public sealed class PyramidSolverTests : IDisposable
     private Harness NewHarness(
         int encPercent = 0, EncumbranceLevel level = EncumbranceLevel.None,
         int quickness = 0, bool isParadigm = false, bool canDrive = true,
-        string? leaderName = null, bool bindWire = true, bool solverEnabled = true)
+        string? leaderName = null, bool bindWire = true, bool solverEnabled = true,
+        string[]? partyMembers = null)
     {
         string dir = Path.Combine(_root, "alpha");
         Directory.CreateDirectory(dir);
@@ -77,9 +79,11 @@ public sealed class PyramidSolverTests : IDisposable
             snapshot: () => snap, quickness: () => quickness,
             log: null, useTimer: false, post: a => a(),
             isParadigm: () => isParadigm, canDrive: () => canDrive, leaderName: () => leaderName,
-            enabled: () => solverEnabled);
+            enabled: () => solverEnabled, coordinator: coord,
+            isPartyMember: n => partyMembers is not null
+                && Array.Exists(partyMembers, m => string.Equals(m, n, StringComparison.OrdinalIgnoreCase)));
 
-        Harness h = new() { Tracker = tracker, Walker = walker, Solver = solver };
+        Harness h = new() { Tracker = tracker, Walker = walker, Coord = coord, Solver = solver };
         walker.SetWireSender(h.Sent.Add);
         walker.SetPyramidSolver(solver);
         walker.Event += h.Events.Add;
@@ -98,6 +102,28 @@ public sealed class PyramidSolverTests : IDisposable
     {
         int i = 0;
         while (h.Solver.Active && i++ < maxIters)
+        {
+            switch (h.Solver.PhaseName)
+            {
+                case "AwaitingSphinx":
+                    h.Solver.FeedLineForTests("With a loud grinding noise, a concealed passage opens in the ceiling!");
+                    break;
+                case "AwaitingDoor":
+                    h.Solver.OnRoomObserved(new RoomObservation("Great Pyramid", AllDirs, AllDirs));
+                    break;
+                default:
+                    h.Solver.FireSettleForTests();
+                    break;
+            }
+        }
+    }
+
+    // Drive the same loop but stop as soon as the solver reaches a target floor
+    // (or goes inactive) — used to set up a mid-climb floor state.
+    private static void DriveUntilFloor(Harness h, string floor, int maxIters = 3000)
+    {
+        int i = 0;
+        while (h.Solver.Active && h.Solver.FloorName != floor && i++ < maxIters)
         {
             switch (h.Solver.PhaseName)
             {
@@ -242,6 +268,84 @@ public sealed class PyramidSolverTests : IDisposable
         Assert.Contains("ask sphinx stars", h.SentText);
         Assert.Equal(5, h.SentText.Count(t => t == "push block"));
         Assert.Contains("@party give golden lion key to Fujin", h.SentText);
+    }
+
+    // ----- combat / hold gating -------------------------------------
+
+    [Fact]
+    public void CombatGate_PausesPacedFloorSteppingUntilCleared()
+    {
+        using Harness h = NewHarness(leaderName: "Fujin");
+        LocateFirepit(h);
+        h.Solver.TryBegin(new RoomKey(12, 2085));
+        DriveUntilFloor(h, "F3");                     // through the blind floors to F3
+        Assert.Equal("F3", h.Solver.FloorName);
+
+        // Combat engaged on the paced floor → stepping stalls (no completion).
+        h.Coord.AssertGate(MovementCoordinator.CombatGate, "test");
+        for (int i = 0; i < 30; i++) RunOneStep(h);
+        Assert.True(h.Solver.Active);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Finished);
+
+        // Combat clears → the climb resumes and finishes.
+        h.Coord.ClearGate(MovementCoordinator.CombatGate, "test");
+        RunToEnd(h);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+    }
+
+    [Fact]
+    public void PartyHold_PausesUntilFreed()
+    {
+        using Harness h = NewHarness(leaderName: "Fujin", partyMembers: new[] { "Jroc", "Xian" });
+        LocateFirepit(h);
+        h.Solver.TryBegin(new RoomKey(12, 2085));
+        DriveUntilFloor(h, "F3");
+
+        // Undead priest holds a party member → stepping stalls. Check fewer ticks
+        // than the ~20-tick "assume worn off" cap so we're verifying the pause, not
+        // the cap's auto-release.
+        h.Solver.FeedLineForTests("big undead priest casts hold person on Jroc!");
+        for (int i = 0; i < 8; i++) RunOneStep(h);
+        Assert.True(h.Solver.Active);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Finished);
+
+        // A freedom cast on the held member releases the pause → finishes.
+        h.Solver.FeedLineForTests("Xian casts freedom on Jroc!");
+        RunToEnd(h);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+    }
+
+    [Fact]
+    public void KeyGrabber_LeaderGrabbed_SkipsForcedGive()
+    {
+        using Harness h = NewHarness(leaderName: "Fujin");
+        LocateFirepit(h);
+        h.Solver.TryBegin(new RoomKey(12, 2085));
+        h.Solver.FeedLineForTests("You picked up golden lion key.");   // leader grabbed it
+        RunToEnd(h);
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        // Leader already holds the key, so no forced consolidation was sent.
+        Assert.DoesNotContain(h.SentText, t => t.StartsWith("@party give golden lion key", StringComparison.Ordinal));
+    }
+
+    // One iteration of the run loop (same dispatch as RunToEnd) — used to pump a
+    // fixed number of steps while checking a stalled state.
+    private static void RunOneStep(Harness h)
+    {
+        if (!h.Solver.Active) return;
+        switch (h.Solver.PhaseName)
+        {
+            case "AwaitingSphinx":
+                h.Solver.FeedLineForTests("With a loud grinding noise, a concealed passage opens in the ceiling!");
+                break;
+            case "AwaitingDoor":
+                h.Solver.OnRoomObserved(new RoomObservation("Great Pyramid", AllDirs, AllDirs));
+                break;
+            default:
+                h.Solver.FireSettleForTests();
+                break;
+        }
     }
 
     public void Dispose()
