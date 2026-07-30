@@ -1059,6 +1059,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.PyramidSolver.SetWireSender(engineSend);
         // Message Response auto-send rides the same gate-wrapped pipeline.
         AppServices.Current.MessageResponder.SetWireSender(engineSend);
+        // Summon-on-death CR recheck rides the same gate-wrapped pipeline.
+        AppServices.Current.SummonSettle.SetWireSender(engineSend);
         // Recovery gate's tier-3 look-sweep rides the same gate-wrapped pipeline
         // so its `look <dir>` peeks can't land mid-password-prompt.
         AppServices.Current.Recovery.SetWireSender(engineSend);

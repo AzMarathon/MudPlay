@@ -64,6 +64,16 @@ public sealed class MovementCoordinator
     // Self-clears on the next room observation or a short timeout.
     public const string CombatRedisplaySettleGate = "CombatRedisplaySettle";
 
+    // Asserted by SummonOnDeathSettle for a brief window when the engine kills a
+    // monster whose DeathSpell summons another. The kill clears the Combat gate and
+    // steps the walker synchronously, before the summon's arrival line is received,
+    // so without this the walker drags the fresh summon into the next room. Holds
+    // the walker while a CR re-scans: the summon surfaces and the Combat gate takes
+    // over, or the room is empty and the settle clears so the walker steps on.
+    // Engine-wait tier — never flips the toolbar Start/Pause/Stop. Self-clears on
+    // the next room observation or a short timeout.
+    public const string SummonDeathSettleGate = "SummonDeathSettle";
+
     // Asserted by HealthManager when HP drops below the configured rest
     // trigger; clears when HP recovers past the configured rest target.
     public const string HealthRecoveryGate = "HealthRecovery";

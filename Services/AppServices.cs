@@ -883,6 +883,11 @@ public sealed class AppServices
     // sitting on a stale entry.
     public Game.Combat.MonsterDeathWatcher MonsterDeath { get; private set; } = null!;
 
+    // Index of monsters whose DeathSpell summons another, + the settle that CR-
+    // rechecks the room on such a kill before the walker moves on.
+    public Game.Combat.MonsterDeathSummonIndex MonsterDeathSummon { get; private set; } = null!;
+    public Game.Combat.SummonOnDeathSettle SummonSettle { get; private set; } = null!;
+
     // Engages a monster hidden by darkness. A dark room prints no "Also here:"
     // line, so the only tell a hostile shares it is the mob's dark-cyan attack
     // line; this watcher reads the name off that line (gated on
@@ -2596,6 +2601,17 @@ public sealed class AppServices
         // room re-display correct any cross-variant ambiguity.
         MonsterDeath = new Game.Combat.MonsterDeathWatcher(
             Router, MonsterMessages, Log);
+        // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
+        // resync handler below: on a kill whose DeathSpell summons, it asserts a
+        // hold + sends a CR to re-scan the room, and that hold has to be in place
+        // before the resync's RemoveDeadEntity clears the Combat gate and steps the
+        // walker (both synchronous). Wire-sender bound per-session by the VM.
+        MonsterDeathSummon = new Game.Combat.MonsterDeathSummonIndex(GameData);
+        SummonSettle = new Game.Combat.SummonOnDeathSettle(
+            MonsterDeath, RoomClassifier, MovementCoordinator, MonsterDeathSummon,
+            currentTargetName: () => Combat.CurrentTarget,
+            movementActive: () => MovementControl.IsActive,
+            log: Log);
         MonsterDeath.MonsterDied += evt =>
         {
             // If the dead monster could drop an item we auto-collect, re-survey
