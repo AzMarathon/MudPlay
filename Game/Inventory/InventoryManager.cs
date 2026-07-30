@@ -582,23 +582,51 @@ public sealed partial class InventoryManager : IDisposable
     {
         string? wealthLine = null;
         string? encumbranceLine = null;
-        string? keysLine = null;
         var currencyTokens = new List<string>();
 
+        // The capture buffer is the raw ~80-col word-wrapped dump, in order:
+        //   You are carrying <items>.
+        //   You have the following keys: <keys>.   (or "You have no keys.")
+        //   Wealth: <...>
+        //   Encumbrance: <...>
+        // Any of these sentences can wrap across several rows. Classify each row
+        // by the last section marker seen, so a wrapped continuation stays with
+        // its own section instead of bleeding into the next — a wrapped keys line
+        // otherwise stranded its trailing "key" out of the last key name and into
+        // the carried-items text.
+        var itemRows = new List<string>();
+        var keyRows = new List<string>();
+        var section = InventorySection.None;
         foreach (string raw in _captureBuffer)
         {
             string trimmed = raw.TrimStart();
-            if (trimmed.StartsWith("Wealth:", StringComparison.Ordinal))
-                wealthLine = trimmed;
-            else if (trimmed.StartsWith("Encumbrance:", StringComparison.Ordinal))
-                encumbranceLine = trimmed;
+            if (trimmed.StartsWith("You are carrying", StringComparison.Ordinal))
+            { section = InventorySection.Items; itemRows.Add(trimmed); }
             else if (trimmed.StartsWith("You have the following keys:", StringComparison.Ordinal))
-                keysLine = trimmed;
+            { section = InventorySection.Keys; keyRows.Add(trimmed); }
+            else if (trimmed.StartsWith("You have no keys", StringComparison.Ordinal))
+                section = InventorySection.Keys;   // no key names to collect
+            else if (trimmed.StartsWith("Wealth:", StringComparison.Ordinal))
+            { section = InventorySection.Wealth; wealthLine = trimmed; }
+            else if (trimmed.StartsWith("Encumbrance:", StringComparison.Ordinal))
+            { section = InventorySection.Encumbrance; encumbranceLine = trimmed; }
+            else
+            {
+                switch (section)
+                {
+                    case InventorySection.Items: itemRows.Add(trimmed); break;
+                    case InventorySection.Keys: keyRows.Add(trimmed); break;
+                    case InventorySection.Wealth: wealthLine = Join(wealthLine, trimmed); break;
+                    case InventorySection.Encumbrance: encumbranceLine = Join(encumbranceLine, trimmed); break;
+                }
+            }
         }
+
+        string? keysLine = keyRows.Count > 0 ? string.Join(" ", keyRows) : null;
 
         // Reconstruct the word-wrapped items text and pull currency tokens out
         // of it. Item tokens are ignored in this slice — only coins matter.
-        string itemsText = string.Join(" ", CollectItemLines());
+        string itemsText = string.Join(" ", itemRows);
         const string prefix = "You are carrying ";
         // Check the "nothing" form first: it also starts with the prefix, so
         // stripping the prefix would leave the literal "nothing" to be split into a
@@ -806,22 +834,12 @@ public sealed partial class InventoryManager : IDisposable
         });
     }
 
-    // The capture buffer holds the "You are carrying ..." rows plus the Keys /
-    // Wealth / Encumbrance trailers. Item rows are everything that isn't one of
-    // those trailers; we join them to undo the ~80-col word wrap before
-    // splitting on ", ".
-    private IEnumerable<string> CollectItemLines()
-    {
-        foreach (string raw in _captureBuffer)
-        {
-            string trimmed = raw.TrimStart();
-            if (trimmed.StartsWith("Wealth:", StringComparison.Ordinal)) continue;
-            if (trimmed.StartsWith("Encumbrance:", StringComparison.Ordinal)) continue;
-            if (trimmed.StartsWith("You have no keys", StringComparison.Ordinal)) continue;
-            if (trimmed.StartsWith("You have the following keys", StringComparison.Ordinal)) continue;
-            yield return trimmed;
-        }
-    }
+    // Section a row in the word-wrapped inventory dump belongs to, so a wrapped
+    // continuation row folds back into its own sentence instead of the next.
+    private enum InventorySection { None, Items, Keys, Wealth, Encumbrance }
+
+    private static string Join(string? head, string tail) =>
+        string.IsNullOrEmpty(head) ? tail : head + " " + tail;
 
     // ----- currency math (all under _lock) -----------------------------
 

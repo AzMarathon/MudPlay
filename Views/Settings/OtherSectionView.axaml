@@ -185,6 +185,19 @@
                       Margin="0,8,0,0"
                       ToolTip.Tip="When checked: if a movement-blocking condition (a prevents-movement gamedata flag or over-encumbrance) strands you as your party leader walks off, FujinTerm telepaths @comeback &lt;your room&gt; to the leader so their recovery flow picks you back up. When unchecked, the strand is detected but no request is sent — you handle it manually. Applies only for this character."/>
 
+            <!-- Navigation puzzle-solver master toggles (Global tier — one switch
+                 per install). Off → a walk-to that would hand off to the solver
+                 just fails like any unroutable destination. Read live via
+                 PyramidSolver.Enabled / TeleportMazeSolver.Enabled. -->
+            <TextBlock Classes="FieldLabel" Text="Navigation puzzle solvers:" Margin="0,14,0,0"/>
+            <CheckBox Content="Enable the Great Pyramid climb solver"
+                      IsChecked="{Binding PyramidSolverEnabled, Mode=TwoWay}"
+                      ToolTip.Tip="When checked (default): walking to a Great Pyramid room drives the party leader up the five-floor puzzle to the top. When unchecked: the walk fails normally instead of handing off to the climb solver. Applies to every character on this install."/>
+            <CheckBox Content="Enable the asylum (random-teleport maze) solver"
+                      IsChecked="{Binding AsylumSolverEnabled, Mode=TwoWay}"
+                      Margin="0,8,0,0"
+                      ToolTip.Tip="When checked (default): walking to a room inside a random-teleport maze pocket (the Warped Asylum) drives look-peeks and reshuffles until a route exists, then hands the final walk back. When unchecked: the walk fails normally. Applies to every character on this install."/>
+
             <!-- Cleanup-Player-Database row: prose-style "Cleanup Player
                  Database after [spinner] days." — spinner widened from
                  90→120 so 4-digit values (e.g. 3650-day max) render

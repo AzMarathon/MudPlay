@@ -51,6 +51,18 @@ public sealed class GlobalSettings
     // out. 0 or negative disables auto-cleanup entirely.
     public int PlayerCleanupDays { get; set; } = 90;
 
+    // Master enable for the Great Pyramid climb solver — when true (default) a
+    // walk-to a pyramid room hands off to PyramidSolver; when false the walk
+    // fails normally like any unroutable destination. Install-wide (Global tier);
+    // read live via PyramidSolver.Enabled. Surfaced in Settings → Other.
+    public bool PyramidSolverEnabled { get; set; } = true;
+
+    // Master enable for the random-teleport asylum (maze) solver — when true
+    // (default) a walk-to a maze-pocket room hands off to TeleportMazeSolver; when
+    // false the walk fails normally. Install-wide (Global tier); read live via
+    // TeleportMazeSolver.Enabled. Surfaced in Settings → Other.
+    public bool AsylumSolverEnabled { get; set; } = true;
+
     // Per-tab settings deltas — keyed by tab name (Health / Combat / Talk /
     // etc.). Each value is a partial DTO for that tab containing only the
     // fields the user pinned to the Global tier. SettingsResolver merges

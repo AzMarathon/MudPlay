@@ -696,6 +696,9 @@ public partial class MainWindowViewModel : ObservableObject
         // tracker consumes the observation, so a look-peek (which the tracker
         // drops) still reaches the solver.
         _roomDisplayParser.RoomParsed += AppServices.Current.MazeSolver.OnRoomObserved;
+        // Same feed drives the pyramid solver's F3 door-state reads and its scatter
+        // (room-name) fail detection.
+        _roomDisplayParser.RoomParsed += AppServices.Current.PyramidSolver.OnRoomObserved;
         // Same pre-suppression feed drives the recovery gate's tier-3 look-sweep
         // — it reads peeked neighbours the tracker would otherwise drop.
         _roomDisplayParser.RoomParsed += AppServices.Current.Recovery.OnRoomObserved;
@@ -741,6 +744,11 @@ public partial class MainWindowViewModel : ObservableObject
         // Messages record's AppliedMessage / AppliedEndsWith pair to
         // surface live ActiveFlags.
         AppServices.Current.Conditions.AttachLineExtractor(Lines);
+        // Game-data message Response auto-send (e.g. desert "use water").
+        AppServices.Current.MessageResponder.AttachLineExtractor(Lines);
+        // Pyramid solver watches lines for the sphinx "concealed passage" cue, the
+        // golden-lion-key pickup, and the scatter room name.
+        AppServices.Current.PyramidSolver.AttachLineExtractor(Lines);
         // Party-buff confirmation — CastingDirector watches inbound lines
         // for OUR caster echo ("You cast bless on Raijin!") to confirm a
         // pending party-bless cast landed before it starts the buff's
@@ -1046,6 +1054,11 @@ public partial class MainWindowViewModel : ObservableObject
         // gate-wrapped pipeline. The RoomParsed feed that drives its relocalize
         // is subscribed below beside the RoomDisplayParser.
         AppServices.Current.MazeSolver.SetWireSender(engineSend);
+        // Pyramid solver — its climb moves + door/sphinx commands ride the same
+        // gate-wrapped pipeline.
+        AppServices.Current.PyramidSolver.SetWireSender(engineSend);
+        // Message Response auto-send rides the same gate-wrapped pipeline.
+        AppServices.Current.MessageResponder.SetWireSender(engineSend);
         // Recovery gate's tier-3 look-sweep rides the same gate-wrapped pipeline
         // so its `look <dir>` peeks can't land mid-password-prompt.
         AppServices.Current.Recovery.SetWireSender(engineSend);

@@ -948,6 +948,9 @@ public sealed class AppServices
     // by CastingDirector's Tier-2 cure path.
     public Game.Conditions.ConditionTracker Conditions { get; private set; } = null!;
 
+    // Sends a game-data message's Response command when its CasterMessage lands.
+    public Game.Conditions.MessageResponder MessageResponder { get; private set; } = null!;
+
     // Outbound ailment-sync engine — on a local curable ailment it
     // announces on say (.@poisoned etc.) so other FujinTerm
     // clients mirror our state, and @waits the leader; on clear it @oks.
@@ -1292,6 +1295,13 @@ public sealed class AppServices
     // teleport and reshuffles across disconnected components until a plain route
     // to the goal exists, then hands the final walk back to the walker.
     public Game.Map.TeleportMazeSolver MazeSolver { get; private set; } = null!;
+
+    // Great Pyramid puzzle-climb solver. When the walker can't source a route to a
+    // pyramid room (the floors are joined only by sphinx teleports BFS never plans
+    // through), this plays the canned per-floor climb script from the firepit to
+    // 12/2085. Its wire-sender, room-display feed, and line feed are bound
+    // per-session by MainWindowViewModel after connect.
+    public Game.Map.PyramidSolver PyramidSolver { get; private set; } = null!;
 
     // Writer that persists tracker-learned room names back into the
     // active set's Rooms.json. Consumed by the
@@ -2837,6 +2847,10 @@ public sealed class AppServices
         // lands in MainWindowViewModel alongside the other line
         // consumers.
         Conditions = new Game.Conditions.ConditionTracker(Messages, Log);
+        // Sends a game-data message's Response command when its CasterMessage
+        // lands (e.g. "desert damage" → "use water"). Wire-sender + line feed
+        // bound per-session by MainWindowViewModel.
+        MessageResponder = new Game.Conditions.MessageResponder(Messages, Log);
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a
         // curable ailment (or being held) it announces ".@poisoned" /
@@ -3691,8 +3705,26 @@ public sealed class AppServices
         MazeSolver = new Game.Map.TeleportMazeSolver(
             MazeIndex, RoomGraph, RoomTracker, Bfs, Walker, Log,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
-            paradigmResolver: ParadigmResync);
+            paradigmResolver: ParadigmResync,
+            enabled: () => Settings.Current.AsylumSolverEnabled);
         Walker.SetMazeSolver(MazeSolver);
+        // Great Pyramid climb solver — same no-route hand-off as the maze solver,
+        // on its own slot. Drives the leader only, and only when leading or solo
+        // (canDrive), pre-flighting the floor-1 timer against live encumbrance +
+        // quickness. Wire-sender / RoomParsed / line feeds bound per-session.
+        PyramidSolver = new Game.Map.PyramidSolver(
+            RoomTracker, Walker,
+            snapshot: () => Inventory.Snapshot,
+            quickness: () => Game.Calculators.CharacterCalculator
+                .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.PlusQuickness,
+            log: Log,
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            canDrive: () => PartyState.SelfIsLeader || PartyState.Members.Count <= 1,
+            leaderName: () => PartyState.SelfIsLeader ? PartyState.LeaderName : null,
+            enabled: () => Settings.Current.PyramidSolverEnabled,
+            coordinator: MovementCoordinator,
+            isPartyMember: IsPartyMemberName);
+        Walker.SetPyramidSolver(PyramidSolver);
         // Data-driven boat routing. When a walk's goal is cheaper (or only)
         // reachable by a sea-captain sailing, the planner stitches the two land
         // legs around the boat hop and the walker inserts a BoatStep. The planner
@@ -5011,6 +5043,25 @@ public sealed class AppServices
     // lives in one place. Backs PathItemDemand's possession check and the
     // MovementFilter key/item gate.
     private bool IsItemCarried(int itemId) => CountItemHeld(itemId) > 0;
+
+    // Does 'name' as it appears in a spell line (e.g. "casts hold person on Jroc")
+    // name a current party member? Party names can be one or two words and the wire
+    // line often uses just the first, so match the full name or its first token.
+    // Backs the pyramid solver's party-member hold detection.
+    private bool IsPartyMemberName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        foreach (Game.PartyMember m in PartyState.Members)
+        {
+            string full = m.Name;
+            if (full.Length == 0) continue;
+            if (string.Equals(full, name, StringComparison.OrdinalIgnoreCase)) return true;
+            int sp = full.IndexOf(' ');
+            string first = sp > 0 ? full[..sp] : full;
+            if (string.Equals(first, name, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
 
     // "Name (map/room)" for the room the tracker currently sits in, or null when
     // position is unknown. Stamped onto transaction-ledger rows so a deposit
