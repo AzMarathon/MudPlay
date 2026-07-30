@@ -44,6 +44,7 @@ public sealed class CombatManagerTests
         // EquipmentManager's job now, tested in EquipmentManagerTests; here we
         // pin the decision — which loadout combat requested and when.
         public List<(string? Weapon, string? OffHand)> Swaps { get; } = new();
+        public List<bool> SwapForced { get; } = new();   // parallel to Swaps: the force flag per swap
 
         // When true, UI posts queue instead of running inline so a test can feed
         // a whole announce burst, then PumpUi() to flush the single coalesced
@@ -70,7 +71,7 @@ public sealed class CombatManagerTests
                 post: a => { if (DeferUi) _uiJobs.Enqueue(a); else a(); },
                 log: Log);
             Combat.SetWireSender(b => Sent.Add(b));
-            Combat.SetWeaponActuator((w, oh) => Swaps.Add((w, oh)));
+            Combat.SetWeaponActuator((w, oh, force) => { Swaps.Add((w, oh)); SwapForced.Add(force); });
             Combat.SetDarkRoomProbe(() => Dark);
         }
 
@@ -1719,6 +1720,36 @@ public sealed class CombatManagerTests
         // Requested the alternate loadout and re-swung with the alt command.
         Assert.Equal(("warhammer", (string?)null), Assert.Single(h.Swaps));
         Assert.Equal("swing stone golem", h.LastSent);
+    }
+
+    [Fact]
+    public void WeaponNoEffect_OnAlt_ForcesPhysicalSwapAndRetries()
+    {
+        // 210839: the alternate was "believed" equipped but never physically
+        // swapped (a phantom swap off a stale snapshot). A no-effect while on the
+        // alt must FORCE the real swap (bypassing the actuator's worn/carried
+        // gates) and retry the alternate attack once — not concede with the weapon
+        // path unswapped (the reported symptom: kept swinging the useless normal
+        // weapon against a margoyle immune to it).
+        using Harness h = new();
+        h.Settings.NormalWeapon = "throwing hammers";
+        h.Settings.AlternateWeapon = "golden broadsword";
+        h.Settings.AlternateAttackCommand = "aa";
+        h.AddMonster(1, "margoyle", killable: true);
+        h.Feed("Also here: margoyle.");
+
+        // First no-effect → request the alternate (now believed on it, unforced).
+        h.Feed("Your weapon has no effect against this monster!");
+        h.Swaps.Clear();
+        h.SwapForced.Clear();
+        h.Sent.Clear();
+
+        // Second no-effect while believed on the alternate → force-swap + retry.
+        h.Feed("Your weapon has no effect against this monster!");
+
+        Assert.Contains(("golden broadsword", (string?)null), h.Swaps);
+        Assert.Contains(true, h.SwapForced);            // the swap was forced this time
+        Assert.Equal("aa margoyle", h.LastSent);        // alternate attack re-sent
     }
 
     [Fact]

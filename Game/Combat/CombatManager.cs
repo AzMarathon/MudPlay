@@ -119,7 +119,7 @@ public sealed partial class CombatManager : IDisposable
     // synchronous burst in the pre-move sequence, before the sn. Until wired both
     // no-op, so the manager stays a pure decider (tests assert on the decision,
     // not the actuation).
-    private Action<string?, string?>? _swapWeapon;
+    private Action<string?, string?, bool>? _swapWeapon;
     private Action? _prepBackstabArmor;
     private Func<bool>? _isStealthed;
     private Func<int, bool>? _hasSeeHidden;
@@ -424,7 +424,7 @@ public sealed partial class CombatManager : IDisposable
     // backstab-armor automation is wired — the weapon still gets swapped either
     // way).
     public void SetWeaponActuator(
-        Action<string?, string?> swapWeapon, Action? prepBackstabArmor = null)
+        Action<string?, string?, bool> swapWeapon, Action? prepBackstabArmor = null)
     {
         ArgumentNullException.ThrowIfNull(swapWeapon);
         _swapWeapon = swapWeapon;
@@ -1015,7 +1015,7 @@ public sealed partial class CombatManager : IDisposable
         bool backstabActive = settings.DoBackstab
             && !string.IsNullOrWhiteSpace(settings.BackstabWeapon);
         if (!backstabActive && _usingAlternateWeapon)
-            _swapWeapon?.Invoke(settings.NormalWeapon, settings.NormalOffHand);
+            _swapWeapon?.Invoke(settings.NormalWeapon, settings.NormalOffHand, false);
         _usingAlternateWeapon = false;
     }
 
@@ -1037,7 +1037,7 @@ public sealed partial class CombatManager : IDisposable
         _backstabOpenerConsumed = false;
 
         if (string.IsNullOrWhiteSpace(settings.BackstabWeapon)) return;
-        _swapWeapon?.Invoke(settings.BackstabWeapon, settings.BackstabOffHand);
+        _swapWeapon?.Invoke(settings.BackstabWeapon, settings.BackstabOffHand, false);
         _prepBackstabArmor?.Invoke();
         _usingAlternateWeapon = false;
     }
@@ -1058,7 +1058,7 @@ public sealed partial class CombatManager : IDisposable
     // Decide which weapon should be on for the next attack and hand it to the
     // actuator (EquipmentManager owns the wire + worn-diff + two-handed rule).
     // Called from OnEntitiesObserved just before SendAttack.
-    private void EquipForAttack(CombatSettings settings, bool wantAlternate)
+    private void EquipForAttack(CombatSettings settings, bool wantAlternate, bool force = false)
     {
         string? weapon;
         string? offHand;
@@ -1074,7 +1074,7 @@ public sealed partial class CombatManager : IDisposable
             offHand = settings.NormalOffHand;
             _usingAlternateWeapon = false;
         }
-        _swapWeapon?.Invoke(weapon, offHand);
+        _swapWeapon?.Invoke(weapon, offHand, force);
     }
 
     private void Send(string text)
@@ -1106,17 +1106,28 @@ public sealed partial class CombatManager : IDisposable
 
         if (_usingAlternateWeapon)
         {
-            // Both weapons are out against this species — the weapon path is
-            // exhausted. Remember the alternate failure (mirrors the normal
-            // fail-set) and, when a caster is wired, re-run the round so a
-            // Physical-first build falls back to the attack-spell cascade instead
-            // of swinging uselessly. Guard the re-dispatch on a first-time Add so a
-            // spell that also can't fire can't spin us in a swing → no-effect →
-            // re-dispatch loop; the server's auto-repeat then just logs quietly.
+            // We *believe* the alternate is out, yet it has no effect — which is
+            // itself evidence it isn't physically on the hand (a phantom swap: the
+            // actuator suppressed the `eq` off a stale worn/carried snapshot, but
+            // the belief flag flipped anyway). Guard on a first-time Add so we do
+            // the recovery once per species (no swing→no-effect→re-dispatch loop).
             if (_alternateWeaponFailedMonsters.Add(species))
             {
                 _log?.Combat(LogCategory, $"adding {species} to alternate-weapon fail-set");
+                // Physical-first build with a caster: prefer the attack-spell cascade.
                 if (TryFallBackToSpellAfterWeaponFail(settings)) return;
+                // No spell fallback — FORCE the real swap (bypassing the snapshot
+                // gates) and retry the alternate attack once, mirroring a manual
+                // `eq <alt>` + re-attack. Only if a no-effect arrives AFTER this
+                // confirmed swap (species already in the set) do we truly concede.
+                _log?.Combat(LogCategory,
+                    $"weapon-no-effect on ALT against {species} — forcing physical swap + retry");
+                EquipForAttack(settings, wantAlternate: true, force: true);
+                if (_currentTarget is { } retryTgt)
+                {
+                    SendAttack(settings.AlternateAttackCommand, retryTgt, priority: null);
+                    return;
+                }
             }
             _log?.Warn(LogCategory,
                 $"weapon-no-effect on ALT against {species} — weapon path exhausted");

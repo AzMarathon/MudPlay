@@ -165,7 +165,13 @@ public sealed class EquipmentManager
     // off-hand (the game refuses the wield with a hand full — the auto-trade
     // doesn't apply), while a one-hander equips its configured off-hand when
     // that isn't already worn. Empty weapon ⇒ no-op.
-    public void SwapWeapon(string? weapon, string? offHand)
+    // force: send the `eq` unconditionally, bypassing the worn-diff + carried-pack
+    // gates. Used for a combat-critical swap (recovering from a weapon-no-effect
+    // that the engine believed was already on the alternate): a stale/desynced
+    // snapshot is precisely why the alternate isn't physically on the hand, so the
+    // gates would wrongly suppress the swap. Normal (unforced) callers keep the
+    // snapshot diff.
+    public void SwapWeapon(string? weapon, string? offHand, bool force = false)
     {
         string? w = weapon?.Trim();
         if (string.IsNullOrEmpty(w)) return;
@@ -177,24 +183,25 @@ public sealed class EquipmentManager
         // speculative `eq` here only draws "You do not have X left unequipped."
         // (the already-on normal case) or, after a rare cleanup EP-zap, fails with
         // "You may not use that weapon." Defer to the diff below, which runs once
-        // the dump lands and the real worn/held state is known.
-        if (snap.LastUpdated == DateTimeOffset.MinValue) return;
+        // the dump lands and the real worn/held state is known. A forced swap can't
+        // defer — it must recover now — so it sends regardless.
+        if (!force && snap.LastUpdated == DateTimeOffset.MinValue) return;
 
         string? wornWeapon = SlotItem(snap, "Weapon Hand");
         string? wornOffHand = SlotItem(snap, "Off-Hand");
         bool twoHanded = _isTwoHanded(w);
         // Gate equips on what's actually in the pack: a weapon lost to a deathpile
         // can't be wielded, and blindly sending `eq` only draws "You do not have X
-        // left unequipped." on every combat round.
+        // left unequipped." on every combat round. (Bypassed on force.)
         ISet<string>? held = HeldNames(snap);
 
-        if (!string.Equals(w, wornWeapon, StringComparison.OrdinalIgnoreCase)
-            && IsHeld(held, w))
+        if (force
+            || (!string.Equals(w, wornWeapon, StringComparison.OrdinalIgnoreCase) && IsHeld(held, w)))
         {
             if (twoHanded && !string.IsNullOrWhiteSpace(wornOffHand))
                 _wire.Send($"rem {wornOffHand!.Trim()}");
             _log?.Info(LogCategory,
-                $"swap weapon={w} offhand={(twoHanded ? "<two-handed>" : offHand ?? "<none>")}");
+                $"swap weapon={w} offhand={(twoHanded ? "<two-handed>" : offHand ?? "<none>")}{(force ? " (forced)" : "")}");
             _wire.Send($"eq {w}");
         }
 
@@ -202,8 +209,8 @@ public sealed class EquipmentManager
 
         string? oh = offHand?.Trim();
         if (!string.IsNullOrEmpty(oh)
-            && !string.Equals(oh, wornOffHand, StringComparison.OrdinalIgnoreCase)
-            && IsHeld(held, oh))
+            && (force
+                || (!string.Equals(oh, wornOffHand, StringComparison.OrdinalIgnoreCase) && IsHeld(held, oh))))
             _wire.Send($"eq {oh}");
     }
 

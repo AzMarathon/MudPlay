@@ -66,7 +66,7 @@ public sealed class DarkRoomCombatIntegrationTests
                 post: a => a(),
                 log: Log);
             Combat.SetWireSender(b => Sent.Add(b));
-            Combat.SetWeaponActuator((_, _) => { });
+            Combat.SetWeaponActuator((_, _, _) => { });
             Watcher = new DarkRoomCombatWatcher(
                 Router, Tracker, Classifier,
                 currentTarget: () => Combat.CurrentTarget,
