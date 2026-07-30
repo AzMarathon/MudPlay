@@ -2586,16 +2586,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             includeLairDwell: _services.IsAutoCombatEnabled);
     }
 
-    // Compact ETA phrasing for the walk-to status: seconds under a minute,
-    // "Nm" / "Nm Ss" beyond it.
-    private static string FormatEta(TimeSpan eta)
-    {
-        if (eta <= TimeSpan.Zero) return "0s";
-        int totalSeconds = (int)System.Math.Round(eta.TotalSeconds);
-        if (totalSeconds < 60) return $"{totalSeconds}s";
-        int m = totalSeconds / 60, s = totalSeconds % 60;
-        return s == 0 ? $"{m}m" : $"{m}m {s}s";
-    }
+    private static string FormatEta(TimeSpan eta) => RouteEtaEstimator.FormatCompact(eta);
 
     // Shared walk-to progress readout — the sailing countdown, or the
     // "Walking to X on step A of B, remaining C, ~ETA to arrive" line. Reused by a

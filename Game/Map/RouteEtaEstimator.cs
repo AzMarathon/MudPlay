@@ -58,4 +58,16 @@ public static class RouteEtaEstimator
 
         return total;
     }
+
+    // Compact ETA phrasing shared by every surface that shows a route arrival
+    // time (the walk-status label, the route picker): seconds under a minute,
+    // "Nm" / "Nm Ss" beyond it. Non-positive spans read "0s".
+    public static string FormatCompact(TimeSpan eta)
+    {
+        if (eta <= TimeSpan.Zero) return "0s";
+        int totalSeconds = (int)Math.Round(eta.TotalSeconds);
+        if (totalSeconds < 60) return $"{totalSeconds}s";
+        int m = totalSeconds / 60, s = totalSeconds % 60;
+        return s == 0 ? $"{m}m" : $"{m}m {s}s";
+    }
 }

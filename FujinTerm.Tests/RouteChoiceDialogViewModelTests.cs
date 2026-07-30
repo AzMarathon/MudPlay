@@ -411,6 +411,29 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Contains("send it", vm.SendItSummary, System.StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Summaries_ShowApproxEta_WhenSupplied()
+    {
+        var choice = Choice(new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 5 }));
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Bank (1/9)", id => "a raft",
+            freeEta: System.TimeSpan.FromSeconds(65),
+            gatedEta: System.TimeSpan.FromSeconds(20));
+
+        Assert.Contains("(~1m 5s)", vm.FreeSummary);
+        Assert.Contains("(~20s)", vm.GatedSummary);
+        Assert.Contains("(~20s)", vm.SendItSummary);   // send-it walks the gated line
+    }
+
+    [Fact]
+    public void Summaries_OmitEta_WhenNotSupplied()
+    {
+        var vm = PickerVm();      // no ETA args → bare step counts
+        Assert.DoesNotContain("(~", vm.FreeSummary);
+        Assert.DoesNotContain("(~", vm.GatedSummary);
+        Assert.DoesNotContain("(~", vm.SendItSummary);
+    }
+
     // ----- Teleport fork: walk vs teleport --------------------------------
 
     private static RouteChoice TeleportChoice() =>

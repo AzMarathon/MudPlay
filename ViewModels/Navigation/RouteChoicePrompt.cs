@@ -102,6 +102,18 @@ public static class RouteChoicePrompt
         RouteChoice choice,
         Action<IReadOnlyList<RoomKey>?>? previewSink)
     {
+        // Approximate arrival ETA for each route — realm-aware per-hop travel plus
+        // a lair-fight dwell for each lair the walker steps into when auto-combat is
+        // on, the same estimate the live walk-status label surfaces. Empty free
+        // path (sole route) estimates to zero, so the picker shows a bare step count
+        // there.
+        TimeSpan freeEta = RouteEtaEstimator.Estimate(
+            choice.FreePath, services.AutoLair.TravelCostModel,
+            services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled);
+        TimeSpan gatedEta = RouteEtaEstimator.Estimate(
+            choice.GatedPath, services.AutoLair.TravelCostModel,
+            services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled);
+
         var vm = new RouteChoiceDialogViewModel(
             choice,
             DestinationLabel(services, destination),
@@ -118,7 +130,9 @@ public static class RouteChoicePrompt
             // No give or shop but a flagged monster drops it: name the lair the
             // run would reroute to hunt, so the picker previews the hunt option
             // (which otherwise only surfaces as a prompt once the walk starts).
-            itemId => services.PathItemDropName(itemId, source));
+            itemId => services.PathItemDropName(itemId, source),
+            freeEta,
+            gatedEta);
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and
