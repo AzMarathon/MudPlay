@@ -42,6 +42,7 @@ public sealed class AutoEquipCoordinator : IDisposable
     private readonly Func<bool> _maGateAsserted;
     private readonly Func<string, EquipResult> _applyBySetId;
     private readonly Func<bool> _wornLoadoutKnown;
+    private readonly Func<bool> _isAutoEnabled;
     private readonly LogService? _log;
 
     private PlayerPosition _lastPosition;
@@ -54,6 +55,7 @@ public sealed class AutoEquipCoordinator : IDisposable
         Func<bool> maGateAsserted,
         Func<string, EquipResult> applyBySetId,
         Func<bool> wornLoadoutKnown,
+        Func<bool> isAutoEnabled,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(player);
@@ -62,12 +64,14 @@ public sealed class AutoEquipCoordinator : IDisposable
         ArgumentNullException.ThrowIfNull(maGateAsserted);
         ArgumentNullException.ThrowIfNull(applyBySetId);
         ArgumentNullException.ThrowIfNull(wornLoadoutKnown);
+        ArgumentNullException.ThrowIfNull(isAutoEnabled);
         _player = player;
         _readEquipment = readEquipment;
         _hpGateAsserted = hpGateAsserted;
         _maGateAsserted = maGateAsserted;
         _applyBySetId = applyBySetId;
         _wornLoadoutKnown = wornLoadoutKnown;
+        _isAutoEnabled = isAutoEnabled;
         _log = log;
 
         _lastPosition = player.Position;
@@ -136,6 +140,12 @@ public sealed class AutoEquipCoordinator : IDisposable
 
     private void Fire(EquipTriggerType type)
     {
+        // Respect the automation master switch — with the Auto-All kill-switch
+        // engaged the user has silenced every engine, so a posture/combat
+        // transition must not auto-swap gear. Explicit applies (Workshop "Apply
+        // Now", "Equip All", @equip-<set>) don't flow through here, so they still
+        // work with the kill-switch on.
+        if (!_isAutoEnabled()) return;
         if (ResolveTarget(_readEquipment(), type) is not { } setId) return;
         // Hold the fire until a full 'i' has established the worn set. Diffing a
         // set against an empty (never-parsed) loadout treats every item as unworn

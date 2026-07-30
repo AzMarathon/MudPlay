@@ -3958,6 +3958,9 @@ public sealed class AppServices
             // against an inventory it hasn't parsed yet without emitting redundant
             // wears for gear already worn.
             wornLoadoutKnown: () => Inventory.IsLoaded,
+            // Master gate: no per-set AutoMode flag exists, so auto-equip follows
+            // the Auto-All kill-switch — silenced automation means no gear swaps.
+            isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
             log: Log);
 
         // Per-game-data-set loop catalogue. Loops live

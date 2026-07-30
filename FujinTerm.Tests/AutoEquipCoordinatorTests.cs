@@ -108,4 +108,34 @@ public sealed class AutoEquipCoordinatorTests
 
         Assert.Equal("mana-set", AutoEquipCoordinator.ResolveTarget(cfg, EquipTriggerType.PreRestMana));
     }
+
+    // ===== master gate (Auto-All kill-switch) =====
+
+    [Fact]
+    public void Fire_Suppressed_WhenAutoDisabled_ThenApplies_OnceReEnabled()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(SetFor(EquipTriggerType.Default, enabled: true, "default-set"));
+        var applied = new System.Collections.Generic.List<string>();
+        bool autoEnabled = false;
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => autoEnabled);
+
+        // Kill-switch engaged: entering combat must NOT auto-swap gear.
+        player.InCombat = true;
+        Assert.Empty(applied);
+
+        // Re-enabled: a fresh combat transition now applies the Default set.
+        player.InCombat = false;
+        autoEnabled = true;
+        player.InCombat = true;
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
 }
