@@ -3,6 +3,7 @@ using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using FujinTerm.Models.Profile;
+using FujinTerm.Models.Settings;
 using FujinTerm.Services;
 using FujinTerm.Views.Settings;
 
@@ -58,6 +59,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Traps";
             yield return "@trap max searches";
             yield return "@trap max disarms";
+            yield return "Pyramid solver";
+            yield return "Great Pyramid climb";
+            yield return "Asylum solver";
+            yield return "Maze solver";
             foreach (StubGroup g in StubGroups)
             foreach (StubField f in g.Fields)
                 yield return f.Label;
@@ -162,6 +167,14 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // entirely; per-player Don't-auto-delete opts records out individually.
     [ObservableProperty] private int _playerCleanupDays = 90;
 
+    // Navigation puzzle-solver master toggles. Both Global tier (one switch per
+    // install) — Apply writes through to SettingsService, not the per-character
+    // profile. Read live via PyramidSolver.Enabled / TeleportMazeSolver.Enabled
+    // (wired in AppServices), so flipping either takes effect on the next walk-to
+    // without a reload. Default on.
+    [ObservableProperty] private bool _pyramidSolverEnabled = true;
+    [ObservableProperty] private bool _asylumSolverEnabled = true;
+
     // ----- Inline stub catalog (un-wired fields) -----
 
     // The remaining un-wired Other-tab fields, rendered inline below the wired
@@ -245,13 +258,18 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
         _profile.Save();
 
-        // PlayerCleanupDays lives at Global tier (one threshold per
-        // install). Persist alongside the char-tier write so the
-        // user's single Apply commits both.
+        // PlayerCleanupDays + the two solver toggles live at Global tier (one
+        // setting per install). Persist alongside the char-tier write so the
+        // user's single Apply commits everything.
         int sanitized = Math.Clamp(PlayerCleanupDays, 0, 3650);
-        if (_globalSettings.Current.PlayerCleanupDays != sanitized)
+        GlobalSettings g = _globalSettings.Current;
+        if (g.PlayerCleanupDays != sanitized
+            || g.PyramidSolverEnabled != PyramidSolverEnabled
+            || g.AsylumSolverEnabled != AsylumSolverEnabled)
         {
-            _globalSettings.Current.PlayerCleanupDays = sanitized;
+            g.PlayerCleanupDays = sanitized;
+            g.PyramidSolverEnabled = PyramidSolverEnabled;
+            g.AsylumSolverEnabled = AsylumSolverEnabled;
             _globalSettings.Save();
         }
 
@@ -294,6 +312,8 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         MaxComebackBacktrackRooms = dto.MaxComebackBacktrackRooms;
         AutoRequestComebackWhenLeftBehind = dto.AutoRequestComebackWhenLeftBehind;
         PlayerCleanupDays = _globalSettings?.Current.PlayerCleanupDays ?? 90;
+        PyramidSolverEnabled = _globalSettings?.Current.PyramidSolverEnabled ?? true;
+        AsylumSolverEnabled = _globalSettings?.Current.AsylumSolverEnabled ?? true;
         ApplyToServices(dto);
     }
 
@@ -353,6 +373,8 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnHideWhenDiscardingChanged(bool value) => MarkDirty();
     partial void OnMaxComebackBacktrackRoomsChanged(int value) => MarkDirty();
     partial void OnAutoRequestComebackWhenLeftBehindChanged(bool value) => MarkDirty();
+    partial void OnPyramidSolverEnabledChanged(bool value) => MarkDirty();
+    partial void OnAsylumSolverEnabledChanged(bool value) => MarkDirty();
 
     private void MarkDirty()
     {

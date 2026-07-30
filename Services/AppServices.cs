@@ -3698,7 +3698,8 @@ public sealed class AppServices
         MazeSolver = new Game.Map.TeleportMazeSolver(
             MazeIndex, RoomGraph, RoomTracker, Bfs, Walker, Log,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
-            paradigmResolver: ParadigmResync);
+            paradigmResolver: ParadigmResync,
+            enabled: () => Settings.Current.AsylumSolverEnabled);
         Walker.SetMazeSolver(MazeSolver);
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
@@ -3712,7 +3713,8 @@ public sealed class AppServices
             log: Log,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             canDrive: () => PartyState.SelfIsLeader || PartyState.Members.Count <= 1,
-            leaderName: () => PartyState.SelfIsLeader ? PartyState.LeaderName : null);
+            leaderName: () => PartyState.SelfIsLeader ? PartyState.LeaderName : null,
+            enabled: () => Settings.Current.PyramidSolverEnabled);
         Walker.SetPyramidSolver(PyramidSolver);
         // Data-driven boat routing. When a walk's goal is cheaper (or only)
         // reachable by a sea-captain sailing, the planner stitches the two land

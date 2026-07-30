@@ -6,6 +6,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Navigation can now climb the Great Pyramid puzzle: walking to a pyramid room drives the party leader up all five floors (push-blocks, sphinx keywords, timed/chaos/door/footpath floors) to the top room, stopping there for the player to finish
 - Pyramid climb pre-flights the floor-1 timer against the leader's encumbrance/speed and refuses a run that would scatter; a mid-climb scatter halts and reports
+- Settings → Other gains master on/off toggles for the Great Pyramid climb solver and the asylum (random-teleport maze) solver, both default on
 - Fixed a word-wrapped inventory "keys" line stranding "key" onto the last carried item (e.g. "3 waterskin key" instead of "large iron key")
 - bug reports addressed: paradigm-20260729-165133
 

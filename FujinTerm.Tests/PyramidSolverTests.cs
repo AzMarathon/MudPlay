@@ -47,7 +47,7 @@ public sealed class PyramidSolverTests : IDisposable
     private Harness NewHarness(
         int encPercent = 0, EncumbranceLevel level = EncumbranceLevel.None,
         int quickness = 0, bool isParadigm = false, bool canDrive = true,
-        string? leaderName = null, bool bindWire = true)
+        string? leaderName = null, bool bindWire = true, bool solverEnabled = true)
     {
         string dir = Path.Combine(_root, "alpha");
         Directory.CreateDirectory(dir);
@@ -76,7 +76,8 @@ public sealed class PyramidSolverTests : IDisposable
         PyramidSolver solver = new(tracker, walker,
             snapshot: () => snap, quickness: () => quickness,
             log: null, useTimer: false, post: a => a(),
-            isParadigm: () => isParadigm, canDrive: () => canDrive, leaderName: () => leaderName);
+            isParadigm: () => isParadigm, canDrive: () => canDrive, leaderName: () => leaderName,
+            enabled: () => solverEnabled);
 
         Harness h = new() { Tracker = tracker, Walker = walker, Solver = solver };
         walker.SetWireSender(h.Sent.Add);
@@ -168,6 +169,10 @@ public sealed class PyramidSolverTests : IDisposable
 
         using Harness follower = NewHarness(canDrive: false);
         Assert.False(follower.Solver.CanSolve(new RoomKey(12, 2085)));
+
+        using Harness disabled = NewHarness(solverEnabled: false);
+        Assert.False(disabled.Solver.Enabled);
+        Assert.False(disabled.Solver.CanSolve(new RoomKey(12, 2085)));
     }
 
     // ----- driving ---------------------------------------------------

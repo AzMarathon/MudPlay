@@ -90,6 +90,9 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     // tests run it inline.
     private readonly Action<Action> _post;
 
+    // Settings → Other master toggle (default on). Gates CanSolve via Enabled.
+    private readonly Func<bool> _enabled;
+
     private readonly DispatcherTimer? _settleTimer;
     private readonly DispatcherTimer? _lookTimeout;
 
@@ -151,7 +154,10 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     // reply is re-sent rather than falling back to a look. On stock it uses the
     // sweep directly. (The Paradigm asylum's pull-lever escape is neutralised at
     // graph-build in RoomGraphManager so the pocket detects there the same as stock.)
-    public bool Enabled => true;
+    // The realm-agnostic capability above is still subject to the Settings → Other
+    // master toggle: when the user turns the asylum solver off, Enabled goes false
+    // and CanSolve declines every pocket.
+    public bool Enabled => _enabled();
 
     public TeleportMazeSolver(
         TeleportMazeIndex index,
@@ -161,8 +167,9 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         AutoWalkManager walker,
         LogService? log = null,
         Func<bool>? isParadigm = null,
-        ParadigmPositionResolver? paradigmResolver = null)
-        : this(index, graph, tracker, bfs, walker, log, useTimer: true, post: null, isParadigm, paradigmResolver) { }
+        ParadigmPositionResolver? paradigmResolver = null,
+        Func<bool>? enabled = null)
+        : this(index, graph, tracker, bfs, walker, log, useTimer: true, post: null, isParadigm, paradigmResolver, enabled) { }
 
     internal TeleportMazeSolver(
         TeleportMazeIndex index,
@@ -174,7 +181,8 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         bool useTimer,
         Action<Action>? post,
         Func<bool>? isParadigm = null,
-        ParadigmPositionResolver? paradigmResolver = null)
+        ParadigmPositionResolver? paradigmResolver = null,
+        Func<bool>? enabled = null)
     {
         ArgumentNullException.ThrowIfNull(index);
         ArgumentNullException.ThrowIfNull(graph);
@@ -191,6 +199,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         _post = post ?? (a => Dispatcher.UIThread.Post(a));
         _isParadigm = isParadigm ?? (() => false);
         _paradigmResolver = paradigmResolver;
+        _enabled = enabled ?? (() => true);
 
         _walker.Event += OnWalkerEvent;
         if (_paradigmResolver is not null)

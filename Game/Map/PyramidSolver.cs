@@ -70,6 +70,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     private readonly Func<int> _quickness;
     private readonly Func<bool> _canDrive;      // leader or solo — else the solver must not steer
     private readonly Func<string?> _leaderName; // for the F3 @party give consolidation
+    private readonly Func<bool> _enabled;       // Settings → Other master toggle
     private readonly Action<Action> _post;
 
     private readonly DispatcherTimer? _settleTimer;
@@ -102,7 +103,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     public string FloorName => _floor.ToString();
     public string PhaseName => _phase.ToString();
     public int StepsDriven => _totalSteps;
-    public bool Enabled => true;
+    public bool Enabled => _enabled();
 
     public PyramidSolver(
         RoomTracker tracker,
@@ -112,9 +113,10 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         LogService? log = null,
         Func<bool>? isParadigm = null,
         Func<bool>? canDrive = null,
-        Func<string?>? leaderName = null)
+        Func<string?>? leaderName = null,
+        Func<bool>? enabled = null)
         : this(tracker, walker, snapshot, quickness, log, useTimer: true, post: null,
-               isParadigm, canDrive, leaderName) { }
+               isParadigm, canDrive, leaderName, enabled) { }
 
     internal PyramidSolver(
         RoomTracker tracker,
@@ -126,7 +128,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         Action<Action>? post,
         Func<bool>? isParadigm = null,
         Func<bool>? canDrive = null,
-        Func<string?>? leaderName = null)
+        Func<string?>? leaderName = null,
+        Func<bool>? enabled = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(walker);
@@ -142,6 +145,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _isParadigm = isParadigm ?? (() => false);
         _canDrive = canDrive ?? (() => true);
         _leaderName = leaderName ?? (() => null);
+        _enabled = enabled ?? (() => true);
 
         if (useTimer)
         {
