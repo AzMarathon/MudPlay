@@ -949,6 +949,14 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
      - Protection: **gnomish fish-helm (item 929)**, `NegateSpell = [512, 513, 514, 453]`. Worn, it
        negates the drown chain (512/513/514) and the black-water damage (453). You still take the minor
        direct 511 chip but never drown.
+     - **[CONFIRMED via game data, Paradigm 1.9.1]** The **lava / volcano biome** is this same shape.
+       `Spell:526` "magma heat" (`Abil-0 1` Damage, a leaf spell — no EndCast chain) covers ~1000 rooms
+       (Lava Tube / "salamander tubes", Magma/Molten River, Jagged Obsidian Field, Volcano Magma Tunnels,
+       etc.); `Spell:218` "temple of fire fire" covers the Temple-of-Fire / Volcano-heart rooms. Both are
+       negated by **either** the **magma amulet (item 487)** or the **phoenix feather (item 1000)** —
+       each has `NegateSpell = [526, 218]`, and they're the only two items that do. `RoomHazardIndex`
+       already indexes these (one any-of group {487, 1000}), so the router treats lava exactly like the
+       river/desert: avoid unless the player carries a counter.
      - Timer cancel on exit: the `6/1139` up-exit is `(Cast: pre-516, post-0)` → spell **516**
        `151`(EndCast→**515** "stop drowning"), and 515 `153`(KillSpell) **512** & **513** — leaving the
        water cancels the drown timer. (`Cast: pre-N` = cast spell N *before* moving through the exit.)
