@@ -1318,21 +1318,36 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   2/1` = open/close); timer broadcast `Doors on this level creak and thump!`, per-door `The door to
   <dir> just opened.`, exits carry state (`open/closed door <dir>`). **Per-door:** `(Door [1000
   picklocks/strength])` = unbashable → **wait** for the timer; lesser door on-path = **bash
-  `<dir>`**. Golden lion key drops from a neutral `floating key` monster (auto-grab; if a member
-  grabs, leader forces `@party give golden lion key to <leader>`; **no-drop bug** → exit E, re-enter
-  W to respawn, retry). Key door: `unlock` → `The key breaks and crumbles apart.` → `open` → move.
+  `<dir>`**. Golden lion key drops from the neutral `floating key` monster (**#598**) — its default
+  client relationship was `Flee` in the Paradigm overlay (stock was already `Enemy`); set to
+  **`Enemy`** so party auto-combat clears it for the key (the solver needs no kill logic). The client
+  tracks who grabs it (`<name> picks up golden lion key`) and forces `@party give golden lion key to
+  <leader>` at the key-door unless the leader grabbed it. (**No-drop bug** — a bugged kill drops
+  nothing → exit E, re-enter W to respawn; not yet automated.) Key door: `unlock` → `The key breaks
+  and crumbles apart.` → `open` → move.
 - **F4 — footpath, forward-only.** Spell "fourteen" by walking the correct arches (`ask sphinx
   riddle` @ 2052 gives the clue). Each arch casts **701 (pass)** / **702 (fail)**; **702 →
   TB 2640→2641** = weighted teleport down; a **backtrack also falls** (backtracking = unsolved).
-  Solver runs the footpath strictly forward; **pause for monsters**; on `hold person`, **freeze
-  until cured/worn off** (forward-only makes a left-behind member unrecoverable); any deviation →
-  halt+report (never back up). Pass internally gates on ability 134 = 9 (Dao/Sunstone flag) —
-  climbers already hold it, so the client doesn't check/encode it.
+  Runs the footpath strictly forward (never back up); paces slower than the other floors for
+  reaction time. Pass internally gates on ability 134 = 9 (Dao/Sunstone flag) — climbers already
+  hold it, so the client doesn't check/encode it.
 - **F5 — standard, paced.** `go shaft`/`go pit` (room CMD textblocks, e.g. 1800/2524, 1857/2521)
   escape **down** to the firepit.
+- **Undead-priest holds** *([CONFIRMED] 2026-07-30, user + game-data trace).* The pyramid undead
+  priest is monster **#770**; it casts `MidSpell-0 = 66` — **spell #66 `hold person`, the SAME spell
+  ID the player casts** (25% at level 20; also casts #77). Wording: witness cast `<caster> casts hold
+  person on <member>!`; the held target's own lines are `Your legs are paralyzed!` → `You can move
+  again!` (private — a *witness* never sees a member's wear-off). Cure = **freedom (#70)** / **cure
+  paralysis (#160)**, seen as `<caster> casts freedom on <member>!` / `<caster> casts cure paralysis
+  on <member>!`. **Per-floor handling:** F1 (timed) and F2 (deadly-to-linger) keep moving through a
+  hold; **F3/F4 wait it out** — pause until a freedom/cure cast frees the member (multiple can be
+  held) or a wear-off cap (~hold person Dur 4) elapses; F5 has no priests. Combat and a **held
+  leader** ride the shared `MovementCoordinator` `Combat`/`Held` gates (the solver waits on those on
+  the paced floors); F1/F2 never gate.
 - **Correction to earlier notes:** spell **698 = "crushing blocks" (damage), NOT a teleport**;
   F4 fail = spell **702**; scatter range = `12/1239–1278` (room-spells 691/692/700), desert
-  secondary = spell **742** → `12/335`.
+  secondary = spell **742** → `12/335`. Earlier "begins to stiffen up!" wording was spell **#327
+  "paralyzed"** (a beholder-type), NOT the undead priest's hold person #66.
 
 ## Attack spells: why one fails to damage a monster
 
