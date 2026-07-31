@@ -3850,6 +3850,10 @@ public sealed class AppServices
         // past the abandoned fight. Both engines are rebuilt together in this
         // method, so the subscription dies with them — no explicit unsubscribe.
         CombatTracker.EngagedTargetAbandoned += reason => Walker.HaltForAbandonedCombat(reason);
+        // So the abandoned-combat halt fires for a running loop / auto-lair too, not
+        // just a point-to-point walk (report stock-20260731-010401). Lazy — reads
+        // MovementControl at halt time, after it's constructed below.
+        Walker.SetAnyEngineActiveCheck(() => MovementControl.IsActive);
 
         // Active auto-light engine — announced the same planned route as the
         // item gate above. It scans for the darkest room and readies a covering

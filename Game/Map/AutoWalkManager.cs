@@ -45,6 +45,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private bool _awaitingHiddenReveal;
     private Func<RoomKey, RoomKey, string?>? _teleportResolver;
     private Func<bool>? _isLeaderWithFollowers;
+    // True when ANY nav engine is driving (loop / auto-lair / point-to-point walk).
+    // The abandoned-combat halt asserts a coordinator-wide gate, so it must fire
+    // for a running loop too, not only when this point-to-point walker is active.
+    private Func<bool>? _isAnyEngineActive;
     private Action? _onLeaderPartySplit;
     private Action? _onPartySplitAbort;
     private Action? _preMoveHook;
@@ -85,6 +89,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // "Sailing the high seas…" countdown while the voyage is in flight.
     private bool _awaitingBoatArrival;
     private IDisposable? _boatTimer;
+    // One-shot settle after an abandoned-combat halt: holds the AbandonedCombat
+    // gate a beat past the Combat-gate clear so a monster that follows us out has
+    // time to arrive and re-assert Combat (report stock-20260731-010401).
+    private IDisposable? _abandonSettle;
+    // How long to hold after the Combat gate clears on an abandon — a followed
+    // monster's arrival lands within ~1s in practice.
+    private static readonly TimeSpan AbandonSettleWindow = TimeSpan.FromMilliseconds(1000);
     private DateTimeOffset _sailingEta;
     private string? _sailingPlace;
 
@@ -507,6 +518,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(check);
         _isLeaderWithFollowers = check;
+    }
+
+    // Predicate reporting whether ANY nav engine is driving (loop / auto-lair /
+    // point-to-point walk) — MovementController.IsActive. Lets HaltForAbandonedCombat
+    // fire for a running loop, not just a point-to-point walk. Until set, the halt
+    // falls back to the walker's own state (legacy behaviour).
+    public void SetAnyEngineActiveCheck(Func<bool> check)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        _isAnyEngineActive = check;
     }
 
     // Party-split-teleport handler — invoked right after the local (leading)
@@ -1128,29 +1149,60 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // didn't follow, the Combat gate is already clearing this same tick and we
     // resume onward; if it followed, its arrival re-asserts Combat and that gate
     // holds us for the fight instead. Fired from
-    // CombatStateTracker.EngagedTargetAbandoned. No-op when no walk is active.
+    // CombatStateTracker.EngagedTargetAbandoned. No-op only when NOTHING is
+    // driving — a running loop / auto-lair pauses through the same coordinator gate
+    // as a point-to-point walk. Gating this on the point-to-point walk state alone
+    // let a loop sprint past a spawned/followed hostile it abandoned via an
+    // in-flight step (report stock-20260731-010401).
     public void HaltForAbandonedCombat(string reason)
     {
-        if (State == WalkState.Idle) return;
+        bool walking = State != WalkState.Idle;
+        if (!walking && !(_isAnyEngineActive?.Invoke() ?? false)) return;
         _abandonHold = true;
         _coordinator.AssertGate(MovementCoordinator.AbandonedCombatGate, "AutoWalkManager", reason);
-        Raise(new WalkEvent(WalkEventKind.Paused, reason, _destination));
+        // The Paused walk-event is point-to-point-walk chrome; a loop reports its
+        // own hold via the coordinator gate, so only raise it when we're walking.
+        if (walking) Raise(new WalkEvent(WalkEventKind.Paused, reason, _destination));
     }
 
     // Auto-release for the AbandonedCombat hold. The halt only ever fires from a
     // room that's clear of actionable hostiles (see CombatStateTracker), so the
     // Combat gate is cleared in the same observation right after we assert ours;
-    // this handler catches that clear and drops our hold, resuming the onward
-    // route with no manual Resume. While the Combat gate is still asserted we
-    // keep holding — a followed monster re-asserts Combat and the fight takes
-    // precedence — so we never sprint away from a fight that's actually engaged.
+    // this handler catches the Combat-gate clear, holds a settle window (so a
+    // monster a step behind us can catch up and re-assert Combat), then drops our
+    // hold and resumes the onward route with no manual Resume. While the Combat
+    // gate is still asserted we keep holding — a followed monster re-asserts Combat
+    // and the fight takes precedence — so we never sprint away from an engaged fight.
     private void OnGatesChangedForAbandon()
     {
         if (!_abandonHold) return;
-        if (_coordinator.AssertedGates.Contains(MovementCoordinator.CombatGate)) return;
+        if (_coordinator.AssertedGates.Contains(MovementCoordinator.CombatGate))
+        {
+            // A follower re-asserted Combat (or the clear hasn't landed yet) — that
+            // gate owns the hold now; drop any pending settle-release.
+            _abandonSettle?.Dispose();
+            _abandonSettle = null;
+            return;
+        }
+        // Combat cleared. Don't resume instantly — the monster we abandoned may be
+        // one step behind; hold the settle so its follow-arrival can re-assert
+        // Combat before the loop sprints on (report stock-20260731-010401). No
+        // scheduler wired (unit tests) → release immediately (legacy behaviour).
+        if (_abandonSettle is not null) return;   // settle already pending
+        if (_scheduleDelay is null) { ReleaseAbandonHold(); return; }
+        _abandonSettle = _scheduleDelay(AbandonSettleWindow, ReleaseAbandonHold);
+    }
+
+    // Settle elapsed with the room still clear of hostiles — no follower engaged, so
+    // drop the abandon hold and let the route resume.
+    private void ReleaseAbandonHold()
+    {
+        _abandonSettle?.Dispose();
+        _abandonSettle = null;
+        if (!_abandonHold) return;
         _abandonHold = false;
         _coordinator.ClearGate(MovementCoordinator.AbandonedCombatGate, "AutoWalkManager",
-            "room clear of hostiles — resuming route");
+            "abandon settle elapsed — no follower engaged, resuming route");
     }
 
     // ----- internals -------------------------------------------------
@@ -2053,6 +2105,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // fires on a Combat-gate transition, which may not come once we're Idle).
         if (_abandonHold)
         {
+            _abandonSettle?.Dispose();
+            _abandonSettle = null;
             _abandonHold = false;
             _coordinator.ClearGate(MovementCoordinator.AbandonedCombatGate, "AutoWalkManager", "walk reset");
         }
