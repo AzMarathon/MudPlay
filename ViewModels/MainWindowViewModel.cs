@@ -921,6 +921,9 @@ public partial class MainWindowViewModel : ObservableObject
         // up, and that hold is exactly what a drop raises. Bind it to the raw,
         // un-wrapped SendUserInput so the escape hangup pierces the gate.
         AppServices.Current.Health.SetHangupWireSender(SendUserInput);
+        // After the exit command goes out, close the carrier ourselves rather
+        // than waiting on the server to notice — see RequestHangupDisconnect.
+        AppServices.Current.Health.SetHangupDisconnect(RequestHangupDisconnect);
         // CastCoordinator's `c <spell> [target]` emits ride the same
         // gate-wrapped pipeline so spell commands respect the
         // suicide-password / trainer-menu lockouts upstream.
@@ -1579,6 +1582,34 @@ public partial class MainWindowViewModel : ObservableObject
         await ConnectWithRetriesAsync();
     }
 
+    // Grace before the emergency-hangup socket close so the just-sent realm exit
+    // command clears the wire — the send is fire-and-forget and the disconnect
+    // doesn't drain pending writes, so closing on the same beat could swallow it.
+    private static readonly TimeSpan HangupExitFlushDelay = TimeSpan.FromMilliseconds(750);
+
+    // HealthManager's low-HP hangup has just sent the realm exit command down the
+    // raw wire; now hard-close the carrier ourselves instead of trusting the
+    // server to drop it. Marshalled to the UI thread (health evaluation already
+    // runs there, but this stays correct if that ever changes), delayed so the
+    // exit command flushes, and a no-op if the server beat us to the drop.
+    private void RequestHangupDisconnect()
+    {
+        if (Dispatcher.UIThread.CheckAccess()) _ = HangupDisconnectAfterFlushAsync();
+        else Dispatcher.UIThread.Post(() => _ = HangupDisconnectAfterFlushAsync());
+    }
+
+    private async Task HangupDisconnectAfterFlushAsync()
+    {
+        // Runs on the UI thread; Task.Delay resumes on the captured Avalonia
+        // context, so the socket/VM teardown stays on-thread. Tear down bare (not
+        // DisconnectInternalAsync) so the Disconnected handler still consumes the
+        // HangupSignal and classifies the drop as HangupInitiated. Guard on
+        // IsConnected so a server that already dropped us inside the flush window
+        // (its handler leaves _telnet non-null) doesn't get a redundant teardown.
+        await Task.Delay(HangupExitFlushDelay);
+        if (IsConnected) await TearDownConnectionAsync();
+    }
+
     private async Task DisconnectInternalAsync()
     {
         // Mark the user-initiated nature BEFORE we close the socket, so
@@ -1588,7 +1619,19 @@ public partial class MainWindowViewModel : ObservableObject
         _userInitiatedDisconnect = true;
         _lastDisconnectCause = DisconnectCause.UserInitiated;
         _reactiveReconnectCount = 0;
+        await TearDownConnectionAsync();
+    }
 
+    // Close the socket + tear down the session without claiming a cause. The
+    // Disconnected event handler classifies the drop (user / hangup / server);
+    // callers that need a specific cause set it before calling. The emergency
+    // hangup uses this bare form so the handler falls through to
+    // HangupSignal.ConsumeDisconnectIntent() — classifying it as HangupInitiated
+    // and consuming the intent flag, exactly as a server-side drop after `=x`
+    // did. Routing it through DisconnectInternalAsync instead would stamp
+    // UserInitiated and leave that hangup flag unconsumed to poison the next drop.
+    private async Task TearDownConnectionAsync()
+    {
         // Flip IsDisconnecting so the toolbar label updates to
         // "Disconnecting…" immediately + a fast double-click hits the
         // re-entry guard in ToggleConnectionAsync instead of flipping
