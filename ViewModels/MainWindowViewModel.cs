@@ -3577,6 +3577,16 @@ public partial class MainWindowViewModel : ObservableObject
             if (window.DataContext is IDisposable d) d.Dispose();
             _navigationWindow = null;
         };
+        // Keep the map coupled to the main window through a taskbar restore: on
+        // some Linux WMs the taskbar surfaces this owned child (the app-group's
+        // last-active window) while the minimized owner stays iconified, so the
+        // user sees the map but not the main window. De-minimize the owner when
+        // the map is activated while it's minimized. No-op during normal use.
+        window.Activated += (_, _) =>
+        {
+            if (main.WindowState == Avalonia.Controls.WindowState.Minimized)
+                main.WindowState = Avalonia.Controls.WindowState.Normal;
+        };
         _navigationWindow = window;
         window.Show(main);
         return vm;
