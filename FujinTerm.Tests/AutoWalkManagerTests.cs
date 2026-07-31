@@ -110,6 +110,59 @@ public sealed class AutoWalkManagerTests : IDisposable
     }
 
     [Fact]
+    public void HaltForAbandonedCombat_AnyEngineActive_AssertsGateWhileWalkerIdle()
+    {
+        // Report stock-20260731-010401: a loop (not a point-to-point walk)
+        // abandoned a spawned hostile via an in-flight step. The point-to-point
+        // walker is Idle while a loop drives, so the halt must still assert the
+        // coordinator-wide AbandonedCombat gate — which pauses the loop — whenever
+        // any engine is active, not only when this walker is walking.
+        Harness h = NewHarness();
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        // Hostile present → Combat gate held, so the abandon hold isn't released.
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "hostile");
+
+        // Nothing driving → halt no-ops.
+        h.Walker.SetAnyEngineActiveCheck(() => false);
+        h.Walker.HaltForAbandonedCombat("nothing active");
+        Assert.DoesNotContain(MovementCoordinator.AbandonedCombatGate, h.Coordinator.AssertedGates);
+
+        // A loop is driving (walker still Idle) → the abandon gate asserts.
+        h.Walker.SetAnyEngineActiveCheck(() => true);
+        h.Walker.HaltForAbandonedCombat("abandoned via loop step");
+        Assert.Contains(MovementCoordinator.AbandonedCombatGate, h.Coordinator.AssertedGates);
+    }
+
+    [Fact]
+    public void AbandonHold_SettlesPastCombatClear_ReleasesOnlyWhenSettleFires()
+    {
+        // The abandon gate must outlast the Combat-gate clear by a settle window so
+        // a monster following us out has time to re-assert Combat before we resume
+        // (report stock-20260731-010401). With a manual scheduler the release is
+        // deferred until the settle callback fires.
+        Harness h = NewHarness();
+        Action? settle = null;
+        h.Walker.SetVoyageScheduler((_, cb) => { settle = cb; return new NoopDisposable(); });
+        h.Walker.SetAnyEngineActiveCheck(() => true);
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "hostile");
+        h.Walker.HaltForAbandonedCombat("abandoned");
+        Assert.Contains(MovementCoordinator.AbandonedCombatGate, h.Coordinator.AssertedGates);
+
+        // Combat clears (we left the room) → the abandon gate must NOT release yet —
+        // it's holding the settle window open.
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "left room");
+        Assert.Contains(MovementCoordinator.AbandonedCombatGate, h.Coordinator.AssertedGates);
+        Assert.NotNull(settle);
+
+        // Settle elapses with no follower → release.
+        settle!();
+        Assert.DoesNotContain(MovementCoordinator.AbandonedCombatGate, h.Coordinator.AssertedGates);
+    }
+
+    private sealed class NoopDisposable : IDisposable { public void Dispose() { } }
+
+    [Fact]
     public void LastEvent_TracksMostRecentWalkEvent()
     {
         Harness h = NewHarness();

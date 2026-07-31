@@ -61,9 +61,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Walker.Event += OnWalkerEvent;
         _services.MovementCoordinator.PauseStateChanged += OnPauseChanged;
         _services.MovementCoordinator.GatesChanged += OnGatesChanged;
-        _services.PlayerDeathHalt.HaltedForDeathChanged += OnGatesChanged;
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved += RefreshDeathRooms;
+        _services.RoomTracker.PlayerDeathObserved += ClearNavIntentOnDeath;
         _services.Conditions.PropertyChanged += OnConditionsChanged;
         _services.RoomGraph.GraphReloaded += OnGraphReloaded;
         _services.TBInfo.StoreReloaded    += RefreshTeleportRooms;
@@ -123,9 +123,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Walker.Event -= OnWalkerEvent;
         _services.MovementCoordinator.PauseStateChanged -= OnPauseChanged;
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
-        _services.PlayerDeathHalt.HaltedForDeathChanged -= OnGatesChanged;
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved -= RefreshDeathRooms;
+        _services.RoomTracker.PlayerDeathObserved -= ClearNavIntentOnDeath;
         _services.Conditions.PropertyChanged -= OnConditionsChanged;
         _services.RoomGraph.GraphReloaded -= OnGraphReloaded;
         _services.TBInfo.StoreReloaded    -= RefreshTeleportRooms;
@@ -451,6 +451,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         DeathRooms = next;
     }
+
+    // Death does a clean stop of every engine (same as the Stop button), which
+    // clears the walker's own destination. Drop the UI's armed walk-to target too
+    // so a later Run can't re-send us to a stale destination (the room we just
+    // died in) — clearing it here matches how Stop clears the queued destination.
+    private void ClearNavIntentOnDeath() => QueuedDestination = null;
 
     private void OnLoopRunnerEvent(LoopEvent _)
     {
@@ -2310,12 +2316,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
         // User pause and combat outrank everything, including a held ailment:
         // an explicit pause is the user's own doing, and mid-fight "Fighting" is
-        // the more useful readout than "Held". A death-induced halt rides the
-        // same UserGate but flavours the chip so the user knows why we stopped.
+        // the more useful readout than "Held". (Death no longer flavours this — it
+        // full-stops every engine and clears the gate rather than pausing.)
         if (gates.Contains(Game.Map.MovementCoordinator.UserGate))
-            return _services.PlayerDeathHalt.HaltedForDeath
-                ? ("Paused — recovering", NavActivityKind.Paused)
-                : ("Paused", NavActivityKind.Paused);
+            return ("Paused", NavActivityKind.Paused);
         if (gates.Contains(Game.Map.MovementCoordinator.CombatGate))
             return ("Fighting", NavActivityKind.Fighting);
         // Engine-owned hold right after a walk left a room with an engaged
@@ -3370,6 +3374,24 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (LoopBuilder is null) return;
         LoopBuilder.RemoveClickAt(oneBasedIndex - 1);
+    }
+
+    // Click a loop-builder row → open the per-waypoint action editor (the same
+    // WaypointActionEditDialog the loop editor uses), pre-seeded with the row's
+    // current command + delay, and apply the result to the builder step. Lets the
+    // user attach commands while building instead of only after saving + editing.
+    [RelayCommand]
+    private async Task EditBuilderWaypointAction(LoopBuilderRow? row)
+    {
+        if (row is null || LoopBuilder is null) return;
+        WaypointActionEditDialogViewModel vm = new(
+            waypointLabel: $"{row.Index}. {row.Name}",
+            command: row.Command,
+            delayMs: row.DelayMs);
+        WaypointActionEditResult? result = await AppServices.Current.Dialogs
+            .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
+        if (result is null) return;
+        LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs);
     }
 
     // Building Loop drag-reorder — move the row at fromOneBased to

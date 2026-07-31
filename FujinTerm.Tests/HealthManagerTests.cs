@@ -71,6 +71,11 @@ public sealed class HealthManagerTests
         /// CombatManager.ResumeAfterShadowRest.</summary>
         public int ShadowRestResumeCount { get; private set; }
 
+        /// <summary>Increments each time the emergency hangup asks the client to
+        /// close the carrier after sending the exit command. AppServices wires
+        /// this to MainWindowViewModel.RequestHangupDisconnect.</summary>
+        public int HangupDisconnectCount { get; private set; }
+
         public Harness(HealthSettings? settings = null)
         {
             Settings = settings ?? new HealthSettings();
@@ -89,6 +94,7 @@ public sealed class HealthManagerTests
                 hangupSignal: Hangup,
                 hasHostileInRoom: () => HostileInRoom);
             Health.SetWireSender(b => Sent.Add(b));
+            Health.SetHangupDisconnect(() => HangupDisconnectCount++);
             Health.SetShadowRest(
                 shadowRestClass: () => ShadowRestClass,
                 isStealthed: () => Stealthed,
@@ -1470,6 +1476,34 @@ public sealed class HealthManagerTests
 
         Assert.Contains("=x", h.SentLines);
         Assert.True(h.Hangup.PeekForTests().DisconnectExpected);
+    }
+
+    [Fact]
+    public void Hangup_ClosesCarrierAfterExitCommand()
+    {
+        // The exit command alone leaves the drop to the server. The hangup now
+        // also asks the client to close the socket itself — the exit command
+        // must go out first, then the disconnect request.
+        using Harness h = new();
+        Assert.Equal(0, h.HangupDisconnectCount);
+
+        h.SetPrompt(hp: 5, maxHp: 200);   // below default 5% hang threshold — fires
+
+        Assert.Contains("=x", h.SentLines);
+        Assert.Equal(1, h.HangupDisconnectCount);
+    }
+
+    [Fact]
+    public void Hangup_NoExitCommand_DoesNotCloseCarrier()
+    {
+        // With no exit command configured the hangup can't fire (it falls back to
+        // rest), so it must not half-drop the client either — no socket close.
+        using Harness h = new() { HangupCommand = null };
+
+        h.SetPrompt(hp: 5, maxHp: 200);
+
+        Assert.DoesNotContain("=x", h.SentLines);
+        Assert.Equal(0, h.HangupDisconnectCount);
     }
 
     [Fact]

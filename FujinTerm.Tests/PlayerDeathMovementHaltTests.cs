@@ -9,12 +9,12 @@ using Xunit;
 namespace FujinTerm.Tests;
 
 /// <summary>
-/// The death-halt bridge: on our own death it asserts
-/// <see cref="MovementCoordinator.UserGate"/> so every movement engine stops and
-/// we sit in the graveyard until a manual resume, flavouring the chip via
-/// <see cref="PlayerDeathMovementHalt.HaltedForDeath"/>. It rides
+/// The death-stop bridge: on our own death it full-stops every movement engine
+/// (the wired stopper) and CLEARS <see cref="MovementCoordinator.UserGate"/> — a
+/// clean stop, same as the Nav Stop button, so nothing survives to re-drive us and
+/// a manual/remote nav action afterward runs freely. It rides
 /// <see cref="RoomTracker.PlayerDeathObserved"/>, which fires for BOTH death
-/// phrasings, so a miracle-save death ("You have N lives left.") halts as surely
+/// phrasings, so a miracle-save death ("You have N lives left.") stops as surely
 /// as a plain "slain by" one.
 /// </summary>
 public sealed class PlayerDeathMovementHaltTests
@@ -38,7 +38,7 @@ public sealed class PlayerDeathMovementHaltTests
         public RoomTracker Tracker { get; }
         public MovementCoordinator Coord { get; } = new();
         public PlayerDeathMovementHalt Halt { get; }
-        public int FlavourChanges { get; private set; }
+        public int EngineStopCount { get; private set; }
         public List<byte[]> Sent { get; } = new();
 
         public Harness()
@@ -54,7 +54,9 @@ public sealed class PlayerDeathMovementHaltTests
             Tracker = new RoomTracker(graph);
             Halt = new PlayerDeathMovementHalt(Tracker, Coord);
             Halt.SetWireSender(Sent.Add);
-            Halt.HaltedForDeathChanged += () => FlavourChanges++;
+            // AppServices always wires a stopper (Walker/LoopRunner/AutoLair Stop);
+            // count invocations so the death-stop path is exercised as in production.
+            Halt.SetEngineStopper(() => EngineStopCount++);
         }
 
         // A miracle-save death — the phrasing that DeathLineWatcher's "slain by"
@@ -73,99 +75,53 @@ public sealed class PlayerDeathMovementHaltTests
     }
 
     [Fact]
-    public void FreshBridge_NotHaltedNotPaused()
+    public void FreshBridge_NotPaused()
     {
         using Harness h = new();
-        Assert.False(h.Halt.HaltedForDeath);
         Assert.False(h.Coord.IsPaused);
         Assert.DoesNotContain(MovementCoordinator.UserGate, h.Coord.AssertedGates);
     }
 
     [Fact]
-    public void Death_AssertsUserGateAndHalts()
+    public void Death_StopsEnginesAndLeavesGateClear()
     {
+        // Death is a clean stop: it invokes the engine stopper and leaves the
+        // UserGate clear (NOT a lingering pause), so a manual/remote nav action
+        // afterward runs freely.
         using Harness h = new();
         h.Die();
 
-        Assert.True(h.Halt.HaltedForDeath);
-        Assert.True(h.Coord.IsPaused);
-        Assert.Contains(MovementCoordinator.UserGate, h.Coord.AssertedGates);
-    }
-
-    [Fact]
-    public void Death_TagsAsserterInHistory()
-    {
-        using Harness h = new();
-        h.Die();
-
-        GateTransitionEntry entry = h.Coord.History.Single(e =>
-            e.Gate == MovementCoordinator.UserGate && e.Asserted);
-        Assert.Equal(PlayerDeathMovementHalt.AsserterName, entry.Asserter);
-    }
-
-    [Fact]
-    public void UserResume_AutoClearsFlavour()
-    {
-        using Harness h = new();
-        h.Die();
-        Assert.True(h.Halt.HaltedForDeath);
-
-        // A manual resume clears UserGate through any Navigation affordance.
-        h.Coord.ClearGate(MovementCoordinator.UserGate);
-
-        Assert.False(h.Halt.HaltedForDeath);
+        Assert.Equal(1, h.EngineStopCount);
         Assert.False(h.Coord.IsPaused);
+        Assert.DoesNotContain(MovementCoordinator.UserGate, h.Coord.AssertedGates);
     }
 
     [Fact]
-    public void FlavourClears_WhenUserGateGoes_EvenWithOtherGatesHeld()
+    public void DeathWhileManuallyPaused_ClearsThePause()
     {
-        // HaltedForDeath keys off UserGate specifically, not overall IsPaused —
-        // a still-asserted combat gate must not keep the "recovering" flavour up.
+        // Dying during a manual pause resets to a clean stop — the stale pause must
+        // not outlive the death and block the player's next move.
+        using Harness h = new();
+        h.Coord.AssertGate(MovementCoordinator.UserGate);
+        Assert.True(h.Coord.IsPaused);
+
+        h.Die();
+
+        Assert.Equal(1, h.EngineStopCount);
+        Assert.DoesNotContain(MovementCoordinator.UserGate, h.Coord.AssertedGates);
+    }
+
+    [Fact]
+    public void Death_LeavesOtherGatesUntouched()
+    {
+        // The death stop clears only the UserGate — a still-asserted combat gate
+        // (its own concern) keeps holding movement until it clears on its own.
         using Harness h = new();
         h.Coord.AssertGate(MovementCoordinator.CombatGate);
         h.Die();
-        Assert.True(h.Halt.HaltedForDeath);
 
-        h.Coord.ClearGate(MovementCoordinator.UserGate);
-
-        Assert.False(h.Halt.HaltedForDeath);
-        Assert.True(h.Coord.IsPaused); // combat still holds movement
-    }
-
-    [Fact]
-    public void ManualUserPause_DoesNotFlagHalt()
-    {
-        // A user pause with no death behind it must read as plain "Paused",
-        // never "recovering".
-        using Harness h = new();
-        h.Coord.AssertGate(MovementCoordinator.UserGate);
-
-        Assert.False(h.Halt.HaltedForDeath);
-    }
-
-    [Fact]
-    public void FlavourChange_FiresOnceEachDirection()
-    {
-        using Harness h = new();
-        h.Die();                                            // false -> true
-        h.Coord.ClearGate(MovementCoordinator.UserGate);    // true -> false
-
-        Assert.Equal(2, h.FlavourChanges);
-        Assert.False(h.Halt.HaltedForDeath);
-    }
-
-    [Fact]
-    public void DeathWhileAlreadyPaused_StillFlagsHalt()
-    {
-        // Dying during a manual pause: AssertGate is idempotent (no second
-        // GatesChanged), but the death still flips the flavour so the chip
-        // switches from "Paused" to "Paused — recovering".
-        using Harness h = new();
-        h.Coord.AssertGate(MovementCoordinator.UserGate);
-        h.Die();
-
-        Assert.True(h.Halt.HaltedForDeath);
+        Assert.DoesNotContain(MovementCoordinator.UserGate, h.Coord.AssertedGates);
+        Assert.Contains(MovementCoordinator.CombatGate, h.Coord.AssertedGates);
     }
 
     [Fact]
@@ -205,7 +161,7 @@ public sealed class PlayerDeathMovementHaltTests
         h.Halt.Dispose();
         h.Die();
 
-        Assert.False(h.Halt.HaltedForDeath);
+        Assert.Equal(0, h.EngineStopCount);
         Assert.DoesNotContain(MovementCoordinator.UserGate, h.Coord.AssertedGates);
     }
 }

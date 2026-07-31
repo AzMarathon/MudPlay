@@ -90,6 +90,7 @@ public sealed class HealthManager : IDisposable
 
     private Action<byte[]>? _wireSender;
     private Action<byte[]>? _hangupWireSender;  // un-wrapped: pierces EngineSendGate
+    private Action? _requestHangupDisconnect;   // hard-close the socket after the exit command
     private Func<bool>? _isPartyFollower;       // in a party AND not the leader
     private Action? _requestPartyWait;          // ping leader to halt (PartyRestSync)
     private Action? _requestPartyOk;            // release leader
@@ -243,6 +244,19 @@ public sealed class HealthManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(sender);
         _hangupWireSender = sender;
+    }
+
+    // Wire the client-side socket close for the emergency hangup. The exit
+    // command alone leaves the drop to the server (which may not act, or acts
+    // slowly, leaving a mortally-wounded character sitting connected); this lets
+    // us also close the carrier ourselves. The callback owns the flush timing —
+    // it must let the just-sent exit command reach the wire before disposing the
+    // socket (see MainWindowViewModel.RequestHangupDisconnect). Unset (tests /
+    // pre-wire) means the pre-existing "send exit, wait for server" behaviour.
+    public void SetHangupDisconnect(Action requestDisconnect)
+    {
+        ArgumentNullException.ThrowIfNull(requestDisconnect);
+        _requestHangupDisconnect = requestDisconnect;
     }
 
     // Wire party-role-aware recovery. isPartyFollower returns true when the local
@@ -858,7 +872,8 @@ public sealed class HealthManager : IDisposable
         }
 
         _log?.Warn(LogCategory,
-            $"HANGUP — HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger} cmd='{hangCmd}'");
+            $"HANGUP — HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger} cmd='{hangCmd}' " +
+            "(sending exit, then closing carrier)");
         // Declare the drop intentional before it lands so MainWindowViewModel's
         // reactive-reconnect path stands down — otherwise the very disconnect we
         // just triggered gets classified as unexpected and immediately dialled back.
@@ -867,6 +882,10 @@ public sealed class HealthManager : IDisposable
         // while the mortally-wounded EngineSendGate hold is up (that hold gates
         // every OTHER engine send, but the escape hangup must pierce it).
         SendHangup(hangCmd);
+        // Don't wait for the server to notice the exit command — close the socket
+        // ourselves so a stuck / slow drop can't leave the character connected.
+        // The callback flushes the just-sent exit command before disposing.
+        _requestHangupDisconnect?.Invoke();
         return true;
     }
 

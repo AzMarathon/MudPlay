@@ -81,9 +81,24 @@ public sealed class DialogService
         viewModel.CloseRequested += OnCloseRequested;
         window.Closed += OnWindowClosed;
 
+        AttachRestoreOwnerOnActivate(window);
         window.Show(_mainWindow);
         return tcs.Task;
     }
+
+    // Keep an owned modeless child coupled to the main window through a taskbar
+    // restore. On some Linux WMs the app-group's last-active window (e.g. the map)
+    // is what the taskbar surfaces, while the minimized owner (main window) stays
+    // iconified — so the user sees the child but not the main. When the child is
+    // activated while the owner is minimized, de-minimize the owner so restoring
+    // the client from the taskbar brings the main window with it. No-op during
+    // normal use (the owner isn't minimized then).
+    private void AttachRestoreOwnerOnActivate(Window window) =>
+        window.Activated += (_, _) =>
+        {
+            if (_mainWindow is { WindowState: WindowState.Minimized } m)
+                m.WindowState = WindowState.Normal;
+        };
 
     // One-shot "show this text" affordance for ad-hoc notices (e.g. "no
     // associated Messages found" from a Spells double-click). Uses the same
@@ -98,6 +113,7 @@ public sealed class DialogService
 
         InfoDialog dlg = new();
         dlg.Configure(title, body);
+        AttachRestoreOwnerOnActivate(dlg);
         dlg.Show(_mainWindow);
     }
 }

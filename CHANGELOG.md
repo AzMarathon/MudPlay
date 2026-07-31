@@ -2,6 +2,16 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.14.0
+
+- Emergency low-HP hangup now closes the connection itself after sending the realm exit command, instead of waiting on the server to drop it — a stuck or slow drop can no longer leave a mortally-wounded character sitting connected
+- Loop builder: clicking a step in the CURRENT NAV build list now opens the Waypoint action editor to attach a command to that step (same as editing a saved loop), instead of deleting it — deletion moved to the roomier ✕ box, and the ↑ / ↓ / ✕ boxes are larger. Steps with a command show a ⚙ marker
+- A hostile that spawns/appears in your room while a loop is running no longer gets left behind: the abandoned-combat halt now covers loops and auto-lair (not just point-to-point walks), and holds a short settle so a monster following you out re-asserts combat and gets fought instead of out-walked
+- Restoring a client from the taskbar with the map (or another window) open now brings the main window up too, instead of surfacing only the child window and leaving the main minimized
+- A follower coming out of the trainer stats screen no longer wrongly re-invites its party leader (which tangled the auto-rejoin) — only the leader reforms the party after a trainer trip; a follower waits for the leader's invite and auto-joins
+- Dying no longer lets a stale destination re-drive you back into the room you died in: death now does a clean stop of every movement engine (walk-to, loop, auto-lair) and clears every retained destination — the same as hitting Stop — with no lingering halt, so your own manual or remote navigation afterward runs normally
+- bug reports addressed: stock-20260731-010401, stock-20260731-015726, stock-20260731-082602
+
 ## 2.12.0
 
 - Game Data → Items "Dropped By" now lists each monster's drop rate, e.g. "Prismatic Dragon(10%)"

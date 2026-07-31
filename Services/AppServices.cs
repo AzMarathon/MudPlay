@@ -1408,10 +1408,10 @@ public sealed class AppServices
     // sprint off without a member who's trying to reconnect and re-party.
     public Game.PartyDisconnectMovementGate PartyDisconnectMovement { get; private set; } = null!;
 
-    // Death-halt bridge — when the local player dies, asserts UserGate so every
-    // movement engine stops and we sit in the graveyard until the player
-    // manually resumes. Exposes HaltedForDeath so the Navigation chip can read
-    // "Paused — recovering" while the death pause holds.
+    // Death-stop bridge — when the local player dies, full-stops every movement
+    // engine and clears the user gate (a clean stop, same as the Nav Stop button)
+    // so nothing survives to re-drive us back into the room we died in, and a
+    // manual or remote nav action afterward runs freely.
     public Game.PlayerDeathMovementHalt PlayerDeathHalt { get; private set; } = null!;
 
     // Dropped / mortally-wounded bridge — while the local character is at or
@@ -3850,6 +3850,10 @@ public sealed class AppServices
         // past the abandoned fight. Both engines are rebuilt together in this
         // method, so the subscription dies with them — no explicit unsubscribe.
         CombatTracker.EngagedTargetAbandoned += reason => Walker.HaltForAbandonedCombat(reason);
+        // So the abandoned-combat halt fires for a running loop / auto-lair too, not
+        // just a point-to-point walk (report stock-20260731-010401). Lazy — reads
+        // MovementControl at halt time, after it's constructed below.
+        Walker.SetAnyEngineActiveCheck(() => MovementControl.IsActive);
 
         // Active auto-light engine — announced the same planned route as the
         // item gate above. It scans for the darkest room and readies a covering
@@ -4174,23 +4178,27 @@ public sealed class AppServices
             Walker, LoopRunner, AutoLair, MovementCoordinator);
 
         // Death engine-quiescence. On our death RoomTracker fires
-        // PlayerDeathObserved (both death phrasings). PlayerDeathHalt applies the
-        // UserGate pause, but a loop caught mid-recovery — a miracle-save restores
-        // HP, which clears the HealthRecovery gate and fires the loop's
-        // ResumeAfterRecovery just before the death registers — sits in the
-        // Recovering state that the pause doesn't cover, so the graveyard's
-        // respawn-room confirm would drive a recovery-reroute straight back out.
-        // Stop the engines outright: the reset clears that recovery state so no
-        // reroute can fire. Also wipe the classifier's room view so a hostile from
-        // the room we died in doesn't linger as a stale target the combat engine
-        // re-attacks when a party member later walks into the graveyard.
-        RoomTracker.PlayerDeathObserved += () =>
+        // PlayerDeathObserved (both death phrasings). PlayerDeathHalt does a clean
+        // stop (via this stopper) then clears the user gate — same as the Nav Stop
+        // button. Stopping outright — not pausing — matters because a loop caught
+        // mid-recovery (a miracle-save restores HP, clearing the HealthRecovery gate
+        // and firing the loop's ResumeAfterRecovery just before the death registers)
+        // sits in a Recovering state a pause doesn't cover, so the graveyard's
+        // respawn-room confirm would drive a recovery-reroute straight back out. The
+        // reset clears that state and every retained destination; nothing survives
+        // to re-drive us into the room we died in, and a manual/remote nav action
+        // afterward runs freely.
+        PlayerDeathHalt.SetEngineStopper(() =>
         {
             LoopRunner.Stop("player died — halting in graveyard");
             Walker.Stop("player died — halting in graveyard");
             AutoLair.Stop("player died — halting in graveyard");
-            RoomClassifier.NoteRoomChanged();
-        };
+        });
+        // Wipe the classifier's room view so a hostile from the room we died in
+        // doesn't linger as a stale target the combat engine re-attacks when a
+        // party member later walks into the graveyard. Independent of the gate
+        // ordering above, so it stays a plain post-death subscriber.
+        RoomTracker.PlayerDeathObserved += () => RoomClassifier.NoteRoomChanged();
 
         // Party-death roster-cleanup bridge. Leader-side: when an active party
         // member dies mid-route it lingers as an [Invited] par slot; we uninvite

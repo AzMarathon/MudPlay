@@ -9,8 +9,10 @@ namespace FujinTerm.ViewModels.Navigation;
 // Ephemeral session for the Navigation window's Loop mode. Tracks the user's
 // clicked rooms and uses LoopManager.ExpandWaypoints to BFS-gap-fill the path
 // between them so the saved loop is ready to run. On Save the click list
-// becomes the loop's Waypoints (each click → one LoopWaypoint with no command
-// attached); commands and delays are added later via the loop editor.
+// becomes the loop's Waypoints (each click → one LoopWaypoint). Per-waypoint
+// commands + delays can be attached while building — click a row to open the
+// same WaypointActionEditDialog the loop editor uses (SetClickAction) — or later
+// via the loop editor.
 public sealed partial class LoopBuilderSessionViewModel : ObservableObject
 {
     private readonly LoopManager _loops;
@@ -86,6 +88,17 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         Reexpand();
     }
 
+    // Attach (or clear) a per-waypoint command + delay on the click at index —
+    // driven by clicking the row in the loop-builder strip, which opens the same
+    // WaypointActionEditDialog the loop editor uses. Commands don't change the
+    // gap-filled path, so no re-expand. No-op when index is out of range.
+    public void SetClickAction(int index, string? command, int delayMs)
+    {
+        if (index < 0 || index >= Clicks.Count) return;
+        string? cmd = string.IsNullOrWhiteSpace(command) ? null : command;
+        Clicks[index] = Clicks[index] with { Command = cmd, DelayMs = cmd is null ? 0 : Math.Max(0, delayMs) };
+    }
+
     // Move the click at fromIndex to toIndex (CURRENT NAV drag-reorder).
     // No-op when indices match or either is out of range.
     public void MoveClick(int fromIndex, int toIndex)
@@ -145,11 +158,12 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         if (!CanSave) return null;
         if (_clicks.Count < 2) return null;
 
-        // Commands / delays start null — users attach them later via
-        // the loop editor's per-waypoint inline editor (only meaningful
-        // on a persisted loop).
-        var waypoints = new List<LoopWaypoint>(_clicks.Count);
-        foreach (RoomKey k in _clicks) waypoints.Add(new LoopWaypoint(k));
+        // Carry any per-waypoint command + delay the user attached while building
+        // (click a row → WaypointActionEditDialog); rows with no action stay a bare
+        // move. Iterate Clicks (which holds the actions), parallel to _clicks.
+        var waypoints = new List<LoopWaypoint>(Clicks.Count);
+        foreach (LoopBuilderRow row in Clicks)
+            waypoints.Add(new LoopWaypoint(row.Key, row.Command, row.DelayMs));
 
         return new Loop(ProposedName, waypoints)
         {
@@ -206,5 +220,12 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     }
 }
 
-// Single click row shown in the bottom strip — index + room label.
-public sealed record LoopBuilderRow(int Index, RoomKey Key, string Name);
+// Single click row shown in the bottom strip — index + room label, plus an
+// optional per-waypoint command + delay the user attaches by clicking the row
+// (same as the loop editor's per-waypoint action). Carried into the saved loop's
+// LoopWaypoint on Save/BuildTransient. HasCommand drives the row's "has an action"
+// marker.
+public sealed record LoopBuilderRow(int Index, RoomKey Key, string Name, string? Command = null, int DelayMs = 0)
+{
+    public bool HasCommand => !string.IsNullOrWhiteSpace(Command);
+}
