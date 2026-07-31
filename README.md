@@ -1,7 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.12.1**
+> **Version 2.13.0**
+> - Loop builder: clicking a step in the CURRENT NAV build list now opens the Waypoint action editor to attach a command to that step (same as editing a saved loop), instead of deleting it — deletion moved to the roomier ✕ box, and the ↑ / ↓ / ✕ boxes are larger. Steps with a command show a ⚙ marker
 > - A hostile that spawns/appears in your room while a loop is running no longer gets left behind: the abandoned-combat halt now covers loops and auto-lair (not just point-to-point walks), and holds a short settle so a monster following you out re-asserts combat and gets fought instead of out-walked
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

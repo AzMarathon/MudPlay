@@ -3372,6 +3372,24 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         LoopBuilder.RemoveClickAt(oneBasedIndex - 1);
     }
 
+    // Click a loop-builder row → open the per-waypoint action editor (the same
+    // WaypointActionEditDialog the loop editor uses), pre-seeded with the row's
+    // current command + delay, and apply the result to the builder step. Lets the
+    // user attach commands while building instead of only after saving + editing.
+    [RelayCommand]
+    private async Task EditBuilderWaypointAction(LoopBuilderRow? row)
+    {
+        if (row is null || LoopBuilder is null) return;
+        WaypointActionEditDialogViewModel vm = new(
+            waypointLabel: $"{row.Index}. {row.Name}",
+            command: row.Command,
+            delayMs: row.DelayMs);
+        WaypointActionEditResult? result = await AppServices.Current.Dialogs
+            .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
+        if (result is null) return;
+        LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs);
+    }
+
     // Building Loop drag-reorder — move the row at fromOneBased to
     // toOneBased.
     public void MoveBuilderClick(int fromOneBased, int toOneBased)

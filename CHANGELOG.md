@@ -2,8 +2,9 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
-## 2.12.1
+## 2.13.0
 
+- Loop builder: clicking a step in the CURRENT NAV build list now opens the Waypoint action editor to attach a command to that step (same as editing a saved loop), instead of deleting it — deletion moved to the roomier ✕ box, and the ↑ / ↓ / ✕ boxes are larger. Steps with a command show a ⚙ marker
 - A hostile that spawns/appears in your room while a loop is running no longer gets left behind: the abandoned-combat halt now covers loops and auto-lair (not just point-to-point walks), and holds a short settle so a monster following you out re-asserts combat and gets fought instead of out-walked
 - bug reports addressed: stock-20260731-010401
 

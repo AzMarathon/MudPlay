@@ -236,20 +236,20 @@ public partial class NavigationWindow : Window
 
     private void WireBuilderClicksList(ListBox list)
     {
-        // Single-click any row (outside the per-row buttons) removes
-        // that waypoint. The Up / Down buttons in the template route
-        // through MoveBuilderClickCommand for reorder. Drag-and-drop
-        // reorder is a known follow-up — the current Avalonia drag-
-        // drop API replaced DataObject with a DataTransfer surface
-        // that's worth wiring centrally rather than per-feature.
+        // Single-click any row (outside the per-row buttons) opens that
+        // waypoint's action editor so a command can be attached while
+        // building — the ✕ button removes, ↑ / ↓ reorder. (Left-click used
+        // to delete; that was a foot-gun once actions became editable in
+        // place — the delete now lives on the roomier ✕ box.) Drag-and-drop
+        // reorder is a known follow-up.
         list.AddHandler(PointerReleasedEvent, BuilderRowPointerReleased);
     }
 
     private void BuilderRowPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         // Bubble up to find a ListBoxItem wrapping a LoopBuilderRow.
-        // Skip the click when the pointer is over one of the reorder
-        // buttons — those have their own command bindings.
+        // Skip the click when the pointer is over one of the per-row
+        // buttons (↑ / ↓ / ✕) — those have their own handlers.
         if (e.Source is Button) return;
         if (e.Source is not StyledElement el) return;
         LoopBuilderRow? row = null;
@@ -262,8 +262,9 @@ public partial class NavigationWindow : Window
             }
         }
         if (row is null) return;
-        if (DataContext is NavigationViewModel vm)
-            vm.RemoveBuilderClickAt(row.Index);
+        if (DataContext is NavigationViewModel vm
+            && vm.EditBuilderWaypointActionCommand.CanExecute(row))
+            vm.EditBuilderWaypointActionCommand.Execute(row);
     }
 
     // Per-row "✕" button — removes the waypoint at the row's index. Bound via

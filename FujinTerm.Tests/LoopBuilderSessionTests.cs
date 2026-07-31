@@ -117,6 +117,43 @@ public sealed class LoopBuilderSessionTests : IDisposable
     }
 
     [Fact]
+    public void SetClickAction_AttachesCommand_CarriedIntoBuiltLoop()
+    {
+        // Clicking a builder row attaches a per-waypoint command while building
+        // (not only via the post-save loop editor); it must ride into the built
+        // loop's LoopWaypoint.
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+
+        s.SetClickAction(0, "sea", 500);
+        Assert.True(s.Clicks[0].HasCommand);
+        Assert.Equal("sea", s.Clicks[0].Command);
+        Assert.Equal(500, s.Clicks[0].DelayMs);
+        Assert.False(s.Clicks[1].HasCommand);
+
+        Loop? loop = s.BuildTransient();
+        Assert.NotNull(loop);
+        Assert.Equal("sea", loop!.Waypoints[0].Command);
+        Assert.Equal(500, loop.Waypoints[0].DelayMs);
+        Assert.Null(loop.Waypoints[1].Command);
+    }
+
+    [Fact]
+    public void SetClickAction_BlankCommand_ClearsActionAndZeroesDelay()
+    {
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+        s.SetClickAction(0, "sea", 500);
+
+        s.SetClickAction(0, "   ", 500);   // blank command clears the action
+        Assert.False(s.Clicks[0].HasCommand);
+        Assert.Null(s.Clicks[0].Command);
+        Assert.Equal(0, s.Clicks[0].DelayMs);
+    }
+
+    [Fact]
     public void RemoveLastClick_PopsAndRecomputes()
     {
         // Schema v2: every expansion closes the loop. Two clicks
