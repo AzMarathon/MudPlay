@@ -56,6 +56,9 @@ public sealed class BackscrollView : Control, ILogicalScrollable
 
     private IReadOnlyList<ScrollbackBuffer.Row> _rows = [];
     private Typeface _typeface;
+    // Bold variant, cached alongside _typeface so DrawRun doesn't allocate a fresh
+    // bold Typeface (a native Skia/HarfBuzz shaping wrapper) per bold run per frame.
+    private Typeface _typefaceBold;
     private double _cellW = 8;
     private double _cellH = 16;
     private double _gutterWidth;
@@ -89,6 +92,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         TextOptions.SetTextRenderingMode(this, TextRenderingMode.Alias);
         RenderOptions.SetEdgeMode(this, EdgeMode.Aliased);
         _typeface = new Typeface(FontFamily);
+        _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
         RecalculateMetrics();
     }
 
@@ -150,6 +154,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     private void RecalculateMetrics()
     {
         _typeface = new Typeface(FontFamily);
+        _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
         // Snap the cell box to whole pixels so adjacent cell fills meet exactly
         // and glyph advances stay grid-aligned (matches TerminalControl).
         FormattedText probe = new("M", CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
@@ -281,7 +286,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         if ((attr.Flags & CellFlags.Concealed) != 0) return;
 
         IBrush fg = BrushFor(fgArgb);
-        Typeface typeface = bold ? new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold) : _typeface;
+        Typeface typeface = bold ? _typefaceBold : _typeface;
         for (int i = x0; i < x1; i++)
         {
             char ch = cells[i].Char;

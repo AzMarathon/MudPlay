@@ -103,6 +103,10 @@ public sealed class TerminalControl : Control
     private const double MaxScale = 2.0;
 
     private Typeface _typeface;
+    // Bold variant, cached alongside _typeface. DrawRun would otherwise allocate a
+    // fresh bold Typeface — a managed wrapper over native Skia/HarfBuzz shaping
+    // resources — for every bold run on every frame, churning native memory.
+    private Typeface _typefaceBold;
     // Native cell box at FontSize. Glyphs are ALWAYS drawn at this size; any
     // window fitting happens by upscaling the rendered bitmap, never by
     // rasterising the bitmap font at a fractional point size (which smears
@@ -144,6 +148,7 @@ public sealed class TerminalControl : Control
         Focusable = true;
         ClipToBounds = true;
         _typeface = new Typeface(FontFamily);
+        _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
         // Bitmap-style fonts (Mx437) need aliased rendering to avoid color
         // smearing across cell boundaries; subpixel AA fringes box-drawing chars.
         TextOptions.SetTextRenderingMode(this, TextRenderingMode.Alias);
@@ -241,6 +246,7 @@ public sealed class TerminalControl : Control
     private void RecalculateMetrics()
     {
         _typeface = new Typeface(FontFamily);
+        _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
         (_cellW, _cellH) = MeasureCell(FontSize);
         RecomputeScale();
         InvalidateMeasure();
@@ -555,7 +561,7 @@ public sealed class TerminalControl : Control
         // Drawing a run as one FormattedText lets the font's advance widths
         // drift the glyph row away from the cell grid by fractions of a pixel,
         // which manifests as the visible "color bleed" between cells.
-        var typeface = bold ? new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold) : _typeface;
+        var typeface = bold ? _typefaceBold : _typeface;
         for (int i = x0; i < x1; i++)
         {
             char ch = screen[i, y].Char;
