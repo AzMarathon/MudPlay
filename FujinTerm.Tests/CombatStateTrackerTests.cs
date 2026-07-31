@@ -828,6 +828,39 @@ public sealed class CombatStateTrackerTests
     }
 
     [Fact]
+    public void RoomClear_InCombatFalseTransition_SeesGateAlreadyCleared()
+    {
+        // Regression (report stock-20260730-184622): the InCombat→false transition
+        // fires HealthManager.Evaluate synchronously, and the rest guard reads
+        // HasEngageableHostiles (derived from the combat gate). If the gate still
+        // read asserted at that instant, the rest would be blocked as "hostile
+        // present" and deferred to the next prompt tick — a multi-second stall
+        // after the room clears. On room clear the gate must already read cleared
+        // the moment InCombat flips false.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        Assert.True(h.State.InCombat);
+        Assert.True(h.Tracker.HasEngageableHostiles);
+
+        bool? engageableAtTransition = null;
+        h.State.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PlayerState.InCombat) && !h.State.InCombat)
+                engageableAtTransition = h.Tracker.HasEngageableHostiles;
+        };
+
+        h.Feed("Also here: Bob.");                // room clear → InCombat false
+
+        Assert.True(engageableAtTransition.HasValue, "InCombat→false should have fired");
+        Assert.False(engageableAtTransition!.Value); // gate already clear at the transition
+        Assert.False(h.State.InCombat);
+        Assert.False(h.Tracker.HasEngageableHostiles);
+        Assert.False(h.CombatGateHeld);           // coordinator gate released too
+    }
+
+    [Fact]
     public void AutoAttackOff_HostileStillHere_KeepsInCombatTrue()
     {
         // Turning auto-attack off next to a live mob must NOT declare us out of

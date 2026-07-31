@@ -455,25 +455,38 @@ public sealed class CombatStateTracker : IDisposable
             // clear of engageable hostiles flips it, so HealthManager never rests
             // next to a live mob.
             //
-            // Set out-of-combat AND drop the stealth the fight spent BEFORE
-            // releasing the gate: ClearGate resumes the walker synchronously and
-            // fires its pre-move hook, so both must already read "clear" for the
-            // pre-move auto-sneak to re-establish stealth before the step out
-            // (report stock-20260730-163044). CombatSpentStealth only fires when we
-            // actually engaged — a pure walk-past of an un-actionable room never
-            // broke our sneak, so we leave it intact.
+            // Ordering is load-bearing — each step feeds a synchronous downstream
+            // reaction, so the sequence matters:
+            //   1. Drop _gateAsserted first. HasEngageableHostiles is derived from
+            //      it, and step 2's InCombat=false fires HealthManager.Evaluate
+            //      synchronously; if the gate still read asserted there, the rest
+            //      is blocked as "hostile present" and deferred to the next prompt
+            //      tick — a multi-second stall after the room clears (report
+            //      stock-20260730-184622).
+            //   2. Flip InCombat false (+ drop the stealth the fight spent) BEFORE
+            //      the coordinator gate releases the walker, so the pre-move
+            //      re-sneak sees out-of-combat (report stock-20260730-163044).
+            //      CombatSpentStealth only fires when we actually engaged — a pure
+            //      walk-past of an un-actionable room never broke our sneak.
+            //   3. Release the coordinator Combat gate — resumes the walker + its
+            //      pre-move hook now that both InCombat and HasEngageableHostiles
+            //      read clear. Inlined rather than via ClearGate so InCombat can
+            //      flip between the flag drop (1) and the coordinator release (3).
+            // targetable>0 means hostiles remain but none are killable — release
+            // and move past (the move-past rule); the "room cleared" wording is the
+            // genuine empty-room case.
+            string clearReason = targetable > 0
+                ? $"room un-actionable: {targetable} hostile(s), none hittable — moving on"
+                : "room cleared";
+            bool wasAsserted = _gateAsserted;
+            _gateAsserted = false;                                        // (1)
             if (_state.InCombat)
             {
-                _state.InCombat = false;
+                _state.InCombat = false;                                  // (2)
                 CombatSpentStealth?.Invoke();
             }
-
-            // targetable>0 here means hostiles remain but none are killable —
-            // release the gate and move past (per the move-past rule). The
-            // "room cleared" wording stays for the genuine empty-room case.
-            ClearGate(targetable > 0
-                ? $"room un-actionable: {targetable} hostile(s), none hittable — moving on"
-                : "room cleared");
+            if (wasAsserted)                                              // (3)
+                _coordinator.ClearGate(MovementCoordinator.CombatGate, AsserterName, clearReason);
         }
     }
 
