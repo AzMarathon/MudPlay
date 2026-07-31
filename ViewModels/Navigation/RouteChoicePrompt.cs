@@ -31,6 +31,11 @@ public static class RouteChoicePrompt
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // A death has us halted in the graveyard — refuse to start a user walk (so
+        // we don't plan a route or pop a picker) until the player manually resumes.
+        // See RefuseIfHaltedForDeath.
+        if (RefuseIfHaltedForDeath(services)) return;
+
         Room? source = services.RoomTracker.State.CurrentRoom;
         if (source is null)
         {
@@ -203,6 +208,11 @@ public static class RouteChoicePrompt
         AppServices services, RoomKey destination, bool gated,
         bool armAcquisition = true, bool avoidTeleports = false)
     {
+        // Post-death halt still holding — the walk that landed here came from a
+        // picker left open when we died. Refuse it so its Go can't clear the death
+        // halt and march us back into the room we died in.
+        if (RefuseIfHaltedForDeath(services)) return;
+
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
         // → SendNextStep), which would fire one stale step toward the OLD
@@ -224,4 +234,20 @@ public static class RouteChoicePrompt
         services.RoomGraph.GetRoom(destination)?.Name is { Length: > 0 } name
             ? $"{name} ({destination})"
             : destination.ToString();
+
+    // Block a user-initiated walk while the post-death halt is holding. After a
+    // death every movement engine is stopped and we sit in the graveyard until the
+    // player manually resumes; a goto (Run, context-menu, favourite, history, or a
+    // picker left open across the death) must NOT silently clear that halt and
+    // re-walk the last destination — which repeatedly marched a dead player back
+    // into the room that killed them (report stock-20260731-082602). Death-recovery
+    // ("Recover Now") walks via Walker.WalkTo directly and bypasses this on
+    // purpose. The user resumes from the Navigation window / toolbar to move again.
+    private static bool RefuseIfHaltedForDeath(AppServices services)
+    {
+        if (!services.PlayerDeathHalt.HaltedForDeath) return false;
+        services.Log.Info("Navigation",
+            "Walk request ignored — halted in the graveyard after death; resume to move.");
+        return true;
+    }
 }

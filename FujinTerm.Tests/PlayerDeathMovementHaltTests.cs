@@ -208,4 +208,36 @@ public sealed class PlayerDeathMovementHaltTests
         Assert.False(h.Halt.HaltedForDeath);
         Assert.DoesNotContain(MovementCoordinator.UserGate, h.Coord.AssertedGates);
     }
+
+    [Fact]
+    public void Death_InvokesEngineStopper()
+    {
+        // The halt full-stops every movement engine on death (AppServices wires the
+        // stopper to Walker/LoopRunner/AutoLair Stop) so no retained destination
+        // survives to re-drive us back — report stock-20260731-082602.
+        using Harness h = new();
+        int stops = 0;
+        h.Halt.SetEngineStopper(() => stops++);
+
+        h.Die();
+
+        Assert.Equal(1, stops);
+    }
+
+    [Fact]
+    public void Death_HaltHolds_EvenWhenStopperClearsUserGate()
+    {
+        // Auto-Lair edge case: the user had paused (UserGate asserted) and the
+        // engine stopper (AutoLair.Stop) clears the UserGate as it tears down.
+        // Because the halt stops engines FIRST and asserts the gate LAST, the death
+        // halt still ends asserted — nothing can re-drive us after death.
+        using Harness h = new();
+        h.Coord.AssertGate(MovementCoordinator.UserGate);   // pre-death manual pause
+        h.Halt.SetEngineStopper(() => h.Coord.ClearGate(MovementCoordinator.UserGate));
+
+        h.Die();
+
+        Assert.True(h.Halt.HaltedForDeath);
+        Assert.Contains(MovementCoordinator.UserGate, h.Coord.AssertedGates);
+    }
 }

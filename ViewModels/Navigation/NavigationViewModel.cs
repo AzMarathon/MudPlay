@@ -64,6 +64,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.PlayerDeathHalt.HaltedForDeathChanged += OnGatesChanged;
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved += RefreshDeathRooms;
+        _services.RoomTracker.PlayerDeathObserved += ClearNavIntentOnDeath;
         _services.Conditions.PropertyChanged += OnConditionsChanged;
         _services.RoomGraph.GraphReloaded += OnGraphReloaded;
         _services.TBInfo.StoreReloaded    += RefreshTeleportRooms;
@@ -126,6 +127,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.PlayerDeathHalt.HaltedForDeathChanged -= OnGatesChanged;
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved -= RefreshDeathRooms;
+        _services.RoomTracker.PlayerDeathObserved -= ClearNavIntentOnDeath;
         _services.Conditions.PropertyChanged -= OnConditionsChanged;
         _services.RoomGraph.GraphReloaded -= OnGraphReloaded;
         _services.TBInfo.StoreReloaded    -= RefreshTeleportRooms;
@@ -451,6 +453,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         DeathRooms = next;
     }
+
+    // Death stops every movement engine and halts us in the graveyard. Drop any
+    // armed walk-to target too so, once the player resumes, a stale destination
+    // (the room they just died in) can't be re-sent by the Run button. The engine
+    // stop already cleared the walker's own destination; this clears the UI's arm.
+    private void ClearNavIntentOnDeath() => QueuedDestination = null;
 
     private void OnLoopRunnerEvent(LoopEvent _)
     {

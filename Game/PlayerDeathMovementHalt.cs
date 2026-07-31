@@ -54,6 +54,12 @@ public sealed class PlayerDeathMovementHalt : IDisposable
     private readonly DispatcherTimer _resyncTimer;
     private Action<byte[]>? _wireResync;
 
+    // Full-stops every movement engine (walk-to, loop, auto-lair) on death.
+    // AppServices wires it to Walker.Stop / LoopRunner.Stop / AutoLair.Stop. We
+    // STOP rather than merely pause so no retained destination survives to
+    // re-drive us back into the room we died in when the halt is later released.
+    private Action? _stopEngines;
+
     // True only while a death-induced pause is holding. Distinct from "UserGate is
     // asserted" — the user can also pause manually — so the chip can flavour just
     // the death case as "recovering". Auto-cleared when the user resumes.
@@ -89,8 +95,24 @@ public sealed class PlayerDeathMovementHalt : IDisposable
         _wireResync = sender;
     }
 
+    // Bind the engine full-stop invoked on death (Walker/LoopRunner/AutoLair Stop).
+    // Until set, death only asserts the pause gate (older behaviour); the stop is
+    // what guarantees no engine's retained destination can re-drive us afterward.
+    public void SetEngineStopper(Action stopEngines)
+    {
+        ArgumentNullException.ThrowIfNull(stopEngines);
+        _stopEngines = stopEngines;
+    }
+
     private void OnPlayerDied()
     {
+        // Full-stop every engine FIRST, then assert the halt gate LAST. Order
+        // matters: Auto-Lair's own Stop() clears the UserGate when it was paused,
+        // so stopping AFTER our assert could wipe the halt we just raised. Stopping
+        // first lets any such clear happen while HaltedForDeath is still false
+        // (OnGatesChanged no-ops), then our assert reliably lands the halt.
+        _stopEngines?.Invoke();
+
         // Assert first, THEN raise the flavour: AssertGate fires GatesChanged, and
         // OnGatesChanged must still see HaltedForDeath == false at that point so it
         // doesn't immediately clear the flavour we're about to set.

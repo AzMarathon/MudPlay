@@ -4178,23 +4178,28 @@ public sealed class AppServices
             Walker, LoopRunner, AutoLair, MovementCoordinator);
 
         // Death engine-quiescence. On our death RoomTracker fires
-        // PlayerDeathObserved (both death phrasings). PlayerDeathHalt applies the
-        // UserGate pause, but a loop caught mid-recovery — a miracle-save restores
-        // HP, which clears the HealthRecovery gate and fires the loop's
-        // ResumeAfterRecovery just before the death registers — sits in the
-        // Recovering state that the pause doesn't cover, so the graveyard's
-        // respawn-room confirm would drive a recovery-reroute straight back out.
-        // Stop the engines outright: the reset clears that recovery state so no
-        // reroute can fire. Also wipe the classifier's room view so a hostile from
-        // the room we died in doesn't linger as a stale target the combat engine
-        // re-attacks when a party member later walks into the graveyard.
-        RoomTracker.PlayerDeathObserved += () =>
+        // PlayerDeathObserved (both death phrasings). PlayerDeathHalt full-stops
+        // every engine (via this stopper) and then asserts the UserGate halt — the
+        // stop-then-assert order lives inside PlayerDeathHalt.OnPlayerDied so an
+        // engine's own Stop() (Auto-Lair clears the UserGate when it was paused)
+        // can't wipe the halt. Stopping outright — not pausing — matters because a
+        // loop caught mid-recovery (a miracle-save restores HP, clearing the
+        // HealthRecovery gate and firing the loop's ResumeAfterRecovery just before
+        // the death registers) sits in a Recovering state the pause doesn't cover,
+        // so the graveyard's respawn-room confirm would drive a recovery-reroute
+        // straight back out. The reset clears that state; nothing survives to
+        // re-drive us into the room we died in when the halt is later released.
+        PlayerDeathHalt.SetEngineStopper(() =>
         {
             LoopRunner.Stop("player died — halting in graveyard");
             Walker.Stop("player died — halting in graveyard");
             AutoLair.Stop("player died — halting in graveyard");
-            RoomClassifier.NoteRoomChanged();
-        };
+        });
+        // Wipe the classifier's room view so a hostile from the room we died in
+        // doesn't linger as a stale target the combat engine re-attacks when a
+        // party member later walks into the graveyard. Independent of the gate
+        // ordering above, so it stays a plain post-death subscriber.
+        RoomTracker.PlayerDeathObserved += () => RoomClassifier.NoteRoomChanged();
 
         // Party-death roster-cleanup bridge. Leader-side: when an active party
         // member dies mid-route it lingers as an [Invited] par slot; we uninvite

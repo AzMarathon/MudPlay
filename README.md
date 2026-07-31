@@ -7,6 +7,7 @@
 > - A hostile that spawns/appears in your room while a loop is running no longer gets left behind: the abandoned-combat halt now covers loops and auto-lair (not just point-to-point walks), and holds a short settle so a monster following you out re-asserts combat and gets fought instead of out-walked
 > - Restoring a client from the taskbar with the map (or another window) open now brings the main window up too, instead of surfacing only the child window and leaving the main minimized
 > - A follower coming out of the trainer stats screen no longer wrongly re-invites its party leader (which tangled the auto-rejoin) — only the leader reforms the party after a trainer trip; a follower waits for the leader's invite and auto-joins
+> - Dying no longer lets a stale destination re-drive you back into the room you died in: death full-stops every movement engine (walk-to, loop, auto-lair) and refuses a goto/walk-to until you manually resume, and the armed destination is cleared
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
