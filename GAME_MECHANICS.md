@@ -702,6 +702,14 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   The player's on-screen room does **not** re-print on a refusal. This is the authoritative
   signal the client keys on: `MovementRefusalDetector` matches these lines and calls
   `RoomTracker.NoteMoveBlocked` (which drops the pending move and re-confirms at the source).
+- **[CONFIRMED]** **Picklock + open verb wording (stock, capture 2026-07-30).** A successful
+  `pick <dir>` prints **`You successfully unlocked the door.`** — **past tense**, and the *same*
+  line the use-key unlock emits (the two are distinguished only by which command was in flight,
+  not by wording). A pick failure is **`Your skill fails you this time.`**. Unlocking does **not**
+  open the door — a separate `open <dir>` is required, whose success prints **`You open the
+  door.`** (not "The door is now open."). `DoorOpenManager` keys on all three; matching only
+  present-tense "unlock(s)" or "is now open" stranded the walker at a picked door
+  (report stock-20260730-182812).
 - **Corollary the tracker relies on:** *a room redisplay that still matches the room you moved
   from is never the result of a refused move.* While a move is pending, seeing the source room
   again can only be a **passive re-look** — a combat-clear, a monster/player arrival or

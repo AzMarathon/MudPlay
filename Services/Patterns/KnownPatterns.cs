@@ -411,10 +411,10 @@ public static class KnownPatterns
     // verbs.
     public const string DoorBashSuccess       = "door.bash.success";       // "you bashed the door open" / "bashed the gate open"
     public const string DoorBashFailure       = "door.bash.failure";       // "your attempts to bash through fail"
-    public const string DoorPickSuccess       = "door.pick.success";       // "you successfully unlock the door"
+    public const string DoorPickSuccess       = "door.pick.success";       // "you successfully unlocked the door" (also present-tense "unlock(s)")
     public const string DoorPickFailure       = "door.pick.failure";       // "your lockpicking skill fails you"
     public const string DoorPickNotLocked     = "door.pick.notlocked";     // "was not locked"
-    public const string DoorOpenedNow         = "door.opened.now";         // "is now open" (after open)
+    public const string DoorOpenedNow         = "door.opened.now";         // "you open the door" (also "is now open") — after open
     public const string DoorAlreadyOpen       = "door.opened.already";     // "is already open"
     public const string DoorIsLocked          = "door.islocked";           // "is locked" (open hit a keyed door)
     public const string DoorKeyUnlockSuccess  = "door.key.unlocked";       // "successfully unlocked" (after use <key> <dir>)

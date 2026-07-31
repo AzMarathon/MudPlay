@@ -23,6 +23,7 @@
 > - Auto-search now holds the walker in a cleared room long enough to search it in place, instead of a zero-dwell loop stepping out before the search fires
 > - Auto-sneak now re-establishes sneak before leaving a room it just cleared of hostiles — the fight spends your sneak, and the client no longer treats the stale state as still-sneaking
 > - Old Mother Woodard (monster #545) now defaults to Friend on stock realms (she was missing from the stock overlay seed, so auto-combat treated her as an enemy); Paradigm already had her as Friend
+> - Picklock doors now open and the walk continues: the live "You successfully unlocked the door." / "You open the door." wording is now recognized, so a picked door no longer strands the walker waiting to send `open`
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

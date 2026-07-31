@@ -101,6 +101,30 @@ public sealed class DoorOpenManagerTests
     }
 
     [Fact]
+    public void Pick_LiveStockWording_UnlockedThenYouOpen_Opens()
+    {
+        // Exact wording captured from the stock server (report
+        // stock-20260730-182812): picklock success is PAST tense "unlocked" and
+        // the open reply is "You open the door." — neither matched the original
+        // present-tense / "is now open" patterns, so the FSM stalled in
+        // WaitingPick and never sent `open`.
+        using Harness h = new() { PicklocksOverBash = true };
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.N, 0, canBash: true, "walker", r => result = r);
+
+        Assert.Equal("pick n", h.LastSent);
+
+        h.Line("You successfully unlocked the door.");
+        Assert.Equal("open n", h.LastSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingOpen, h.Mgr.CurrentState);
+
+        h.Line("You open the door.");
+
+        Assert.IsType<DoorOpenResult.Opened>(result);
+        Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
+    }
+
+    [Fact]
     public void Pick_DoorNotLocked_SkipsToOpenImmediately()
     {
         using Harness h = new() { PicklocksOverBash = true };
