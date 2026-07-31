@@ -1,6 +1,7 @@
 using System;
 using FujinTerm.Game.Inventory;
 using FujinTerm.Models.GameData;
+using FujinTerm.Models.Profile;
 
 namespace FujinTerm.Game.Remote;
 
@@ -53,6 +54,22 @@ public sealed class EquipHandler : IDisposable
         }
 
         string keyword = ctx.Args[0];
+
+        // @equip-all is the remote twin of the "Equip All" action-menu item, which
+        // applies the Default gear set — NOT a lookup of a set literally named
+        // "all" (report stock-20260730-214959). Route it to the same trigger apply.
+        if (string.Equals(keyword, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            switch (_equipment.ApplyByTrigger(EquipTriggerType.Default))
+            {
+                case EquipResult.Applied:  ctx.Reply("equipping all (default gear set)"); break;
+                case EquipResult.NoChange: ctx.Reply("default gear set already worn"); break;
+                case EquipResult.NotFound: if (_engine.WarnOnDenial) ctx.Reply("no default gear set configured"); break;
+                case EquipResult.Busy:     if (_engine.WarnOnDenial) ctx.Reply("busy equipping"); break;
+            }
+            return;
+        }
+
         switch (_equipment.ApplyByKeyword(keyword))
         {
             case EquipResult.Applied:
