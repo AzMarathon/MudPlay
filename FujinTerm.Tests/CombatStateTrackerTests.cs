@@ -1007,6 +1007,32 @@ public sealed class CombatStateTrackerTests
     }
 
     [Fact]
+    public void IdleStallWatchdog_MobAttackNoDamage_ResetsStall()
+    {
+        // Regression (report stock-20260730-190736): on realms whose melee carries
+        // no damage number ("The X slashes you with their shortsword!") or is
+        // armour-deflected ("...but your armour deflects the blow!"), the per-round
+        // swings match neither MobHits (needs "for N damage") nor MobMisses (needs
+        // "at you"), so before MobAttacksYou they never refreshed the activity
+        // stamp — an active fight tripped the watchdog and the walker abandoned the
+        // live hostile. The mob's swing must now register as combat activity.
+        using Harness h = new();
+        h.WireSender();
+        h.AddMonster(1, "dark cultist", killable: true);
+
+        h.Feed("Also here: dark cultist.");
+        Assert.True(h.CombatGateHeld);
+
+        h.FakeNow = h.FakeNow.AddSeconds(5);
+        h.Feed("The dark cultist slashes you, but your armour deflects the blow!");
+        h.FakeNow = h.FakeNow.AddSeconds(2);               // 7s since gate, 2s since swing
+        h.Tracker.OnCombatTick();
+
+        Assert.Empty(h.SentRaw);                            // not stalled — no CR
+        Assert.True(h.CombatGateHeld);                      // live fight left alone
+    }
+
+    [Fact]
     public void IdleStallWatchdog_NoGate_NeverFires()
     {
         // No gate held → nothing to resync. The watchdog must stay silent even

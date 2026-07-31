@@ -59,6 +59,18 @@ public static class KnownPatterns
     public const string UserHits             = "combat.user-hits";
     public const string MobMisses            = "combat.mob-misses";
     public const string MobHits              = "combat.mob-hits";
+
+    // A mob melee attack landing ON us, regardless of outcome — "The <mob> <verb>
+    // you...", covering hits without a "for N damage" tail ("...slashes you with
+    // their shortsword!") and armour-deflected / non-damage swings ("...slashes
+    // you, but your armour deflects the blow!") that MobHits (needs "for N
+    // damage") and MobMisses (needs "at you") both miss. Deliberately broad and
+    // used ONLY as an idle-stall combat-activity signal (CombatStateTracker) — NOT
+    // counted for hit/miss stats. Keeps the stall watchdog from mistaking an
+    // active fight (whose per-round lines don't match the stricter patterns) for
+    // an empty, stuck-gate room and abandoning the fight (report
+    // stock-20260730-190736).
+    public const string MobAttacksYou        = "combat.mob-attacks-you";
     public const string UserGainExperience   = "combat.user-gain-experience";
 
     // The local player's own swing MISSING. On the live realm a whiff prints the

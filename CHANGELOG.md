@@ -27,7 +27,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Old Mother Woodard (monster #545) now defaults to Friend on stock realms (she was missing from the stock overlay seed, so auto-combat treated her as an enemy); Paradigm already had her as Friend
 - Picklock doors now open and the walk continues: the live "You successfully unlocked the door." / "You open the door." wording is now recognized, so a picked door no longer strands the walker waiting to send `open`
 - Resting now starts the instant a room clears of hostiles instead of stalling several seconds — when a fresh monster interrupts a rest, the out-of-combat transition no longer sees a stale "hostile present" and re-sends `rest` immediately
-- bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949, stock-20260730-150957, stock-20260730-151145, stock-20260730-160706, paradigm-20260730-163244, stock-20260730-163044, stock-20260730-182812, stock-20260730-184622
+- Combat no longer walks off mid-fight: on realms whose melee prints no damage number or gets armour-deflected, the mob's per-round swings now register as combat activity, so the idle-stall watchdog stops mistaking an active fight for a stuck-gate empty room and abandoning it
+- bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949, stock-20260730-150957, stock-20260730-151145, stock-20260730-160706, paradigm-20260730-163244, stock-20260730-163044, stock-20260730-182812, stock-20260730-184622, stock-20260730-190736
 
 ## 2.11.0
 

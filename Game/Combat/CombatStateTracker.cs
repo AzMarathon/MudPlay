@@ -67,6 +67,7 @@ public sealed class CombatStateTracker : IDisposable
     private readonly IDisposable _userHitsSub;
     private readonly IDisposable _mobHitsSub;
     private readonly IDisposable _mobMissesSub;
+    private readonly IDisposable _mobAttacksSub;
     private readonly IDisposable _combatStatusSub;
 
     private bool _gateAsserted;
@@ -201,10 +202,15 @@ public sealed class CombatStateTracker : IDisposable
         _now         = clock ?? (() => DateTimeOffset.Now);
 
         _classifier.EntitiesObserved += OnEntitiesObserved;
-        _userHitsSub      = router.Subscribe(KnownPatterns.UserHits,    OnAnyCombatLine);
-        _mobHitsSub       = router.Subscribe(KnownPatterns.MobHits,     OnAnyCombatLine);
-        _mobMissesSub     = router.Subscribe(KnownPatterns.MobMisses,   OnAnyCombatLine);
-        _combatStatusSub  = router.Subscribe(KnownPatterns.CombatStatus, OnCombatStatus);
+        _userHitsSub      = router.Subscribe(KnownPatterns.UserHits,      OnAnyCombatLine);
+        _mobHitsSub       = router.Subscribe(KnownPatterns.MobHits,       OnAnyCombatLine);
+        _mobMissesSub     = router.Subscribe(KnownPatterns.MobMisses,     OnAnyCombatLine);
+        // Broad mob-attacks-us line — catches the per-round swings that MobHits /
+        // MobMisses miss on realms whose melee carries no damage number or "at
+        // you", so an active fight keeps refreshing the idle-stall stamp instead
+        // of tripping the watchdog (report stock-20260730-190736).
+        _mobAttacksSub    = router.Subscribe(KnownPatterns.MobAttacksYou, OnAnyCombatLine);
+        _combatStatusSub  = router.Subscribe(KnownPatterns.CombatStatus,  OnCombatStatus);
     }
 
     // Wire the combat-off "clear hostiles when seen Hidden" override:
@@ -591,6 +597,7 @@ public sealed class CombatStateTracker : IDisposable
         _userHitsSub.Dispose();
         _mobHitsSub.Dispose();
         _mobMissesSub.Dispose();
+        _mobAttacksSub.Dispose();
         _combatStatusSub.Dispose();
     }
 }

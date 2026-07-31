@@ -121,6 +121,13 @@ public static class DefaultPatterns
             @"^The (?<target>[\w -]+) \w+ at you\b");
         yield return new RegexPattern(KnownPatterns.MobHits,
             @"^The (?<target>[\w -]+) \w+ you for (?<damage>\d+) damage!");
+        // Broad "the mob just attacked us" activity signal — see
+        // KnownPatterns.MobAttacksYou. Matches "The <mob> <verb> you..." with any
+        // (or no) tail, so a fight whose swings are armour-deflected or carry no
+        // damage number still registers as combat activity for the idle-stall
+        // watchdog. Not used for stats; deliberately broader than MobHits/MobMisses.
+        yield return new RegexPattern(KnownPatterns.MobAttacksYou,
+            @"^The [\w -]+ \w+ you\b");
         yield return new RegexPattern(KnownPatterns.UserGainExperience,
             @"^You gain (?<exp>\d+) experience\.");
         // The local player's own swing missing. On the live realm a whiff
