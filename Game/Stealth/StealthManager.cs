@@ -210,6 +210,33 @@ public sealed class StealthManager : IDisposable
         TryBeginAutoSneak("room change + idle/failed + !combat");
     }
 
+    // Called by CombatStateTracker when a room clears of engageable hostiles and
+    // combat ends. Attacking spends stealth — the surprise opener is one-shot and
+    // engaging reveals you (see GAME_MECHANICS) — but there's no line-driven signal
+    // for it, so a sneak/hide we held going into the fight is now stale-true. Drop
+    // it to Idle so the pre-move auto-sneak (RequestPreMoveStealth, fired as the
+    // walker steps out of the cleared room) sees a settled non-stealth state and
+    // re-establishes sneak for the move instead of no-opping on the stale state
+    // (report stock-20260730-163044). No `sn` is sent here — the re-attempt is the
+    // pre-move hook's job.
+    public void NoteCombatEndedStealthReset()
+    {
+        if (_stateValue == StealthState.Sneaking)
+        {
+            _log?.Info(LogCategory, "combat spent sneak — resetting for pre-move re-sneak");
+            Transition(StealthState.Idle);
+            _state.IsSneaking = false;
+            // The room-clear counts as this room's "confirm"; without clearing it a
+            // later NoteRoomChanged could mis-read a genuine silent loss.
+            _sneakConfirmedThisRoom = false;
+        }
+        else if (_stateValue == StealthState.Hidden)
+        {
+            _log?.Info(LogCategory, "combat spent hide — resetting stealth");
+            NoteHideBroken();
+        }
+    }
+
     // Movement-engine pre-move hook — called by the walker / loop runner
     // immediately before a move's bytes go out (after any door / trap / hidden /
     // multi-action pre-steps) so the move itself is performed under sneak.

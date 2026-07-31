@@ -3057,6 +3057,11 @@ public sealed class AppServices
         // Auto-hide is suppressed in a party — a hidden member falls off the
         // Also-here line and can't be single-target-healed/buffed until revealed.
         Stealth.SetPartyCheck(() => PartyState.IsInParty);
+        // Combat spends stealth (attacking reveals you) but emits no line the FSM
+        // can key on, so a room cleared by winning leaves IsSneaking stale-true.
+        // Reset it the instant combat ends — before the Combat gate releases the
+        // walker — so the pre-move re-sneak re-establishes stealth for the step out.
+        CombatTracker.CombatSpentStealth += () => Stealth.NoteCombatEndedStealthReset();
 
         // Backstab window — CombatManager opens with `bs` on the first swing while
         // stealthed: either a sneak-approach into the monster's room, or a monster

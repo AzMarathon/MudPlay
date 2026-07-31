@@ -147,6 +147,15 @@ public sealed class CombatStateTracker : IDisposable
     // still cleared for the new room — see OnEntitiesObserved's RoomChange arm.)
     public event Action<string>? EngagedTargetAbandoned;
 
+    // Fires when a room clears of engageable hostiles and combat truly ends, so a
+    // stealth consumer can drop the sneak/hide the fight spent. Attacking reveals
+    // you (the surprise opener is one-shot — see GAME_MECHANICS), but the stealth
+    // FSM has no line-driven signal for it, so IsSneaking stays stale-true after a
+    // kill. StealthManager subscribes and resets to Idle; raised BEFORE the Combat
+    // gate releases so the walker's pre-move re-sneak sees a clean state and can
+    // re-establish stealth for the step out (report stock-20260730-163044).
+    public event Action? CombatSpentStealth;
+
     public CombatStateTracker(
         MessageRouter router,
         MovementCoordinator coordinator,
@@ -439,21 +448,32 @@ public sealed class CombatStateTracker : IDisposable
             if (obs.Source == RoomObservationSource.RoomChange && _gateAsserted)
                 EngagedTargetAbandoned?.Invoke("left a room with an engaged target still alive");
 
+            // Room is now clear of engageable monsters → combat truly ended. This
+            // is the authoritative "we're out of combat" signal; CombatStatus=Off
+            // is unreliable (the server emits it when we cast a spell mid-round,
+            // with the mob still alive — see OnCombatStatus). Only a room confirmed
+            // clear of engageable hostiles flips it, so HealthManager never rests
+            // next to a live mob.
+            //
+            // Set out-of-combat AND drop the stealth the fight spent BEFORE
+            // releasing the gate: ClearGate resumes the walker synchronously and
+            // fires its pre-move hook, so both must already read "clear" for the
+            // pre-move auto-sneak to re-establish stealth before the step out
+            // (report stock-20260730-163044). CombatSpentStealth only fires when we
+            // actually engaged — a pure walk-past of an un-actionable room never
+            // broke our sneak, so we leave it intact.
+            if (_state.InCombat)
+            {
+                _state.InCombat = false;
+                CombatSpentStealth?.Invoke();
+            }
+
             // targetable>0 here means hostiles remain but none are killable —
             // release the gate and move past (per the move-past rule). The
             // "room cleared" wording stays for the genuine empty-room case.
             ClearGate(targetable > 0
                 ? $"room un-actionable: {targetable} hostile(s), none hittable — moving on"
                 : "room cleared");
-            // Room is now clear of engageable monsters → combat truly
-            // ended. This is the authoritative "we're out of combat"
-            // signal; CombatStatus=Off is unreliable (server emits it
-            // when we cast a spell mid-round, with the mob still
-            // alive — see CombatStateTracker.OnCombatStatus). Tying
-            // the false transition to the gate clear means
-            // HealthManager won't start resting while a hostile mob
-            // is still here.
-            if (_state.InCombat) _state.InCombat = false;
         }
     }
 
