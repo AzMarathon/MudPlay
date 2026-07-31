@@ -99,6 +99,15 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
             .OpenWindowAsync<DeathLogViewModel, bool>(new DeathLogViewModel(title, log));
     }
 
+    // Double-clicking a death row opens/focuses the Navigation window and centres
+    // the map on the death's map/room. No-op when the death room was unknown at
+    // capture (Room is null — the grid shows "—" and there's nowhere to centre).
+    public void ShowSelectedOnMap()
+    {
+        if (SelectedRecord?.Room is not { } room) return;
+        AppServices.Current.NavigateToRoom(new Game.Map.RoomKey(room.Map, room.Room));
+    }
+
     [RelayCommand(CanExecute = nameof(CanRecoverSelected))]
     private void RecoverNow() { if (SelectedRecord is { } r) _recovery.RecoverNow(r); }
 

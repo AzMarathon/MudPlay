@@ -63,6 +63,8 @@
         <DataGrid Grid.Row="2"
                   ItemsSource="{Binding Records}"
                   SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
+                  DoubleTapped="OnRecordDoubleTapped"
+                  ToolTip.Tip="Double-click a death to centre the map on its map/room."
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="1"
                   BorderBrush="{StaticResource ChromeBorderBrush}"
