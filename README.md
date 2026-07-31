@@ -5,6 +5,7 @@
 > - Loop builder: clicking a step in the CURRENT NAV build list now opens the Waypoint action editor to attach a command to that step (same as editing a saved loop), instead of deleting it — deletion moved to the roomier ✕ box, and the ↑ / ↓ / ✕ boxes are larger. Steps with a command show a ⚙ marker
 > - A hostile that spawns/appears in your room while a loop is running no longer gets left behind: the abandoned-combat halt now covers loops and auto-lair (not just point-to-point walks), and holds a short settle so a monster following you out re-asserts combat and gets fought instead of out-walked
 > - Restoring a client from the taskbar with the map (or another window) open now brings the main window up too, instead of surfacing only the child window and leaving the main minimized
+> - A follower coming out of the trainer stats screen no longer wrongly re-invites its party leader (which tangled the auto-rejoin) — only the leader reforms the party after a trainer trip; a follower waits for the leader's invite and auto-joins
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

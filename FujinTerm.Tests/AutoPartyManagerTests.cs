@@ -1093,6 +1093,7 @@ public sealed class AutoPartyManagerTests
         PlayerDatabase players = new();
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         PartyState party = new();
+        party.SelfIsLeader = true;   // leader-side reform — only a leader re-invites its followers
         TrainerMenuTracker tracker = new(router, party) { NowProvider = () => Now };
         AutoPartyManager engine = new(router, players, party, tracker) { NowProvider = () => Now };
         engine.SetWireSender(_ => { });
@@ -1127,6 +1128,7 @@ public sealed class AutoPartyManagerTests
         PlayerDatabase players = new();
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         PartyState party = new();
+        party.SelfIsLeader = true;   // leader-side reform — only a leader re-invites its followers
         TrainerMenuTracker tracker = new(router, party) { NowProvider = () => Now };
         AutoPartyManager engine = new(router, players, party, tracker) { NowProvider = () => Now };
         engine.SetWireSender(_ => { });
@@ -1154,6 +1156,7 @@ public sealed class AutoPartyManagerTests
         PlayerDatabase players = new();
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         PartyState party = new();
+        party.SelfIsLeader = true;   // leader-side reform — only a leader re-invites its followers
         TrainerMenuTracker tracker = new(router, party) { NowProvider = () => Now };
         AutoPartyManager engine = new(router, players, party, tracker) { NowProvider = () => Now };
         engine.SetWireSender(_ => { });
@@ -1172,6 +1175,39 @@ public sealed class AutoPartyManagerTests
 
         byte[] sent = Assert.Single(engine.LastSentForTests);
         Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
+    }
+
+    [Fact]
+    public void TrainerMenuExited_AsFollower_DoesNotReInviteLeader()
+    {
+        // Report stock-20260731-015726: a follower's menu-entry roster includes its
+        // LEADER; on menu exit it must NOT `invite <leader>` (the leader re-invites
+        // the follower, who auto-joins via JoinPartyIfInvited). Only a leader
+        // reforms — before the fix a follower fired `invite <leader>` and tangled
+        // the rejoin.
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PlayerDatabase players = new();
+        PartyState party = new();
+        party.SelfIsLeader = false;      // we're a follower
+        party.LeaderName = "Fujin";
+        TrainerMenuTracker tracker = new(router, party) { NowProvider = () => Now };
+        AutoPartyManager engine = new(router, players, party, tracker) { NowProvider = () => Now };
+        engine.SetWireSender(_ => { });
+
+        // Roster at menu entry holds our leader.
+        party.Members.Add(new PartyMember { Name = "Fujin" });
+        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        Dispatch(router, "    Point Cost Chart");
+        Assert.Contains("Fujin", tracker.RosterAtMenuEntry);
+
+        // Follower-side view dissolved during the trip.
+        party.Members.Clear();
+        engine.LastSentForTests.Clear();
+
+        Dispatch(router, "[HP=33]:");
+
+        Assert.Empty(engine.LastSentForTests);   // no invite — the leader reforms
     }
 
     [Fact]

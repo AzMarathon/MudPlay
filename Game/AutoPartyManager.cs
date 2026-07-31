@@ -581,6 +581,19 @@ public sealed class AutoPartyManager : IDisposable
     {
         if (_trainerMenu is null) return;
         if (!_wire.IsBound) return;
+        // Only a leader reforms its group after a trainer trip. A follower's
+        // roster snapshot includes its LEADER, and re-inviting the leader is always
+        // wrong — the leader re-invites the follower, who auto-joins via
+        // JoinPartyIfInvited. Without this a follower coming out of the trainer menu
+        // fired `invite <leader>` (+ a @join nag AT the leader), tangling the
+        // reform (report stock-20260731-015726). Mirrors NotePartySplitTeleport's
+        // leader gate.
+        if (!_party.SelfIsLeader)
+        {
+            _log?.Log(LogSeverity.Debug, "AutoParty",
+                "Trainer-menu exit: not the leader — leaving the re-invite to the leader.");
+            return;
+        }
         IReadOnlyList<string> snapshot = _trainerMenu.RosterAtMenuEntry;
         if (snapshot.Count == 0) return;
 
