@@ -828,6 +828,39 @@ public sealed class CombatStateTrackerTests
     }
 
     [Fact]
+    public void RoomClear_InCombatFalseTransition_SeesGateAlreadyCleared()
+    {
+        // Regression (report stock-20260730-184622): the InCombat→false transition
+        // fires HealthManager.Evaluate synchronously, and the rest guard reads
+        // HasEngageableHostiles (derived from the combat gate). If the gate still
+        // read asserted at that instant, the rest would be blocked as "hostile
+        // present" and deferred to the next prompt tick — a multi-second stall
+        // after the room clears. On room clear the gate must already read cleared
+        // the moment InCombat flips false.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        Assert.True(h.State.InCombat);
+        Assert.True(h.Tracker.HasEngageableHostiles);
+
+        bool? engageableAtTransition = null;
+        h.State.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PlayerState.InCombat) && !h.State.InCombat)
+                engageableAtTransition = h.Tracker.HasEngageableHostiles;
+        };
+
+        h.Feed("Also here: Bob.");                // room clear → InCombat false
+
+        Assert.True(engageableAtTransition.HasValue, "InCombat→false should have fired");
+        Assert.False(engageableAtTransition!.Value); // gate already clear at the transition
+        Assert.False(h.State.InCombat);
+        Assert.False(h.Tracker.HasEngageableHostiles);
+        Assert.False(h.CombatGateHeld);           // coordinator gate released too
+    }
+
+    [Fact]
     public void AutoAttackOff_HostileStillHere_KeepsInCombatTrue()
     {
         // Turning auto-attack off next to a live mob must NOT declare us out of
@@ -971,6 +1004,32 @@ public sealed class CombatStateTrackerTests
         h.FakeNow = h.FakeNow.AddSeconds(2);               // 7s since gate, 2s since hit
         h.Tracker.OnCombatTick();
         Assert.Empty(h.SentRaw);                            // not stalled — no CR
+    }
+
+    [Fact]
+    public void IdleStallWatchdog_MobAttackNoDamage_ResetsStall()
+    {
+        // Regression (report stock-20260730-190736): on realms whose melee carries
+        // no damage number ("The X slashes you with their shortsword!") or is
+        // armour-deflected ("...but your armour deflects the blow!"), the per-round
+        // swings match neither MobHits (needs "for N damage") nor MobMisses (needs
+        // "at you"), so before MobAttacksYou they never refreshed the activity
+        // stamp — an active fight tripped the watchdog and the walker abandoned the
+        // live hostile. The mob's swing must now register as combat activity.
+        using Harness h = new();
+        h.WireSender();
+        h.AddMonster(1, "dark cultist", killable: true);
+
+        h.Feed("Also here: dark cultist.");
+        Assert.True(h.CombatGateHeld);
+
+        h.FakeNow = h.FakeNow.AddSeconds(5);
+        h.Feed("The dark cultist slashes you, but your armour deflects the blow!");
+        h.FakeNow = h.FakeNow.AddSeconds(2);               // 7s since gate, 2s since swing
+        h.Tracker.OnCombatTick();
+
+        Assert.Empty(h.SentRaw);                            // not stalled — no CR
+        Assert.True(h.CombatGateHeld);                      // live fight left alone
     }
 
     [Fact]

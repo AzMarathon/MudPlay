@@ -2,6 +2,42 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.12.0
+
+- Game Data → Items "Dropped By" now lists each monster's drop rate, e.g. "Prismatic Dragon(10%)"
+- Route picker shows an approximate ETA per route (steps + lair-fight time), matching the live walk status
+- Map room tooltips surface locked-door pick/bash requirements (e.g. "Door: 50 picklocks/strength")
+- Map room tooltips surface the Dwarven Mines "mine ore" gather commands
+- Map room tooltips surface paid room-command costs (gambling, healer/summon buys, passage fares, the jail bribe-guard)
+- Navigation lair highlight gains a combined heat+count mode, and the chosen mode is now saved per character
+- Double-clicking a death in the Player Workshop death log opens the map centered on that death's map/room
+- Lower native memory growth on long sessions: the terminal/backscroll renderer caches the bold typeface instead of reallocating it per run per frame, and on Linux/glibc malloc arenas are capped at startup to hold down the native RSS floor
+- Auto-combat no longer stalls on a monster it can't hurt: with both weapons ineffective and no attack spell castable, it moves to the next hostile or room instead of standing there getting beaten — a mana shortage is retried once MA regenerates, a true dead-end logs "cannot attack <monster>"
+- Physical-first combat now fully exhausts the weapon (forcing the alternate swap) before falling back to spells
+- Fixed a stale teleport route-preview lingering after a re-route, and a mid-walk replan dropping the "walk it, no teleport" choice
+- On "your weapon has no effect", auto-combat now force-swaps to the alternate weapon (or falls back to a spell) and retries instead of stalling
+- Killing a summon-on-death monster now rechecks the room before the walker steps on, so a fresh summon isn't dragged into the next room
+- Fixed WalkTo failing to route out of some rooms (e.g. ganghouse 15/945) whose CMD was misread as a teleport
+- Auto-collect no longer fires doomed coin `get`s at 100% encumbrance — the hard weight cap now always applies, not only when a "skip if makes …" flag is set
+- Auto-deposit no longer wedges: a bank reroute that returns without dropping wealth below the threshold now re-arms instead of looping forever, and logs why it's holding
+- Equipment manager no longer auto-applies a gear set while the Auto-All kill-switch is engaged (manual "Apply Now" / "Equip All" / @equip still work)
+- No-mana classes (warriors/ninjas) no longer break combat and run when you type `exp` — a latent MaxMana on the stat/exp screen is no longer applied as a live mana pool, so the Health tab's mana/kai settings (run/rest below mana) stay inert for a character with no mana
+- Killing the last monster no longer triggers a flee: when the killing blow drops HP into flee territory but empties the room, the client now stays and rests instead of running from nothing (and a fresh monster entering while you're still low re-triggers the flee)
+- Auto-search now holds the walker in a cleared room long enough to search it in place, instead of a zero-dwell loop stepping out before the search fires
+- Auto-sneak now re-establishes sneak before leaving a room it just cleared of hostiles — the fight spends your sneak, and the client no longer treats the stale state as still-sneaking
+- Old Mother Woodard (monster #545) now defaults to Friend on stock realms (she was missing from the stock overlay seed, so auto-combat treated her as an enemy); Paradigm already had her as Friend
+- Picklock doors now open and the walk continues: the live "You successfully unlocked the door." / "You open the door." wording is now recognized, so a picked door no longer strands the walker waiting to send `open`
+- Resting now starts the instant a room clears of hostiles instead of stalling several seconds — when a fresh monster interrupts a rest, the out-of-combat transition no longer sees a stale "hostile present" and re-sends `rest` immediately
+- Combat no longer walks off mid-fight: on realms whose melee prints no damage number or gets armour-deflected, the mob's per-round swings now register as combat activity, so the idle-stall watchdog stops mistaking an active fight for a stuck-gate empty room and abandoning it
+- Auto-collect no longer grabs cash on room entry before combat starts: with "collect after combat" on, a room whose "Also here" hostiles reveal a beat after the floor-cash line now holds the collect until the room is cleared, instead of firing a `get` into a fight
+- Party reconnect: when a member re-enters the realm and you haven't moved, the client now sends a carriage return to re-observe the room and auto-invites them if they're standing there — only falling back to the `@where` round-trip if they re-entered elsewhere
+- After death, the client sends a carriage return to re-observe the graveyard if the respawn room hasn't shown up on its own, so your position is re-established promptly instead of sitting "lost" until you move
+- Death log detail now shows why a recovery is still "Partial" — the pile items that weren't seen picked up — instead of leaving the status unexplained
+- `@equip-all` now triggers the "Equip All" action (applies your Default gear set), instead of hunting for a gear set literally named "all"
+- "Get All" now works even when its floor cache is stale (e.g. loot dropped mid-combat): an empty cache re-surveys the room and grabs on the fresh survey, instead of reporting nothing on the ground
+- A disconnect now suspends the party `par` poll and @health telepaths until you're back in the realm, so they no longer fire into the BBS login menu and derail re-entry
+- bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949, stock-20260730-150957, stock-20260730-151145, stock-20260730-160706, paradigm-20260730-163244, stock-20260730-163044, stock-20260730-182812, stock-20260730-184622, stock-20260730-190736, stock-20260730-193107, stock-20260730-193610, stock-20260730-194053, stock-20260730-214157, stock-20260730-214959, stock-20260730-215247, stock-20260731-004105
+
 ## 2.11.0
 
 - Navigation can now climb the Great Pyramid puzzle: walking to a pyramid room drives the party leader up all five floors (push-blocks, sphinx keywords, timed/chaos/door/footpath floors) to the top room, stopping there for the player to finish

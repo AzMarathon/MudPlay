@@ -119,7 +119,7 @@ public sealed partial class CombatManager : IDisposable
     // synchronous burst in the pre-move sequence, before the sn. Until wired both
     // no-op, so the manager stays a pure decider (tests assert on the decision,
     // not the actuation).
-    private Action<string?, string?>? _swapWeapon;
+    private Action<string?, string?, bool>? _swapWeapon;
     private Action? _prepBackstabArmor;
     private Func<bool>? _isStealthed;
     private Func<int, bool>? _hasSeeHidden;
@@ -318,6 +318,19 @@ public sealed partial class CombatManager : IDisposable
     private readonly HashSet<string> _alternateWeaponFailedMonsters =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Monster Number → canonical species (ResolvedName), rebuilt from every room
+    // observation. Bridges the Number-keyed actionability check (CanEngageMonster,
+    // which the walker gate calls with only a Number) to the species-keyed runtime
+    // fail-sets above, so a monster proven un-hittable this room by observed "no
+    // effect" lines — not just by game-data prediction — reads as un-actionable.
+    // Room-scoped, cleared on room-cleared.
+    private readonly Dictionary<int, string> _speciesByNumber = new();
+
+    // Species we've already surfaced a "cannot attack" line for this room — keeps
+    // the status message to once per species instead of once per failed round.
+    private readonly HashSet<string> _cannotAttackAnnounced =
+        new(StringComparer.OrdinalIgnoreCase);
+
     // Backstab only lands on the surprise round — the very first action taken in
     // a freshly-approached room. Once ANY combat action fires here (bs, spell, or
     // swing) the surprise is spent, so re-picking `bs` on a re-engage (interrupt
@@ -424,7 +437,7 @@ public sealed partial class CombatManager : IDisposable
     // backstab-armor automation is wired — the weapon still gets swapped either
     // way).
     public void SetWeaponActuator(
-        Action<string?, string?> swapWeapon, Action? prepBackstabArmor = null)
+        Action<string?, string?, bool> swapWeapon, Action? prepBackstabArmor = null)
     {
         ArgumentNullException.ThrowIfNull(swapWeapon);
         _swapWeapon = swapWeapon;
@@ -694,6 +707,11 @@ public sealed partial class CombatManager : IDisposable
 
             if (e.MonsterNumber is int n)
             {
+                // Remember the Number→species mapping for the runtime actionability
+                // bridge (CanEngageMonster), independent of relationship so the
+                // gate can resolve any observed monster.
+                _speciesByNumber[n] = e.ResolvedName;
+
                 MonsterOverlay overlay = ResolveOverlay(n);
                 if ((overlay.Relationship ?? MonsterRelationship.Enemy) != MonsterRelationship.Enemy)
                     continue;
@@ -867,10 +885,15 @@ public sealed partial class CombatManager : IDisposable
         EngageableCandidate? actionableFallback = null;
         foreach (EngageableCandidate cand in ordered)
         {
-            if (UnengageableReason(settings, cand.MonsterNumber) is { } reason)
+            EngageAssessment assess = AssessEngage(settings, cand.MonsterNumber, cand.ResolvedName);
+            if (assess != EngageAssessment.CanAct)
             {
                 _log?.Combat(LogCategory,
-                    $"skip un-actionable {cand.RawName} (#{cand.MonsterNumber}) — {reason}");
+                    $"skip un-actionable {cand.RawName} (#{cand.MonsterNumber}) — {assess}");
+                // Only a permanent give-up surfaces the "cannot attack" line; a
+                // transient mana stall stays quiet (it's retryable once MA regens).
+                if (assess == EngageAssessment.Unkillable)
+                    AnnounceCannotAttack(cand.ResolvedName);
                 continue;
             }
             actionableFallback ??= cand;
@@ -998,6 +1021,8 @@ public sealed partial class CombatManager : IDisposable
     {
         _normalWeaponFailedMonsters.Clear();
         _alternateWeaponFailedMonsters.Clear();
+        _speciesByNumber.Clear();
+        _cannotAttackAnnounced.Clear();
         ClearBackstabResolution();
 
         // Reset the combat-spell room economy — per-room debuff-once /
@@ -1015,7 +1040,7 @@ public sealed partial class CombatManager : IDisposable
         bool backstabActive = settings.DoBackstab
             && !string.IsNullOrWhiteSpace(settings.BackstabWeapon);
         if (!backstabActive && _usingAlternateWeapon)
-            _swapWeapon?.Invoke(settings.NormalWeapon, settings.NormalOffHand);
+            _swapWeapon?.Invoke(settings.NormalWeapon, settings.NormalOffHand, false);
         _usingAlternateWeapon = false;
     }
 
@@ -1037,7 +1062,7 @@ public sealed partial class CombatManager : IDisposable
         _backstabOpenerConsumed = false;
 
         if (string.IsNullOrWhiteSpace(settings.BackstabWeapon)) return;
-        _swapWeapon?.Invoke(settings.BackstabWeapon, settings.BackstabOffHand);
+        _swapWeapon?.Invoke(settings.BackstabWeapon, settings.BackstabOffHand, false);
         _prepBackstabArmor?.Invoke();
         _usingAlternateWeapon = false;
     }
@@ -1058,7 +1083,7 @@ public sealed partial class CombatManager : IDisposable
     // Decide which weapon should be on for the next attack and hand it to the
     // actuator (EquipmentManager owns the wire + worn-diff + two-handed rule).
     // Called from OnEntitiesObserved just before SendAttack.
-    private void EquipForAttack(CombatSettings settings, bool wantAlternate)
+    private void EquipForAttack(CombatSettings settings, bool wantAlternate, bool force = false)
     {
         string? weapon;
         string? offHand;
@@ -1074,7 +1099,7 @@ public sealed partial class CombatManager : IDisposable
             offHand = settings.NormalOffHand;
             _usingAlternateWeapon = false;
         }
-        _swapWeapon?.Invoke(weapon, offHand);
+        _swapWeapon?.Invoke(weapon, offHand, force);
     }
 
     private void Send(string text)
@@ -1106,20 +1131,49 @@ public sealed partial class CombatManager : IDisposable
 
         if (_usingAlternateWeapon)
         {
-            // Both weapons are out against this species — the weapon path is
-            // exhausted. Remember the alternate failure (mirrors the normal
-            // fail-set) and, when a caster is wired, re-run the round so a
-            // Physical-first build falls back to the attack-spell cascade instead
-            // of swinging uselessly. Guard the re-dispatch on a first-time Add so a
-            // spell that also can't fire can't spin us in a swing → no-effect →
-            // re-dispatch loop; the server's auto-repeat then just logs quietly.
+            bool physicalFirst = settings.ActionOrder == CombatActionOrder.PhysicalFirst;
+
+            // First no-effect while believed on the alternate. It's itself evidence
+            // of a phantom swap (the actuator suppressed the `eq` off a stale
+            // worn/carried snapshot, but the belief flag flipped anyway), so we
+            // give the weapon one genuine try. Order depends on the build:
+            //   - Physical-first wants the weapon truly exhausted before spells, so
+            //     it force-swaps + retries here and only reaches the spell cascade
+            //     once THAT fails (below).
+            //   - Spells-first already cast its spells before ever swinging, so on
+            //     the weapon fallback failing it prefers the spell cascade, and only
+            //     force-retries the weapon when no spell can take the round.
+            // Guarded on a first-time Add so the recovery runs once per species.
             if (_alternateWeaponFailedMonsters.Add(species))
             {
                 _log?.Combat(LogCategory, $"adding {species} to alternate-weapon fail-set");
-                if (TryFallBackToSpellAfterWeaponFail(settings)) return;
+                if (!physicalFirst && TryFallBackToSpellAfterWeaponFail(settings)) return;
+                _log?.Combat(LogCategory,
+                    $"weapon-no-effect on ALT against {species} — forcing physical swap + retry");
+                EquipForAttack(settings, wantAlternate: true, force: true);
+                if (_currentTarget is { } retryTgt)
+                {
+                    SendAttack(settings.AlternateAttackCommand, retryTgt, priority: null);
+                    return;
+                }
             }
-            _log?.Warn(LogCategory,
-                $"weapon-no-effect on ALT against {species} — weapon path exhausted");
+
+            // The alternate has now genuinely failed (the forced retry drew another
+            // no-effect, or there was no target to retry against). Physical-first
+            // reaches the spell cascade HERE — after the weapon is proven out — so a
+            // configured spell can still take the round.
+            if (physicalFirst && TryFallBackToSpellAfterWeaponFail(settings)) return;
+
+            // The weapon is out and the spell cascade didn't take the round. Drop
+            // the target and force a fresh room view; the retarget loop then
+            // re-assesses (AssessEngage) — attack another hostile, cast if MA has
+            // regenerated, or, if nothing here is actionable, release the walker to
+            // move on. It owns the "cannot attack" announce so a transient mana
+            // stall (retryable) isn't mislabelled as a permanent give-up.
+            _log?.Combat(LogCategory,
+                $"weapon-no-effect on ALT against {species} — weapon exhausted, re-assessing");
+            _currentTarget = null;
+            TrySendRoomRefresh($"weapon exhausted vs {species} — re-pick / move on");
             return;
         }
 
@@ -1130,6 +1184,18 @@ public sealed partial class CombatManager : IDisposable
         EquipForAttack(settings, wantAlternate: true);
         if (_currentTarget is { } tgt)
             SendAttack(settings.AlternateAttackCommand, tgt, priority: null);
+    }
+
+    // Surface a "cannot attack <species>" line once per species this room — the
+    // whole configured combat chain (both weapons + every attack spell) proved
+    // ineffective, so the engine is giving up on it and moving on. Info level so
+    // it shows in the program log the operator watches. The once-per-species guard
+    // keeps a room full of the same immune mob from spamming a line every round.
+    private void AnnounceCannotAttack(string species)
+    {
+        if (string.IsNullOrEmpty(species)) return;
+        if (!_cannotAttackAnnounced.Add(species)) return;
+        _log?.Info(LogCategory, $"cannot attack {species} — nothing in the combat chain can hurt it; moving on");
     }
 
     // "Your fists have no effect" — we're swinging bare-handed (a weapon that

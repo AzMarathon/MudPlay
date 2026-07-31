@@ -123,6 +123,39 @@ public sealed class DeathRecoveryManagerTests
     }
 
     [Fact]
+    public void PartialRecovery_TracksUnrecoveredItems_ClearedOnFullRecovery()
+    {
+        // Report stock-20260730-214157: a record stays Partial when a pile item
+        // never matches a "You pick up X" line, but the UI gave no clue which. The
+        // record now carries the outstanding names so the detail panel can show
+        // exactly what's keeping it Partial.
+        using GraphHarness h = new();
+        h.EnterGates();
+        h.Snapshot = SnapWith(
+            new[] { new EquippedItem("rusty dagger", "Weapon Hand") },
+            new[] { "torch" });
+        h.Recovery.AutoRecover = true;
+        h.Tracker.NoteDeath(2, "You now have 2 lives remaining.");
+        h.EnterGates();   // walk back into the death room → Partial
+
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.NotNull(h.Latest.UnrecoveredItems);
+        Assert.Contains("rusty dagger", h.Latest.UnrecoveredItems!);
+        Assert.Contains("torch", h.Latest.UnrecoveredItems!);
+
+        // Grab one → it drops off the outstanding list; the other still keeps it Partial.
+        h.Recovery.FeedTestLine("You pick up rusty dagger.");
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.DoesNotContain("rusty dagger", h.Latest.UnrecoveredItems!);
+        Assert.Contains("torch", h.Latest.UnrecoveredItems!);
+
+        // Grab the last → Recovered, outstanding list cleared.
+        h.Recovery.FeedTestLine("You pick up torch.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Null(h.Latest.UnrecoveredItems);
+    }
+
+    [Fact]
     public void ReEntry_NoAutoRecover_GoesPartialWithoutGrabbing_ObservedPickupsStillRecover()
     {
         using GraphHarness h = new();

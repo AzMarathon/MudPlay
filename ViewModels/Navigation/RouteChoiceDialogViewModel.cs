@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FujinTerm.Game.Map;
 using FujinTerm.Services;
 
 namespace FujinTerm.ViewModels.Navigation;
@@ -92,20 +93,22 @@ public sealed partial class RouteChoiceDialogViewModel
         Func<int, string?> itemName,
         Func<int, string?>? giveNameForItem = null,
         Func<int, string?>? shopNameForItem = null,
-        Func<int, string?>? dropNameForItem = null)
+        Func<int, string?>? dropNameForItem = null,
+        TimeSpan freeEta = default,
+        TimeSpan gatedEta = default)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
 
         IsTeleportChoice = choice.Kind == RouteChoiceKind.Teleport;
         HasFreeRoute = choice.HasFreeRoute;
-        SendItSummary = $"Direct — send it — {Steps(choice.GatedStepCount)}";
+        SendItSummary = $"Direct — send it — {StepsEta(choice.GatedStepCount, gatedEta)}";
 
         if (IsTeleportChoice)
         {
             Heading = $"Walk or teleport to {destinationLabel}?";
-            FreeSummary = $"Walk it — {Steps(choice.FreeStepCount)}, no teleport";
-            GatedSummary = $"Teleport — {Steps(choice.GatedStepCount)} — much shorter";
+            FreeSummary = $"Walk it — {StepsEta(choice.FreeStepCount, freeEta)}, no teleport";
+            GatedSummary = $"Teleport — {StepsEta(choice.GatedStepCount, gatedEta)} — much shorter";
             TeleportCaveat =
                 $"Teleports via {choice.TeleportLanding ?? "an unknown room"} — a teleport can drop "
                 + "you somewhere deadly (a damaging plane, water with no boat). Whether you survive "
@@ -127,8 +130,8 @@ public sealed partial class RouteChoiceDialogViewModel
             if (HasFreeRoute)
             {
                 Heading = $"Two routes to {destinationLabel}";
-                FreeSummary = $"Free route — {Steps(choice.FreeStepCount)}, no items needed";
-                GatedSummary = $"Direct — acquire then go — {Steps(choice.GatedStepCount)}";
+                FreeSummary = $"Free route — {StepsEta(choice.FreeStepCount, freeEta)}, no items needed";
+                GatedSummary = $"Direct — acquire then go — {StepsEta(choice.GatedStepCount, gatedEta)}";
                 Footnote = "Click a route to preview it on the map, then Go to walk it. "
                     + "\"Acquire then go\" sources any missing gate items first; \"send it\" walks "
                     + "straight through without them.";
@@ -137,7 +140,7 @@ public sealed partial class RouteChoiceDialogViewModel
             {
                 Heading = $"Only route to {destinationLabel} crosses a hazard";
                 FreeSummary = "No hazard-free route — every path there crosses a hazard you must counter";
-                GatedSummary = $"Route — {Steps(choice.GatedStepCount)}";
+                GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
                 Footnote = "Click the route to preview it on the map, then Go to walk it. "
                     + "This is the only way there — Go walks it and stops at the hazard; "
                     + "carry, buy, or use a counter to cross.";
@@ -146,7 +149,7 @@ public sealed partial class RouteChoiceDialogViewModel
             {
                 Heading = $"Only route to {destinationLabel} is gated";
                 FreeSummary = "No open detour — the only way there crosses a gate you must clear yourself";
-                GatedSummary = $"Route — {Steps(choice.GatedStepCount)}";
+                GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
                 Footnote = "Click the route to preview it on the map, then Go to walk it. "
                     + "This is the only way there — Go walks it and stops at the gate; "
                     + "clear what's shown to continue.";
@@ -159,7 +162,15 @@ public sealed partial class RouteChoiceDialogViewModel
         }
     }
 
-    private static string Steps(int n) => n == 1 ? "1 step" : $"{n} steps";
+    // "6 steps (~35s)" — the hop count with an approximate arrival ETA when one
+    // is known (realm-aware per-hop travel plus a lair-fight dwell for each lair
+    // on the route). Falls back to a bare step count when no ETA is supplied
+    // (default TimeSpan.Zero — e.g. the empty free-route sentinel).
+    private static string StepsEta(int n, TimeSpan eta)
+    {
+        string steps = n == 1 ? "1 step" : $"{n} steps";
+        return eta > TimeSpan.Zero ? $"{steps} (~{RouteEtaEstimator.FormatCompact(eta)})" : steps;
+    }
 
     // "a raft (buy at General Store); the iron key; a waterskin (dropped by a
     // sand nomad)" — each requirement is one clause; a hazard's any-of counters

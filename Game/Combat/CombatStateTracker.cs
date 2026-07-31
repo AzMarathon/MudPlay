@@ -67,6 +67,7 @@ public sealed class CombatStateTracker : IDisposable
     private readonly IDisposable _userHitsSub;
     private readonly IDisposable _mobHitsSub;
     private readonly IDisposable _mobMissesSub;
+    private readonly IDisposable _mobAttacksSub;
     private readonly IDisposable _combatStatusSub;
 
     private bool _gateAsserted;
@@ -147,6 +148,15 @@ public sealed class CombatStateTracker : IDisposable
     // still cleared for the new room — see OnEntitiesObserved's RoomChange arm.)
     public event Action<string>? EngagedTargetAbandoned;
 
+    // Fires when a room clears of engageable hostiles and combat truly ends, so a
+    // stealth consumer can drop the sneak/hide the fight spent. Attacking reveals
+    // you (the surprise opener is one-shot — see GAME_MECHANICS), but the stealth
+    // FSM has no line-driven signal for it, so IsSneaking stays stale-true after a
+    // kill. StealthManager subscribes and resets to Idle; raised BEFORE the Combat
+    // gate releases so the walker's pre-move re-sneak sees a clean state and can
+    // re-establish stealth for the step out (report stock-20260730-163044).
+    public event Action? CombatSpentStealth;
+
     public CombatStateTracker(
         MessageRouter router,
         MovementCoordinator coordinator,
@@ -192,10 +202,15 @@ public sealed class CombatStateTracker : IDisposable
         _now         = clock ?? (() => DateTimeOffset.Now);
 
         _classifier.EntitiesObserved += OnEntitiesObserved;
-        _userHitsSub      = router.Subscribe(KnownPatterns.UserHits,    OnAnyCombatLine);
-        _mobHitsSub       = router.Subscribe(KnownPatterns.MobHits,     OnAnyCombatLine);
-        _mobMissesSub     = router.Subscribe(KnownPatterns.MobMisses,   OnAnyCombatLine);
-        _combatStatusSub  = router.Subscribe(KnownPatterns.CombatStatus, OnCombatStatus);
+        _userHitsSub      = router.Subscribe(KnownPatterns.UserHits,      OnAnyCombatLine);
+        _mobHitsSub       = router.Subscribe(KnownPatterns.MobHits,       OnAnyCombatLine);
+        _mobMissesSub     = router.Subscribe(KnownPatterns.MobMisses,     OnAnyCombatLine);
+        // Broad mob-attacks-us line — catches the per-round swings that MobHits /
+        // MobMisses miss on realms whose melee carries no damage number or "at
+        // you", so an active fight keeps refreshing the idle-stall stamp instead
+        // of tripping the watchdog (report stock-20260730-190736).
+        _mobAttacksSub    = router.Subscribe(KnownPatterns.MobAttacksYou, OnAnyCombatLine);
+        _combatStatusSub  = router.Subscribe(KnownPatterns.CombatStatus,  OnCombatStatus);
     }
 
     // Wire the combat-off "clear hostiles when seen Hidden" override:
@@ -439,21 +454,45 @@ public sealed class CombatStateTracker : IDisposable
             if (obs.Source == RoomObservationSource.RoomChange && _gateAsserted)
                 EngagedTargetAbandoned?.Invoke("left a room with an engaged target still alive");
 
-            // targetable>0 here means hostiles remain but none are killable —
-            // release the gate and move past (per the move-past rule). The
-            // "room cleared" wording stays for the genuine empty-room case.
-            ClearGate(targetable > 0
+            // Room is now clear of engageable monsters → combat truly ended. This
+            // is the authoritative "we're out of combat" signal; CombatStatus=Off
+            // is unreliable (the server emits it when we cast a spell mid-round,
+            // with the mob still alive — see OnCombatStatus). Only a room confirmed
+            // clear of engageable hostiles flips it, so HealthManager never rests
+            // next to a live mob.
+            //
+            // Ordering is load-bearing — each step feeds a synchronous downstream
+            // reaction, so the sequence matters:
+            //   1. Drop _gateAsserted first. HasEngageableHostiles is derived from
+            //      it, and step 2's InCombat=false fires HealthManager.Evaluate
+            //      synchronously; if the gate still read asserted there, the rest
+            //      is blocked as "hostile present" and deferred to the next prompt
+            //      tick — a multi-second stall after the room clears (report
+            //      stock-20260730-184622).
+            //   2. Flip InCombat false (+ drop the stealth the fight spent) BEFORE
+            //      the coordinator gate releases the walker, so the pre-move
+            //      re-sneak sees out-of-combat (report stock-20260730-163044).
+            //      CombatSpentStealth only fires when we actually engaged — a pure
+            //      walk-past of an un-actionable room never broke our sneak.
+            //   3. Release the coordinator Combat gate — resumes the walker + its
+            //      pre-move hook now that both InCombat and HasEngageableHostiles
+            //      read clear. Inlined rather than via ClearGate so InCombat can
+            //      flip between the flag drop (1) and the coordinator release (3).
+            // targetable>0 means hostiles remain but none are killable — release
+            // and move past (the move-past rule); the "room cleared" wording is the
+            // genuine empty-room case.
+            string clearReason = targetable > 0
                 ? $"room un-actionable: {targetable} hostile(s), none hittable — moving on"
-                : "room cleared");
-            // Room is now clear of engageable monsters → combat truly
-            // ended. This is the authoritative "we're out of combat"
-            // signal; CombatStatus=Off is unreliable (server emits it
-            // when we cast a spell mid-round, with the mob still
-            // alive — see CombatStateTracker.OnCombatStatus). Tying
-            // the false transition to the gate clear means
-            // HealthManager won't start resting while a hostile mob
-            // is still here.
-            if (_state.InCombat) _state.InCombat = false;
+                : "room cleared";
+            bool wasAsserted = _gateAsserted;
+            _gateAsserted = false;                                        // (1)
+            if (_state.InCombat)
+            {
+                _state.InCombat = false;                                  // (2)
+                CombatSpentStealth?.Invoke();
+            }
+            if (wasAsserted)                                              // (3)
+                _coordinator.ClearGate(MovementCoordinator.CombatGate, AsserterName, clearReason);
         }
     }
 
@@ -558,6 +597,7 @@ public sealed class CombatStateTracker : IDisposable
         _userHitsSub.Dispose();
         _mobHitsSub.Dispose();
         _mobMissesSub.Dispose();
+        _mobAttacksSub.Dispose();
         _combatStatusSub.Dispose();
     }
 }

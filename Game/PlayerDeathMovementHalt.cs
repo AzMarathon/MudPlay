@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using FujinTerm.Game.Combat;
 using FujinTerm.Game.Map;
 using FujinTerm.Services;
@@ -41,6 +42,18 @@ public sealed class PlayerDeathMovementHalt : IDisposable
     private readonly LogService? _log;
     private bool _disposed;
 
+    // Graveyard-resync fallback. On death the tracker goes PendingRespawn and waits
+    // for the graveyard's room display to land as the new authoritative position.
+    // But that display can be slow to arrive on its own (observed ~37s), leaving us
+    // "lost" the whole time (report stock-20260730-194053). If we're still
+    // un-anchored a short window after death, send a bare CR to force the graveyard
+    // to re-display so PendingRespawn's candidate search can land it at once. Fired
+    // as a fallback (not immediately) so it lands after the death teleport settles —
+    // a CR sent mid-sequence could re-display the pre-teleport room and mis-anchor.
+    private static readonly TimeSpan ResyncDelay = TimeSpan.FromSeconds(2.5);
+    private readonly DispatcherTimer _resyncTimer;
+    private Action<byte[]>? _wireResync;
+
     // True only while a death-induced pause is holding. Distinct from "UserGate is
     // asserted" — the user can also pause manually — so the chip can flavour just
     // the death case as "recovering". Auto-cleared when the user resumes.
@@ -60,8 +73,20 @@ public sealed class PlayerDeathMovementHalt : IDisposable
         _coordinator = coordinator;
         _log = log;
 
+        _resyncTimer = new DispatcherTimer { Interval = ResyncDelay };
+        _resyncTimer.Tick += (_, _) => FireGraveyardResync();
+
         _tracker.PlayerDeathObserved += OnPlayerDied;
         _coordinator.GatesChanged += OnGatesChanged;
+    }
+
+    // Bind the wire sender used for the post-death graveyard-resync CR. Until set,
+    // the resync is a no-op (the tracker still lands the graveyard on the next
+    // natural room display, just not hurried along).
+    public void SetWireSender(Action<byte[]> sender)
+    {
+        ArgumentNullException.ThrowIfNull(sender);
+        _wireResync = sender;
     }
 
     private void OnPlayerDied()
@@ -74,7 +99,31 @@ public sealed class PlayerDeathMovementHalt : IDisposable
         SetHaltedForDeath(true);
         _log?.Info(DeathLineWatcher.LogCategory,
             "Movement halted after death — resume from the Navigation window when you're ready to move.");
+
+        // Arm the graveyard-resync fallback: if the respawn room display hasn't
+        // landed us within ResyncDelay, force it with a CR (see the field comment).
+        _resyncTimer.Stop();
+        _resyncTimer.Start();
     }
+
+    // ResyncDelay after death: if the tracker still hasn't anchored the graveyard
+    // (a slow / missed respawn display), send a bare CR to re-display it now so the
+    // PendingRespawn candidate search lands the room. A tick where we've already
+    // anchored is a no-op.
+    private void FireGraveyardResync()
+    {
+        _resyncTimer.Stop();
+        if (_tracker.State.Confidence is not (RoomConfidence.PendingRespawn or RoomConfidence.Lost))
+            return;
+        if (_wireResync is null) return;
+        _wireResync(System.Text.Encoding.Latin1.GetBytes("\r"));
+        _log?.Info(DeathLineWatcher.LogCategory,
+            "Post-death graveyard resync — sent CR to re-observe the respawn room.");
+    }
+
+    // Test seam — fire the resync deterministically (DispatcherTimer doesn't tick
+    // under headless xUnit).
+    internal void FireGraveyardResyncForTests() => FireGraveyardResync();
 
     // The death pause rides UserGate, so the moment the user resumes (clears
     // UserGate through any Navigation affordance) the "recovering" flavour drops.
@@ -96,6 +145,7 @@ public sealed class PlayerDeathMovementHalt : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _resyncTimer.Stop();
         _tracker.PlayerDeathObserved -= OnPlayerDied;
         _coordinator.GatesChanged -= OnGatesChanged;
     }

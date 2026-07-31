@@ -729,7 +729,7 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     private string ResolveDroppedBy(string obtainedFrom)
     {
         if (string.IsNullOrWhiteSpace(obtainedFrom)) return string.Empty;
-        List<string> names = new();
+        List<string> entries = new();
         foreach (string token in obtainedFrom.Split(','))
         {
             string trimmed = token.Trim();
@@ -737,11 +737,16 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             string rest = trimmed[9..]; // skip "Monster #"
             int paren = rest.IndexOf('(');
             string numText = paren >= 0 ? rest[..paren] : rest;
+            // Keep the drop-rate suffix ("(10%)") so the reader sees how likely the
+            // drop is, e.g. "Prismatic Dragon(10%)".
+            string percent = paren >= 0 ? rest[paren..].Trim() : string.Empty;
             if (!int.TryParse(numText.Trim(), out int monsterId)) continue;
             string? name = LookupMonsterName(monsterId);
-            if (!string.IsNullOrEmpty(name) && !names.Contains(name)) names.Add(name);
+            if (string.IsNullOrEmpty(name)) continue;
+            string entry = name + percent;
+            if (!entries.Contains(entry)) entries.Add(entry);
         }
-        return string.Join(", ", names);
+        return string.Join(", ", entries);
     }
 
     private string? LookupMonsterName(int monsterId)

@@ -12,6 +12,11 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Cap glibc malloc arenas early to hold down the long-run native RSS floor
+        // (Linux/glibc only; no-op elsewhere). Done first so it bounds arena growth
+        // before the renderer starts churning text-shaping allocations.
+        NativeHeapTuning.CapMallocArenas();
+
         // Install the crash net before anything can fault. CrashReporter.Guard
         // captures exceptions escaping the UI run loop; Install hooks the
         // out-of-band CLR failure channels. Either way a fatal error lands a

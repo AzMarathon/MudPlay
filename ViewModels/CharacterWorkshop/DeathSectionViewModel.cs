@@ -60,6 +60,32 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         set { if (_recovery.AutoEquip != value) { _recovery.AutoEquip = value; OnPropertyChanged(); } }
     }
 
+    // Recovery-status blurb for the detail panel — the last recovery note, plus
+    // (while still Partial) the pile items not yet seen picked up, so "why is this
+    // Partial?" is answered in-place instead of hidden in a grid-row tooltip
+    // (report stock-20260730-214157). Empty for an Active record with no note.
+    public string RecoveryDetailText
+    {
+        get
+        {
+            if (SelectedRecord is not { } r) return string.Empty;
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(r.RecoveryMessage)) parts.Add(r.RecoveryMessage!);
+            if (r.Status == DeathRecoveryStatus.Partial && r.UnrecoveredItems is { Count: > 0 })
+                parts.Add("Still to recover: " + string.Join(", ", r.UnrecoveredItems));
+            return string.Join("\n", parts);
+        }
+    }
+
+    // Drives the detail panel's recovery section visibility.
+    public bool HasRecoveryDetail => RecoveryDetailText.Length > 0;
+
+    partial void OnSelectedRecordChanged(DeathRecord? value)
+    {
+        OnPropertyChanged(nameof(RecoveryDetailText));
+        OnPropertyChanged(nameof(HasRecoveryDetail));
+    }
+
     // Re-pull observables + record list from the manager.
     public void Refresh()
     {
@@ -73,6 +99,10 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
 
         OnPropertyChanged(nameof(AutoRecover));
         OnPropertyChanged(nameof(AutoEquip));
+        // The pinned record's Status / UnrecoveredItems may have changed without a
+        // reference change, so force the recovery blurb to re-read.
+        OnPropertyChanged(nameof(RecoveryDetailText));
+        OnPropertyChanged(nameof(HasRecoveryDetail));
         ClearAllRecoveredCommand.NotifyCanExecuteChanged();
     }
 
@@ -97,6 +127,15 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         string title = $"How did I Die? — {r.RoomName ?? "Unknown room"} · {r.DiedText}";
         await AppServices.Current.Dialogs
             .OpenWindowAsync<DeathLogViewModel, bool>(new DeathLogViewModel(title, log));
+    }
+
+    // Double-clicking a death row opens/focuses the Navigation window and centres
+    // the map on the death's map/room. No-op when the death room was unknown at
+    // capture (Room is null — the grid shows "—" and there's nowhere to centre).
+    public void ShowSelectedOnMap()
+    {
+        if (SelectedRecord?.Room is not { } room) return;
+        AppServices.Current.NavigateToRoom(new Game.Map.RoomKey(room.Map, room.Room));
     }
 
     [RelayCommand(CanExecute = nameof(CanRecoverSelected))]

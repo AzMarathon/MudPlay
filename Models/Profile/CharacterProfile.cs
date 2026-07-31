@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FujinTerm.Game.Map;
 
 namespace FujinTerm.Models.Profile;
 
@@ -119,6 +120,12 @@ public sealed class CharacterProfile
     // saved bounds, or an expanded min-width clamps the saved (narrower) width
     // back up. Defaults false (expanded) on a fresh profile.
     public bool NavMapCollapsed { get; set; }
+
+    // The Navigation map's lair-highlight mode (the "Lairs" chip cycle:
+    // uniform → heat → count → heat+count → off). Written by NavigationViewModel
+    // whenever the user changes it, read when the window opens so the map paints
+    // lairs the way they left it. Serialized by name, defaults to Uniform.
+    public LairDisplayMode NavLairMode { get; set; } = LairDisplayMode.Uniform;
 
     // Persisted left-pane proportions for resizable two-pane dialogs keyed by
     // stable id (e.g. "MonsterEditDialog"). Each value is the fraction (0.0–1.0)

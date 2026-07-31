@@ -1693,6 +1693,12 @@
     "Priority": "Normal"
   },
   {
+    "Number": 545,
+    "Name": "Old Mother Woodard",
+    "Relationship": "Friend",
+    "Priority": "Normal"
+  },
+  {
     "Number": 547,
     "Name": "necromancer",
     "Relationship": "Enemy",

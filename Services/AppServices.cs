@@ -883,6 +883,11 @@ public sealed class AppServices
     // sitting on a stale entry.
     public Game.Combat.MonsterDeathWatcher MonsterDeath { get; private set; } = null!;
 
+    // Index of monsters whose DeathSpell summons another, + the settle that CR-
+    // rechecks the room on such a kill before the walker moves on.
+    public Game.Combat.MonsterDeathSummonIndex MonsterDeathSummon { get; private set; } = null!;
+    public Game.Combat.SummonOnDeathSettle SummonSettle { get; private set; } = null!;
+
     // Engages a monster hidden by darkness. A dark room prints no "Also here:"
     // line, so the only tell a hostile shares it is the mob's dark-cyan attack
     // line; this watcher reads the name off that line (gated on
@@ -2596,6 +2601,17 @@ public sealed class AppServices
         // room re-display correct any cross-variant ambiguity.
         MonsterDeath = new Game.Combat.MonsterDeathWatcher(
             Router, MonsterMessages, Log);
+        // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
+        // resync handler below: on a kill whose DeathSpell summons, it asserts a
+        // hold + sends a CR to re-scan the room, and that hold has to be in place
+        // before the resync's RemoveDeadEntity clears the Combat gate and steps the
+        // walker (both synchronous). Wire-sender bound per-session by the VM.
+        MonsterDeathSummon = new Game.Combat.MonsterDeathSummonIndex(GameData);
+        SummonSettle = new Game.Combat.SummonOnDeathSettle(
+            MonsterDeath, RoomClassifier, MovementCoordinator, MonsterDeathSummon,
+            currentTargetName: () => Combat.CurrentTarget,
+            movementActive: () => MovementControl.IsActive,
+            log: Log);
         MonsterDeath.MonsterDied += evt =>
         {
             // If the dead monster could drop an item we auto-collect, re-survey
@@ -2768,7 +2784,11 @@ public sealed class AppServices
             // Reverse-flee routing: BFS from the current room back to the active
             // engine's start. No filter so gates / avoided rooms never block an
             // escape — a flee just needs to physically retreat along the graph.
-            findReversePath: (from, to) => Bfs.FindPath(from, to));
+            findReversePath: (from, to) => Bfs.FindPath(from, to),
+            // Defer the flee one UI-thread hop so the round's death line (parsed
+            // after the prompt in the same wire read) settles before we commit —
+            // a killing blow that empties the room then rests instead of running.
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
 
         // Late-wire the classifier's flee probe now that Health exists (it's
         // built after RoomClassifier). While fleeing, a monster that pursues us
@@ -3037,6 +3057,11 @@ public sealed class AppServices
         // Auto-hide is suppressed in a party — a hidden member falls off the
         // Also-here line and can't be single-target-healed/buffed until revealed.
         Stealth.SetPartyCheck(() => PartyState.IsInParty);
+        // Combat spends stealth (attacking reveals you) but emits no line the FSM
+        // can key on, so a room cleared by winning leaves IsSneaking stale-true.
+        // Reset it the instant combat ends — before the Combat gate releases the
+        // walker — so the pre-move re-sneak re-establishes stealth for the step out.
+        CombatTracker.CombatSpentStealth += () => Stealth.NoteCombatEndedStealthReset();
 
         // Backstab window — CombatManager opens with `bs` on the first swing while
         // stealthed: either a sneak-approach into the monster's room, or a monster
@@ -3235,6 +3260,10 @@ public sealed class AppServices
         // — subsequent prompts no-op), so BBS-menu / login time never counts.
         // Same WirePromptScanner the EventScheduler uses for its in-game latch.
         PromptScanner.PromptObserved += _ => TimeAnalysis.NoteInGame();
+        // Same in-game gate resumes the party wall-clock cadences (par poll +
+        // @health) once we're back in the realm after a disconnect — they were
+        // suspended on the drop so nothing leaks into the login-menu nav.
+        PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
         // A fresh character starts disarmed: zero the counters, then Suspend so
         // accrual waits for that character's first in-game prompt. (Disconnect
         // disarms via MainWindowVM; @reset / the window button keep counting.)
@@ -3416,7 +3445,11 @@ public sealed class AppServices
             naming: Currency,
             // Same item-table tiebreaker the ground tracker uses — a stacked
             // denomination-named item ("2 gold key") isn't collected as coin.
-            isKnownItem: IsKnownGroundItem);
+            isKnownItem: IsKnownGroundItem,
+            // Defer the room-survey collect decision one tick so the room's later
+            // "Also here:" hostile line has been parsed before we choose to get vs
+            // hold (report stock-20260730-193107).
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
         // Reset held tallies on profile swap — prior character's
         // counts aren't relevant to the new one.
         Profile.ProfileLoaded += _ => Cash.ResetTallies();
@@ -3942,6 +3975,9 @@ public sealed class AppServices
             // against an inventory it hasn't parsed yet without emitting redundant
             // wears for gear already worn.
             wornLoadoutKnown: () => Inventory.IsLoaded,
+            // Master gate: no per-set AutoMode flag exists, so auto-equip follows
+            // the Auto-All kill-switch — silenced automation means no gear swaps.
+            isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
             log: Log);
 
         // Per-game-data-set loop catalogue. Loops live

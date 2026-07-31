@@ -441,6 +441,12 @@
     "MaxToGet": 1
   },
   {
+    "Number": 593,
+    "Name": "black serpent key",
+    "AutoCollect": true,
+    "MaxToGet": 2
+  },
+  {
     "Number": 595,
     "Name": "path",
     "CannotBeTaken": true

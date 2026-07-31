@@ -266,12 +266,24 @@ public sealed class RouteChoicePlannerTests
         ]
         """;
 
+    // The teleport fixtures all put CMD 5 on 1/1 with an (Item: 5) exit to 1/9; the
+    // Item→Teleport promotion is TBInfo-gated, so a CMD-5 chain that teleports to
+    // 1/9 makes the exit legitimately promote.
+    private const string TeleportTbInfo =
+        """[ { "Number": 5, "Action": "go arch:teleport 9 1\n" } ]""";
+
+    private static void WithTeleportGraph(
+        string roomsJson,
+        Action<BfsMapper, RoomGraphManager, MovementFilter> body)
+        => WithGraph(roomsJson, body, tbInfoJson: TeleportTbInfo);
+
     private static void WithGraph(
         string roomsJson,
         Action<BfsMapper, RoomGraphManager, MovementFilter> body,
         string? spellsJson = null,
         string? itemsJson = null,
-        Action<RoomHazardIndex, MovementFilter>? wireHazards = null)
+        Action<RoomHazardIndex, MovementFilter>? wireHazards = null,
+        string? tbInfoJson = null)
     {
         string root = Path.Combine(Path.GetTempPath(),
             "fujinterm-routechoice-" + Path.GetRandomFileName());
@@ -282,10 +294,24 @@ public sealed class RouteChoicePlannerTests
             File.WriteAllText(Path.Combine(setDir, "Rooms.json"), roomsJson);
             if (spellsJson is not null) File.WriteAllText(Path.Combine(setDir, "Spells.json"), spellsJson);
             if (itemsJson is not null) File.WriteAllText(Path.Combine(setDir, "Items.json"), itemsJson);
+            if (tbInfoJson is not null) File.WriteAllText(Path.Combine(setDir, "TBInfo.json"), tbInfoJson);
 
             GameDataCache cache = new(root);
             cache.SwitchSet("alpha");
-            RoomGraphManager graph = new(cache);
+            // The Item→Teleport promotion is TBInfo-gated: build with a TBInfoStore
+            // when a teleport CMD chain is supplied so the fixture's (Item: N) exit
+            // legitimately promotes.
+            RoomGraphManager graph;
+            if (tbInfoJson is not null)
+            {
+                TBInfoStore tbinfo = new(cache);
+                tbinfo.OnActiveSetChanged("alpha");
+                graph = new(cache, log: null, tbinfo);
+            }
+            else
+            {
+                graph = new(cache);
+            }
             graph.OnActiveSetChanged("alpha");
             BfsMapper bfs = new(graph);
 
@@ -512,7 +538,7 @@ public sealed class RouteChoicePlannerTests
     [Fact]
     public void OffersTeleportChoice_WhenTeleportShortcuts_AndWalkExists()
     {
-        WithGraph(TeleportShortcutJson, (bfs, graph, filter) =>
+        WithTeleportGraph(TeleportShortcutJson, (bfs, graph, filter) =>
         {
             RouteChoice? choice = RouteChoicePlanner.EvaluateTeleport(
                 bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
@@ -551,7 +577,7 @@ public sealed class RouteChoicePlannerTests
     [Fact]
     public void NoTeleportChoice_WhenTeleportIsOnlyRoute()
     {
-        WithGraph(TeleportOnlyJson, (bfs, graph, filter) =>
+        WithTeleportGraph(TeleportOnlyJson, (bfs, graph, filter) =>
         {
             RouteChoice? choice = RouteChoicePlanner.EvaluateTeleport(
                 bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
@@ -565,7 +591,7 @@ public sealed class RouteChoicePlannerTests
     [Fact]
     public void NoTeleportChoice_WhenTeleportSavesOnlyOneStep()
     {
-        WithGraph(TeleportSavesOneJson, (bfs, graph, filter) =>
+        WithTeleportGraph(TeleportSavesOneJson, (bfs, graph, filter) =>
         {
             RouteChoice? choice = RouteChoicePlanner.EvaluateTeleport(
                 bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
@@ -582,7 +608,7 @@ public sealed class RouteChoicePlannerTests
     [Fact]
     public void Bfs_RefuseTeleports_ReturnsWalkingRouteNotTeleport()
     {
-        WithGraph(TeleportShortcutJson, (bfs, graph, _) =>
+        WithTeleportGraph(TeleportShortcutJson, (bfs, graph, _) =>
         {
             IReadOnlyList<Direction>? tele = bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 9), null);
             Assert.NotNull(tele);

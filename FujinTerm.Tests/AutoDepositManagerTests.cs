@@ -662,6 +662,46 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Equal(2, fires);
     }
 
+    [Fact]
+    public void RerouteCompletesWithoutDepositing_ReArmsGate_NotWedged()
+    {
+        // A reroute that reaches the bank but banks nothing (everything is under
+        // the KeepOnHand floor) still leaves the gate above threshold. The
+        // single-fire guard must re-arm on the return leg so a later crossing
+        // retries — otherwise it wedges for the session and the character loops
+        // forever, full and never depositing (report paradigm-20260730-125716).
+        using Harness h = NewHarness();
+        StartLair(h);
+        h.Settings.BankRoomKey = "1/3";
+        h.Banks.Add(new RoomKey(1, 3));
+        h.Settings.AutoDepositIfCoinsExceed = 1;
+        h.Settings.KeepOnHandWealth = 10_000;      // nothing lands above the floor
+
+        DateTime now = DateTime.UtcNow;
+        h.Cash.AutoDepositClock = () => now;
+        int fires = 0;
+        h.Cash.AutoDepositRequested += _ => fires++;
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Assert.Equal(1, fires);
+
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        DeliverBankInventory(h);
+        Assert.Empty(h.DepositLines());            // nothing above keep → no dep
+
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 1));              // walked back
+        Assert.True(h.Lair.IsActive);              // engine resumed
+        Assert.False(h.AutoDeposit.IsRerouting);
+
+        // Still over the gate. Past the retry cooldown the RE-ARMED guard fires
+        // again rather than staying wedged from the first crossing.
+        now = now.AddMinutes(2);
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Assert.Equal(2, fires);
+    }
+
     // Report #5 / #1: a manual Stop mid-reroute must tear the reroute down so a
     // later walker Finished (from whatever the user starts next) can't fire
     // Resume() and resurrect the pre-detour engine — and it must re-arm the

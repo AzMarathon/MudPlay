@@ -121,6 +121,13 @@ public static class DefaultPatterns
             @"^The (?<target>[\w -]+) \w+ at you\b");
         yield return new RegexPattern(KnownPatterns.MobHits,
             @"^The (?<target>[\w -]+) \w+ you for (?<damage>\d+) damage!");
+        // Broad "the mob just attacked us" activity signal — see
+        // KnownPatterns.MobAttacksYou. Matches "The <mob> <verb> you..." with any
+        // (or no) tail, so a fight whose swings are armour-deflected or carry no
+        // damage number still registers as combat activity for the idle-stall
+        // watchdog. Not used for stats; deliberately broader than MobHits/MobMisses.
+        yield return new RegexPattern(KnownPatterns.MobAttacksYou,
+            @"^The [\w -]+ \w+ you\b");
         yield return new RegexPattern(KnownPatterns.UserGainExperience,
             @"^You gain (?<exp>\d+) experience\.");
         // The local player's own swing missing. On the live realm a whiff
@@ -663,14 +670,30 @@ public static class DefaultPatterns
             @"\bbashed the (?:door|gate) open\b");
         yield return new RegexPattern(KnownPatterns.DoorBashFailure,
             @"\battempts? to bash through fails?\b");
+        // Picklock success. The live stock wording is PAST tense —
+        // "You successfully unlocked the door." — which is the same phrasing the
+        // use-key path emits (DoorKeyUnlockSuccess). Both patterns match that
+        // line and the FSM disambiguates by state (OnPickSuccess acts only in
+        // WaitingPick, OnKeyUnlockSuccess only in WaitingUseKey). Present-tense
+        // "unlock(s)" is kept for realms that phrase it that way. Matching only
+        // present tense left the pick success unseen, stranding the FSM in
+        // WaitingPick (report stock-20260730-182812).
         yield return new RegexPattern(KnownPatterns.DoorPickSuccess,
-            @"\bsuccessfully unlocks? the (?:door|gate)\b");
+            @"\bsuccessfully unlock(?:s|ed)? the (?:door|gate)\b",
+            options: RegexOptions.IgnoreCase);
         yield return new RegexPattern(KnownPatterns.DoorPickFailure,
             @"\b(?:lockpicking )?skill fails you\b");
         yield return new RegexPattern(KnownPatterns.DoorPickNotLocked,
             @"\b(?:door|gate|exit|passage) (?:was|is) not locked\b");
+        // Open confirmation. The live stock reply to `open <dir>` is
+        // "You open the door." — NOT "The door is now open." (kept as an
+        // alternative for realms/contexts that phrase it that way). Without the
+        // "you open the" form the FSM stalled in WaitingOpen after a pick/key
+        // unlock, since the open was never confirmed (report
+        // stock-20260730-182812).
         yield return new RegexPattern(KnownPatterns.DoorOpenedNow,
-            @"\b(?:door|gate) is now open\b");
+            @"\byou open the (?:door|gate)\b|\b(?:door|gate) is now open\b",
+            options: RegexOptions.IgnoreCase);
         yield return new RegexPattern(KnownPatterns.DoorAlreadyOpen,
             @"\b(?:door|gate) is already open\b");
         yield return new RegexPattern(KnownPatterns.DoorIsLocked,

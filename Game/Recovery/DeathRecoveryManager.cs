@@ -298,6 +298,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         AddNames(_remaining, record.EquippedAtDeath);
         AddNames(_remaining, record.LostItems);
         _recoveryTotal = _remaining.Count;
+        record.UnrecoveredItems = _remaining.Count > 0 ? new List<string>(_remaining) : null;
 
         bool known = record.EquippedAtDeath is not null || record.LostItems is not null;
         if (known && _recoveryTotal == 0)
@@ -349,7 +350,17 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         }
 
         if (_remaining.Count == 0)
+        {
             FinalizeRecovered(record, $"Recovered {_recoveryTotal} item(s).");
+            return;
+        }
+
+        // Still items outstanding — snapshot them onto the record + persist +
+        // notify so the detail panel shows exactly what's keeping this Partial
+        // (report stock-20260730-214157).
+        record.UnrecoveredItems = new List<string>(_remaining);
+        _profile.Save();
+        OnPropertyChanged(nameof(Records));
     }
 
     // Whole-word containment (case-insensitive): true when needle appears in
@@ -379,6 +390,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         _activeRecovery = null;
         _remaining.Clear();
+        record.UnrecoveredItems = null;   // everything accounted for
         SetStatus(record, DeathRecoveryStatus.Recovered, message);
     }
 

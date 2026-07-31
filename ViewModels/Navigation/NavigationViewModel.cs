@@ -31,6 +31,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_services.Profile.Current is { NavMapCollapsed: true })
             _mapExpanded = false;
 
+        // Restore the lair-highlight mode the user last left. Seed the backing
+        // field directly so this doesn't loop back through OnLairModeChanged and
+        // re-save during construction.
+        if (_services.Profile.Current is { } lairProfile)
+            _lairMode = lairProfile.NavLairMode;
+
         // 1 s tick — keeps the CURRENT NAV lair countdowns + the
         // BUILDING-LAIR strip in sync as time passes. Only runs while
         // the user cares (build mode OR active run); idle Navigation
@@ -552,11 +558,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     public string LairButtonLabel => LairMode switch
     {
-        LairDisplayMode.Heat  => "Lairs: heat",
-        LairDisplayMode.Count => "Lairs: count",
-        LairDisplayMode.Off   => "Lairs: off",
-        _                     => "Lairs",
+        LairDisplayMode.Heat      => "Lairs: heat",
+        LairDisplayMode.Count     => "Lairs: count",
+        LairDisplayMode.HeatCount => "Lairs: heat+count",
+        LairDisplayMode.Off       => "Lairs: off",
+        _                         => "Lairs",
     };
+
+    // Persist the lair-highlight mode per-character so the map reopens the way
+    // the user left it. Write-through-on-change, mirroring OnMapExpandedChanged.
+    partial void OnLairModeChanged(LairDisplayMode value)
+    {
+        if (_services.Profile.Current is not { } profile) return;
+        if (profile.NavLairMode == value) return;
+        profile.NavLairMode = value;
+        _services.Profile.Save();
+    }
 
     [ObservableProperty] private bool _highlightShops = true;
     [ObservableProperty] private bool _highlightSpells = true;
@@ -583,7 +600,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         LairDisplayMode.Uniform => LairDisplayMode.Heat,
         LairDisplayMode.Heat    => LairDisplayMode.Count,
-        LairDisplayMode.Count   => LairDisplayMode.Off,
+        LairDisplayMode.Count   => LairDisplayMode.HeatCount,
+        LairDisplayMode.HeatCount => LairDisplayMode.Off,
         _                       => LairDisplayMode.Uniform,
     };
     [RelayCommand] private void ToggleShops()  => HighlightShops  = !HighlightShops;
@@ -778,6 +796,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private RoomKey? _queuedDestination;
 
     partial void OnQueuedDestinationChanged(RoomKey? value) => RefreshPreviewPath();
+    // Drop the armed preview the instant a walk starts (the live WalkPath takes
+    // over), and restore it if the walk stops with a destination still armed.
+    partial void OnIsWalkingChanged(bool value) => RefreshPreviewPath();
 
     // Red preview line drawn on the map while a destination is queued but not
     // yet running. Bound to MapControl.PreviewPath. Cleared when no
@@ -788,7 +809,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     private void RefreshPreviewPath()
     {
-        if (Graph is null
+        // While a walk is underway the live WalkPath is the route the walker will
+        // actually take (it honours the walk's no-teleport / gate choices); the
+        // armed-destination preview is redundant and would otherwise redraw a
+        // teleport-allowed line on every room change over the top of it (the stale
+        // "preview through a teleport" left behind on a no-teleport walk).
+        if (IsWalking
+            || Graph is null
             || CurrentRoomKey is not { } src
             || QueuedDestination is not { } dest
             || src.Equals(dest))
@@ -2577,16 +2604,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             includeLairDwell: _services.IsAutoCombatEnabled);
     }
 
-    // Compact ETA phrasing for the walk-to status: seconds under a minute,
-    // "Nm" / "Nm Ss" beyond it.
-    private static string FormatEta(TimeSpan eta)
-    {
-        if (eta <= TimeSpan.Zero) return "0s";
-        int totalSeconds = (int)System.Math.Round(eta.TotalSeconds);
-        if (totalSeconds < 60) return $"{totalSeconds}s";
-        int m = totalSeconds / 60, s = totalSeconds % 60;
-        return s == 0 ? $"{m}m" : $"{m}m {s}s";
-    }
+    private static string FormatEta(TimeSpan eta) => RouteEtaEstimator.FormatCompact(eta);
 
     // Shared walk-to progress readout — the sailing countdown, or the
     // "Walking to X on step A of B, remaining C, ~ETA to arrive" line. Reused by a

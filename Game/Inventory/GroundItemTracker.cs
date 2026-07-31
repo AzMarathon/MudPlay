@@ -59,6 +59,10 @@ public sealed class GroundItemTracker : IDisposable
     // cleared on room change.
     public IReadOnlyList<string> Items => _items;
 
+    // Fires after a "You notice" survey rebuilds Items — the floor list is now
+    // current. A get-all that found an empty cache can re-survey and grab on this.
+    public event Action? SurveyUpdated;
+
     // Bind the per-session LineExtractor so the tracker can stitch a wrapped
     // "You notice" survey back together — same shape as AutoGetItemsManager /
     // the CashManager.
@@ -141,6 +145,7 @@ public sealed class GroundItemTracker : IDisposable
             if (IsCashEntry(entry)) continue;
             _items.Add(entry);
         }
+        SurveyUpdated?.Invoke();
     }
 
     // Split "a, b and c" survey wording into individual entries — commas

@@ -299,6 +299,60 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("giant rat", debuff.Value.Target);
     }
 
+    // ----- physical-first: weapon exhausted before spells -------------
+
+    [Fact]
+    public void PhysicalFirst_ExhaustsWeaponBeforeFallingToSpell()
+    {
+        // Physical-first with a caster: the weapon must be GENUINELY exhausted
+        // before the spell cascade is reached. On the first alt no-effect the
+        // engine force-retries the weapon (not the spell); only once THAT also
+        // fails does it cast the attack spell.
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.PhysicalFirst;
+        h.Settings.NormalWeapon = "sword";
+        h.Settings.AlternateWeapon = "hammer";
+        h.Settings.AlternateAttackCommand = "aa";
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "lightning", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");                             // swings weapon (physical-first)
+        Assert.Equal("a giant rat", h.LastSent);
+
+        h.Feed("Your weapon has no effect against this monster!");   // normal → swap to alt
+        h.Feed("Your weapon has no effect against this monster!");   // alt 1st → force-retry the WEAPON
+        Assert.Equal("aa giant rat", h.LastSent);
+        Assert.DoesNotContain("lightning giant rat", h.AllSent);     // spell not reached yet
+
+        h.Feed("Your weapon has no effect against this monster!");   // alt 2nd → weapon out → spell
+        Assert.Equal("lightning giant rat", h.LastSent);
+    }
+
+    [Fact]
+    public void ManaStuck_WeaponOut_MovesOnNow_ButStaysRetryableUntilManaRegens()
+    {
+        // Weapons can't hit and MA is below the spell's cast floor: the mob is
+        // un-actionable THIS round (the walker moves on rather than stand getting
+        // beaten waiting for a mana tick) — but NOT permanently. Once MA regens
+        // above the floor it reads actionable again, so the cast chain is retried.
+        using Harness h = new();
+        h.Settings.NormalWeapon = "sword";
+        h.Settings.AlternateWeapon = "hammer";
+        h.Settings.AlternateAttackCommand = "aa";
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "lightning", MinManaPerCast = 50 };
+        h.Ma = 10; h.MaxMa = 100;                                    // below the cast floor
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");                            // spell can't fire → swings
+
+        h.Feed("Your weapon has no effect against this monster!");   // normal → alt
+        h.Feed("Your weapon has no effect against this monster!");   // alt 1st → retry
+        h.Feed("Your weapon has no effect against this monster!");   // alt 2nd → weapon out
+
+        Assert.False(h.Combat.CanEngageMonster(1));                  // can't act now → move on
+        h.Ma = 100;                                                 // MA regenerates
+        Assert.True(h.Combat.CanEngageMonster(1));                  // castable again → retry
+    }
+
     // ----- heartbeat keeps the cast going each round -------------------
 
     [Fact]

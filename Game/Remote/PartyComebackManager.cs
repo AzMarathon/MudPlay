@@ -64,6 +64,14 @@ public sealed class PartyComebackManager : IDisposable
     // false-matches an unrelated telepath containing a "map N, room M" phrase.
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(20);
 
+    // On a member's return we first send a bare CR to re-observe our room (they
+    // re-enter where they left — our room if we haven't moved) and let the
+    // "Also here:" re-display drive AutoPartyManager's invite-on-seen. Only if they
+    // haven't rejoined by the time this elapses did they re-enter elsewhere — then
+    // we fall back to the @where probe. Long enough to cover the CR round-trip +
+    // the invite/follow-confirm handshake (report stock-20260730-193610).
+    private static readonly TimeSpan CrRecoverFallback = TimeSpan.FromSeconds(3);
+
     // Pulls the map/room numbers out of a @where reply
     // ("{Throne Room (map 9, room 1012); exits: ...}"). PartyEssentialHandlers
     // fixes that wording, so this parse tracks it.
@@ -80,6 +88,11 @@ public sealed class PartyComebackManager : IDisposable
     private readonly BfsMapper _bfs;
     private readonly LogService? _log;
     private readonly DispatcherTimer _followTimer;
+    // Fires the @where fallback if a returned member hasn't rejoined after the CR
+    // re-observe window. _crPendingName is the member we're giving the CR path a
+    // chance to recover (null when none pending).
+    private readonly DispatcherTimer _crFallbackTimer;
+    private string? _crPendingName;
     private readonly WireSender _wire = new();
     private readonly List<IDisposable> _subs = new();
 
@@ -157,6 +170,8 @@ public sealed class PartyComebackManager : IDisposable
 
         _followTimer = new DispatcherTimer { Interval = FollowTimeout };
         _followTimer.Tick += OnFollowTimeout;
+        _crFallbackTimer = new DispatcherTimer { Interval = CrRecoverFallback };
+        _crFallbackTimer.Tick += (_, _) => FireCrFallback();
 
         _walker.Event += OnWalkEvent;
         _party.MemberFollowConfirmed += OnMemberFollowConfirmed;
@@ -206,6 +221,7 @@ public sealed class PartyComebackManager : IDisposable
         _subs.Clear();
         _followTimer.Stop();
         _followTimer.Tick -= OnFollowTimeout;
+        _crFallbackTimer.Stop();
     }
 
     // ----- @comeback (path A) ----------------------------------------
@@ -226,10 +242,56 @@ public sealed class PartyComebackManager : IDisposable
         if (_busy) return;                 // a recovery is already running
         if (MemberInParty(given)) return;  // already back with us
         if (!_wire.IsBound) return;        // can't probe without a wire
+
+        // Re-observe our room before spending a @where round-trip: a member who
+        // re-enters the realm lands back where they left, so if we haven't moved
+        // they're standing in our room. A bare CR re-displays it, and the
+        // "Also here: <member>" line drives AutoPartyManager's invite-on-seen —
+        // recovering them with no @where (report stock-20260730-193610). If they
+        // haven't rejoined when CrRecoverFallback elapses, they re-entered
+        // elsewhere and FireCrFallback sends the @where. One CR recovery in flight
+        // at a time; a second concurrent return goes straight to the probe.
+        if (_crPendingName is null)
+        {
+            _crPendingName = given;
+            _wire.Send("");   // bare CR — re-display the current room
+            _crFallbackTimer.Stop();
+            _crFallbackTimer.Start();
+            _log?.Info(LogCategory,
+                $"{given} re-entered the realm — CR to re-observe our room before probing @where.");
+            return;
+        }
+        ProbeWhere(given);
+    }
+
+    // CR re-observe window elapsed. If the member rejoined via invite-on-seen they
+    // were in our room — nothing to do; otherwise they re-entered elsewhere, so
+    // fall back to the @where probe.
+    private void FireCrFallback()
+    {
+        _crFallbackTimer.Stop();
+        string? given = _crPendingName;
+        _crPendingName = null;
+        if (given is null) return;
+        if (MemberInParty(given))
+        {
+            _log?.Info(LogCategory, $"{given} rejoined after the CR — no @where needed.");
+            return;
+        }
+        if (_busy || !_wire.IsBound) return;
+        ProbeWhere(given);
+    }
+
+    // Test seam — fire the CR-recover fallback deterministically (the DispatcherTimer
+    // doesn't tick under headless xUnit).
+    internal void FireCrFallbackForTests() => FireCrFallback();
+
+    private void ProbeWhere(string given)
+    {
         PruneProbes();
         _pendingProbes[given] = NowProvider();
         _wire.Send($"/{given} @where");
-        _log?.Info(LogCategory, $"{given} re-entered the realm — probing @where for recovery.");
+        _log?.Info(LogCategory, $"{given} not recovered by CR — probing @where for recovery.");
     }
 
     private void OnTelepathIn(MatchResult result)

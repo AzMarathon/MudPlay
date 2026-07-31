@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using FujinTerm.Game;
 using FujinTerm.Game.Map;
 using FujinTerm.Services;
@@ -23,7 +25,11 @@ public sealed class PlayerDeathMovementHaltTests
         [
           { "Number": 1, "Name": "Start", "Map": 1, "Light": 0, "Shop": 0,
             "Lair": "", "Delay": 5,
-            "N": "0", "S": "0", "E": "0", "W": "0",
+            "N": "2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Number": 2, "Name": "Graveyard", "Map": 1, "Light": 0, "Shop": 0,
+            "Lair": "", "Delay": 5,
+            "N": "0", "S": "1", "E": "0", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
         ]
         """;
@@ -33,6 +39,7 @@ public sealed class PlayerDeathMovementHaltTests
         public MovementCoordinator Coord { get; } = new();
         public PlayerDeathMovementHalt Halt { get; }
         public int FlavourChanges { get; private set; }
+        public List<byte[]> Sent { get; } = new();
 
         public Harness()
         {
@@ -46,6 +53,7 @@ public sealed class PlayerDeathMovementHaltTests
 
             Tracker = new RoomTracker(graph);
             Halt = new PlayerDeathMovementHalt(Tracker, Coord);
+            Halt.SetWireSender(Sent.Add);
             Halt.HaltedForDeathChanged += () => FlavourChanges++;
         }
 
@@ -53,6 +61,9 @@ public sealed class PlayerDeathMovementHaltTests
         // watcher never sees. RoomTracker.NoteDeath fires PlayerDeathObserved
         // regardless of phrasing.
         public void Die() => Tracker.NoteDeath(6, "You have 6 lives left.");
+
+        public bool SentCarriageReturn =>
+            Sent.Exists(b => Encoding.Latin1.GetString(b) == "\r");
 
         public void Dispose()
         {
@@ -155,6 +166,36 @@ public sealed class PlayerDeathMovementHaltTests
         h.Die();
 
         Assert.True(h.Halt.HaltedForDeath);
+    }
+
+    [Fact]
+    public void GraveyardResync_StillPendingRespawn_SendsCr()
+    {
+        // Report stock-20260730-194053: after death the respawn room display can be
+        // slow, leaving us "lost". If we're still un-anchored when the resync
+        // fallback fires, a CR forces the graveyard to re-display so PendingRespawn's
+        // candidate search can land it.
+        using Harness h = new();
+        h.Die();
+        Assert.Equal(RoomConfidence.PendingRespawn, h.Tracker.State.Confidence);
+        Assert.False(h.SentCarriageReturn);   // armed, not fired yet
+
+        h.Halt.FireGraveyardResyncForTests();
+
+        Assert.True(h.SentCarriageReturn);
+    }
+
+    [Fact]
+    public void GraveyardResync_NoWireSender_NoThrow()
+    {
+        // Unbound sender (pre-connect) → the resync is a silent no-op, never a throw.
+        using Harness h = new();
+        var halt = new PlayerDeathMovementHalt(h.Tracker, h.Coord);   // no SetWireSender
+        h.Tracker.NoteDeath(6, "You have 6 lives left.");
+
+        halt.FireGraveyardResyncForTests();   // must not throw
+
+        halt.Dispose();
     }
 
     [Fact]

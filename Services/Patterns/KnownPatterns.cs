@@ -59,6 +59,18 @@ public static class KnownPatterns
     public const string UserHits             = "combat.user-hits";
     public const string MobMisses            = "combat.mob-misses";
     public const string MobHits              = "combat.mob-hits";
+
+    // A mob melee attack landing ON us, regardless of outcome — "The <mob> <verb>
+    // you...", covering hits without a "for N damage" tail ("...slashes you with
+    // their shortsword!") and armour-deflected / non-damage swings ("...slashes
+    // you, but your armour deflects the blow!") that MobHits (needs "for N
+    // damage") and MobMisses (needs "at you") both miss. Deliberately broad and
+    // used ONLY as an idle-stall combat-activity signal (CombatStateTracker) — NOT
+    // counted for hit/miss stats. Keeps the stall watchdog from mistaking an
+    // active fight (whose per-round lines don't match the stricter patterns) for
+    // an empty, stuck-gate room and abandoning the fight (report
+    // stock-20260730-190736).
+    public const string MobAttacksYou        = "combat.mob-attacks-you";
     public const string UserGainExperience   = "combat.user-gain-experience";
 
     // The local player's own swing MISSING. On the live realm a whiff prints the
@@ -411,10 +423,10 @@ public static class KnownPatterns
     // verbs.
     public const string DoorBashSuccess       = "door.bash.success";       // "you bashed the door open" / "bashed the gate open"
     public const string DoorBashFailure       = "door.bash.failure";       // "your attempts to bash through fail"
-    public const string DoorPickSuccess       = "door.pick.success";       // "you successfully unlock the door"
+    public const string DoorPickSuccess       = "door.pick.success";       // "you successfully unlocked the door" (also present-tense "unlock(s)")
     public const string DoorPickFailure       = "door.pick.failure";       // "your lockpicking skill fails you"
     public const string DoorPickNotLocked     = "door.pick.notlocked";     // "was not locked"
-    public const string DoorOpenedNow         = "door.opened.now";         // "is now open" (after open)
+    public const string DoorOpenedNow         = "door.opened.now";         // "you open the door" (also "is now open") — after open
     public const string DoorAlreadyOpen       = "door.opened.already";     // "is already open"
     public const string DoorIsLocked          = "door.islocked";           // "is locked" (open hit a keyed door)
     public const string DoorKeyUnlockSuccess  = "door.key.unlocked";       // "successfully unlocked" (after use <key> <dir>)

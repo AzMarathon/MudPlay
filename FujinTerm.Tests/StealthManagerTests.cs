@@ -486,6 +486,106 @@ public sealed class StealthManagerTests
         Assert.Empty(h.Sent);
     }
 
+    // ----- combat-spent stealth reset (report stock-20260730-163044) --
+
+    [Fact]
+    public void CombatEndedReset_FromSneaking_DropsToIdle()
+    {
+        // Attacking spends the sneak but emits no line the FSM keys on, so
+        // IsSneaking is stale-true after a kill. The reset drops it to Idle
+        // without sending anything (the re-sneak is the pre-move hook's job).
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Feed("Sneaking...");
+        Assert.Equal(StealthState.Sneaking, h.Stealth.State);
+
+        h.Stealth.NoteCombatEndedStealthReset();
+
+        Assert.Equal(StealthState.Idle, h.Stealth.State);
+        Assert.False(h.State.IsSneaking);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void CombatEndedReset_ThenPreMove_ReSneaksBeforeLeaving()
+    {
+        // The reported bug end-to-end: sneak-approach a room, fight it clear,
+        // then step out. Without the reset the pre-move hook sees a stale
+        // Sneaking and no-ops (never re-sneaking); with it, the walker's
+        // pre-move `sn` re-establishes stealth for the move out.
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Feed("Sneaking...");                     // approached under sneak
+        h.State.InCombat = true;                   // engaged the room's hostile
+
+        // Room clears: combat tracker flips InCombat false, then resets stealth,
+        // then the walker's pre-move hook fires as it steps out.
+        h.State.InCombat = false;
+        h.Stealth.NoteCombatEndedStealthReset();
+        h.Stealth.RequestPreMoveStealth();
+
+        Assert.Single(h.Sent);
+        Assert.Equal("sn", h.LastSent());
+        Assert.Equal(StealthState.AttemptingSneak, h.Stealth.State);
+    }
+
+    [Fact]
+    public void CombatEndedReset_WhenNotSneaking_NoOp()
+    {
+        // Never engaged under stealth (Idle) → nothing to reset, no transition.
+        using AutoHarness h = new() { AutoSneakOn = true };
+        Assert.Equal(StealthState.Idle, h.Stealth.State);
+
+        h.Stealth.NoteCombatEndedStealthReset();
+
+        Assert.Equal(StealthState.Idle, h.Stealth.State);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void CombatEndedReset_ThenPreMove_NpcPresent_NoReSneak()
+    {
+        // A friendly NPC left in the cleared room still blocks sneak — the
+        // post-combat re-sneak must stay suppressed rather than burn a doomed sn.
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Stealth.SetSneakBlockCheck(() => true);
+        h.Feed("Sneaking...");
+
+        h.Stealth.NoteCombatEndedStealthReset();
+        h.Stealth.RequestPreMoveStealth();
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(StealthState.Idle, h.Stealth.State);
+    }
+
+    [Fact]
+    public void CombatEndedReset_ThenPreMove_NoDoubleSneak()
+    {
+        // The reactive room-change path and the pre-move path can both fire for
+        // the same step-out; the settled-state guard keeps it to one `sn`.
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Feed("Sneaking...");
+
+        h.Stealth.NoteCombatEndedStealthReset();
+        h.Stealth.RequestPreMoveStealth();
+        Assert.Single(h.Sent);
+
+        h.Stealth.RequestPreMoveStealth();
+        Assert.Single(h.Sent);
+    }
+
+    [Fact]
+    public void CombatEndedReset_FromHidden_DropsHide()
+    {
+        // Combat reveals a hidden opener too — drop the optimistic hidden state.
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Stealth.NoteHideConfirmed();
+        Assert.Equal(StealthState.Hidden, h.Stealth.State);
+
+        h.Stealth.NoteCombatEndedStealthReset();
+
+        Assert.Equal(StealthState.Idle, h.Stealth.State);
+        Assert.False(h.State.IsHidden);
+    }
+
     [Fact]
     public void AutoHide_NoteIdle_SendsHide()
     {

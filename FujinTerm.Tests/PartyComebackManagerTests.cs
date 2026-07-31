@@ -388,12 +388,39 @@ public sealed class PartyComebackManagerTests : IDisposable
         StartLair(h);
 
         // Tank followed us, dropped, and re-enters the realm inside the grace
-        // window → PartyManager raises MemberReturned → we telepath @where.
+        // window → PartyManager raises MemberReturned → we first send a bare CR to
+        // re-observe our room (report 193610), NOT @where yet.
         h.Router.Dispatch(Line("Tank started to follow you."));
         h.Router.Dispatch(Line("Tank just disconnected!!!."));
         h.Router.Dispatch(Line("Tank just entered the Realm."));
 
+        Assert.False(Sent(h, "/Tank @where"));   // held — CR re-observe first
+
+        // Tank didn't rejoin via invite-on-seen (re-entered elsewhere), so the
+        // fallback fires the @where probe.
+        h.Comeback.FireCrFallbackForTests();
         Assert.True(Sent(h, "/Tank @where"));
+    }
+
+    [Fact]
+    public void MemberReturns_RejoinsAfterCr_NoWhereProbe()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        StartLair(h);
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank just disconnected!!!."));
+        h.Router.Dispatch(Line("Tank just entered the Realm."));
+        Assert.False(Sent(h, "/Tank @where"));    // CR re-observe first
+
+        // Tank was standing in our room; the CR's "Also here:" drove
+        // AutoPartyManager's invite-on-seen and Tank re-followed — so by the time
+        // the fallback fires he's back in the party and no @where is spent.
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Comeback.FireCrFallbackForTests();
+
+        Assert.False(Sent(h, "/Tank @where"));
     }
 
     [Fact]
@@ -406,6 +433,8 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Router.Dispatch(Line("Tank started to follow you."));
         h.Router.Dispatch(Line("Tank just disconnected!!!."));
         h.Router.Dispatch(Line("Tank just entered the Realm."));
+        // CR re-observe found no Tank in our room → fallback fires the @where probe.
+        h.Comeback.FireCrFallbackForTests();
         // Leader probed @where; Tank answers with their location.
         h.Router.Dispatch(Line("Tank telepaths: Throne Room (map 1, room 3); exits: north"));
 

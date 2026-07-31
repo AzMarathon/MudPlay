@@ -784,30 +784,49 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.Equal(997, room!.Cmd);
     }
 
+    private const string ItemCmdRooms = """
+        [
+          { "Map Number": 7, "Room Number": 130, "Name": "Grove",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 5, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "7/131 (Item: 474)", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     [Fact]
-    public void Item_OnExit_WithCmdOnSourceRoom_PromotesToTeleport()
+    public void Item_OnExit_WithCmdTeleportingToTarget_PromotesToTeleport()
     {
-        // Source room CMD=5 + (Item: 474) on the exit → Teleport.
-        const string json = """
-            [
-              { "Map Number": 7, "Room Number": 130, "Name": "Grove",
-                "Light": 0, "Shop": 0, "Spell": 0, "CMD": 5, "Lair": "",
-                "Delay": 5,
-                "N": "0", "S": "0", "E": "0", "W": "0",
-                "NE": "0", "NW": "0", "SE": "7/131 (Item: 474)", "SW": "0",
-                "U": "0", "D": "0" }
-            ]
+        // Source room CMD=5 whose TBInfo chain teleports to the (Item: 474) exit's
+        // target (7/131) → the item-gated exit is re-hinted Teleport (a real
+        // party-breaking emblem/chime teleport).
+        const string tbInfo = """
+            [ { "Number": 5, "Action": "wave emblem:teleport 131 7\n" } ]
             """;
-        SeedRooms("alpha", json);
-        GameDataCache cache = NewCache();
-        cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
-        graph.OnActiveSetChanged("alpha");
+        var (graph, _) = BuildWithTbInfo("alpha", ItemCmdRooms, tbInfo);
 
         Room? room = graph.GetRoom(new RoomKey(7, 130));
         Assert.NotNull(room);
         Assert.True(room!.Exits.TryGetValue(Direction.SE, out RoomExit ex));
         Assert.Equal(RoomExitHint.Teleport, ex.Hint);
+        Assert.Equal(474, ex.KeyItemId);
+    }
+
+    [Fact]
+    public void Item_OnExit_WithCmdNotTeleportingToTarget_StaysItem()
+    {
+        // Regression (report paradigm-20260729-221044): a non-zero CMD that is NOT
+        // a teleport to the exit's target (here a make-emblem action) must NOT
+        // promote the item-gated exit — it's a walkable item passage, and promoting
+        // it stranded the walk-to on step 1 resolving a nonexistent teleport keyword.
+        const string tbInfo = """
+            [ { "Number": 5, "Action": "make emblem:roomitem 474 1\n" } ]
+            """;
+        var (graph, _) = BuildWithTbInfo("alpha", ItemCmdRooms, tbInfo);
+
+        Room? room = graph.GetRoom(new RoomKey(7, 130));
+        Assert.NotNull(room);
+        Assert.True(room!.Exits.TryGetValue(Direction.SE, out RoomExit ex));
+        Assert.Equal(RoomExitHint.Item, ex.Hint);
         Assert.Equal(474, ex.KeyItemId);
     }
 

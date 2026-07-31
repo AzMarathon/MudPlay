@@ -702,6 +702,14 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   The player's on-screen room does **not** re-print on a refusal. This is the authoritative
   signal the client keys on: `MovementRefusalDetector` matches these lines and calls
   `RoomTracker.NoteMoveBlocked` (which drops the pending move and re-confirms at the source).
+- **[CONFIRMED]** **Picklock + open verb wording (stock, capture 2026-07-30).** A successful
+  `pick <dir>` prints **`You successfully unlocked the door.`** — **past tense**, and the *same*
+  line the use-key unlock emits (the two are distinguished only by which command was in flight,
+  not by wording). A pick failure is **`Your skill fails you this time.`**. Unlocking does **not**
+  open the door — a separate `open <dir>` is required, whose success prints **`You open the
+  door.`** (not "The door is now open."). `DoorOpenManager` keys on all three; matching only
+  present-tense "unlock(s)" or "is now open" stranded the walker at a picked door
+  (report stock-20260730-182812).
 - **Corollary the tracker relies on:** *a room redisplay that still matches the room you moved
   from is never the result of a refused move.* While a move is pending, seeing the source room
   again can only be a **passive re-look** — a combat-clear, a monster/player arrival or
@@ -910,6 +918,18 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   and waits for the arrival room to render. A member the captain rejected (minlevel / fare / attunement)
   **never boards** — detected as *no teleport into a ship room within a short window of firing the
   verb*, which is the fail signal.
+- **[CONFIRMED by user 2026-07-30] Jail `bribe guard` is a cell-hop helper with an escalating "take
+  the most you can afford" toll.** In the jail rooms (Paradigm `1/541–545`, `14/1326–1333`) the
+  `bribe guard` command casts a jail-teleport (moves the player between cells so a jailed player can
+  reach their gear when they can't bash / picklock the cell door or lack the jail key). The TBInfo
+  `Action` lists **six escalating `price` tiers** — `100 / 1000 / 10000 / 100000 / 1000000 / 10000000`
+  copper (1 Gold → 10 Runic). The guard charges the **largest tier the player can currently afford**,
+  capped at 10 Runic per bribe: carry 11 Runic → charged 10 Runic; carry 8 Runic → charged 1 Runic
+  (the next tier, 10 Runic, is unaffordable). The escalating cost *is* the catch. Only the ceiling is
+  meaningful to surface, so the room tooltip renders it as "bribe guard — costs up to 10 Runic (takes
+  the most you can afford)". This tiered multi-`price` shape is unique to bribe guard among room-`CMD`
+  commands; ordinary paid services (`roll dice`, `buy <spell>`, `summon <x>`, `secure passage`) carry a
+  single `price <copper> [failTextblockId]`.
 - **[CONFIRMED]** **`look <dir>` peeks the adjacent room with a full room display, but the player never
   moves.** Looking into an exit (`look north`, `l e`, `peer …`) renders the neighbouring room exactly
   like walking in would — its title, its `You notice … here.` item/cash survey, and its `Also here:`
@@ -949,6 +969,14 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
      - Protection: **gnomish fish-helm (item 929)**, `NegateSpell = [512, 513, 514, 453]`. Worn, it
        negates the drown chain (512/513/514) and the black-water damage (453). You still take the minor
        direct 511 chip but never drown.
+     - **[CONFIRMED via game data, Paradigm 1.9.1]** The **lava / volcano biome** is this same shape.
+       `Spell:526` "magma heat" (`Abil-0 1` Damage, a leaf spell — no EndCast chain) covers ~1000 rooms
+       (Lava Tube / "salamander tubes", Magma/Molten River, Jagged Obsidian Field, Volcano Magma Tunnels,
+       etc.); `Spell:218` "temple of fire fire" covers the Temple-of-Fire / Volcano-heart rooms. Both are
+       negated by **either** the **magma amulet (item 487)** or the **phoenix feather (item 1000)** —
+       each has `NegateSpell = [526, 218]`, and they're the only two items that do. `RoomHazardIndex`
+       already indexes these (one any-of group {487, 1000}), so the router treats lava exactly like the
+       river/desert: avoid unless the player carries a counter.
      - Timer cancel on exit: the `6/1139` up-exit is `(Cast: pre-516, post-0)` → spell **516**
        `151`(EndCast→**515** "stop drowning"), and 515 `153`(KillSpell) **512** & **513** — leaving the
        water cancels the drown timer. (`Cast: pre-N` = cast spell N *before* moving through the exit.)

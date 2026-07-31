@@ -498,6 +498,48 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
+    public void Build_PricedRoomCommands_SurfaceCost_TieredBribeShowsCeiling()
+    {
+        // A gambling command (single price) and the jail bribe-guard (six
+        // escalating prices) both carry a `price` the tooltip previously dropped.
+        // The dice cost surfaces flat; the bribe surfaces as its ceiling with the
+        // "takes the most you can afford" caveat. No spell catalog is passed, so
+        // bribe-guard's cast lines don't surface as a teleport — it lands on the
+        // standalone priced line instead.
+        const string cmdRooms = """
+            [
+              { "Map Number": 1, "Room Number": 2, "Name": "Jail Cell",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 997,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string cmdTbinfo = """
+            [
+              { "Number": 997, "LinkTo": 0,
+                "Action": "roll dice:price 10000 1560:random 998\nbribe guard:cast 5432:cast 5434:price 100:price 1000:price 10000:price 100000:price 1000000:price 10000000\n",
+                "Called From": "Room 1/2" }
+            ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),  cmdRooms);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"), cmdTbinfo);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged(_setName);
+
+        Room room = graph.GetRoom(new RoomKey(1, 2))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo);
+
+        Assert.Contains("roll dice — costs 100 Gold", text);
+        Assert.Contains("bribe guard — costs up to 10 Runic (takes the most you can afford)", text);
+    }
+
+    [Fact]
     public void Build_LevelGatedExit_RendersFriendlyLabel()
     {
         // Form A — exit-direction gate "(Level: 40 to 0)" means Level 40+.
@@ -725,5 +767,43 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Assert.True(posExits < posRLight);
         Assert.True(posRLight < posDesc);
         Assert.True(posDesc < posRegen);
+    }
+
+    // ----- Door / key pick+bash requirement in the exit hint --------
+
+    [Fact]
+    public void FormatExitHint_Door_PicklocksAndStrength_SurfacesRequirement()
+    {
+        Assert.True(RoomExit.TryParseWire("9/177 (Door [11 picklocks/strength])", out RoomExit exit));
+        Assert.Equal("Door: 11 picklocks/strength", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    [Fact]
+    public void FormatExitHint_Door_PicklocksOnly_OmitsStrength()
+    {
+        Assert.True(RoomExit.TryParseWire("3/14 (Door [50 picklocks])", out RoomExit exit));
+        Assert.Equal("Door: 50 picklocks", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    [Fact]
+    public void FormatExitHint_Door_NoRequirement_RendersBareDoor()
+    {
+        Assert.True(RoomExit.TryParseWire("1/2666 (Door)", out RoomExit exit));
+        Assert.Equal("Door", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    [Fact]
+    public void FormatExitHint_KeyLocked_WithPicklockAlt_AppendsAlternative()
+    {
+        Assert.True(RoomExit.TryParseWire("1/1224 (Key: 172 [or 100 picklocks])", out RoomExit exit));
+        // No Items table supplied → the key falls back to "#172"; the pick alt tails on.
+        Assert.Equal("Key: #172, or 100 picklocks", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    [Fact]
+    public void FormatExitHint_KeyLocked_NoPicklockAlt_JustKey()
+    {
+        Assert.True(RoomExit.TryParseWire("1/1224 (Key: 172)", out RoomExit exit));
+        Assert.Equal("Key: #172", RoomTooltipBuilder.FormatExitHint(exit, data: null));
     }
 }

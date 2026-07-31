@@ -79,6 +79,11 @@ public sealed class HealthManager : IDisposable
     private readonly Func<Models.Profile.GeneralSettings>? _readGeneralSettings;
     private readonly Func<bool>? _hasEngageableHostiles;
     private readonly Func<bool>? _hasHostileInRoom;
+    // Defers the flee firing one dispatch tick so the round's death line (parsed
+    // AFTER the end-of-round prompt in the same wire read) can settle before we
+    // commit — see the flee branch in Evaluate. Synchronous (a => a()) when
+    // unwired, so tests stay deterministic.
+    private readonly Action<Action> _post;
     private readonly Func<int>? _readDeathFloor;
     private readonly HangupSignal? _hangupSignal;
     private readonly LogService? _log;
@@ -191,7 +196,8 @@ public sealed class HealthManager : IDisposable
         LogService? log = null,
         HangupSignal? hangupSignal = null,
         Func<bool>? hasHostileInRoom = null,
-        Func<Map.RoomKey, Map.RoomKey, IReadOnlyList<Map.Direction>?>? findReversePath = null)
+        Func<Map.RoomKey, Map.RoomKey, IReadOnlyList<Map.Direction>?>? findReversePath = null,
+        Action<Action>? post = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(coordinator);
@@ -212,6 +218,7 @@ public sealed class HealthManager : IDisposable
         _readDeathFloor = readDeathFloor;
         _log = log;
         _hangupSignal = hangupSignal;
+        _post = post ?? (a => a());
         _state.PropertyChanged += OnStateChanged;
     }
 
@@ -604,32 +611,19 @@ public sealed class HealthManager : IDisposable
                 string reason = hpRun
                     ? $"HP {_state.Hp}/{_state.MaxHp} <= run-trigger={hpRunTrigger}"
                     : $"MA {_state.Ma}/{_state.MaxMa} <= run-trigger={maRunTrigger}";
-                // A party follower must NOT run off alone — that breaks party
-                // formation and strands them. On low HP we broadcast @heal so the
-                // party healer tops us up and stay put; the leader owns the party's
-                // run decision, and solo characters just flee. A mana-triggered
-                // flee on a follower has no valid action (running is forbidden and
-                // @heal can't restore mana), so it only logs. TryFlee itself no-ops
-                // when no movement engine is active (idle), so the leader/solo path
-                // only runs when "not idle".
-                if (_requestPartyHeal is not null && (_isPartyFollower?.Invoke() ?? false))
-                {
-                    if (hpRun)
-                    {
-                        _log?.Combat(LogCategory,
-                            $"party follower low HP — requesting heal instead of fleeing ({reason})");
-                        _requestPartyHeal();
-                    }
-                    else
-                    {
-                        _log?.Combat(LogCategory,
-                            $"party follower low MA — holding (no solo flee; heal can't restore mana) ({reason})");
-                    }
-                }
-                else
-                {
-                    TryFlee(reason);
-                }
+                bool fleeAsFollower = follower && _requestPartyHeal is not null;
+                // Defer the flee one dispatch tick, then re-verify a live hostile
+                // before committing. The end-of-round prompt that dropped us into
+                // flee territory is parsed BEFORE the round's death line in the same
+                // wire read (PromptScanner.Append runs ahead of Emulator.Feed), so
+                // right now a monster we killed this round still reads as present
+                // (InCombat true, hostile present). Posting lets the death line
+                // process first: a killing blow that empties the room then falls
+                // through to rest instead of running from nothing, while a fresh
+                // hostile that survived still fires the flee (report
+                // stock-20260730-160706). The single-shot latch is set now so a
+                // burst of HP updates doesn't queue several flees.
+                _post(() => CommitFleeReaction(hpRun, fleeAsFollower, reason));
             }
         }
 
@@ -874,6 +868,40 @@ public sealed class HealthManager : IDisposable
         // every OTHER engine send, but the escape hangup must pierce it).
         SendHangup(hangCmd);
         return true;
+    }
+
+    // Deferred flee reaction — runs one dispatch tick after the run-trigger
+    // tripped, once the round's death line has settled. Stands down when the room
+    // emptied in the meantime (the flee-triggering round also killed the last
+    // monster): with no live hostile there's nothing to flee, so we stay and rest.
+    // Otherwise dispatches the same action the synchronous path would have — a
+    // party follower's @heal / hold, or a solo/leader TryFlee. `_fledThisCombat`
+    // was latched at decision time; a room-clear resets it via the InCombat→false
+    // Evaluate, so a fresh hostile that wanders in re-triggers the flee.
+    private void CommitFleeReaction(bool hpRun, bool follower, string reason)
+    {
+        if (!_state.InCombat || !(_hasHostileInRoom?.Invoke() ?? true))
+        {
+            _log?.Combat(LogCategory,
+                $"flee stood down — no live hostile once the round settled; resting ({reason})");
+            return;
+        }
+        if (follower)
+        {
+            if (hpRun)
+            {
+                _log?.Combat(LogCategory,
+                    $"party follower low HP — requesting heal instead of fleeing ({reason})");
+                _requestPartyHeal!();
+            }
+            else
+            {
+                _log?.Combat(LogCategory,
+                    $"party follower low MA — holding (no solo flee; heal can't restore mana) ({reason})");
+            }
+            return;
+        }
+        TryFlee(reason);
     }
 
     // Public entry for CombatManager's backstab-failure flee (wired via

@@ -909,6 +909,10 @@ public partial class MainWindowViewModel : ObservableObject
         // CombatStateTracker sends `break` before releasing the walker when the
         // user toggles auto-attack off mid-fight (CombatSettings.BreakBeforeFleeing).
         AppServices.Current.CombatTracker.SetWireSender(engineSend);
+        // Post-death graveyard resync — a CR to re-observe the respawn room if it
+        // hasn't landed shortly after death. Wire-send only (not a move), so it
+        // rides engineSend even though the death halt holds the movement gate.
+        AppServices.Current.PlayerDeathHalt.SetWireSender(engineSend);
         // HealthManager sends rest / stand / pre- / post-rest commands
         // via the same gate-wrapped engine pipeline.
         AppServices.Current.Health.SetWireSender(engineSend);
@@ -1059,6 +1063,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.PyramidSolver.SetWireSender(engineSend);
         // Message Response auto-send rides the same gate-wrapped pipeline.
         AppServices.Current.MessageResponder.SetWireSender(engineSend);
+        // Summon-on-death CR recheck rides the same gate-wrapped pipeline.
+        AppServices.Current.SummonSettle.SetWireSender(engineSend);
         // Recovery gate's tier-3 look-sweep rides the same gate-wrapped pipeline
         // so its `look <dir>` peeks can't land mid-password-prompt.
         AppServices.Current.Recovery.SetWireSender(engineSend);
@@ -2404,6 +2410,11 @@ public partial class MainWindowViewModel : ObservableObject
                 // the offline span doesn't count. Totals freeze and resume
                 // on the next in-game prompt after reconnect.
                 AppServices.Current.TimeAnalysis.Suspend();
+                // Suspend the party wall-clock cadences (par poll + @health) so
+                // they don't fire `par` / telepaths into the BBS login menu during
+                // re-entry, derailing the menu nav (report stock-20260731-004105).
+                // They resume on the first in-game prompt after we're back.
+                AppServices.Current.PartyPoller.NotifyDisconnected();
 
                 // Drop per-session condition + buff-duration state so a
                 // fresh login starts clean: any non-auto-clearing

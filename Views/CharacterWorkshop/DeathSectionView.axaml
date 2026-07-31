@@ -63,6 +63,8 @@
         <DataGrid Grid.Row="2"
                   ItemsSource="{Binding Records}"
                   SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
+                  DoubleTapped="OnRecordDoubleTapped"
+                  ToolTip.Tip="Double-click a death to centre the map on its map/room."
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="1"
                   BorderBrush="{StaticResource ChromeBorderBrush}"
@@ -121,6 +123,16 @@
                         <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
                                    FontFamily="{StaticResource FontMono}"
                                    Text="{Binding SelectedRecord.DiedText, FallbackValue=''}"/>
+                    </StackPanel>
+
+                    <!-- Recovery status: for a Partial record, names the pile
+                         items that weren't seen picked up, so the stoplight has a
+                         reason instead of just a colour (report 214157). Hidden
+                         for a fresh Active record with no note. -->
+                    <StackPanel Spacing="2" IsVisible="{Binding HasRecoveryDetail}">
+                        <TextBlock Classes="SectionHeader" Text="Recovery" Margin="0,0,0,2"/>
+                        <TextBlock Classes="FieldValue" FontWeight="Normal" TextWrapping="Wrap"
+                                   Text="{Binding RecoveryDetailText}"/>
                     </StackPanel>
 
                     <!-- Worn-loss vs carried-loss, split into two columns.

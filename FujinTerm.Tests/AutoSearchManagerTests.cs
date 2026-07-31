@@ -160,12 +160,14 @@ public sealed class AutoSearchManagerTests
     }
 
     [Fact]
-    public void EmptyObservation_BeforeOccupants_DoesNotSearchOrHold()
+    public void EmptyObservation_BeforeOccupants_HoldsButDoesNotSearch()
     {
-        // The empty room-entry observation (no hostiles, not yet holding) precedes
-        // the occupant line; it must NOT fire the search — the classify timer
-        // covers a genuinely clear room, and a fight arriving a beat later must
-        // still defer.
+        // Room entry holds the Search gate so a zero-dwell loop can't step out
+        // before the classify-delayed `sea` fires (report stock-20260730-163244).
+        // The empty room-entry observation (no hostiles, precedes the occupant
+        // line) must NOT fire the search — the classify timer covers a genuinely
+        // clear room, and a fight arriving a beat later still defers under the
+        // same hold.
         var coord = new MovementCoordinator();
         bool hostiles = false;
         var mgr = new AutoSearchManager(
@@ -175,12 +177,13 @@ public sealed class AutoSearchManagerTests
         mgr.SetWireSender(_ => { });
 
         mgr.OnRoomChanged();
-        mgr.OnRoomObserved();         // empty wipe → nothing
+        Assert.True(SearchHeld(coord));   // held from entry to search in place
+        mgr.OnRoomObserved();             // empty wipe → nothing sent, still held
         Assert.Empty(mgr.LastSentForTests);
-        Assert.False(SearchHeld(coord));
+        Assert.True(SearchHeld(coord));
 
         hostiles = true;
-        mgr.OnRoomObserved();         // occupants revealed → defer + hold
+        mgr.OnRoomObserved();             // occupants revealed → defer, still held
         Assert.True(SearchHeld(coord));
         Assert.Empty(mgr.LastSentForTests);
     }
@@ -197,27 +200,30 @@ public sealed class AutoSearchManagerTests
         mgr.SetWireSender(_ => { });
 
         mgr.OnRoomChanged();
-        mgr.OnClassifyElapsed();      // clear room → one sea
+        mgr.OnClassifyElapsed();      // clear room → one sea, gate held for settle
         Assert.Single(mgr.LastSentForTests);
 
-        // A monster wanders in after the clear-room search: must not re-arm/hold
-        // or fire a second search for this room.
+        // A monster wanders in after the clear-room search: must not re-arm or
+        // fire a second search for this room.
         hostiles = true;
         mgr.OnRoomObserved();
-        Assert.False(SearchHeld(coord));
         Assert.Single(mgr.LastSentForTests);
 
         hostiles = false;
         mgr.OnRoomObserved();         // that fight clears — still no second search
         Assert.Single(mgr.LastSentForTests);
+
+        mgr.OnSettleElapsed();        // settle window ends → gate released
+        Assert.False(SearchHeld(coord));
     }
 
     [Fact]
     public void RoomChange_DiscardsHeldSearch_ReleasesGate()
     {
         var coord = new MovementCoordinator();
+        bool enabled = true;
         var mgr = new AutoSearchManager(
-            isEnabled: () => true,
+            isEnabled: () => enabled,
             hasEngageableHostiles: () => true,
             coordinator: coord);
         mgr.SetWireSender(_ => { });
@@ -226,7 +232,10 @@ public sealed class AutoSearchManagerTests
         mgr.OnRoomObserved();         // deferred + held
         Assert.True(SearchHeld(coord));
 
-        mgr.OnRoomChanged();          // moved on → discard + release
+        // Search disarmed for the next room so the release isn't masked by the
+        // fresh room-entry hold; the old room's held search must still be dropped.
+        enabled = false;
+        mgr.OnRoomChanged();          // moved on → discard + release, nothing new to hold
         Assert.False(SearchHeld(coord));
     }
 

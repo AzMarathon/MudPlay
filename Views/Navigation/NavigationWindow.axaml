@@ -427,7 +427,7 @@
                                     <Button Classes="ToggleChip" Content="{Binding LairButtonLabel}"
                                             Command="{Binding ToggleLairsCommand}"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                            ToolTip.Tip="Lair highlight: click to cycle uniform colour → respawn heat-map → max-monster count → off."
+                                            ToolTip.Tip="Lair highlight: click to cycle uniform colour → respawn heat-map → max-monster count → heat-map + count → off. Your choice is saved per character."
                                             Classes.LairFill="{Binding HighlightLairs}"/>
                                     <Button Classes="ToggleChip" Content="Shops"
                                             Command="{Binding ToggleShopsCommand}"

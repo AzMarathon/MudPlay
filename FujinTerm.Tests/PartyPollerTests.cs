@@ -54,6 +54,26 @@ public sealed class PartyPollerTests
     }
 
     [Fact]
+    public void ParPoll_SuspendedOnDisconnect_ResumesOnEnteredRealm()
+    {
+        // Report stock-20260731-004105: a disconnect stops the par poll so it can't
+        // fire `par` into the BBS login menu; it resumes only once we're back in
+        // the realm (first in-game prompt → NotifyEnteredRealm).
+        var (poller, _, state, _, _, wire) = Setup();
+        state.Members.Add(new PartyMember { Name = "Forged" });
+        state.IsInParty = true;
+        wire.Clear();   // drop the on-join @health telepath — we test the par cadence
+
+        poller.NotifyDisconnected();
+        poller.DoParPollForTests();
+        Assert.Empty(wire);   // suspended — nothing reaches the wire
+
+        poller.NotifyEnteredRealm();
+        poller.DoParPollForTests();
+        Assert.Equal("par\r", LastWire(wire));
+    }
+
+    [Fact]
     public void ParPoll_NoWireSender_NoThrow()
     {
         var (poller, _, state, _, _, _) = Setup();

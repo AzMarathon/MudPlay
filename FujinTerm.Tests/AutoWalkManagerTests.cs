@@ -66,9 +66,17 @@ public sealed class AutoWalkManagerTests : IDisposable
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
+        // TBInfo so the teleport fixture's CMD-100 room legitimately teleports to
+        // 7/131 — the Item→Teleport promotion is TBInfo-gated on the CMD actually
+        // teleporting to the exit's target (only rooms with CMD 100 + an exit to
+        // 7/131, i.e. the teleport tests, are affected).
+        File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"),
+            """[ { "Number": 100, "Action": "go arch:teleport 131 7\n" } ]""");
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged("alpha");
+        RoomGraphManager graph = new(cache, log: null, tbinfo);
         graph.OnActiveSetChanged("alpha");
         BfsMapper bfs = new(graph);
         RoomTracker tracker = new(graph);
