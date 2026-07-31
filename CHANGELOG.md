@@ -28,7 +28,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Picklock doors now open and the walk continues: the live "You successfully unlocked the door." / "You open the door." wording is now recognized, so a picked door no longer strands the walker waiting to send `open`
 - Resting now starts the instant a room clears of hostiles instead of stalling several seconds — when a fresh monster interrupts a rest, the out-of-combat transition no longer sees a stale "hostile present" and re-sends `rest` immediately
 - Combat no longer walks off mid-fight: on realms whose melee prints no damage number or gets armour-deflected, the mob's per-round swings now register as combat activity, so the idle-stall watchdog stops mistaking an active fight for a stuck-gate empty room and abandoning it
-- bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949, stock-20260730-150957, stock-20260730-151145, stock-20260730-160706, paradigm-20260730-163244, stock-20260730-163044, stock-20260730-182812, stock-20260730-184622, stock-20260730-190736
+- Auto-collect no longer grabs cash on room entry before combat starts: with "collect after combat" on, a room whose "Also here" hostiles reveal a beat after the floor-cash line now holds the collect until the room is cleared, instead of firing a `get` into a fight
+- bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949, stock-20260730-150957, stock-20260730-151145, stock-20260730-160706, paradigm-20260730-163244, stock-20260730-163044, stock-20260730-182812, stock-20260730-184622, stock-20260730-190736, stock-20260730-193107
 
 ## 2.11.0
 

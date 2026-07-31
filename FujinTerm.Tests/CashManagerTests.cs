@@ -42,6 +42,11 @@ public sealed class CashManagerTests
         public List<long> AutoDeposits { get; } = new();
         public List<(string Currency, int Count)> Collected { get; } = new();
         public List<(string Currency, int Count)> Hidden { get; } = new();
+        // When false (default) posted actions run inline, so existing tests see
+        // the collect synchronously. Set true to capture them (room-survey race
+        // tests) and run them on demand via RunPosts().
+        public bool DeferPosts { get; set; }
+        public List<Action> Posts { get; } = new();
 
         public Harness()
         {
@@ -54,7 +59,8 @@ public sealed class CashManagerTests
                 getSnapshot: () => Snapshot,
                 isPeekSuppressed: () => PeekSuppressed,
                 log: Log,
-                isKnownItem: entry => KnownItem?.Invoke(entry) ?? false);
+                isKnownItem: entry => KnownItem?.Invoke(entry) ?? false,
+                post: a => { if (DeferPosts) Posts.Add(a); else a(); });
             Cash.SetWireSender(b => Sent.Add(b));
             Cash.CashDispatched += (c, n, p) => Dispatches.Add((c, n, p));
             Cash.AutoDepositRequested += t => AutoDeposits.Add(t);
@@ -67,6 +73,14 @@ public sealed class CashManagerTests
             Router.Dispatch(new LineExtractor.EmittedLine(
                 line, Array.Empty<CellAttributes>(),
                 DateTimeOffset.UtcNow, IsPromptLine: false));
+        }
+
+        // Run + clear any captured posted actions (see DeferPosts).
+        public void RunPosts()
+        {
+            List<Action> snap = Posts.ToList();
+            Posts.Clear();
+            foreach (Action a in snap) a();
         }
 
         public string LastSent => Sent.Count == 0
@@ -675,6 +689,45 @@ public sealed class CashManagerTests
         List<string> lines = h.Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
         Assert.Contains("get 56 silver noble", lines);
         Assert.DoesNotContain(lines, l => l.StartsWith("get") && l.Contains("copper"));
+    }
+
+    [Fact]
+    public void YouNotice_CollectAfterCombat_HostileRevealsAfterCashLine_Defers()
+    {
+        // Report stock-20260730-193107: the room's "You notice ... here." cash line
+        // is parsed BEFORE its "Also here: <monsters>" line, so at notice time no
+        // hostile is known yet. With collect-after-combat on, the collect decision
+        // is posted a tick; by then the Also-here has revealed the hostile, so the
+        // get must be held — not sent into a room that's about to start combat.
+        using Harness h = new() { DeferPosts = true };
+        h.Settings.CopperPolicy = CashPolicy.Collect;
+        h.Settings.CollectAfterCombatFinished = true;
+
+        h.Feed("You notice 11 copper farthings here.");
+        Assert.Empty(h.Sent);            // decision deferred to the post — nothing sent yet
+        Assert.Single(h.Posts);
+
+        h.HasHostiles = true;            // the room's Also-here revealed a hostile
+        h.RunPosts();
+
+        Assert.Empty(h.Sent);            // held for post-combat, no premature `get`
+    }
+
+    [Fact]
+    public void YouNotice_CollectAfterCombat_ClearRoom_CollectsAfterPost()
+    {
+        // Companion to the above: when the post fires and no hostile revealed, the
+        // room is genuinely clear, so the deferred decision collects normally.
+        using Harness h = new() { DeferPosts = true };
+        h.Settings.CopperPolicy = CashPolicy.Collect;
+        h.Settings.CollectAfterCombatFinished = true;
+
+        h.Feed("You notice 11 copper farthings here.");
+        Assert.Empty(h.Sent);
+        h.RunPosts();                    // no hostile → collect
+
+        Assert.Single(h.Sent);
+        Assert.Equal("get 11 copper farthing", h.LastSent);
     }
 
     [Fact]

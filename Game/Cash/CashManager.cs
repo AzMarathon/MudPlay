@@ -60,6 +60,10 @@ public sealed class CashManager : IDisposable
     private readonly Func<bool> _hasEngageableHostiles;
     private readonly Func<InventorySnapshot> _getSnapshot;
     private readonly Func<bool> _isPeekSuppressed;
+    // Defers an action one dispatch tick. Used so a room-survey ("You notice ...")
+    // collect decision is made AFTER the room's later "Also here:" line has been
+    // parsed and the combat gate is current. Default runs synchronously (tests).
+    private readonly Action<Action> _post;
     private readonly LogService? _log;
     private readonly CurrencyNaming _naming;
     private readonly Func<string, bool>? _isKnownItem;
@@ -184,7 +188,8 @@ public sealed class CashManager : IDisposable
         Func<bool>? isPeekSuppressed = null,
         LogService? log = null,
         CurrencyNaming? naming = null,
-        Func<string, bool>? isKnownItem = null)
+        Func<string, bool>? isKnownItem = null,
+        Action<Action>? post = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(readSettings);
@@ -209,6 +214,9 @@ public sealed class CashManager : IDisposable
         // "2 gold key" ambiguity; null (tests / no game data) leaves the
         // count+denomination heuristic standing alone.
         _isKnownItem = isKnownItem;
+        // Unbound (tests) runs inline; production wires Dispatcher.UIThread.Post so
+        // the room-survey collect decision lands after the room-display batch settles.
+        _post = post ?? (a => a());
         _log = log;
 
         _groundSub   = router.Subscribe(KnownPatterns.CashOnGround,  OnCashOnGround);
@@ -559,7 +567,7 @@ public sealed class CashManager : IDisposable
             CashDispatched?.Invoke(currency!, count, policy);
 
             if (policy == CashPolicy.Collect)
-                CollectOrDefer(count, currency!);
+                CollectOrDeferRoomSurvey(count, currency!);
         }
     }
 
@@ -572,6 +580,24 @@ public sealed class CashManager : IDisposable
     // collects immediately. On defer it asserts the AcquisitionGate (via
     // NoteDeferredPending) so the walker holds across the combat-clear boundary
     // until the flush runs — the same race defence the item engine uses.
+    // Room-survey ("You notice ... here.") collect. The survey line is parsed
+    // BEFORE the room's "Also here: <monsters>" line, so _hasEngageableHostiles()
+    // can still read a stale "clear" for a hostile that's about to reveal — which
+    // sent a `get` into a room that then started combat (report
+    // stock-20260730-193107). With collect-after-combat on, defer the decision one
+    // dispatch tick so the current room-display batch (including Also-here) has
+    // been processed and the combat gate is current, THEN collect-or-defer.
+    // Collect-after-combat off keeps the immediate collect (nothing to race).
+    private void CollectOrDeferRoomSurvey(int count, string currency)
+    {
+        if (!_collectAfterCombatFinished())
+        {
+            CollectCoins(count, currency);
+            return;
+        }
+        _post(() => CollectOrDefer(count, currency));
+    }
+
     private void CollectOrDefer(int count, string currency)
     {
         if (_collectAfterCombatFinished() && _hasEngageableHostiles())

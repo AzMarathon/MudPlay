@@ -26,6 +26,7 @@
 > - Picklock doors now open and the walk continues: the live "You successfully unlocked the door." / "You open the door." wording is now recognized, so a picked door no longer strands the walker waiting to send `open`
 > - Resting now starts the instant a room clears of hostiles instead of stalling several seconds — when a fresh monster interrupts a rest, the out-of-combat transition no longer sees a stale "hostile present" and re-sends `rest` immediately
 > - Combat no longer walks off mid-fight: on realms whose melee prints no damage number or gets armour-deflected, the mob's per-round swings now register as combat activity, so the idle-stall watchdog stops mistaking an active fight for a stuck-gate empty room and abandoning it
+> - Auto-collect no longer grabs cash on room entry before combat starts: with "collect after combat" on, a room whose "Also here" hostiles reveal a beat after the floor-cash line now holds the collect until the room is cleared, instead of firing a `get` into a fight
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

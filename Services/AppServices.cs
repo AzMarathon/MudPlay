@@ -3441,7 +3441,11 @@ public sealed class AppServices
             naming: Currency,
             // Same item-table tiebreaker the ground tracker uses — a stacked
             // denomination-named item ("2 gold key") isn't collected as coin.
-            isKnownItem: IsKnownGroundItem);
+            isKnownItem: IsKnownGroundItem,
+            // Defer the room-survey collect decision one tick so the room's later
+            // "Also here:" hostile line has been parsed before we choose to get vs
+            // hold (report stock-20260730-193107).
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
         // Reset held tallies on profile swap — prior character's
         // counts aren't relevant to the new one.
         Profile.ProfileLoaded += _ => Cash.ResetTallies();
