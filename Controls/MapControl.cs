@@ -476,7 +476,7 @@ public sealed class MapControl : Control
     {
         "#E64A4A", // 0:30 red
         "#F07818", // 1:00 orange
-        "#ECC400", // 1:30 yellow
+        "#C8A000", // 1:30 amber-gold (darkened + shifted off pure yellow so a lair heat node isn't mistaken for a down-exit room, whose fill is #DCDC00)
         "#A6C82A", // 2:00 yellow-green
         "#43B84E", // 2:30 green
         "#22B58E", // 3:00 green / light-blue mix (teal)
