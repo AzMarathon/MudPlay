@@ -68,6 +68,13 @@ public sealed class DeathRecord
     // EquippedAtDeath.
     public List<DeathItem>? LostItems { get; set; }
 
+    // Pile item names not yet confirmed picked up during recovery — the subset of
+    // EquippedAtDeath + LostItems the manager is still waiting on a "You pick up X"
+    // line for. Kept in sync by DeathRecoveryManager so the detail panel can show
+    // WHY a record is still Partial (a name that never matched a pickup — e.g. a
+    // wording quirk). null / empty once everything has been seen recovered.
+    public List<string>? UnrecoveredItems { get; set; }
+
     // Coins on hand at the moment of death — they drop into the deathpile with
     // the carried items, so they're shown alongside them under "Inventory lost".
     // Stored as per-denomination counts (not a consolidated copper total) so the

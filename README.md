@@ -30,6 +30,7 @@
 > - Auto-collect no longer grabs cash on room entry before combat starts: with "collect after combat" on, a room whose "Also here" hostiles reveal a beat after the floor-cash line now holds the collect until the room is cleared, instead of firing a `get` into a fight
 > - Party reconnect: when a member re-enters the realm and you haven't moved, the client now sends a carriage return to re-observe the room and auto-invites them if they're standing there — only falling back to the `@where` round-trip if they re-entered elsewhere
 > - After death, the client sends a carriage return to re-observe the graveyard if the respawn room hasn't shown up on its own, so your position is re-established promptly instead of sitting "lost" until you move
+> - Death log detail now shows why a recovery is still "Partial" — the pile items that weren't seen picked up — instead of leaving the status unexplained
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
