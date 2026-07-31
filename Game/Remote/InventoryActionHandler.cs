@@ -40,6 +40,9 @@ public sealed class InventoryActionHandler : IDisposable
     private readonly Func<CashSettings> _readCash;
     private readonly CurrencyNaming _naming;
     private Action<byte[]>? _wireSender;
+    // A get-all that found an empty ground cache sent a re-survey CR and is waiting
+    // for the next "You notice" survey to grab on. One-shot; reset on that survey.
+    private bool _getAllAwaitingResurvey;
     private bool _disposed;
 
     public InventoryActionHandler(
@@ -67,6 +70,8 @@ public sealed class InventoryActionHandler : IDisposable
         Register("@deposit-all", OnDepositAll);
         Register("@share", OnShare);
         Register("@get-all", OnGetAll);
+
+        _ground.SurveyUpdated += OnGroundResurveyed;
     }
 
     // Bind the wire-sender — the gate-wrapped SendUserInput pipeline from
@@ -83,6 +88,7 @@ public sealed class InventoryActionHandler : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _ground.SurveyUpdated -= OnGroundResurveyed;
         foreach (string cmd in RegisteredCommands) _engine.UnregisterHandler(cmd);
     }
 
@@ -109,11 +115,32 @@ public sealed class InventoryActionHandler : IDisposable
     // commands as a side effect.
     public string GetAll()
     {
-        IReadOnlyList<string> ground = _ground.Items;
-        if (ground.Count == 0) return "nothing on the ground to get";
+        if (_ground.Items.Count > 0) return GrabGround();
 
+        // Empty cache — the last "You notice" survey may be stale: items can drop
+        // mid-combat (from kills) with no auto re-survey, so a manual Get All saw
+        // nothing even with loot on the floor (report stock-20260730-215247). Force
+        // a fresh look and grab on the next survey, so the click reflects the actual
+        // floor. One re-survey at a time; a second while pending doesn't re-CR.
+        if (_getAllAwaitingResurvey) return "nothing on the ground to get";
+        _getAllAwaitingResurvey = true;
+        Send("");   // bare CR — re-observe the room + its "You notice" survey
+        return "re-surveying the floor for get-all";
+    }
+
+    // The re-survey (or any later "You notice") landed — grab the freshly-surveyed
+    // floor for a get-all that was waiting. One-shot: the wire shows the gets.
+    private void OnGroundResurveyed()
+    {
+        if (!_getAllAwaitingResurvey) return;
+        _getAllAwaitingResurvey = false;
+        if (_ground.Items.Count > 0) GrabGround();
+    }
+
+    private string GrabGround()
+    {
         int sent = 0;
-        foreach (string item in ground)
+        foreach (string item in _ground.Items)
         {
             string name = StripArticle(item);
             if (name.Length == 0) continue;

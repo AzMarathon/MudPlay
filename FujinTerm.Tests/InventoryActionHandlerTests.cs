@@ -132,15 +132,35 @@ public sealed class InventoryActionHandlerTests
     // ----- @get-all ----------------------------------------------------
 
     [Fact]
-    public void GetAll_EmptyFloor_ReportsNothing()
+    public void GetAll_EmptyCache_ResurveysThenGrabsOnFreshSurvey()
     {
+        // Report stock-20260730-215247: a stale/empty ground cache (items dropped
+        // mid-combat with no auto re-survey) left Get All doing nothing. It now
+        // re-surveys with a bare CR and grabs on the fresh "You notice" survey.
         Harness h = Setup();
         SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
 
         h.Engine.DispatchForTests(Telepath("Bob", "@get-all"));
+        Assert.Equal("re-surveying the floor for get-all", Assert.Single(Replies(h.Engine)));
+        Assert.Equal(new[] { "" }, Wire(h));   // the bare CR (trailing \r trimmed)
 
-        Assert.Equal("nothing on the ground to get", Assert.Single(Replies(h.Engine)));
-        Assert.Empty(Wire(h));
+        // The fresh survey lands with loot → it's grabbed.
+        FeedRoom(h.Router, "You notice a rusty dagger, an iron helm here.");
+        Assert.Contains("get rusty dagger", Wire(h));
+        Assert.Contains("get iron helm", Wire(h));
+    }
+
+    [Fact]
+    public void GetAll_EmptyCache_ResurveyStillEmpty_GrabsNothing()
+    {
+        // The re-survey confirms an empty floor → no gets fired (only the CR).
+        Harness h = Setup();
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@get-all"));
+        FeedRoom(h.Router, "You notice 12 gold crowns here.");   // cash only, no items
+
+        Assert.Equal(new[] { "" }, Wire(h));   // just the CR — nothing to grab
     }
 
     [Fact]

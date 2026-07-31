@@ -31,6 +31,8 @@
 > - Party reconnect: when a member re-enters the realm and you haven't moved, the client now sends a carriage return to re-observe the room and auto-invites them if they're standing there — only falling back to the `@where` round-trip if they re-entered elsewhere
 > - After death, the client sends a carriage return to re-observe the graveyard if the respawn room hasn't shown up on its own, so your position is re-established promptly instead of sitting "lost" until you move
 > - Death log detail now shows why a recovery is still "Partial" — the pile items that weren't seen picked up — instead of leaving the status unexplained
+> - `@equip-all` now triggers the "Equip All" action (applies your Default gear set), instead of hunting for a gear set literally named "all"
+> - "Get All" now works even when its floor cache is stale (e.g. loot dropped mid-combat): an empty cache re-surveys the room and grabs on the fresh survey, instead of reporting nothing on the ground
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
