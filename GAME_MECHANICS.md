@@ -1752,9 +1752,10 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
   leader left before re-inviting; **(2)** when the follower is stunned / hit a movement-preventing
   affliction and the leader didn't wait for it to clear before leaving the room. The client's
   `ComebackRequester` is correctly telepath-only. A follower must not auto-navigate itself back to a
-  stale self-selected walk-to target — and after **any** death every movement engine is full-stopped
-  and gotos are refused until manual resume, so nothing re-drives us into the room we died in
-  (report `stock-20260731-082602`).
+  stale self-selected walk-to target — and after **any** death every movement engine is cleanly
+  stopped and every retained destination cleared (the same as hitting the Nav Stop button; no
+  lingering halt, so a manual or remote nav action afterward runs freely), so nothing re-drives us
+  into the room we died in (report `stock-20260731-082602`).
 - **[CONFIRMED]** *(report 002413)* A **knockdown** is a movement-preventing (held) status. The
   hit lands as `You are knocked off your feet, and land with a heavy thump!` (third-person
   `{s} is knocked flat!`), then the standing status while down is **`You are flat on your back!`** —

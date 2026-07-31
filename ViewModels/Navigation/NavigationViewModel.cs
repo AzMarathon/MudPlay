@@ -61,7 +61,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Walker.Event += OnWalkerEvent;
         _services.MovementCoordinator.PauseStateChanged += OnPauseChanged;
         _services.MovementCoordinator.GatesChanged += OnGatesChanged;
-        _services.PlayerDeathHalt.HaltedForDeathChanged += OnGatesChanged;
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved += RefreshDeathRooms;
         _services.RoomTracker.PlayerDeathObserved += ClearNavIntentOnDeath;
@@ -124,7 +123,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Walker.Event -= OnWalkerEvent;
         _services.MovementCoordinator.PauseStateChanged -= OnPauseChanged;
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
-        _services.PlayerDeathHalt.HaltedForDeathChanged -= OnGatesChanged;
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved -= RefreshDeathRooms;
         _services.RoomTracker.PlayerDeathObserved -= ClearNavIntentOnDeath;
@@ -454,10 +452,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         DeathRooms = next;
     }
 
-    // Death stops every movement engine and halts us in the graveyard. Drop any
-    // armed walk-to target too so, once the player resumes, a stale destination
-    // (the room they just died in) can't be re-sent by the Run button. The engine
-    // stop already cleared the walker's own destination; this clears the UI's arm.
+    // Death does a clean stop of every engine (same as the Stop button), which
+    // clears the walker's own destination. Drop the UI's armed walk-to target too
+    // so a later Run can't re-send us to a stale destination (the room we just
+    // died in) — clearing it here matches how Stop clears the queued destination.
     private void ClearNavIntentOnDeath() => QueuedDestination = null;
 
     private void OnLoopRunnerEvent(LoopEvent _)
@@ -2318,12 +2316,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
         // User pause and combat outrank everything, including a held ailment:
         // an explicit pause is the user's own doing, and mid-fight "Fighting" is
-        // the more useful readout than "Held". A death-induced halt rides the
-        // same UserGate but flavours the chip so the user knows why we stopped.
+        // the more useful readout than "Held". (Death no longer flavours this — it
+        // full-stops every engine and clears the gate rather than pausing.)
         if (gates.Contains(Game.Map.MovementCoordinator.UserGate))
-            return _services.PlayerDeathHalt.HaltedForDeath
-                ? ("Paused — recovering", NavActivityKind.Paused)
-                : ("Paused", NavActivityKind.Paused);
+            return ("Paused", NavActivityKind.Paused);
         if (gates.Contains(Game.Map.MovementCoordinator.CombatGate))
             return ("Fighting", NavActivityKind.Fighting);
         // Engine-owned hold right after a walk left a room with an engaged

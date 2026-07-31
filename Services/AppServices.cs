@@ -1408,10 +1408,10 @@ public sealed class AppServices
     // sprint off without a member who's trying to reconnect and re-party.
     public Game.PartyDisconnectMovementGate PartyDisconnectMovement { get; private set; } = null!;
 
-    // Death-halt bridge — when the local player dies, asserts UserGate so every
-    // movement engine stops and we sit in the graveyard until the player
-    // manually resumes. Exposes HaltedForDeath so the Navigation chip can read
-    // "Paused — recovering" while the death pause holds.
+    // Death-stop bridge — when the local player dies, full-stops every movement
+    // engine and clears the user gate (a clean stop, same as the Nav Stop button)
+    // so nothing survives to re-drive us back into the room we died in, and a
+    // manual or remote nav action afterward runs freely.
     public Game.PlayerDeathMovementHalt PlayerDeathHalt { get; private set; } = null!;
 
     // Dropped / mortally-wounded bridge — while the local character is at or
@@ -4178,17 +4178,16 @@ public sealed class AppServices
             Walker, LoopRunner, AutoLair, MovementCoordinator);
 
         // Death engine-quiescence. On our death RoomTracker fires
-        // PlayerDeathObserved (both death phrasings). PlayerDeathHalt full-stops
-        // every engine (via this stopper) and then asserts the UserGate halt — the
-        // stop-then-assert order lives inside PlayerDeathHalt.OnPlayerDied so an
-        // engine's own Stop() (Auto-Lair clears the UserGate when it was paused)
-        // can't wipe the halt. Stopping outright — not pausing — matters because a
-        // loop caught mid-recovery (a miracle-save restores HP, clearing the
-        // HealthRecovery gate and firing the loop's ResumeAfterRecovery just before
-        // the death registers) sits in a Recovering state the pause doesn't cover,
-        // so the graveyard's respawn-room confirm would drive a recovery-reroute
-        // straight back out. The reset clears that state; nothing survives to
-        // re-drive us into the room we died in when the halt is later released.
+        // PlayerDeathObserved (both death phrasings). PlayerDeathHalt does a clean
+        // stop (via this stopper) then clears the user gate — same as the Nav Stop
+        // button. Stopping outright — not pausing — matters because a loop caught
+        // mid-recovery (a miracle-save restores HP, clearing the HealthRecovery gate
+        // and firing the loop's ResumeAfterRecovery just before the death registers)
+        // sits in a Recovering state a pause doesn't cover, so the graveyard's
+        // respawn-room confirm would drive a recovery-reroute straight back out. The
+        // reset clears that state and every retained destination; nothing survives
+        // to re-drive us into the room we died in, and a manual/remote nav action
+        // afterward runs freely.
         PlayerDeathHalt.SetEngineStopper(() =>
         {
             LoopRunner.Stop("player died — halting in graveyard");
