@@ -23,6 +23,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Killing the last monster no longer triggers a flee: when the killing blow drops HP into flee territory but empties the room, the client now stays and rests instead of running from nothing (and a fresh monster entering while you're still low re-triggers the flee)
 - Auto-search now holds the walker in a cleared room long enough to search it in place, instead of a zero-dwell loop stepping out before the search fires
 - Auto-sneak now re-establishes sneak before leaving a room it just cleared of hostiles — the fight spends your sneak, and the client no longer treats the stale state as still-sneaking
+- Old Mother Woodard (monster #545) now defaults to Friend on stock realms (she was missing from the stock overlay seed, so auto-combat treated her as an enemy); Paradigm already had her as Friend
 - bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949, stock-20260730-150957, stock-20260730-151145, stock-20260730-160706, paradigm-20260730-163244, stock-20260730-163044
 
 ## 2.11.0
