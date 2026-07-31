@@ -909,6 +909,10 @@ public partial class MainWindowViewModel : ObservableObject
         // CombatStateTracker sends `break` before releasing the walker when the
         // user toggles auto-attack off mid-fight (CombatSettings.BreakBeforeFleeing).
         AppServices.Current.CombatTracker.SetWireSender(engineSend);
+        // Post-death graveyard resync — a CR to re-observe the respawn room if it
+        // hasn't landed shortly after death. Wire-send only (not a move), so it
+        // rides engineSend even though the death halt holds the movement gate.
+        AppServices.Current.PlayerDeathHalt.SetWireSender(engineSend);
         // HealthManager sends rest / stand / pre- / post-rest commands
         // via the same gate-wrapped engine pipeline.
         AppServices.Current.Health.SetWireSender(engineSend);

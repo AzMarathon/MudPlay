@@ -27,6 +27,8 @@
 > - Resting now starts the instant a room clears of hostiles instead of stalling several seconds — when a fresh monster interrupts a rest, the out-of-combat transition no longer sees a stale "hostile present" and re-sends `rest` immediately
 > - Combat no longer walks off mid-fight: on realms whose melee prints no damage number or gets armour-deflected, the mob's per-round swings now register as combat activity, so the idle-stall watchdog stops mistaking an active fight for a stuck-gate empty room and abandoning it
 > - Auto-collect no longer grabs cash on room entry before combat starts: with "collect after combat" on, a room whose "Also here" hostiles reveal a beat after the floor-cash line now holds the collect until the room is cleared, instead of firing a `get` into a fight
+> - Party reconnect: when a member re-enters the realm and you haven't moved, the client now sends a carriage return to re-observe the room and auto-invites them if they're standing there — only falling back to the `@where` round-trip if they re-entered elsewhere
+> - After death, the client sends a carriage return to re-observe the graveyard if the respawn room hasn't shown up on its own, so your position is re-established promptly instead of sitting "lost" until you move
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
