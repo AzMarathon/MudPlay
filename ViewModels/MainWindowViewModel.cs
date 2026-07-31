@@ -2410,6 +2410,11 @@ public partial class MainWindowViewModel : ObservableObject
                 // the offline span doesn't count. Totals freeze and resume
                 // on the next in-game prompt after reconnect.
                 AppServices.Current.TimeAnalysis.Suspend();
+                // Suspend the party wall-clock cadences (par poll + @health) so
+                // they don't fire `par` / telepaths into the BBS login menu during
+                // re-entry, derailing the menu nav (report stock-20260731-004105).
+                // They resume on the first in-game prompt after we're back.
+                AppServices.Current.PartyPoller.NotifyDisconnected();
 
                 // Drop per-session condition + buff-duration state so a
                 // fresh login starts clean: any non-auto-clearing

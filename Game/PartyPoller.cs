@@ -41,6 +41,12 @@ public sealed partial class PartyPoller : IDisposable
     private readonly DispatcherTimer? _timer;
     private DispatcherTimer? _healthNagTimer;
     private Action<byte[]>? _wireSender;
+    // Suspended between a disconnect and the first in-game prompt after we're back
+    // in the realm. `par` and the @health round-trip are wall-clock timers that
+    // fire independent of the game prompt, so left running they put `par` /
+    // telepaths on the wire while the client sits at the BBS login menu, where they
+    // land as stray menu keystrokes and derail re-entry (report stock-20260731-004105).
+    private bool _suspended;
     private bool _disposed;
 
     // How often to send `par` on the wire. Default 5 s.
@@ -243,6 +249,9 @@ public sealed partial class PartyPoller : IDisposable
         // Master gate — when the user turns off "send @health nags to party
         // members", skip both the initial round-trip and the retry nag.
         if (!HealthNagEnabled) return;
+        // Dropped / at the login menu — no telepaths onto the wire until we're
+        // back in the realm.
+        if (_suspended) return;
         // Don't telepath into the trainer menu — the request would land as
         // stray keystrokes and no baseline reply can arrive while the statline
         // is suppressed anyway.
@@ -395,11 +404,36 @@ public sealed partial class PartyPoller : IDisposable
         return true;
     }
 
+    // ----- connection lifecycle ------------------------------------------
+
+    // Any disconnect (user- or server-initiated) suspends both cadences so no
+    // `par` / @health telepath leaks onto the wire while we're dropped or sitting
+    // at the BBS login menu during re-entry. Pending @health nags are dropped —
+    // the roster is wiped on reconnect and re-formed fresh.
+    public void NotifyDisconnected()
+    {
+        _suspended = true;
+        _timer?.Stop();
+        StopHealthNagTimer();
+        _activeNags.Clear();
+    }
+
+    // First in-game prompt after a (re)connect — we're back in the realm, so the
+    // `par` cadence may resume. Idempotent: only the suspended→live edge restarts
+    // the timer, so it's cheap to call on every prompt.
+    public void NotifyEnteredRealm()
+    {
+        if (!_suspended) return;
+        _suspended = false;
+        _timer?.Start();
+    }
+
     // ----- par poll ------------------------------------------------------
 
     private void DoParPoll()
     {
         if (_wireSender is null) return;
+        if (_suspended) return;
         if (!_state.IsInParty) return;
         if (InTrainerMenu) return;
         if (IsParPollEnabled is { } gate && !gate()) return;

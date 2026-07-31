@@ -35,7 +35,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Death log detail now shows why a recovery is still "Partial" — the pile items that weren't seen picked up — instead of leaving the status unexplained
 - `@equip-all` now triggers the "Equip All" action (applies your Default gear set), instead of hunting for a gear set literally named "all"
 - "Get All" now works even when its floor cache is stale (e.g. loot dropped mid-combat): an empty cache re-surveys the room and grabs on the fresh survey, instead of reporting nothing on the ground
-- bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949, stock-20260730-150957, stock-20260730-151145, stock-20260730-160706, paradigm-20260730-163244, stock-20260730-163044, stock-20260730-182812, stock-20260730-184622, stock-20260730-190736, stock-20260730-193107, stock-20260730-193610, stock-20260730-194053, stock-20260730-214157, stock-20260730-214959, stock-20260730-215247
+- A disconnect now suspends the party `par` poll and @health telepaths until you're back in the realm, so they no longer fire into the BBS login menu and derail re-entry
+- bug reports addressed: paradigm-20260729-194421, paradigm-20260729-210839, paradigm-20260729-211336, paradigm-20260729-221044, paradigm-20260730-124104, paradigm-20260730-125716, stock-20260730-130949, stock-20260730-150957, stock-20260730-151145, stock-20260730-160706, paradigm-20260730-163244, stock-20260730-163044, stock-20260730-182812, stock-20260730-184622, stock-20260730-190736, stock-20260730-193107, stock-20260730-193610, stock-20260730-194053, stock-20260730-214157, stock-20260730-214959, stock-20260730-215247, stock-20260731-004105
 
 ## 2.11.0
 

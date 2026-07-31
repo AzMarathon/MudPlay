@@ -3260,6 +3260,10 @@ public sealed class AppServices
         // — subsequent prompts no-op), so BBS-menu / login time never counts.
         // Same WirePromptScanner the EventScheduler uses for its in-game latch.
         PromptScanner.PromptObserved += _ => TimeAnalysis.NoteInGame();
+        // Same in-game gate resumes the party wall-clock cadences (par poll +
+        // @health) once we're back in the realm after a disconnect — they were
+        // suspended on the drop so nothing leaks into the login-menu nav.
+        PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
         // A fresh character starts disarmed: zero the counters, then Suspend so
         // accrual waits for that character's first in-game prompt. (Disconnect
         // disarms via MainWindowVM; @reset / the window button keep counting.)

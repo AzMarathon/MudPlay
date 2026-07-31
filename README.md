@@ -33,6 +33,7 @@
 > - Death log detail now shows why a recovery is still "Partial" — the pile items that weren't seen picked up — instead of leaving the status unexplained
 > - `@equip-all` now triggers the "Equip All" action (applies your Default gear set), instead of hunting for a gear set literally named "all"
 > - "Get All" now works even when its floor cache is stale (e.g. loot dropped mid-combat): an empty cache re-surveys the room and grabs on the fresh survey, instead of reporting nothing on the ground
+> - A disconnect now suspends the party `par` poll and @health telepaths until you're back in the realm, so they no longer fire into the BBS login menu and derail re-entry
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
