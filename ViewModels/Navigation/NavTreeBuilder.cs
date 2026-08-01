@@ -69,21 +69,45 @@ public static class NavTreeBuilder
 
     // Replace target's contents with a freshly built tree, preserving folder
     // expand/collapse state across the rebuild (keyed by folder path) so a
-    // refresh doesn't snap every folder back to its default. defaultExpanded is
-    // the per-surface starting state (see Build).
+    // refresh doesn't snap every folder back to its default. For surfaces that
+    // never filter (the Manage dialog); a fresh scratch override set harvested
+    // from the current tree each call reproduces the original behaviour.
     public static void Sync<TRow>(
         ObservableCollection<object> target,
         IEnumerable<TRow> rows,
         Func<TRow, string?> folderOf,
         IEnumerable<string> allFolders,
         bool defaultExpanded = true)
+        => Sync(target, rows, folderOf, allFolders, defaultExpanded,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                harvest: true, forceExpandAll: false);
+
+    // Filter-aware sync with a caller-OWNED persistent expand-override set
+    // (folders the user toggled away from the default). When harvest is true the
+    // current tree's toggles are folded into expandOverrides first — the caller
+    // skips this when the current tree is a filtered / force-expanded view, which
+    // isn't the user's resting state, so the resting expand state survives a
+    // filter → clear cycle intact. forceExpandAll opens every folder in the built
+    // tree so a filter match nested in a folder is visible without a manual
+    // expand (only folders WITH matches survive a filtered build).
+    public static void Sync<TRow>(
+        ObservableCollection<object> target,
+        IEnumerable<TRow> rows,
+        Func<TRow, string?> folderOf,
+        IEnumerable<string> allFolders,
+        bool defaultExpanded,
+        HashSet<string> expandOverrides,
+        bool harvest,
+        bool forceExpandAll)
     {
         ArgumentNullException.ThrowIfNull(target);
-        var overridden = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        CollectOverrides(target, overridden, defaultExpanded);
+        ArgumentNullException.ThrowIfNull(expandOverrides);
+
+        if (harvest) HarvestOverrides(target, expandOverrides, defaultExpanded);
 
         List<object> built = Build(rows, folderOf, allFolders, defaultExpanded);
-        RestoreOverrides(built, overridden, defaultExpanded);
+        ApplyOverrides(built, expandOverrides, defaultExpanded);
+        if (forceExpandAll) ForceExpandFolders(built);
 
         target.Clear();
         foreach (object node in built) target.Add(node);
@@ -110,31 +134,49 @@ public static class NavTreeBuilder
         _ => node.ToString() ?? string.Empty,
     };
 
-    // Expand/collapse state is keyed by folder path. We record the folders the
-    // user toggled AWAY from the tree's default (a collapsed folder in an
-    // expand-by-default tree, or an expanded folder in a collapse-by-default
-    // one) so a rebuild keeps that override instead of snapping every folder
-    // back to its default.
-    private static void CollectOverrides(IEnumerable<object> nodes, HashSet<string> overridden, bool defaultExpanded)
+    // Fold the CURRENT tree's expand toggles into the persistent override set:
+    // a folder toggled AWAY from the default (a collapsed folder in an
+    // expand-by-default tree, or an expanded one in a collapse-by-default tree)
+    // is recorded; a folder back AT the default clears its override. Called only
+    // on a resting (non-filtered) tree so a transient filter view never pollutes
+    // the set.
+    private static void HarvestOverrides(IEnumerable<object> nodes, HashSet<string> overrides, bool defaultExpanded)
     {
         foreach (object node in nodes)
         {
             if (node is NavFolderNodeViewModel f)
             {
-                if (f.IsExpanded != defaultExpanded) overridden.Add(f.Path);
-                CollectOverrides(f.Children, overridden, defaultExpanded);
+                if (f.IsExpanded != defaultExpanded) overrides.Add(f.Path);
+                else overrides.Remove(f.Path);
+                HarvestOverrides(f.Children, overrides, defaultExpanded);
             }
         }
     }
 
-    private static void RestoreOverrides(IEnumerable<object> nodes, HashSet<string> overridden, bool defaultExpanded)
+    // Set each freshly-built folder's expand state from the override set (away
+    // from default when listed, else default).
+    private static void ApplyOverrides(IEnumerable<object> nodes, HashSet<string> overrides, bool defaultExpanded)
     {
         foreach (object node in nodes)
         {
             if (node is NavFolderNodeViewModel f)
             {
-                if (overridden.Contains(f.Path)) f.IsExpanded = !defaultExpanded;
-                RestoreOverrides(f.Children, overridden, defaultExpanded);
+                f.IsExpanded = overrides.Contains(f.Path) ? !defaultExpanded : defaultExpanded;
+                ApplyOverrides(f.Children, overrides, defaultExpanded);
+            }
+        }
+    }
+
+    // Open every folder in the built tree — used while filtering so a match
+    // nested in a folder shows without the user hunting for it.
+    private static void ForceExpandFolders(IEnumerable<object> nodes)
+    {
+        foreach (object node in nodes)
+        {
+            if (node is NavFolderNodeViewModel f)
+            {
+                f.IsExpanded = true;
+                ForceExpandFolders(f.Children);
             }
         }
     }

@@ -97,6 +97,21 @@ public sealed class FavoritesStore
         Changed?.Invoke();
     }
 
+    // Re-point a favourite at a different room and/or relabel it. Favourites are
+    // keyed by room, so a coordinate change removes the old entry and adds one at
+    // the new key carrying the folder over; a same-coordinate edit is a relabel.
+    public void Edit(RoomKey oldKey, RoomKey newKey, string? newLabel)
+    {
+        if (oldKey.Equals(newKey))
+        {
+            Rename(oldKey, newLabel);
+            return;
+        }
+        string? folder = FolderOf(oldKey);
+        Remove(oldKey);
+        Add(newKey, newLabel, folder);
+    }
+
     // Remove the favourite. No-op when not bookmarked or no profile loaded.
     public void Remove(RoomKey key)
     {

@@ -14,10 +14,6 @@
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
         <StackPanel Spacing="8">
-            <TextBlock Text="Edit favourite"
-                       Foreground="{StaticResource ChromeFgBrush}"
-                       FontSize="{StaticResource FontSizeLg}"
-                       FontWeight="SemiBold"/>
             <TextBlock Text="Edit the name, or change the map / room to re-point this favourite at a different room."
                        Foreground="{StaticResource ChromeFgMutedBrush}"
                        FontSize="11"

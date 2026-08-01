@@ -307,17 +307,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         FavoriteEditResult? res = await _dialogs
             .OpenWindowAsync<FavoriteEditDialogViewModel, FavoriteEditResult?>(vm);
         if (res is null) return;
-        RoomKey newKey = new(res.Map, res.Room);
-        if (newKey.Equals(row.Key))
-        {
-            _favorites.Rename(row.Key, res.Label);
-        }
-        else
-        {
-            string? folder = _favorites.FolderOf(row.Key);
-            _favorites.Remove(row.Key);
-            _favorites.Add(newKey, res.Label, folder);
-        }
+        _favorites.Edit(row.Key, new RoomKey(res.Map, res.Room), res.Label);
     }
 
     [RelayCommand]

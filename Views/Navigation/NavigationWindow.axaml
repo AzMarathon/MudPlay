@@ -1134,7 +1134,7 @@
                                                             Content="✎"
                                                             FontSize="10"
                                                             Padding="6,2"
-                                                            ToolTip.Tip="Rename favourite"
+                                                            ToolTip.Tip="Edit favourite (name / map / room)"
                                                             Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).RenameFavoriteCommand}"
                                                             CommandParameter="{Binding}"/>
                                                     <Button Grid.Column="2"
@@ -1150,7 +1150,7 @@
                                                             <MenuItem Header="Walk here"
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).GoToFavoriteCommand}"
                                                                       CommandParameter="{Binding}"/>
-                                                            <MenuItem Header="Rename…"
+                                                            <MenuItem Header="Edit…"
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).RenameFavoriteCommand}"
                                                                       CommandParameter="{Binding}"/>
                                                             <MenuItem Header="Move to folder…"

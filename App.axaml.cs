@@ -99,11 +99,6 @@ public partial class App : Application
                 FujinTerm.ViewModels.Settings.EventEditDialogViewModel,
                 FujinTerm.Views.Settings.EventEditDialog>();
 
-            // Favourite-room rename — Navigation GOTO pane pencil button.
-            AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.FavoriteRenameDialogViewModel,
-                FujinTerm.Views.Navigation.FavoriteRenameDialog>();
-
             // Folder name prompt — New / Rename folder on both the Manage
             // dialog (loops + lairs) and the rail (gotos).
             AppServices.Current.Dialogs.RegisterWindow<
