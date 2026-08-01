@@ -110,6 +110,12 @@ public partial class App : Application
                 FujinTerm.ViewModels.Navigation.NavFolderNameDialogViewModel,
                 FujinTerm.Views.Navigation.NavFolderNameDialog>();
 
+            // Add-favourite room picker — the Manage dialog's GOTO tab "Add"
+            // button (search by name or map/room, then save as a favourite).
+            AppServices.Current.Dialogs.RegisterWindow<
+                FujinTerm.ViewModels.Navigation.AddFavoriteDialogViewModel,
+                FujinTerm.Views.Navigation.AddFavoriteDialog>();
+
             // File → Open profile / Save profile as — custom modeless dialogs
             // replacing the platform file pickers (the per-folder layout means
             // profiles live as subfolders, not flat .json files).

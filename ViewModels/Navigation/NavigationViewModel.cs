@@ -1282,6 +1282,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // drives tree-vs-placeholder visibility.
     public bool HasFavoriteTree => FavoriteTree.Count > 0;
 
+    // Live filter over the GOTO favourites — empty shows the full folder tree; a
+    // value keeps only favourites whose label matches and expands their folders.
+    // Rebuilds the tree only (not the flat Favorites list). Mirrors LoopFilter.
+    [ObservableProperty] private string _gotoFilter = string.Empty;
+
+    partial void OnGotoFilterChanged(string value) => RebuildFavoriteTree();
+
+    // Favourites exist but the current filter matches none — drives the GOTO
+    // "no matches" empty state (distinct from "no favourites saved").
+    public bool HasNoFavoriteMatches => HasFavorites && FavoriteTree.Count == 0;
+
     private void OnFavoritesChanged()
     {
         RefreshFavorites();
@@ -1312,9 +1323,26 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         entries.Sort((a, b) => string.Compare(a.Label, b.Label, StringComparison.OrdinalIgnoreCase));
         foreach (FavoriteRowViewModel e in entries) Favorites.Add(e);
-        NavTreeBuilder.Sync(FavoriteTree, Favorites, r => r.Folder, _services.Favorites.AllFolders);
         OnPropertyChanged(nameof(HasFavorites));
+        RebuildFavoriteTree();
+    }
+
+    // Rebuild the GOTO folder tree from the flat Favorites, honouring GotoFilter.
+    // With a filter active only matching favourites survive, empty folders are
+    // dropped, and folders auto-expand so hits are visible; unfiltered, the full
+    // folder set shows and per-folder expand overrides survive. Mirrors
+    // RebuildNavTree for loops/lairs.
+    private void RebuildFavoriteTree()
+    {
+        string filter = (GotoFilter ?? string.Empty).Trim();
+        bool filtering = filter.Length > 0;
+        IEnumerable<FavoriteRowViewModel> rows = filtering
+            ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            : Favorites;
+        IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.Favorites.AllFolders;
+        NavTreeBuilder.Sync(FavoriteTree, rows, r => r.Folder, folders, defaultExpanded: filtering);
         OnPropertyChanged(nameof(HasFavoriteTree));
+        OnPropertyChanged(nameof(HasNoFavoriteMatches));
     }
 
     // Click a favourite → stage it as the queued destination, mirroring a pick
@@ -1812,9 +1840,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (ContextRoomKey is not { } k) return;
         if (_services.Favorites.IsFavorite(k))
+        {
             _services.Favorites.Remove(k);
+        }
         else
+        {
             _services.Favorites.Add(k);
+            // Reveal the result — the GOTO pane defaults collapsed, so an add is
+            // otherwise invisible and reads as a no-op (report context).
+            IsGotoExpanded = true;
+        }
         OnPropertyChanged(nameof(ContextIsFavorite));
     }
 
@@ -2066,7 +2101,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             search: _services.RoomSearch,
             walker: _services.Walker,
             movement: _services.MovementControl,
-            autoLair: _services.AutoLair);
+            autoLair: _services.AutoLair,
+            favorites: _services.Favorites);
         await _services.Dialogs
             .OpenWindowAsync<NavigationManagerDialogViewModel, bool>(vm);
     }

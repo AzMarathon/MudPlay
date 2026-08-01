@@ -1,0 +1,73 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FujinTerm.ViewModels.Navigation"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="440"
+        x:Class="FujinTerm.Views.Navigation.AddFavoriteDialog"
+        x:DataType="vm:AddFavoriteDialogViewModel"
+        Title="Add favourite"
+        Width="420" Height="440"
+        WindowStartupLocation="CenterOwner">
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
+        <DockPanel LastChildFill="True">
+            <TextBlock DockPanel.Dock="Top"
+                       Text="Add favourite"
+                       FontSize="{StaticResource FontSizeLg}"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource ChromeFgBrush}"/>
+            <TextBlock DockPanel.Dock="Top"
+                       Text="Search a room by name, or enter a map/room number (e.g. 1/297), then pick it."
+                       FontSize="11"
+                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,8"/>
+            <TextBox DockPanel.Dock="Top"
+                     Name="QueryBox"
+                     Text="{Binding Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     PlaceholderText="Room name or map/room…"
+                     Margin="0,0,0,8"/>
+
+            <Button DockPanel.Dock="Bottom"
+                    Content="Cancel"
+                    HorizontalAlignment="Right"
+                    MinWidth="90"
+                    Margin="0,8,0,0"
+                    Command="{Binding CancelCommand}"
+                    IsCancel="True"/>
+
+            <Border BorderBrush="{StaticResource ChromeBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Results}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RoomSearchResult">
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="8,5"
+                                        Command="{Binding $parent[ItemsControl].((vm:AddFavoriteDialogViewModel)DataContext).PickCommand}"
+                                        CommandParameter="{Binding}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding PrimaryLine}"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource ChromeFgBrush}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding SecondaryLine}"
+                                                   FontSize="10"
+                                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   IsVisible="{Binding SecondaryLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+        </DockPanel>
+    </Border>
+</Window>

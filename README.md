@@ -1,7 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.15.0**
+> **Version 2.16.0**
+> - GOTO favourites management is back as a dedicated tab in the Navigation Management window: create / rename / delete folders, Add a favourite by room-name search or map/room number, and per-favourite Walk / Rename / Move-to-folder / Delete. The GOTO collapsible also gains a filter box, and adding a favourite from the map now auto-expands the pane so it's actually visible
 > - Backscroll window mouse-wheel now scrolls a configurable number of lines per notch (default 5, was 1) — set it in Settings → BBS + Display, right below Scrollback, saved per-BBS
 > - A party follower coming out of the train-stats screen is no longer left unable to rejoin: entering that screen breaks up the party server-side, so the follower now clears its own stale "following" state — and even if it lingers, an invite / @join from the leader you think you're following is now honored (a leader never re-invites a current follower) instead of rejected as "already following"
 >

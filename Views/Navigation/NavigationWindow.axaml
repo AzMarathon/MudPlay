@@ -1016,21 +1016,34 @@
                                 </Expander.Header>
                                 <StackPanel Spacing="2" HorizontalAlignment="Stretch">
                                     <!-- GOTO folders live in the character profile
-                                         (not on disk like loops/lairs). There is no
-                                         "+ Folder" button: a root folder is created by
-                                         right-clicking empty tree space → "New folder…",
-                                         a nested one from a folder node's "New subfolder…". -->
+                                         (not on disk like loops/lairs). Create /
+                                         rename / delete folders and add favourites
+                                         from the Navigation Management window's GOTO
+                                         tab, or right-click nodes in this tree. -->
+                                    <!-- Filter box first, then folders, then favourites. -->
+                                    <TextBox Text="{Binding GotoFilter, Mode=TwoWay}"
+                                             PlaceholderText="Filter favourites…"
+                                             FontSize="11"
+                                             Margin="0,0,0,2"
+                                             IsVisible="{Binding HasFavorites}"/>
                                     <!-- Empty-state hint — cap MaxWidth +
                                          keep wrapping so a long string
                                          can't push the rail wider than
                                          the 290 px column. -->
-                                    <TextBlock Text="No favourites — right-click a room → Add to favorites."
+                                    <TextBlock Text="No favourites — right-click a room → Add to favorites, or use the Navigation Management GOTO tab."
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                FontSize="11"
                                                TextWrapping="Wrap"
                                                MaxWidth="250"
                                                HorizontalAlignment="Left"
-                                               IsVisible="{Binding !HasFavoriteTree}"/>
+                                               IsVisible="{Binding !HasFavorites}"/>
+                                    <TextBlock Text="No favourites match the filter."
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               MaxWidth="250"
+                                               HorizontalAlignment="Left"
+                                               IsVisible="{Binding HasNoFavoriteMatches}"/>
                                     <TreeView Name="FavoriteTreeView"
                                               ItemsSource="{Binding FavoriteTree}"
                                               IsVisible="{Binding HasFavoriteTree}"
