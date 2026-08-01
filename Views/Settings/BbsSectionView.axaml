@@ -146,7 +146,7 @@
 
                     <TextBlock Classes="GroupHeader" Text="Display"/>
 
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
                         <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Columns:"/>
                         <NumericUpDown Grid.Row="0" Grid.Column="1"
                                        Value="{Binding TerminalCols, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
@@ -168,6 +168,14 @@
                                        FormatString="0" Width="140"
                                        HorizontalAlignment="Left"
                                        ToolTip.Tip="Applies on next launch — the live ring stays its current size."/>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Wheel scroll (lines):"/>
+                        <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                       Value="{Binding BackscrollWheelLines, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="1" Maximum="50" Increment="1"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"
+                                       ToolTip.Tip="Rows the Backscroll window advances per mouse-wheel notch."/>
                     </Grid>
 
                     <TextBlock Margin="0,4,0,0"

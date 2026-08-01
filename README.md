@@ -1,13 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.14.0**
-> - Emergency low-HP hangup now closes the connection itself after sending the realm exit command, instead of waiting on the server to drop it — a stuck or slow drop can no longer leave a mortally-wounded character sitting connected
-> - Loop builder: clicking a step in the CURRENT NAV build list now opens the Waypoint action editor to attach a command to that step (same as editing a saved loop), instead of deleting it — deletion moved to the roomier ✕ box, and the ↑ / ↓ / ✕ boxes are larger. Steps with a command show a ⚙ marker
-> - A hostile that spawns/appears in your room while a loop is running no longer gets left behind: the abandoned-combat halt now covers loops and auto-lair (not just point-to-point walks), and holds a short settle so a monster following you out re-asserts combat and gets fought instead of out-walked
-> - Restoring a client from the taskbar with the map (or another window) open now brings the main window up too, instead of surfacing only the child window and leaving the main minimized
-> - A follower coming out of the trainer stats screen no longer wrongly re-invites its party leader (which tangled the auto-rejoin) — only the leader reforms the party after a trainer trip; a follower waits for the leader's invite and auto-joins
-> - Dying no longer lets a stale destination re-drive you back into the room you died in: death now does a clean stop of every movement engine (walk-to, loop, auto-lair) and clears every retained destination — the same as hitting Stop — with no lingering halt, so your own manual or remote navigation afterward runs normally
+> **Version 2.15.0**
+> - Backscroll window mouse-wheel now scrolls a configurable number of lines per notch (default 5, was 1) — set it in Settings → BBS + Display, right below Scrollback, saved per-BBS
+> - A party follower coming out of the train-stats screen is no longer left unable to rejoin: entering that screen breaks up the party server-side, so the follower now clears its own stale "following" state — and even if it lingers, an invite / @join from the leader you think you're following is now honored (a leader never re-invites a current follower) instead of rejected as "already following"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

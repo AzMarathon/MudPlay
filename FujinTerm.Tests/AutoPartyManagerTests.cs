@@ -215,6 +215,27 @@ public sealed class AutoPartyManagerTests
         Assert.Empty(engine.LastSentForTests);
     }
 
+    [Fact]
+    public void InviteReceived_FromBelievedLeader_AcceptsDespiteStaleRoster()
+    {
+        // Our train-stats trip broke the party server-side with no leave-line
+        // reaching us, so our roster still lists the leader (Raijin). A leader
+        // never re-invites a current follower, so this re-invite proves the roster
+        // is stale — accept it (send follow) instead of skipping on the phantom
+        // membership (report stock-20260801-002423).
+        var (engine, router, players, party) = Setup();
+        SeedPlayer(players, "Raijin", joinOnInvited: true);
+        party.LeaderName = "Raijin";
+        party.IsInParty = true;
+        party.SelfIsLeader = false;
+        party.Members.Add(new PartyMember { Name = "Raijin", IsLeader = true });
+
+        Dispatch(router, "Raijin has invited you to follow him.");
+
+        byte[] sent = Assert.Single(engine.LastSentForTests);
+        Assert.Equal("follow Raijin\r", Encoding.Latin1.GetString(sent));
+    }
+
     [Theory]
     [InlineData("him")]
     [InlineData("her")]

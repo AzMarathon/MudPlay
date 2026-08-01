@@ -42,6 +42,12 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     public static readonly StyledProperty<double> FontSizeProperty =
         AvaloniaProperty.Register<BackscrollView, double>(nameof(FontSize), 16);
 
+    // Rows advanced per mouse-wheel notch (the host ScrollViewer scrolls by
+    // ScrollSize.Height). One row is exhaustingly slow through a deep buffer;
+    // sourced from the BBS-tier BackscrollWheelLines setting. Default 5.
+    public static readonly StyledProperty<int> WheelLinesProperty =
+        AvaloniaProperty.Register<BackscrollView, int>(nameof(WheelLines), 5);
+
     public FontFamily FontFamily
     {
         get => GetValue(FontFamilyProperty);
@@ -52,6 +58,12 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     {
         get => GetValue(FontSizeProperty);
         set => SetValue(FontSizeProperty, value);
+    }
+
+    public int WheelLines
+    {
+        get => GetValue(WheelLinesProperty);
+        set => SetValue(WheelLinesProperty, value);
     }
 
     private IReadOnlyList<ScrollbackBuffer.Row> _rows = [];
@@ -414,7 +426,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
 
     public bool IsLogicalScrollEnabled => true;
 
-    public Size ScrollSize => new(_cellW * 3, _cellH);
+    public Size ScrollSize => new(_cellW * 3, _cellH * Math.Max(1, WheelLines));
 
     public Size PageScrollSize => new(_viewport.Width, _viewport.Height);
 

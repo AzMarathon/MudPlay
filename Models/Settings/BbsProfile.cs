@@ -161,6 +161,10 @@ public sealed class BbsProfile
     // is intentionally deferred.
     public int ScrollbackLines { get; set; } = 4_000;
 
+    // How many rows one mouse-wheel notch scrolls in the Backscroll window.
+    // Line-by-line (1) is exhaustingly slow through a big buffer; default 5.
+    public int BackscrollWheelLines { get; set; } = 5;
+
     // Per-tab settings deltas at the BBS tier — same shape as
     // GlobalSettings.Settings. Holds anything the user pinned to "only for
     // this BBS."

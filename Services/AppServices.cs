@@ -1808,6 +1808,12 @@ public sealed class AppServices
         // input and the auto-trainer's CP replay both ride the raw SendUserInput,
         // so they pierce the hold and remain the only two things that can type.
         TrainerScreen = new Game.TrainerScreenGate(TrainerMenu, EngineGate, Log);
+        // Entering the train-stats screen breaks up our party server-side; a
+        // FOLLOWER must clear its own stale "following <leader>" state now so the
+        // leader's fresh re-invite on return is auto-accepted, not rejected as
+        // "already following" (report stock-20260801-002423). PartyManager gates
+        // this to followers; a leader reforms its group on trainer exit instead.
+        TrainerMenu.MenuEntered += Party.NoteTrainStatsExcursion;
         AutoParty = new Game.AutoPartyManager(Router, Players, PartyState, TrainerMenu, Log);
         // Suicide-password observer + engine-gate consumer. Drives
         // EngineGate.IsLocked during password-entry prompts so
@@ -5861,6 +5867,7 @@ public sealed class AppServices
     {
         Models.Settings.BbsProfile values = ResolveActiveBbs() ?? new Models.Settings.BbsProfile();
         Display.ScrollbackLines = values.ScrollbackLines;
+        Display.BackscrollWheelLines = values.BackscrollWheelLines;
         Display.TerminalCols = values.TerminalCols;
         Display.TerminalRows = values.TerminalRows;
 
@@ -5897,6 +5904,7 @@ public sealed class AppServices
         Display.FontFamily = DisplayConfig.DefaultFontFamily;
         Display.FontSize = DisplayConfig.DefaultFontSize;
         Display.ScrollbackLines = defaults.ScrollbackLines;
+        Display.BackscrollWheelLines = defaults.BackscrollWheelLines;
         Display.TerminalCols = defaults.TerminalCols;
         Display.TerminalRows = defaults.TerminalRows;
         Display.ScaleToWindow = false;

@@ -26,6 +26,11 @@ public sealed partial class DisplayConfig : ObservableObject
     [ObservableProperty] private int _terminalCols = 80;
     [ObservableProperty] private int _terminalRows = 25;
 
+    // Rows the Backscroll window advances per mouse-wheel notch. Mirrors the
+    // BBS-tier BbsProfile.BackscrollWheelLines; the Backscroll window reads it
+    // live so a change applies without reopening. Default 5.
+    [ObservableProperty] private int _backscrollWheelLines = 5;
+
     // Terminal canvas font family, as an avares:// URI. Sourced from the
     // char-tier GeneralSettings.TerminalFontFamily; MainWindowViewModel wraps it
     // into a FontFamily the TerminalControl binds to.

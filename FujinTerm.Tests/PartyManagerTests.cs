@@ -215,6 +215,41 @@ public sealed class PartyManagerTests
     }
 
     [Fact]
+    public void NoteTrainStatsExcursion_Follower_ClearsFollowingState()
+    {
+        // Entering the train-stats screen breaks up our party server-side; a
+        // follower's own stale "following <leader>" state must clear so the
+        // leader's fresh re-invite on return is auto-accepted, not rejected as
+        // "already following" (report stock-20260801-002423).
+        var (router, p) = Setup(localCharacterName: "Fujin");
+        router.Dispatch(Line("You are now following Raijin."));
+        Assert.True(p.State.IsInParty);
+        Assert.Equal("Raijin", p.State.LeaderName);
+
+        p.NoteTrainStatsExcursion();
+
+        Assert.Empty(p.State.Members);
+        Assert.False(p.State.IsInParty);
+        Assert.Null(p.State.LeaderName);
+    }
+
+    [Fact]
+    public void NoteTrainStatsExcursion_Leader_LeavesRosterIntact()
+    {
+        // A LEADER reforms its group on trainer exit from a roster snapshot that
+        // needs SelfIsLeader intact — so its own state must NOT reset here.
+        var (router, p) = Setup(localCharacterName: "Forged");
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.True(p.State.SelfIsLeader);
+
+        p.NoteTrainStatsExcursion();
+
+        Assert.True(p.State.IsInParty);
+        Assert.True(p.State.SelfIsLeader);
+        Assert.Contains(p.State.Members, m => m.Name == "Helper");
+    }
+
+    [Fact]
     public void Dissolved_OnAlreadyEmpty_NoOp()
     {
         // Idempotent — receiving the dissolution line when we're
