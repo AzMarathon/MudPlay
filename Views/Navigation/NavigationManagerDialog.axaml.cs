@@ -36,9 +36,11 @@ public partial class NavigationManagerDialog : Window
     {
         InitializeComponent();
         WireDragDrop(WalkTreeView);
+        WireDragDrop(GotoTreeView);
         // DoubleTapped only routes as Bubble, so the handler must be
         // registered on that strategy to fire at all.
         WalkTreeView.AddHandler(DoubleTappedEvent, OnRowDoubleTapped, RoutingStrategies.Bubble);
+        GotoTreeView.AddHandler(DoubleTappedEvent, OnRowDoubleTapped, RoutingStrategies.Bubble);
     }
 
     // Double-clicking a leaf runs it — the fast "play this now" gesture,
@@ -51,6 +53,7 @@ public partial class NavigationManagerDialog : Window
         {
             case ManagerLoopRow loop:      vm.RunLoopCommand.Execute(loop); break;
             case ManagerLairSetupRow lair: vm.RunLairSetupCommand.Execute(lair); break;
+            case FavoriteRowViewModel fav: vm.WalkToFavoriteCommand.Execute(fav); break;
         }
     }
 
@@ -129,6 +132,7 @@ public partial class NavigationManagerDialog : Window
         {
             case ManagerLoopRow loop: vm.MoveLoopToFolder(loop, folder); break;
             case ManagerLairSetupRow lair: vm.MoveLairToFolder(lair, folder); break;
+            case FavoriteRowViewModel fav: vm.MoveFavoriteToFolder(fav, folder); break;
         }
     }
 
@@ -143,6 +147,7 @@ public partial class NavigationManagerDialog : Window
             {
                 case ManagerLoopRow:
                 case ManagerLairSetupRow:
+                case FavoriteRowViewModel:
                     return e.DataContext;
                 case NavFolderNodeViewModel:
                     return null;
@@ -163,6 +168,7 @@ public partial class NavigationManagerDialog : Window
                 case NavFolderNodeViewModel folder: return folder.Path;
                 case ManagerLoopRow loop:           return loop.Source.Folder;
                 case ManagerLairSetupRow lair:      return lair.Source.Folder;
+                case FavoriteRowViewModel fav:      return fav.Folder ?? string.Empty;
             }
         }
         return string.Empty;

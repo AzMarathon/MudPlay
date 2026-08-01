@@ -227,6 +227,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
             foreach (FavoriteRowViewModel e in entries) Favorites.Add(e);
         }
         OnPropertyChanged(nameof(HasFavorites));
+        OnPropertyChanged(nameof(HasFolders));
         RebuildFavoriteTree();
     }
 
@@ -279,24 +280,44 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _favorites.MoveFavorite(row.Key, NavFolders.Normalize(folder));
     }
 
+    // True while any GOTO folder exists — gates the "Move to folder…" affordance
+    // (there's nowhere to move a favourite with no folders).
+    public bool HasFolders => _favorites is { } f && f.AllFolders.Count > 0;
+
     [RelayCommand]
     private async Task MoveFavoriteAsync(FavoriteRowViewModel? row)
     {
-        if (row is null) return;
-        string? folder = await PromptFolderNameAsync(
-            "Move favourite", "Destination folder (blank = root).", row.Folder);
-        if (folder is null) return;
+        if (row is null || _favorites is null) return;
+        FolderPickerDialogViewModel vm = new(_favorites.AllFolders, row.Folder);
+        string? folder = await _dialogs
+            .OpenWindowAsync<FolderPickerDialogViewModel, string?>(vm);
+        if (folder is null) return;   // cancelled (root is "")
         MoveFavoriteToFolder(row, folder);
     }
 
+    // Full edit — name + map + room. Re-points the favourite at a different room
+    // when the coordinate changed (favourites are keyed by room), else relabels.
     [RelayCommand]
-    private async Task RenameFavoriteAsync(FavoriteRowViewModel? row)
+    private async Task EditFavoriteAsync(FavoriteRowViewModel? row)
     {
         if (row is null || _favorites is null) return;
-        string? label = await PromptFolderNameAsync(
-            "Rename favourite", "New name for this favourite (blank = room name).", row.Label);
-        if (label is null) return;   // cancelled
-        _favorites.Rename(row.Key, string.IsNullOrWhiteSpace(label) ? null : label);
+        FavoriteEditDialogViewModel vm = new(
+            row.Label, row.Key.Map, row.Key.Room,
+            (m, r) => _graph.GetRoom(new RoomKey(m, r))?.Name);
+        FavoriteEditResult? res = await _dialogs
+            .OpenWindowAsync<FavoriteEditDialogViewModel, FavoriteEditResult?>(vm);
+        if (res is null) return;
+        RoomKey newKey = new(res.Map, res.Room);
+        if (newKey.Equals(row.Key))
+        {
+            _favorites.Rename(row.Key, res.Label);
+        }
+        else
+        {
+            string? folder = _favorites.FolderOf(row.Key);
+            _favorites.Remove(row.Key);
+            _favorites.Add(newKey, res.Label, folder);
+        }
     }
 
     [RelayCommand]

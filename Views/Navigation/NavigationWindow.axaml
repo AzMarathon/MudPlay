@@ -1154,6 +1154,7 @@
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).RenameFavoriteCommand}"
                                                                       CommandParameter="{Binding}"/>
                                                             <MenuItem Header="Move to folder…"
+                                                                      IsVisible="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).HasGotoFolders}"
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).MoveFavoriteToFolderPromptCommand}"
                                                                       CommandParameter="{Binding}"/>
                                                             <Separator/>

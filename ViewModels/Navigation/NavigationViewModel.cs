@@ -1324,6 +1324,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         entries.Sort((a, b) => string.Compare(a.Label, b.Label, StringComparison.OrdinalIgnoreCase));
         foreach (FavoriteRowViewModel e in entries) Favorites.Add(e);
         OnPropertyChanged(nameof(HasFavorites));
+        OnPropertyChanged(nameof(HasGotoFolders));
         RebuildFavoriteTree();
     }
 
@@ -1627,17 +1628,23 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         MoveSetupToFolder(row, folder);
     }
 
-    // Context-menu "Move to folder…" for a GOTO favourite — prompts for a
-    // destination path.
+    // Context-menu "Move to folder…" for a GOTO favourite — pick a destination
+    // folder from a list (root included) rather than typing a path. Only shown
+    // when at least one folder exists (see HasGotoFolders).
     [RelayCommand]
     private async Task MoveFavoriteToFolderPromptAsync(FavoriteRowViewModel? row)
     {
         if (row is null) return;
-        string? folder = await PromptFolderNameAsync(
-            "Move favourite", "Destination folder (blank = root).", row.Folder);
-        if (folder is null) return;
+        FolderPickerDialogViewModel vm = new(_services.Favorites.AllFolders, row.Folder);
+        string? folder = await _services.Dialogs
+            .OpenWindowAsync<FolderPickerDialogViewModel, string?>(vm);
+        if (folder is null) return;   // cancelled (root is "")
         MoveFavoriteToFolder(row, folder);
     }
+
+    // True while any GOTO folder exists — gates the favourite "Move to folder…"
+    // menu item (nowhere to move to otherwise).
+    public bool HasGotoFolders => _services.Favorites.AllFolders.Count > 0;
 
     private async Task<string?> PromptFolderNameAsync(string title, string prompt, string initial = "")
     {
