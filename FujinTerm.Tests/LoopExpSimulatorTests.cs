@@ -132,10 +132,11 @@ public sealed class LoopExpSimulatorTests
         // throughput (~800/hr) exceeds the 720 tick cap, so an hours-deep loop runs
         // at the cap — the estimate must not collapse into a synchronised
         // kill-then-idle wave (which pinned it near 4.7M).
-        // 31 wyvern lairs with 2 empty transit rooms between each (the mesa is
-        // spread out), walked at 1.0s/step. All respawns (270-390s) exceed a single
-        // lap, so without per-spawn variance the sim would lock every lair to "fire
-        // every 2nd lap" and halve the rate. It must clear that ~4.7M floor.
+        // 31 wyvern lairs with 2 empty transit rooms between each, walked at 1.0s/step.
+        // The 2-room hops (~3 steps) hide in the combat downtime, so travel is free and
+        // the loop is tick-limited: even though every respawn (270-390s) exceeds a
+        // single lap, the rate-based fixed point shortens the lap so the total lands at
+        // the 720/hr cap (720 × 9000 = 6.48M) — NOT the ~5.2M greedy-skip floor.
         var rooms = new ExpRoomVisit[93];
         for (int i = 0; i < 31; i++)
         {
@@ -146,11 +147,25 @@ public sealed class LoopExpSimulatorTests
             rooms[i * 3 + 2] = Empty(2, 13000 + i);
         }
         ExpSimResult e = LoopExpSimulator.Simulate(Route(rooms), Single(secPerStep: 1.0));
+        Assert.InRange(e.ExpPerHour, 6_400_000, 6_500_000);
+    }
 
-        // Paced to the slowest (390s) lair so all fire each lap: ~73 mobs ×
-        // 3600/390 ≈ 674 kills/hr × 9000 ≈ 6.1M — well clear of the ~5.2M
-        // greedy-skip / resonance floor.
-        Assert.InRange(e.ExpPerHour, 5_500_000, 6_300_000);
+    [Fact]
+    public void LongHopsBetweenLairs_CostTravelTicks_LowerThroughput()
+    {
+        // Same lairs but 6 empty rooms between each — a 7-step hop at 1.0s (7s) drops
+        // one combat tick per hop (floor(7/5)=1). That travel waste lengthens the lap,
+        // pulling the estimate meaningfully below the free-travel tick cap.
+        var rooms = new ExpRoomVisit[31 * 7];
+        for (int i = 0; i < 31; i++)
+        {
+            int respawn = i < 15 ? 270 : i < 19 ? 330 : 390;
+            rooms[i * 7] = Room(2, 11000 + i, Lair(2, 9000, respawn));
+            for (int k = 1; k < 7; k++) rooms[i * 7 + k] = Empty(2, 12000 + i * 10 + k);
+        }
+        ExpSimResult e = LoopExpSimulator.Simulate(Route(rooms), Single(secPerStep: 1.0));
+        // ~62 mobs, ~31 wasted ticks/lap → clearly below the 6.48M free-travel cap.
+        Assert.True(e.ExpPerHour < 5_500_000, $"long hops should cost throughput; got {e.ExpPerHour:N0}");
     }
 
     [Fact]

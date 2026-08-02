@@ -3,23 +3,21 @@ using System.Collections.Generic;
 
 namespace FujinTerm.Game.Map;
 
-// Tick-based exp/hr model for a lair loop. Combat resolves on a fixed 5-second
-// global tick (720/hour): you bank exp only on a tick where you're engaged with a
-// live mob, and movement between lairs rides the downtime between ticks — a hop
-// that completes before the next tick drops no round, so travel is FREE until a
-// stretch is long enough to leave you standing in a monster-less room when a tick
-// fires. Charging travel as wall-clock time added on top of combat (a naive lap
-// model) understates a tight loop, because that travel overlaps the downtime and
-// costs no ticks. See GAME_MECHANICS.md "Combat tick & exp accrual".
+// Rate-based exp/hr model for a lair loop. Combat resolves on a fixed 5-second
+// global tick (720/hour): you bank exp only on a tick you're engaged with a live
+// mob, and movement between lairs rides the downtime — a hop that completes before
+// the next tick drops no round, so travel is FREE until a stretch is long enough to
+// leave you in a monster-less room when a tick fires (then floor(transit/5) ticks
+// drop). See GAME_MECHANICS.md "Combat tick & exp accrual".
 //
-// Replay: walk the ordered lap on a wall clock. Each lair carries a last-kill
-// timestamp and fires only if wall - lastKill >= its respawn (instant / NPC
-// fixtures fire every pass). Firing costs mobCount × roundsToKill ticks (single-
-// target) or roundsToKill flat (rooming), banks the lair's exp, and re-stamps its
-// clock. Transit between engagements costs floor(transitSeconds / 5) dropped ticks
-// — the downtime after a kill absorbs the first tick-interval free. A warm-up
-// window sheds the "everything's ready at t=0" burst; exp banked over the following
-// hour is the rate.
+// A step-by-step replay of a fixed loop doesn't hold the real operating point: a
+// greedy skip cascades DOWN (skip a not-up lair → lap shortens → more get outrun),
+// and holding for every lair balloons UP (waits compound). Both are deterministic-
+// timing artifacts. So this solves for the steady lap time L as a fixed point
+// instead: each lair fires a fraction min(1, L/respawn) of the laps (instant/NPC
+// fixtures every lap), and L = the combat that fires + travel waste, never less than
+// the time to physically walk the route. It converges (rate-, not phase-based) and
+// reproduces a well-run loop's real throughput.
 
 public enum ExpCombatMode { SingleTarget, AreaAllTargets }
 
@@ -83,7 +81,6 @@ public sealed record ExpEstimatorSnapshot(
 public static class LoopExpSimulator
 {
     private const double HorizonSeconds = 3600.0;
-    private const int MaxIterations = 2_000_000;
 
     public static ExpSimResult Simulate(ExpRoute route, ExpSimSettings s)
     {
@@ -93,215 +90,89 @@ public static class LoopExpSimulator
         IReadOnlyList<ExpRoomVisit> lap = route.Lap;
         if (lap.Count == 0) return new ExpSimResult(0, 0, 0, Array.Empty<ExpLairStat>());
 
-        // Warm up until the slowest lair has had a chance to cycle once, then
-        // measure over an hour.
-        double maxTimer = 0;
-        foreach (ExpRoomVisit v in lap)
-            foreach (ExpTarget tg in v.Targets)
-                if (tg.Included && !tg.IsInstant && tg.RespawnSeconds > maxTimer) maxTimer = tg.RespawnSeconds;
-        double measureStart = Math.Min(maxTimer, HorizonSeconds);
-        double measureEnd = measureStart + HorizonSeconds;
+        double tick = s.SecondsPerRound > 0 ? s.SecondsPerRound : 5.0;   // combat cadence
+        double roundsPerMob = Math.Max(0.01, s.RoundsPerMob);
+        bool area = s.CombatMode == ExpCombatMode.AreaAllTargets;
 
-        // Clocks keyed by (RoomKey, target index) so a room visited twice in a
-        // lap shares one respawn clock rather than double-firing.
-        var lastKill = new Dictionary<(RoomKey Room, int Target), double>();
-        var fires = new Dictionary<(RoomKey, int), int>();
-        var misses = new Dictionary<(RoomKey, int), int>();
-        var closest = new Dictionary<(RoomKey, int), double>();
-
-        // Desynchronise the initial respawn phases. Starting every lair "up" at t=0
-        // and killing them in a fixed order locks the deterministic replay into a
-        // synchronised wave — clear the whole loop, then idle while it all repops at
-        // once — which loses ticks a real, hours-deep loop never loses: its per-lair
-        // timers are spread out, so with enough lairs there's almost always one
-        // ready. Spread each lair's first ready-time with a golden-ratio
-        // low-discrepancy sequence rather than in loop order: an in-order spread
-        // just makes the walker move WITH the ready-wave and still stall, whereas a
-        // decorrelated spread guarantees a live lair is always somewhere ahead, so
-        // the replay settles on the steady state (tick cap) instead of the synced
-        // transient. See GAME_MECHANICS.md "Combat tick & exp accrual".
-        var lairInit = new List<((RoomKey, int) Key, int Respawn)>();
-        var seenLair = new HashSet<(RoomKey, int)>();
+        // Deduped lair / fixture targets (a room revisited in the lap shares one
+        // respawn clock, so count it once).
+        var lairs = new List<(RoomKey Room, double Respawn, int Mobs, double ExpPerMob, bool Instant)>();
+        var seen = new HashSet<(RoomKey, int)>();
         for (int i = 0; i < lap.Count; i++)
             for (int j = 0; j < lap[i].Targets.Count; j++)
             {
                 ExpTarget tg = lap[i].Targets[j];
-                if (!tg.Included || tg.IsInstant || tg.MobCount <= 0 || tg.ExpPerMob <= 0) continue;
-                var key = (lap[i].Room, j);
-                if (seenLair.Add(key)) lairInit.Add((key, tg.RespawnSeconds));
+                if (!tg.Included || tg.MobCount <= 0 || tg.ExpPerMob <= 0) continue;
+                if (!seen.Add((lap[i].Room, j))) continue;
+                lairs.Add((lap[i].Room, tg.RespawnSeconds, tg.MobCount, tg.ExpPerMob, tg.IsInstant));
             }
-        if (lairInit.Count > 1 && maxTimer > 0)
-            for (int k = 0; k < lairInit.Count; k++)
-            {
-                double frac = (k * 0.618033988749895) % 1.0;   // golden-ratio spread, decorrelated from walk order
-                double readyAt = frac * maxTimer;
-                lastKill[lairInit[k].Key] = readyAt - lairInit[k].Respawn;   // ready exactly at readyAt
-            }
+        if (lairs.Count == 0) return new ExpSimResult(0, 0, 0, Array.Empty<ExpLairStat>());
 
-        double tick = s.SecondsPerRound > 0 ? s.SecondsPerRound : 5.0;   // combat cadence
-
-        // One full lap's combat time (every lair fired once) — the pacing cap. A
-        // deterministic greedy-skip replay is unstable at the loop's real operating
-        // point: the moment one lair is skipped the lap shortens, more get outrun,
-        // and it cascades to a "fire every 2nd lap" floor far below what a real run
-        // achieves. So instead of racing ahead we PACE — when a lair isn't up yet we
-        // hold for its repop rather than lapping past it — as long as that hold is
-        // shorter than lapping the whole loop back. That settles the sim on the same
-        // steady state a well-run loop actually holds. The per-lair "early by N"
-        // readout still shows how early each lair is hit (i.e. how over-visited).
-        double loopCombatSeconds = 0;
-        foreach (ExpRoomVisit v in lap)
-            foreach (ExpTarget tg in v.Targets)
-                if (tg.Included && !tg.IsInstant && tg.MobCount > 0 && tg.ExpPerMob > 0)
-                    loopCombatSeconds += (s.CombatMode == ExpCombatMode.AreaAllTargets
-                        ? s.RoundsPerMob : tg.MobCount * s.RoundsPerMob) * tick;
-
-        double wall = 0;                 // wall-clock seconds; combat quantized to the tick
-        double measuredExp = 0;
-        int lapsInWindow = 0;
-        bool first = true;
-        int iter = 0;
-        double pendingSteps = 0;         // transit steps accrued since the last engagement
-
-        var firedThisRoom = new List<(RoomKey, int)>(4);
-
-        while (wall < measureEnd && iter < MaxIterations)
+        // Full-path walk time (continuous) plus travel waste — whole ticks lost to
+        // lair-to-lair hops too long to hide in a kill's downtime. Both fixed by the
+        // route's geometry; computed once.
+        double walkSeconds = 0;
+        double travelWasteSeconds = 0;
+        int stepsSinceLair = 0;
+        bool firstRoom = true;
+        for (int i = 0; i < lap.Count; i++)
         {
-            double wallAtLapStart = wall;
-            bool lapFired = false;
-
-            for (int i = 0; i < lap.Count; i++)
+            if (!firstRoom) { walkSeconds += s.SecondsPerStep; stepsSinceLair++; }
+            firstRoom = false;
+            bool isLair = false;
+            foreach (ExpTarget tg in lap[i].Targets)
+                if (tg.Included && tg.MobCount > 0 && tg.ExpPerMob > 0) { isLair = true; break; }
+            if (isLair)
             {
-                iter++;
-                if (!(first && i == 0)) pendingSteps += 1;   // one move to enter this room
-
-                IReadOnlyList<ExpTarget> targets = lap[i].Targets;
-                if (targets.Count == 0) continue;            // empty room: pure transit
-
-                bool inWindow = wall >= measureStart && wall < measureEnd;
-                firedThisRoom.Clear();
-                double roomExp = 0;
-                int firedMobs = 0;
-
-                // Soonest a not-yet-up lair here will repop (for the pace-vs-skip
-                // decision) and how early we'd be arriving.
-                double soonestReady = double.MaxValue;
-                int soonestJ = -1;
-                double soonestShortfall = 0;
-
-                for (int j = 0; j < targets.Count; j++)
-                {
-                    ExpTarget tg = targets[j];
-                    if (!tg.Included || tg.MobCount <= 0 || tg.ExpPerMob <= 0) continue;
-                    var key = (lap[i].Room, j);
-
-                    if (tg.IsInstant)
-                    {
-                        firedThisRoom.Add(key);
-                        firedMobs += tg.MobCount;
-                        roomExp += tg.ExpPerClear;
-                        continue;
-                    }
-
-                    double lk = lastKill.TryGetValue(key, out double v) ? v : double.NegativeInfinity;
-                    double ready = lk + tg.RespawnSeconds;
-                    if (wall >= ready)
-                    {
-                        firedThisRoom.Add(key);
-                        firedMobs += tg.MobCount;
-                        roomExp += tg.ExpPerClear;
-                        if (inWindow) fires[key] = fires.GetValueOrDefault(key) + 1;
-                    }
-                    else if (ready < soonestReady)
-                    {
-                        soonestReady = ready;
-                        soonestJ = j;
-                        soonestShortfall = ready - wall;   // how early we are
-                    }
-                }
-
-                // Nothing up here. Pace, don't race ahead: if the soonest lair will
-                // repop within a combat lap, hold for it (the operating point a real
-                // loop holds) rather than lapping past and cascading down. If it's
-                // slower than a whole lap, skip-and-return is genuinely faster — a
-                // real miss. The early arrival is recorded either way so the readout
-                // shows how early ("early by N") the loop hits it.
-                if (firedThisRoom.Count == 0)
-                {
-                    if (soonestJ < 0 || soonestShortfall > loopCombatSeconds)
-                    {
-                        if (soonestJ >= 0 && inWindow)
-                        {
-                            var mk = (lap[i].Room, soonestJ);
-                            misses[mk] = misses.GetValueOrDefault(mk) + 1;
-                            if (!closest.TryGetValue(mk, out double c) || soonestShortfall < c) closest[mk] = soonestShortfall;
-                        }
-                        continue;   // skip: too slow to hold for
-                    }
-
-                    // Hold for it: charge the travel to arrive, wait out the repop,
-                    // then fire it (fall through to the shared kill below).
-                    wall += Math.Floor(pendingSteps * s.SecondsPerStep / tick) * tick;
-                    pendingSteps = 0;
-                    wall = Math.Max(wall, soonestReady);
-                    var fk = (lap[i].Room, soonestJ);
-                    ExpTarget wtg = targets[soonestJ];
-                    firedThisRoom.Add(fk);
-                    firedMobs += wtg.MobCount;
-                    roomExp += wtg.ExpPerClear;
-                    if (inWindow)
-                    {
-                        fires[fk] = fires.GetValueOrDefault(fk) + 1;
-                        misses[fk] = misses.GetValueOrDefault(fk) + 1;   // arrived early
-                        if (!closest.TryGetValue(fk, out double c) || soonestShortfall < c) closest[fk] = soonestShortfall;
-                    }
-                }
-
-                // Fire the room: charge the transit then the kill. Travel is free
-                // while it hides in the downtime after a kill; only whole ticks in
-                // monster-less rooms are dropped. Single-target lingers mobCount ×
-                // per-mob rounds; area clears the room flat.
-                wall += Math.Floor(pendingSteps * s.SecondsPerStep / tick) * tick;
-                pendingSteps = 0;
-                double killTicks = s.CombatMode == ExpCombatMode.AreaAllTargets
-                    ? s.RoundsPerMob
-                    : firedMobs * s.RoundsPerMob;
-                wall += killTicks * tick;
-
-                if (inWindow) measuredExp += roomExp;
-                foreach ((RoomKey, int) key in firedThisRoom) lastKill[key] = wall;   // respawn clock starts at the kill
-                lapFired = true;
-            }
-
-            first = false;
-            if (lapFired && wall >= measureStart && wall < measureEnd) lapsInWindow++;
-
-            // Break a stall: a whole lap that engaged nothing (every lair still
-            // respawning) advances no clock, so respawns would never catch up.
-            // Flush the pending transit as elapsed time (at least one tick).
-            if (wall == wallAtLapStart)
-            {
-                wall += Math.Max(pendingSteps * s.SecondsPerStep, tick);
-                pendingSteps = 0;
+                travelWasteSeconds += Math.Floor(stepsSinceLair * s.SecondsPerStep / tick) * tick;
+                stepsSinceLair = 0;
             }
         }
+        walkSeconds += s.SecondsPerStep;   // wrap back to the first room
+        travelWasteSeconds += Math.Floor((stepsSinceLair + 1) * s.SecondsPerStep / tick) * tick;
 
-        double mult = s.RealConditionsMultiplier;
-        double expPerHour = measuredExp * mult;   // window is exactly one hour
-        double avgLap = lapsInWindow > 0 ? HorizonSeconds / lapsInWindow : 0;
+        // Rate-based fixed point on lap time. A step-by-step replay of a fixed loop
+        // either cascades DOWN (greedy skip: skip a not-up lair → lap shortens →
+        // more get outrun → "fire every 2nd lap" floor) or balloons UP (hold for
+        // every lair → the waits compound into a 20-minute lap); both are artifacts
+        // of deterministic phase timing, not the loop's real behaviour. So solve for
+        // the steady lap L directly: each lair fires a fraction min(1, L/respawn) of
+        // the laps (instant/NPC fixtures every lap); the lap is the combat that fires
+        // plus travel waste, but never less than the time to physically walk the
+        // route. Rate-based, so it converges (no phase resonance) and reproduces a
+        // well-run loop's real throughput. See GAME_MECHANICS.md "Combat tick & exp
+        // accrual".
+        double lapSeconds = 60;
+        for (int it = 0; it < 300; it++)
+        {
+            double combat = 0;
+            foreach (var l in lairs)
+            {
+                double frac = l.Instant ? 1.0 : Math.Min(1.0, lapSeconds / l.Respawn);
+                combat += frac * (area ? roundsPerMob : l.Mobs * roundsPerMob) * tick;
+            }
+            double newLap = Math.Max(Math.Max(combat + travelWasteSeconds, walkSeconds), tick);
+            if (Math.Abs(newLap - lapSeconds) < 0.05) { lapSeconds = newLap; break; }
+            lapSeconds = newLap;
+        }
 
+        double lapsPerHour = HorizonSeconds / lapSeconds;
+        double expPerHour = 0;
         var stats = new List<ExpLairStat>();
-        var seenLairKeys = new HashSet<(RoomKey, int)>(fires.Keys);
-        seenLairKeys.UnionWith(misses.Keys);
-        foreach ((RoomKey Room, int Target) key in seenLairKeys)
+        foreach (var l in lairs)
         {
-            stats.Add(new ExpLairStat(
-                key.Room,
-                fires.GetValueOrDefault(key),
-                misses.GetValueOrDefault(key),
-                closest.TryGetValue(key, out double c) ? c : 0));
+            double frac = l.Instant ? 1.0 : Math.Min(1.0, lapSeconds / l.Respawn);
+            double firesPerHour = frac * lapsPerHour;
+            expPerHour += l.Mobs * l.ExpPerMob * firesPerHour;
+            if (!l.Instant)
+                stats.Add(new ExpLairStat(
+                    l.Room,
+                    (int)Math.Round(firesPerHour),
+                    (int)Math.Round((1.0 - frac) * lapsPerHour),   // laps you arrive early on
+                    Math.Max(0.0, l.Respawn - lapSeconds)));        // how early
         }
+        expPerHour *= s.RealConditionsMultiplier;
 
-        return new ExpSimResult(expPerHour, avgLap, lapsInWindow, stats);
+        return new ExpSimResult(expPerHour, lapSeconds, (int)Math.Round(lapsPerHour), stats);
     }
 }
