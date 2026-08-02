@@ -46,7 +46,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     [ObservableProperty] private IReadOnlyList<RoomKey>? _waypointKeys;
 
     // Tunables — each change re-runs the estimate.
-    [ObservableProperty] private double _secondsPerStep = 1.0;
+    [ObservableProperty] private double _secondsPerStep = 1.4;
     [ObservableProperty] private bool _areaCombat;                 // false = single-target, true = AoE ("rooming")
     [ObservableProperty] private double _roundsPerMob = 1.0;
     [ObservableProperty] private double _realConditionsMultiplier = 0.87;
