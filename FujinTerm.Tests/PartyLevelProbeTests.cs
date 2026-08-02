@@ -83,6 +83,42 @@ public sealed class PartyLevelProbeTests
     }
 
     [Fact]
+    public void Reply_NoPendingQuery_StillRecordsLevel()
+    {
+        var h = new Harness();
+        h.AddMember("Fujin", self: true);
+        h.AddMember("Raijin");
+        h.GoInParty();
+
+        // No probe in flight — an unsolicited (or reconnect-time) @level reply
+        // must still persist the exact level so a narrow level gate reads it
+        // instead of the coarse title band.
+        h.Reply("Raijin", Harness.Level(10));
+
+        Assert.Contains(("Raijin", 10), h.Recorded);
+    }
+
+    [Fact]
+    public async Task Reply_AfterQueryWindowClosed_StillRecordsLevel()
+    {
+        var h = new Harness();
+        h.AddMember("Fujin", self: true);
+        h.AddMember("Raijin");
+        h.GoInParty();
+
+        Task<PartyLevelProbe.PartyLevelResult> q = h.Probe.QueryAsync();
+        h.FireWindows();                                  // window elapses with no reply
+        PartyLevelProbe.PartyLevelResult r = await q;
+        Assert.False(r.AnyReplied);                       // probe saw nothing in time
+
+        // The reply lands after the window — the exact level is still recorded
+        // (the previous code dropped it, leaving level gates stuck on the band).
+        h.Reply("Raijin", Harness.Level(10));
+
+        Assert.Contains(("Raijin", 10), h.Recorded);
+    }
+
+    [Fact]
     public async Task Query_OnlyInvitedMember_ReturnsEmptyImmediately()
     {
         var h = new Harness();

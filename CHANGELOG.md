@@ -9,7 +9,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Filtering the Go To or Loops/Lairs collapsible now auto-expands folders that hold a match, so a nested match shows immediately instead of behind a collapsed folder — and clearing the filter restores your folders' expand state
 - Backscroll window mouse-wheel now scrolls a configurable number of lines per notch (default 5, was 1) — set it in Settings → BBS + Display, right below Scrollback, saved per-BBS
 - A party follower coming out of the train-stats screen is no longer left unable to rejoin: entering that screen breaks up the party server-side, so the follower now clears its own stale "following" state — and even if it lingers, an invite / @join from the leader you think you're following is now honored (a leader never re-invites a current follower) instead of rejected as "already following"
-- bug reports addressed: stock-20260801-002423
+- A party member's exact level from an `@level` reply is now recorded even when the reply lands after the query window closes (a slow telepath round-trip) — so a narrow level gate (e.g. a room admitting only level 10) no longer stays blocked on the coarse title-derived level band when the member is actually the right level
+- bug reports addressed: stock-20260801-002423, stock-20260801-041531, stock-20260801-043107
 
 ## 2.14.0
 

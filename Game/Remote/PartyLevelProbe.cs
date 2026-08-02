@@ -157,7 +157,6 @@ public sealed partial class PartyLevelProbe : IDisposable
 
     private void OnChatEntry(ChatLogEntry entry)
     {
-        if (_pending.Count == 0) return;
         if (entry.Channel != ChatChannel.TelepathIncoming) return;
         if (string.IsNullOrEmpty(entry.Speaker)) return;
         if (string.IsNullOrEmpty(entry.Message)) return;
@@ -169,9 +168,20 @@ public sealed partial class PartyLevelProbe : IDisposable
         string given = GivenName(entry.Speaker);
 
         // A parsed level is authoritative for this player — persist it to the
-        // players table regardless of which in-flight query (if any) still
-        // awaits them, so the exact level supersedes the title-derived band.
-        if (known) _recordLevel?.Invoke(given, level);
+        // players table even when no probe is still awaiting them, so a reply
+        // that lands after the query window closed (a slow telepath round-trip)
+        // still supersedes the title-derived band. Previously this ran only
+        // while a probe was in flight, so a late reply was dropped and a narrow
+        // level gate (e.g. "10 to 10") stayed stuck on the coarse title range.
+        if (known)
+        {
+            _recordLevel?.Invoke(given, level);
+            _log?.Info("PartyLevel", $"recorded {given} = level {level}");
+        }
+
+        // Pending-query bookkeeping only applies while a probe is awaiting
+        // replies; a level that arrives outside a window is still recorded above.
+        if (_pending.Count == 0) return;
 
         // Snapshot: Complete mutates _pending. One reply can satisfy several
         // in-flight queries (no echoed parameter to disambiguate); recording

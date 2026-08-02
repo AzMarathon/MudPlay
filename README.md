@@ -6,6 +6,7 @@
 > - Go To favourites are now stored per game-data set (shared by every character on that realm) rather than per-character — the same model as loops and lairs
 > - Filtering the Go To or Loops/Lairs collapsible now auto-expands folders that hold a match, so nested matches show immediately; clearing the filter restores your folders' expand state
 > - Backscroll window mouse-wheel now scrolls a configurable number of lines per notch (default 5, was 1) — set it in Settings → BBS + Display, right below Scrollback, saved per-BBS
+> - A party member's exact level from an `@level` reply is now recorded even when the reply lands after the query window closes — so a narrow level gate (e.g. a room admitting only level 10) no longer stays blocked on the coarse title-derived level band
 > - A party follower coming out of the train-stats screen is no longer left unable to rejoin: entering that screen breaks up the party server-side, so the follower now clears its own stale "following" state — and even if it lingers, an invite / @join from the leader you think you're following is now honored (a leader never re-invites a current follower) instead of rejected as "already following"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
