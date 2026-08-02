@@ -28,6 +28,33 @@ it isn't here and you're unsure, ask.
 - If a specific duration's unit is ever ambiguous, **ask the user** — they can give the correct
   value rather than us guessing.
 
+**Combat tick & exp accrual** *([CONFIRMED] 2026-08-02, user)*
+- Combat fires on a **fixed 5-second global tick** (720 ticks/hour), whether or not you're doing
+  anything. If you aren't engaged with a monster, the tick is a **no-op** on the engine side —
+  you send no combat round out, so nothing can die and no exp is awarded that tick.
+- **Engaged** = a monster is in the room AND you sent an attack command at it. Only then does a
+  tick land a round.
+- **Kill timing is counted in ticks from engagement.** A mob you kill "in 1 round" dies on the
+  **next** combat tick after you engaged it; a 2-round mob dies after 2 ticks pass; etc. This is
+  why the estimator's "rounds to kill a mob" accepts **decimals** — if some mobs die in 1 round
+  and some in 3, the average is fractional.
+- **A tick in a room with no (live) monster yields nothing** — no damage out, no exp in.
+- **Movement rides the downtime between ticks.** A hop from one lair to the next that completes
+  within the ~5s gap re-engages you before the next tick, so it drops **no** combat round — travel
+  is effectively free when it fits. Travel only costs exp when a stretch is long enough that a tick
+  fires while you're standing in a monster-less room mid-transit. Concretely (user): at **1.0–1.2s
+  per step you can cross 4 empty (non-lair) rooms** between lairs without dropping a round; **above
+  1.2s it drops to 3** — i.e. ~`floor(5s ÷ step-seconds)` free rooms per hop.
+- **Each monster slot in a lair carries its own respawn timer**, tracked independently — separate
+  from every other lair, even lairs with the same monster type and size. So a dense multi-lair loop
+  desynchronises: with enough slots there's almost always one ready, and the loop runs pinned at the
+  720/hr tick cap rather than clearing everything then idling for a synchronised repop.
+- Consequence: a perfectly streamlined lair loop keeps a live mob engaged on all 720 ticks, so the
+  ceiling is `720 × avg-exp-per-kill` (matches the "720 kills/hour" cave-worm cap). Charging travel
+  as wall-clock time *added to* combat (as a naive lap model does) understates a tight loop, because
+  in reality that travel overlaps the downtime and doesn't consume ticks. See [[project_nav_obstacle_traversal]]-adjacent
+  exp-estimator work.
+
 ## Equipment & gear
 
 **Equip / remove verbs** *(all [CONFIRMED])*
@@ -450,6 +477,37 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   fallback — otherwise, with identical-exp mobs dying every few seconds (a swarm), the prior kill's
   exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback
   death on it, a beat before the current mob actually dies.
+
+## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
+
+Two distinct spawn mechanisms, and they respawn on completely different rules. This matters
+directly for exp/hr estimation of a loop (how fast a lair refills vs how fast you can lap it).
+
+**Lair mobs — independent per-mob timer keyed to each kill.**
+- A room's `Lair` group spawns N monsters with a respawn time `T` (the lair's `AvgDelay` — stock
+  exports it in **minutes**, Paradigm/GreaterMUD differs; else the slowest member's `RegenTime`).
+  This is the resolution `LairTimerStore` already performs.
+- **Each monster carries its own independent clock of length `T`, started at the moment *that*
+  monster was last killed** — not a shared lair clock. In a 3-mob, 60 s lair: a mob killed at t=0
+  is killable again at t=60; one killed at t=10 is back at t=70. They come back **staggered**.
+- To re-kill a mob you must be in the room at or after `(its last kill + T)`. Arriving earlier, it
+  simply isn't there yet — being early does **not** let it spawn.
+- **Loop consequence:** a lap that returns to a lair with period `P ≥ T` finds it fully respawned
+  (full mobs that lap); `P < T` laps into a partial/empty room. So a lair's sustainable exp rate is
+  capped at `mobs × exp ÷ T` regardless of how fast you loop — the "respawn-limited" regime — while a
+  loop long enough that `P ≥ T` is "travel/kill-limited." The real rate per lair ≈ `min(the two)`.
+
+**NPC-placed mobs — regenerate on entry, effectively no respawn cap.**
+- A monster placed via the room's **`NPC`** field (a fixture, distinct from a `Lair` group) with
+  `RegenTime` 0-ish **regenerates the moment you (re-)enter the room after killing it** — no timer to
+  wait out. These are the classic "rooming" targets (kill as fast as you can fight; bounded by kill
+  speed, not respawn). Verified stock examples: slime beast `1/1765` (`NPC=57`, `RegenTime 0`, 250 xp),
+  cave worm `1/866` (`NPC=8`, `RegenTime 0`, 100 xp), barmaid `1/311` (`NPC=248`, `RegenTime 1`,
+  **0 xp** — an evil-points target, not exp).
+- A room can carry **both** an NPC fixture *and* a `Lair` group (cave-worm room `1/866` has `NPC=8`
+  plus a lair), so a room's yield is the sum of its NPC target(s) + its lair contribution.
+- For a **loop**, an instant mob still yields only once per lap (bounded by lap time); only a
+  stay-in-room **rooming** setup kills it every round.
 
 ## Vitality — HP, dropping, and death
 

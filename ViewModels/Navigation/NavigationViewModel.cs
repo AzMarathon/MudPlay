@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using Avalonia;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -103,6 +105,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshCrawlerChords();
         RefreshTeleportRooms();
         RefreshDeathRooms();
+
+        // Let the bug report snapshot the live estimator when one's active. The
+        // lambda reads the current ExpEstimator (null when not estimating), so a
+        // single registration covers every enter/exit without per-transition wiring.
+        _services.ExpEstimatorSnapshotProvider = () => ExpEstimator?.ToSnapshot();
     }
 
     // Per-second pump for CURRENT NAV lair countdowns. Cheap to leave
@@ -1955,8 +1962,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     partial void OnCurrentModeChanged(NavigationMode value)
     {
+        // Any transition out of ExpEstimator that didn't route through
+        // ToggleExpEstimatorMode (e.g. pausing a running loop opens the loop
+        // builder) still has to tear the session down so its map-preview bridge
+        // unsubscribes. TearDownExpEstimator leaves CurrentMode alone, so this
+        // won't re-enter.
+        if (value != NavigationMode.ExpEstimator && ExpEstimator is not null)
+            TearDownExpEstimator();
         OnPropertyChanged(nameof(IsLoopMode));
         OnPropertyChanged(nameof(IsLairMode));
+        OnPropertyChanged(nameof(IsExpEstimatorMode));
         OnPropertyChanged(nameof(IsLairBuilding));
         OnPropertyChanged(nameof(LairBuildStatusText));
         EnsureLairTickRunning();
@@ -1976,6 +1991,147 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public LoopBuilderSessionViewModel? LoopBuilder { get; private set; }
 
     public bool IsLoopBuilding => LoopBuilder is not null;
+
+    // Active exp/hr estimator session when CurrentMode == ExpEstimator; null
+    // otherwise. Mutually exclusive with the loop builder — both consume map
+    // clicks as waypoints, so the two enter buttons disable each other.
+    public ExpEstimatorSessionViewModel? ExpEstimator { get; private set; }
+
+    public bool IsExpEstimatorMode => CurrentMode == NavigationMode.ExpEstimator;
+    public bool IsExpEstimating => ExpEstimator is not null;
+
+    [RelayCommand]
+    private void ToggleExpEstimatorMode()
+    {
+        if (CurrentMode == NavigationMode.ExpEstimator)
+        {
+            TearDownExpEstimator();
+            CurrentMode = NavigationMode.Idle;
+        }
+        else
+        {
+            // The enter button is disabled while a loop is being built, so we
+            // never clobber an unsaved loop. Tear down any driving engine +
+            // opposing build mode, same as ToggleLoopMode.
+            if (_services.AutoLair.IsActive)
+                _services.AutoLair.Stop("exp estimator requested");
+            if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
+                _services.Walker.Stop("exp estimator requested");
+            _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
+            if (CurrentMode == NavigationMode.AutoLair)
+            {
+                if (!_services.AutoLair.IsActive) _services.AutoLair.Clear();
+                CurrentMode = NavigationMode.Idle;
+            }
+
+            var session = new ExpEstimatorSessionViewModel(
+                _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.Movement);
+            session.PropertyChanged += OnExpEstimatorPropertyChanged;
+            ExpEstimator = session;
+            CurrentMode = NavigationMode.ExpEstimator;
+        }
+        OnPropertyChanged(nameof(ExpEstimator));
+        OnPropertyChanged(nameof(IsExpEstimating));
+    }
+
+    // Seed a fresh estimator session from a saved loop so it can be analysed.
+    // Only meaningful while already in ExpEstimator mode (the Load-loop picker
+    // lives in the estimator collapsible); replaces the current session.
+    public void LoadLoopIntoEstimator(Loop? loop)
+    {
+        if (loop is null || loop.Waypoints.Count < 2) return;
+        TearDownExpEstimator();
+        TearDownLoopBuilder();
+        var session = new ExpEstimatorSessionViewModel(
+            _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.Movement)
+        { ProposedName = loop.Name };
+        session.PropertyChanged += OnExpEstimatorPropertyChanged;
+        foreach (LoopWaypoint w in loop.Waypoints) session.AddClick(w.Key);
+        ExpEstimator = session;
+        CurrentMode = NavigationMode.ExpEstimator;
+        OnPropertyChanged(nameof(ExpEstimator));
+        OnPropertyChanged(nameof(IsExpEstimating));
+
+        // Centre the map on the loop's first room so the loaded route is in view.
+        // Selection before Layout: MapControl centres on SelectedRoomKey when the
+        // layout swaps (see OnFloorChangeRequested).
+        RoomKey firstRoom = loop.Waypoints[0].Key;
+        SelectedRoomKey = firstRoom;
+        Layout = _services.Bfs.BuildLayout(firstRoom);
+    }
+
+    // "Load loop…" in the estimator collapsible → browse to a saved .loop file
+    // (default location: the active set's Loops folder) and seed the session.
+    [RelayCommand]
+    private async Task BrowseLoadLoopIntoEstimator()
+    {
+        if (Application.Current?.ApplicationLifetime
+            is not Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime
+                { MainWindow: { } main })
+            return;
+
+        var options = new FilePickerOpenOptions
+        {
+            Title = "Load a loop to estimate",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Loop file") { Patterns = new[] { "*" + LoopManager.LoopFileSuffix } },
+                FilePickerFileTypes.All,
+            },
+        };
+
+        // Default to the active game-data set's Loops folder.
+        if (_services.Loops.SetName is { } set
+            && await main.StorageProvider.TryGetFolderFromPathAsync(AppPaths.GameDataSetLoopsFolder(set)) is { } start)
+            options.SuggestedStartLocation = start;
+
+        IReadOnlyList<IStorageFile> picked = await main.StorageProvider.OpenFilePickerAsync(options);
+        if (picked.Count == 0) return;
+        if (_services.Loops.LoadFile(picked[0].Path.LocalPath) is { } loop)
+            LoadLoopIntoEstimator(loop);
+    }
+
+    private void TearDownExpEstimator()
+    {
+        if (ExpEstimator is not null)
+            ExpEstimator.PropertyChanged -= OnExpEstimatorPropertyChanged;
+        ExpEstimator = null;
+        LoopBuilderPath = null;
+        LoopBuilderWaypoints = null;
+        OnPropertyChanged(nameof(ExpEstimator));
+        OnPropertyChanged(nameof(IsExpEstimating));
+    }
+
+    private void TearDownLoopBuilder()
+    {
+        if (LoopBuilder is not null)
+            LoopBuilder.PropertyChanged -= OnLoopBuilderPropertyChanged;
+        LoopBuilder = null;
+        LoopBuilderPath = null;
+        LoopBuilderWaypoints = null;
+        OnPropertyChanged(nameof(LoopBuilder));
+        OnPropertyChanged(nameof(IsLoopBuilding));
+    }
+
+    // Mirror the estimator session's preview onto the map's loop-preview bindings
+    // (LoopBuilderPath = red polyline, LoopBuilderWaypoints = numbered pins). These
+    // are reused — the loop builder and the estimator never run at once (their enter
+    // buttons disable each other), and RefreshLoopOverlays only touches the runner's
+    // blue-cycle bindings, so a loop running in the background can't stomp them.
+    private void OnExpEstimatorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        ExpEstimatorSessionViewModel? s = sender as ExpEstimatorSessionViewModel ?? ExpEstimator;
+        switch (e.PropertyName)
+        {
+            case nameof(ExpEstimatorSessionViewModel.PreviewedRoomKeys):
+                LoopBuilderPath = s?.PreviewedRoomKeys;
+                break;
+            case nameof(ExpEstimatorSessionViewModel.WaypointKeys):
+                LoopBuilderWaypoints = s?.WaypointKeys;
+                break;
+        }
+    }
 
     [RelayCommand]
     private void ToggleLoopMode()
@@ -2074,6 +2230,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 break;
             case NavigationMode.AutoLair:
                 _services.AutoLair.Toggle(key);
+                break;
+            case NavigationMode.ExpEstimator:
+                ExpEstimator?.AddClick(key);
                 break;
         }
     }
@@ -3483,6 +3642,76 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (row is null) return;
         MoveBuilderClick(row.Index, row.Index + 1);
     }
+
+    // ----- Exp/Hr estimator row + lifecycle commands ----------------
+    // Parallel the loop-builder row commands above, but target the estimator
+    // session's click list. Rows reuse LoopBuilderRow (same 1-based Index shape).
+
+    [RelayCommand]
+    private void RemoveEstimatorClick(LoopBuilderRow? row)
+    {
+        if (row is not null) ExpEstimator?.RemoveClickAt(row.Index - 1);
+    }
+
+    [RelayCommand]
+    private void MoveEstimatorClickUp(LoopBuilderRow? row)
+    {
+        if (row is not null) ExpEstimator?.MoveClick(row.Index - 1, row.Index - 2);
+    }
+
+    [RelayCommand]
+    private void MoveEstimatorClickDown(LoopBuilderRow? row)
+    {
+        if (row is not null) ExpEstimator?.MoveClick(row.Index - 1, row.Index);
+    }
+
+    [RelayCommand]
+    private void ClearEstimatorClicks() => ExpEstimator?.Clear();
+
+    // "Save as loop" → system Save-As dialog so the user can rename the loop and
+    // choose where it lands (defaults to the active set's Loops folder — saving
+    // there makes it a managed, runnable loop; elsewhere it's a plain export). On a
+    // successful save, leave estimator mode; cancelling keeps the session open.
+    [RelayCommand]
+    private async Task SaveEstimatorAsLoop()
+    {
+        if (ExpEstimator is not { CanSave: true } est || est.BuildTransient() is not { } loop) return;
+        if (Application.Current?.ApplicationLifetime
+            is not Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime
+                { MainWindow: { } main })
+            return;
+
+        var options = new FilePickerSaveOptions
+        {
+            Title = "Save loop",
+            SuggestedFileName = est.ProposedName + LoopManager.LoopFileSuffix,
+            DefaultExtension = LoopManager.LoopFileSuffix.TrimStart('.'),
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("Loop file") { Patterns = new[] { "*" + LoopManager.LoopFileSuffix } },
+            },
+        };
+        if (_services.Loops.SetName is { } set
+            && await main.StorageProvider.TryGetFolderFromPathAsync(AppPaths.GameDataSetLoopsFolder(set)) is { } start)
+            options.SuggestedStartLocation = start;
+
+        IStorageFile? file = await main.StorageProvider.SaveFilePickerAsync(options);
+        if (file is null) return;   // cancelled — stay in estimator mode
+
+        _services.Loops.SaveToPath(loop, file.Path.LocalPath);
+        TearDownExpEstimator();
+        CurrentMode = NavigationMode.Idle;
+    }
+
+    // Throw the estimate away and leave the mode — same teardown as toggling the
+    // Overlays chip off.
+    [RelayCommand]
+    private void DiscardEstimator()
+    {
+        if (CurrentMode != NavigationMode.ExpEstimator) return;
+        TearDownExpEstimator();
+        CurrentMode = NavigationMode.Idle;
+    }
 }
 
 // Which engine is currently moving the player — gates Run/Stop, status
@@ -3501,4 +3730,5 @@ public enum NavigationMode
     Idle = 0,
     LoopBuild = 1,
     AutoLair = 2,
+    ExpEstimator = 3,
 }

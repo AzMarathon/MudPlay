@@ -2,6 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.17.0
+
+- Navigation gains an Exp/Hr Estimator (its own collapsible in the map's right rail): press Start estimating, click rooms on the map to build a throwaway loop, and the estimated experience-per-hour plus a per-lair breakdown surface right there in the panel — then Save it as a real loop or Discard it
+- The estimate is built on the game's 5-second combat tick (720 kills/hour ceiling): movement between lairs rides the downtime, so a short hop is free and only a genuinely long stretch (5+ empty rooms) costs a combat round. It solves for the loop's steady lap time as a fixed point — each lair fires min(1, lap ÷ respawn) of the laps — so a dense loop with free travel lands at the 720/hr cap and a spread-out one lands lower; the per-lair readout shows how early ("early by Ns") each lair is hit. NPC-placed fixtures (e.g. the 1/1765 slime beast) respawn instantly; pool exp is the expected value across the lair's monster list. The real-world multiplier is the haircut from that ceiling to live conditions (~0.9)
+- Loading a loop into the estimator centres the map on its first room; the Save / Stop Estimating / Load / Clear buttons sit at the top of the panel; the per-lair list is labelled by map/room and reserves room for its scrollbar so it never covers the figures
+- Tunable per your character: movement speed (seconds per step), an "I'm Rooming" toggle for area vs single-target combat, rounds to kill a mob, and a real-world multiplier; a per-lair readout shows how often each fires vs is missed and by how many seconds, so you can nudge the loop to catch a near-miss
+- Locked out while a loop is being built (both consume map clicks as waypoints); available again once the loop is running. "Save as loop" opens a system dialog to rename and choose the location (defaults to the active set's Loops folder — saving there makes it a runnable loop); "Load loop…" browses for a saved .loop file to analyse
+- A live estimator session (route, tunables, estimate, and per-lair fires/misses) is captured in the bug report, so a "the exp/hr looks wrong" report is diagnosable
+
 ## 2.16.0
 
 - Go To favourites management is back as a dedicated tab in the Navigation Management window: create / rename / delete folders (buttons, not just right-click), Add a favourite by room-name search or map/room number, drag favourites between folders, and per-favourite Walk / full Edit (name + map + room, in the tab and the rail's ✎) / Move-to-folder (pick from a list) / Delete. The GOTO collapsible also gains a filter box, and adding a favourite from the map now auto-expands the pane so it's actually visible (it previously read as a no-op). GOTO folders in the rail start collapsed, matching the Loops/Lairs section

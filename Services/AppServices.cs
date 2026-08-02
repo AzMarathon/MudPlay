@@ -1485,6 +1485,17 @@ public sealed class AppServices
     // scheduler reads NextReadyAt to choose the next leg.
     public Game.Map.LairTimerStore LairTimers { get; private set; } = null!;
 
+    // Exp/hr estimator resolver — turns a loop's waypoints into the per-room
+    // route the LoopExpSimulator scores. Reads lair/monster game data; its cache
+    // drops on ActiveSetChanged (same app-lifetime pattern as LairTimers).
+    public Game.Map.RouteExpResolver ExpResolver { get; private set; } = null!;
+
+    // Set by the Navigation window's view-model; the bug report calls it to snapshot
+    // the live Exp/Hr Estimator session (route + tunables + result). Returns null
+    // when the estimator isn't active, so a report captured any other time just
+    // notes it as inactive. Bridges VM-only state into the AppServices-based report.
+    public Func<Game.Map.ExpEstimatorSnapshot?>? ExpEstimatorSnapshotProvider { get; set; }
+
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
     // / delete folders; reloads both catalogues after a filesystem
@@ -4006,6 +4017,7 @@ public sealed class AppServices
         // in-session arrival tracker.
         Lairs = new Game.Map.LairManager(Log);
         LairTimers = new Game.Map.LairTimerStore(GameData, RoomGraph, RoomTracker, Log);
+        ExpResolver = new Game.Map.RouteExpResolver(RoomGraph, Bfs, LairTimers, GameData);
 
         // Loops + lairs are per-game-data-set and share one on-disk tree,
         // so they reload together on every active-set change. Mirrors the

@@ -117,6 +117,24 @@ public sealed class LoopManager
     public Loop? Get(string name) =>
         _loops.TryGetValue(name, out Loop? loop) ? loop : null;
 
+    // Deserialize a single loop file the user browsed to (may live outside the
+    // active set's folder). Returns null if it isn't a valid loop. Doesn't add
+    // it to the catalogue — the caller decides what to do with it.
+    public Loop? LoadFile(string path)
+    {
+        try
+        {
+            Loop? loop = JsonStore.Load<Loop>(path);
+            if (loop is null || string.IsNullOrWhiteSpace(loop.Name)) return null;
+            UpgradeIfNeeded(loop);
+            return loop;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // Persist loop under GameDataSetLoopsFolder. No-op when no set is active.
     public void Save(Loop loop)
     {
@@ -140,6 +158,48 @@ public sealed class LoopManager
         JsonStore.Save(path, loop);
         _loops[loop.Name] = loop;
         LoopsChanged?.Invoke();
+    }
+
+    // Save a loop to an explicit path chosen via a Save-As dialog (rename + pick a
+    // location). The loop's Name is taken from the file name so the on-disk name and
+    // the catalogue key agree — Delete and the rail list both derive from Name. A
+    // file that lands under the active set's Loops folder is indexed into the
+    // catalogue (shows in the list, runnable); one saved elsewhere is a plain export
+    // the "Load loop…" picker can still read back.
+    public void SaveToPath(Loop loop, string path)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        string name = Path.GetFileNameWithoutExtension(path);
+        if (!string.IsNullOrWhiteSpace(name)) loop.Name = name;
+        loop.SchemaVersion = Loop3Schema;
+
+        string? dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
+        JsonStore.Save(path, loop);
+
+        string root = string.IsNullOrWhiteSpace(_setName) ? "" : AppPaths.GameDataSetLoopsFolder(_setName);
+        if (root.Length > 0 && IsUnder(path, root))
+        {
+            loop.Folder = NavFolders.RelativeFolder(root, path);
+            _loops[loop.Name] = loop;
+            _log?.Info("Loops", $"Saved loop '{loop.Name}' to {path}.");
+            LoopsChanged?.Invoke();
+        }
+        else
+        {
+            _log?.Info("Loops", $"Exported loop '{loop.Name}' to {path} (outside the set's Loops folder; not catalogued).");
+        }
+    }
+
+    // Whether filePath sits inside directory root (case-insensitive, normalised).
+    private static bool IsUnder(string filePath, string root)
+    {
+        string full = Path.GetFullPath(filePath);
+        string r = Path.GetFullPath(root);
+        if (!r.EndsWith(Path.DirectorySeparatorChar)) r += Path.DirectorySeparatorChar;
+        return full.StartsWith(r, StringComparison.OrdinalIgnoreCase);
     }
 
     // Move the loop named name into folder (empty = Loops root). No-op when

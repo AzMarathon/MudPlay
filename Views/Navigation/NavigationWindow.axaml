@@ -52,6 +52,37 @@
             <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
             <Setter Property="Foreground" Value="#0E0E0E"/>
         </Style>
+        <!-- Per-lair miss cell in the estimator readout: amber when a miss came within
+             a whisker of respawning (nudge the loop to catch it), dim otherwise. -->
+        <Style Selector="TextBlock.MissCell">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.MissCell.NearMiss">
+            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+        </Style>
+
+        <!-- Transparent, chrome-free ListBox for rail lists. Using a ListBox (not a
+             plain ItemsControl) is deliberate: its internal ScrollViewer +
+             HorizontalScrollBarVisibility=Disabled constrains row width to the rail,
+             so a long room name can't push the whole section wider than its
+             neighbours. Same pattern the CURRENT NAV list uses. -->
+        <Style Selector="ListBox.RailList">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.RailList ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox.RailList ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox.RailList ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
 
         <!-- Top-right action button (Run / Stop / Loop mode / Lair mode) -->
         <Style Selector="Button.ActionChip">
@@ -1375,6 +1406,187 @@
                                             </DataTemplate>
                                         </TreeView.DataTemplates>
                                     </TreeView>
+                                </StackPanel>
+                            </Expander>
+
+                            <!-- EXP/HR ESTIMATOR — build-time planning tool. Enter / exit
+                                 with the button right inside this section (locked while a
+                                 loop is being built — both modes consume map clicks). While
+                                 active, click rooms on the map to build a throwaway loop; the
+                                 estimate + per-lair breakdown surface here. Starts collapsed
+                                 like the other rail sections. -->
+                            <Expander Classes="RailSection" IsExpanded="False">
+                                <Expander.Header>
+                                    <TextBlock Classes="RailSectionHeader" Margin="0"
+                                               Text="EXP/HR ESTIMATOR"/>
+                                </Expander.Header>
+                                <StackPanel Margin="6,4" Spacing="6" HorizontalAlignment="Stretch">
+
+                                    <!-- Enter button lives in the section itself (no overlay
+                                         chip). Disabled while building a loop. -->
+                                    <Button IsVisible="{Binding !IsExpEstimatorMode}"
+                                            Content="Start estimating"
+                                            FontSize="11"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                            IsEnabled="{Binding !IsLoopMode}"
+                                            ToolTip.Tip="Click rooms on the map to build a throwaway loop and estimate exp/hr."
+                                            Command="{Binding ToggleExpEstimatorModeCommand}"/>
+                                    <TextBlock IsVisible="{Binding IsLoopMode}"
+                                               FontSize="10" TextWrapping="Wrap"
+                                               Foreground="{StaticResource ChromeFgSecBrush}"
+                                               Text="Locked while building a loop — save or run it first."/>
+
+                                    <StackPanel IsVisible="{Binding IsExpEstimatorMode}" Spacing="6"
+                                                HorizontalAlignment="Stretch">
+
+                                        <!-- Actions up top so Save / Discard / Load are reachable
+                                             without scrolling past the readout + room list. -->
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                                            <Button Grid.Column="0" Content="Save as loop" FontSize="11"
+                                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                    IsEnabled="{Binding ExpEstimator.CanSave}"
+                                                    Command="{Binding SaveEstimatorAsLoopCommand}"/>
+                                            <Button Grid.Column="1" Content="Stop Estimating" FontSize="11"
+                                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                    ToolTip.Tip="Leave estimator mode without saving."
+                                                    Command="{Binding DiscardEstimatorCommand}"/>
+                                        </Grid>
+                                        <Button Content="Load loop…" FontSize="11"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                ToolTip.Tip="Browse for a saved .loop file to analyse (opens in the active set's Loops folder)."
+                                                Command="{Binding BrowseLoadLoopIntoEstimatorCommand}"/>
+                                        <Button Content="Clear rooms" FontSize="10"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                IsVisible="{Binding ExpEstimator.HasClicks}"
+                                                Command="{Binding ClearEstimatorClicksCommand}"/>
+
+                                        <!-- Headline result. -->
+                                        <Border Background="{StaticResource ChromeBgElevBrush}"
+                                                BorderBrush="#2F8F83" BorderThickness="1"
+                                                CornerRadius="4" Padding="8,6">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock FontSize="18" FontWeight="Bold"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{StaticResource ChromeFgBrush}"
+                                                           Text="{Binding ExpEstimator.ExpPerHour, StringFormat='{}{0:N0} exp/hr'}"/>
+                                                <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource ChromeFgSecBrush}"
+                                                           Text="{Binding ExpEstimator.Summary}"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Per-lair breakdown: fires vs misses per hour, amber
+                                             when a miss was close (nudge the loop to catch it). -->
+                                        <ListBox Classes="RailList" Focusable="False"
+                                                 ItemsSource="{Binding ExpEstimator.Lairs}"
+                                                 MaxHeight="180"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ExpEstimatorLairRow">
+                                                    <!-- Right margin reserves space for the overlay scrollbar so it
+                                                         doesn't cover the fires / early-by figures when the list is long. -->
+                                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1,14,1" ColumnSpacing="6">
+                                                        <TextBlock Grid.Column="0" FontSize="11"
+                                                                   Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding RoomLabel}"/>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                            <TextBlock FontSize="11" Foreground="#4FD3C4"
+                                                                       Text="{Binding FiresLabel}"/>
+                                                            <TextBlock FontSize="11" Classes="MissCell"
+                                                                       Classes.NearMiss="{Binding NearMiss}"
+                                                                       Text="{Binding MissLabel}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+
+                                        <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
+
+                                        <TextBox Text="{Binding ExpEstimator.ProposedName, Mode=TwoWay}"
+                                                 PlaceholderText="Loop name" FontSize="11"/>
+
+                                        <TextBlock IsVisible="{Binding !ExpEstimator.HasClicks}"
+                                                   FontSize="11" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource ChromeFgSecBrush}"
+                                                   Text="Click rooms on the map to add waypoints."/>
+
+                                        <ListBox Classes="RailList" Focusable="False"
+                                                 ItemsSource="{Binding ExpEstimator.Clicks}"
+                                                 MaxHeight="200"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:LoopBuilderRow">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto"
+                                                          ColumnSpacing="3" Margin="0,1">
+                                                        <TextBlock Grid.Column="0" FontSize="11" VerticalAlignment="Center"
+                                                                   Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                   Text="{Binding Index, StringFormat='{}{0}.'}"/>
+                                                        <TextBlock Grid.Column="1" FontSize="11" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding Name}"/>
+                                                        <Button Grid.Column="2" Content="▲" FontSize="9" Padding="5,1"
+                                                                ToolTip.Tip="Move earlier"
+                                                                Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).MoveEstimatorClickUpCommand}"
+                                                                CommandParameter="{Binding}"/>
+                                                        <Button Grid.Column="3" Content="▼" FontSize="9" Padding="5,1"
+                                                                ToolTip.Tip="Move later"
+                                                                Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).MoveEstimatorClickDownCommand}"
+                                                                CommandParameter="{Binding}"/>
+                                                        <Button Grid.Column="4" Content="✕" FontSize="9" Padding="5,1"
+                                                                Foreground="{StaticResource AccentRedBrush}"
+                                                                ToolTip.Tip="Remove"
+                                                                Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RemoveEstimatorClickCommand}"
+                                                                CommandParameter="{Binding}"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+
+                                        <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
+
+                                        <CheckBox IsChecked="{Binding ExpEstimator.AreaCombat, Mode=TwoWay}"
+                                                  FontSize="11"
+                                                  ToolTip.Tip="On: you hit every mob in the room at once, so a room clears in your rounds-to-kill no matter how many mobs. Off: you kill mobs one at a time (room cost scales with the mob count)."
+                                                  Content="I'm Rooming"/>
+
+                                        <!-- Labels stack ABOVE each picker and wrap: the rail is only
+                                             290px wide, so a side-by-side label + full-size
+                                             NumericUpDown clips the value and a long single-line label
+                                             pushes the section wider than its neighbours. -->
+                                        <StackPanel Spacing="2">
+                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       Text="Move speed (seconds per step)"/>
+                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
+                                                           Value="{Binding ExpEstimator.SecondsPerStep, Mode=TwoWay}"
+                                                           Minimum="0" Maximum="30" Increment="0.1"
+                                                           FormatString="0.0" ShowButtonSpinner="True"
+                                                           ToolTip.Tip="Seconds to move one room (Stock ~0.5–1, Paradigm ~1–3.5 — set your realm's speed). Only costs exp when a lair-to-lair hop is too long to finish inside a 5s combat round; short hops ride the downtime for free."/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       Text="Rounds to kill a mob"/>
+                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
+                                                           Value="{Binding ExpEstimator.RoundsPerMob, Mode=TwoWay}"
+                                                           Minimum="0.1" Maximum="50" Increment="0.5"
+                                                           FormatString="0.0" ShowButtonSpinner="True"
+                                                           ToolTip.Tip="Average combat rounds to kill one monster (5s per round). When rooming, this is the rounds to clear the whole room."/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       Text="Real-world multiplier (0–1)"/>
+                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
+                                                           Value="{Binding ExpEstimator.RealConditionsMultiplier, Mode=TwoWay}"
+                                                           Minimum="0.1" Maximum="1" Increment="0.01"
+                                                           FormatString="0.00" ShowButtonSpinner="True"
+                                                           ToolTip.Tip="Haircut for real conditions (regen breaks, missed rounds, travel). 1.0 = perfect play; 0.9 default."/>
+                                        </StackPanel>
+
+                                    </StackPanel>
                                 </StackPanel>
                             </Expander>
                         </StackPanel>
