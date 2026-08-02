@@ -451,6 +451,37 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback
   death on it, a beat before the current mob actually dies.
 
+## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
+
+Two distinct spawn mechanisms, and they respawn on completely different rules. This matters
+directly for exp/hr estimation of a loop (how fast a lair refills vs how fast you can lap it).
+
+**Lair mobs — independent per-mob timer keyed to each kill.**
+- A room's `Lair` group spawns N monsters with a respawn time `T` (the lair's `AvgDelay` — stock
+  exports it in **minutes**, Paradigm/GreaterMUD differs; else the slowest member's `RegenTime`).
+  This is the resolution `LairTimerStore` already performs.
+- **Each monster carries its own independent clock of length `T`, started at the moment *that*
+  monster was last killed** — not a shared lair clock. In a 3-mob, 60 s lair: a mob killed at t=0
+  is killable again at t=60; one killed at t=10 is back at t=70. They come back **staggered**.
+- To re-kill a mob you must be in the room at or after `(its last kill + T)`. Arriving earlier, it
+  simply isn't there yet — being early does **not** let it spawn.
+- **Loop consequence:** a lap that returns to a lair with period `P ≥ T` finds it fully respawned
+  (full mobs that lap); `P < T` laps into a partial/empty room. So a lair's sustainable exp rate is
+  capped at `mobs × exp ÷ T` regardless of how fast you loop — the "respawn-limited" regime — while a
+  loop long enough that `P ≥ T` is "travel/kill-limited." The real rate per lair ≈ `min(the two)`.
+
+**NPC-placed mobs — regenerate on entry, effectively no respawn cap.**
+- A monster placed via the room's **`NPC`** field (a fixture, distinct from a `Lair` group) with
+  `RegenTime` 0-ish **regenerates the moment you (re-)enter the room after killing it** — no timer to
+  wait out. These are the classic "rooming" targets (kill as fast as you can fight; bounded by kill
+  speed, not respawn). Verified stock examples: slime beast `1/1765` (`NPC=57`, `RegenTime 0`, 250 xp),
+  cave worm `1/866` (`NPC=8`, `RegenTime 0`, 100 xp), barmaid `1/311` (`NPC=248`, `RegenTime 1`,
+  **0 xp** — an evil-points target, not exp).
+- A room can carry **both** an NPC fixture *and* a `Lair` group (cave-worm room `1/866` has `NPC=8`
+  plus a lair), so a room's yield is the sum of its NPC target(s) + its lair contribution.
+- For a **loop**, an instant mob still yields only once per lap (bounded by lap time); only a
+  stay-in-room **rooming** setup kills it every round.
+
 ## Vitality — HP, dropping, and death
 
 **Max-HP sources** *([CONFIRMED])*

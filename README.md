@@ -1,13 +1,11 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.16.0**
-> - Go To favourites management is back as a dedicated tab in the Navigation Management window: create / rename / delete folders (buttons, not just right-click), Add a favourite by room-name search or map/room number, drag favourites between folders, and per-favourite Walk / full Edit (name + map + room) / Move-to-folder (pick from a list) / Delete. The GOTO collapsible also gains a filter box, and adding a favourite from the map now auto-expands the pane so it's actually visible. GOTO folders in the rail start collapsed, matching the Loops/Lairs section
-> - Go To favourites are now stored per game-data set (shared by every character on that realm) rather than per-character — the same model as loops and lairs
-> - Filtering the Go To or Loops/Lairs collapsible now auto-expands folders that hold a match, so nested matches show immediately; clearing the filter restores your folders' expand state
-> - Backscroll window mouse-wheel now scrolls a configurable number of lines per notch (default 5, was 1) — set it in Settings → BBS + Display, right below Scrollback, saved per-BBS
-> - A party member's exact level from an `@level` reply is now recorded even when the reply lands after the query window closes — so a narrow level gate (e.g. a room admitting only level 10) no longer stays blocked on the coarse title-derived level band
-> - A party follower coming out of the train-stats screen is no longer left unable to rejoin: entering that screen breaks up the party server-side, so the follower now clears its own stale "following" state — and even if it lingers, an invite / @join from the leader you think you're following is now honored (a leader never re-invites a current follower) instead of rejected as "already following"
+> **Version 2.17.0**
+> - Navigation gains an Exp/Hr Estimator mode (Overlays ▾ → Exp/Hr Estimator): click rooms on the map to build a throwaway loop and get an estimated experience-per-hour, then Save it as a real loop or Discard it
+> - The estimate is a timed simulation of one hour of running the loop — each lair respawns on its own clock keyed to when you last killed it, so a fast lap that laps a slow lair before it repops correctly counts that pass as a miss (NPC-placed fixtures like the 1/1765 slime beast respawn instantly and fire every pass)
+> - Tunable per your character: movement speed (seconds per step), single-target vs area combat, rounds to kill a mob / clear a room, and a real-world multiplier; a per-lair readout shows how often each fires vs is missed and by how many seconds, so you can nudge the loop to catch a near-miss
+> - Locked out while a loop is being built (both modes consume map clicks as waypoints); available again once the loop is running. Load an existing saved loop into the estimator to analyse it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

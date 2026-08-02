@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.17.0
+
+- Navigation gains an Exp/Hr Estimator mode (Overlays ▾ → Exp/Hr Estimator): click rooms on the map to build a throwaway loop and get an estimated experience-per-hour, then Save it as a real loop or Discard it
+- The estimate is a timed simulation of one hour of running the loop — each lair respawns on its own clock keyed to when you last killed it, so a fast lap that laps a slow lair before it repops correctly counts that pass as a miss (NPC-placed fixtures like the 1/1765 slime beast respawn instantly and fire every pass)
+- Tunable per your character: movement speed (seconds per step), single-target vs area combat, rounds to kill a mob / clear a room, and a real-world multiplier; a per-lair readout shows how often each fires vs is missed and by how many seconds, so you can nudge the loop to catch a near-miss
+- Locked out while a loop is being built (both modes consume map clicks as waypoints); available again once the loop is running. Load an existing saved loop into the estimator to analyse it
+
 ## 2.16.0
 
 - Go To favourites management is back as a dedicated tab in the Navigation Management window: create / rename / delete folders (buttons, not just right-click), Add a favourite by room-name search or map/room number, drag favourites between folders, and per-favourite Walk / full Edit (name + map + room, in the tab and the rail's ✎) / Move-to-folder (pick from a list) / Delete. The GOTO collapsible also gains a filter box, and adding a favourite from the map now auto-expands the pane so it's actually visible (it previously read as a no-op). GOTO folders in the rail start collapsed, matching the Loops/Lairs section
