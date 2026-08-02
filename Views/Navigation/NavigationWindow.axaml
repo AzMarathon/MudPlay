@@ -1439,6 +1439,27 @@
                                     <StackPanel IsVisible="{Binding IsExpEstimatorMode}" Spacing="6"
                                                 HorizontalAlignment="Stretch">
 
+                                        <!-- Actions up top so Save / Discard / Load are reachable
+                                             without scrolling past the readout + room list. -->
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                                            <Button Grid.Column="0" Content="Save as loop" FontSize="11"
+                                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                    IsEnabled="{Binding ExpEstimator.CanSave}"
+                                                    Command="{Binding SaveEstimatorAsLoopCommand}"/>
+                                            <Button Grid.Column="1" Content="Discard" FontSize="11"
+                                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                    ToolTip.Tip="Leave estimator mode without saving."
+                                                    Command="{Binding DiscardEstimatorCommand}"/>
+                                        </Grid>
+                                        <Button Content="Load loop…" FontSize="11"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                ToolTip.Tip="Browse for a saved .loop file to analyse (opens in the active set's Loops folder)."
+                                                Command="{Binding BrowseLoadLoopIntoEstimatorCommand}"/>
+                                        <Button Content="Clear rooms" FontSize="10"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                IsVisible="{Binding ExpEstimator.HasClicks}"
+                                                Command="{Binding ClearEstimatorClicksCommand}"/>
+
                                         <!-- Headline result. -->
                                         <Border Background="{StaticResource ChromeBgElevBrush}"
                                                 BorderBrush="#2F8F83" BorderThickness="1"
@@ -1563,26 +1584,6 @@
                                                            ToolTip.Tip="Haircut for real conditions (regen breaks, missed rounds, travel). 1.0 = perfect play; 0.9 default."/>
                                         </StackPanel>
 
-                                        <Button Content="Load loop…" FontSize="11"
-                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                                ToolTip.Tip="Browse for a saved .loop file to analyse (opens in the active set's Loops folder)."
-                                                Command="{Binding BrowseLoadLoopIntoEstimatorCommand}"/>
-
-                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-                                            <Button Grid.Column="0" Content="Save as loop" FontSize="11"
-                                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                                    IsEnabled="{Binding ExpEstimator.CanSave}"
-                                                    Command="{Binding SaveEstimatorAsLoopCommand}"/>
-                                            <Button Grid.Column="1" Content="Discard" FontSize="11"
-                                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                                    ToolTip.Tip="Leave estimator mode without saving."
-                                                    Command="{Binding DiscardEstimatorCommand}"/>
-                                        </Grid>
-
-                                        <Button Content="Clear rooms" FontSize="10"
-                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                                IsVisible="{Binding ExpEstimator.HasClicks}"
-                                                Command="{Binding ClearEstimatorClicksCommand}"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Expander>

@@ -110,6 +110,25 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
+    public void EnoughRespawnThroughput_StaysTickLimited_NoSyncWaveLoss()
+    {
+        // The greater-wyvern case: many lairs whose combined respawn throughput
+        // exceeds the 720/hr tick cap, even though the slowest lair's respawn is
+        // longer than a single all-up lap. Because the per-lair timers are spread
+        // out there's almost always one ready, so a real loop runs at the tick cap.
+        // The estimate must NOT collapse into a synchronised kill-then-idle wave.
+        var rooms = new ExpRoomVisit[40];
+        for (int i = 0; i < 40; i++)
+            rooms[i] = Room(1, 100 + i, Lair(2, 1000, i < 30 ? 200 : 500));  // 80 mobs, mixed respawn
+        // throughput = 60*(3600/200) + 20*(3600/500) = 1224 mobs/hr > 720 tick cap.
+        ExpSimResult e = LoopExpSimulator.Simulate(Route(rooms), Single(secPerStep: 0));
+
+        // Tick-limited: ~720 kills/hr × 1000 exp = ~720k. Allow a little slack for
+        // the slow lairs occasionally not being ready on arrival.
+        Assert.InRange(e.ExpPerHour, 660_000, 720_000);
+    }
+
+    [Fact]
     public void ExcludedTarget_IsNotFought()
     {
         // Excluding the low-value lair leaves only the worm → the pure 72k cap.

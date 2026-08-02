@@ -138,7 +138,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         var lairs = new List<string>(Lairs.Count);
         foreach (ExpEstimatorLairRow l in Lairs)
         {
-            string miss = l.MissesPerHour == 0 ? "no misses" : $"{l.MissesPerHour}/hr miss ({l.MissLabel})";
+            string miss = l.MissesPerHour == 0 ? "no misses" : $"{l.MissesPerHour}/hr early by {l.ClosestMissShortfallSeconds:N0}s";
             lairs.Add($"{l.Room.Map}/{l.Room.Room}  {l.Name} — {l.FiresLabel}, {miss}");
         }
 
@@ -211,9 +211,10 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     }
 }
 
-// One lair on the estimated route: how often it fires vs is missed per hour, and
-// the closest a miss came to being ready — a near-miss flags "nudge the loop to
-// catch it," a big shortfall flags "too fast for this lair."
+// One lair on the estimated route: how often it fires per hour, and — when the loop
+// laps back before it repops — how far EARLY you arrive (the shortfall to ready). A
+// near-miss flags "nudge the loop to catch it," a big shortfall flags "too fast for
+// this lair, the lap outruns its respawn."
 public sealed record ExpEstimatorLairRow(
     RoomKey Room, string Name, int FiresPerHour, int MissesPerHour, double ClosestMissShortfallSeconds)
 {
@@ -223,5 +224,5 @@ public sealed record ExpEstimatorLairRow(
 
     public string MissLabel => MissesPerHour == 0
         ? "full"
-        : $"missed by {ClosestMissShortfallSeconds:N0}s";
+        : $"early by {ClosestMissShortfallSeconds:N0}s";
 }

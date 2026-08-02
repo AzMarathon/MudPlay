@@ -2051,6 +2051,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         CurrentMode = NavigationMode.ExpEstimator;
         OnPropertyChanged(nameof(ExpEstimator));
         OnPropertyChanged(nameof(IsExpEstimating));
+
+        // Centre the map on the loop's first room so the loaded route is in view.
+        // Selection before Layout: MapControl centres on SelectedRoomKey when the
+        // layout swaps (see OnFloorChangeRequested).
+        RoomKey firstRoom = loop.Waypoints[0].Key;
+        SelectedRoomKey = firstRoom;
+        Layout = _services.Bfs.BuildLayout(firstRoom);
     }
 
     // "Load loop…" in the estimator collapsible → browse to a saved .loop file

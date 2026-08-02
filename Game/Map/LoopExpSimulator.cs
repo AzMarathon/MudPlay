@@ -109,6 +109,30 @@ public static class LoopExpSimulator
         var misses = new Dictionary<(RoomKey, int), int>();
         var closest = new Dictionary<(RoomKey, int), double>();
 
+        // Desynchronise the initial respawn phases. Starting every lair "up" at t=0
+        // and killing them in a fixed order locks the deterministic replay into a
+        // synchronised wave — clear the whole loop, then idle while it all repops at
+        // once — which loses ticks a real, hours-deep loop never loses: its per-lair
+        // timers are spread out, so with enough lairs there's almost always one
+        // ready. Spread each lair's first ready-time evenly across the slowest
+        // respawn so the replay settles on that steady state, not the synced start.
+        var lairInit = new List<((RoomKey, int) Key, int Respawn)>();
+        var seenLair = new HashSet<(RoomKey, int)>();
+        for (int i = 0; i < lap.Count; i++)
+            for (int j = 0; j < lap[i].Targets.Count; j++)
+            {
+                ExpTarget tg = lap[i].Targets[j];
+                if (!tg.Included || tg.IsInstant || tg.MobCount <= 0 || tg.ExpPerMob <= 0) continue;
+                var key = (lap[i].Room, j);
+                if (seenLair.Add(key)) lairInit.Add((key, tg.RespawnSeconds));
+            }
+        if (lairInit.Count > 1 && maxTimer > 0)
+            for (int k = 0; k < lairInit.Count; k++)
+            {
+                double readyAt = (double)k / lairInit.Count * maxTimer;   // spread over [0, maxTimer]
+                lastKill[lairInit[k].Key] = readyAt - lairInit[k].Respawn;   // ready exactly at readyAt
+            }
+
         double tick = s.SecondsPerRound > 0 ? s.SecondsPerRound : 5.0;   // combat cadence
 
         double wall = 0;                 // wall-clock seconds; combat quantized to the tick
