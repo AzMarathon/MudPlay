@@ -47,7 +47,7 @@ public sealed record ExpSimSettings(
     // whole room costs this flat, count-independent — there is no separate
     // rounds-per-room knob; it IS rounds-per-mob.
     double RoundsPerMob,
-    double RealConditionsMultiplier = 0.87,
+    double RealConditionsMultiplier = 0.9,
     double SecondsPerRound = 5.0);
 
 // Per-lair diagnostic: how often it fired vs was missed over the measured hour,

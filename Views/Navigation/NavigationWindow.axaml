@@ -1560,7 +1560,7 @@
                                                            Value="{Binding ExpEstimator.RealConditionsMultiplier, Mode=TwoWay}"
                                                            Minimum="0.1" Maximum="1" Increment="0.01"
                                                            FormatString="0.00" ShowButtonSpinner="True"
-                                                           ToolTip.Tip="Haircut for real conditions (regen breaks, missed rounds, travel). 1.0 = perfect play; 0.87 default."/>
+                                                           ToolTip.Tip="Haircut for real conditions (regen breaks, missed rounds, travel). 1.0 = perfect play; 0.9 default."/>
                                         </StackPanel>
 
                                         <Button Content="Load loop…" FontSize="11"
