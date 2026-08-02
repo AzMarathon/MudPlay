@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 2.17.0**
-> - Navigation gains an Exp/Hr Estimator mode (Overlays ▾ → Exp/Hr Estimator): click rooms on the map to build a throwaway loop and get an estimated experience-per-hour, then Save it as a real loop or Discard it
+> - Navigation gains an Exp/Hr Estimator (its own collapsible in the map's right rail): press Start estimating, click rooms on the map to build a throwaway loop, and the estimated experience-per-hour plus a per-lair breakdown surface right there in the panel — then Save it as a real loop or Discard it
 > - The estimate is a timed simulation of one hour of running the loop — each lair respawns on its own clock keyed to when you last killed it, so a fast lap that laps a slow lair before it repops correctly counts that pass as a miss (NPC-placed fixtures like the 1/1765 slime beast respawn instantly and fire every pass)
 > - Tunable per your character: movement speed (seconds per step), single-target vs area combat, rounds to kill a mob / clear a room, and a real-world multiplier; a per-lair readout shows how often each fires vs is missed and by how many seconds, so you can nudge the loop to catch a near-miss
 > - Locked out while a loop is being built (both modes consume map clicks as waypoints); available again once the loop is running. Load an existing saved loop into the estimator to analyse it

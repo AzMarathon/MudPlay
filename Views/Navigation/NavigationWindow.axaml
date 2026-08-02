@@ -52,14 +52,7 @@
             <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
             <Setter Property="Foreground" Value="#0E0E0E"/>
         </Style>
-        <!-- Exp/Hr estimator: teal (no map equivalent — it's a build mode, not a
-             persistent overlay, but it lives in the Overlays flyout per design). -->
-        <Style Selector="Button.ToggleChip.EstimatorFill">
-            <Setter Property="Background" Value="#2F8F83"/>
-            <Setter Property="BorderBrush" Value="#2F8F83"/>
-            <Setter Property="Foreground" Value="#0E0E0E"/>
-        </Style>
-        <!-- Per-lair miss cell in the estimator card: amber when a miss came within
+        <!-- Per-lair miss cell in the estimator readout: amber when a miss came within
              a whisker of respawning (nudge the loop to catch it), dim otherwise. -->
         <Style Selector="TextBlock.MissCell">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
@@ -456,18 +449,6 @@
                                             Command="{Binding ToggleLegendCommand}"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                             Classes.LegendFill="{Binding LegendVisible}"/>
-                                    <Border Height="1" Margin="0,3"
-                                            Background="{StaticResource ChromeBorderBrush}"/>
-                                    <!-- Exp/Hr Estimator mode. Not a persistent map
-                                         overlay but lives here per design; locked out
-                                         while a loop is being built (both modes eat map
-                                         clicks as waypoints). -->
-                                    <Button Classes="ToggleChip" Content="Exp/Hr Estimator"
-                                            Command="{Binding ToggleExpEstimatorModeCommand}"
-                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                            IsEnabled="{Binding !IsLoopMode}"
-                                            ToolTip.Tip="Click rooms on the map to build a throwaway loop and estimate exp/hr. Locked while a loop is being built."
-                                            Classes.EstimatorFill="{Binding IsExpEstimatorMode}"/>
                                 </StackPanel>
                             </Flyout>
                         </Button.Flyout>
@@ -653,52 +634,6 @@
                     </ContextMenu>
                 </controls:MapControl.ContextMenu>
             </controls:MapControl>
-
-            <!-- Exp/Hr Estimator on-map readout. Visible only in estimator mode
-                 (ExpEstimator is non-null then, so the ExpEstimator.* bindings
-                 resolve). Big exp/hr figure + per-lair fires/misses so the user
-                 can see which lairs a faster lap is skipping and nudge the loop. -->
-            <Border Grid.Column="0"
-                    IsVisible="{Binding IsExpEstimatorMode}"
-                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,10,10,0"
-                    Background="{StaticResource ChromeBgElevBrush}"
-                    BorderBrush="#2F8F83" BorderThickness="1"
-                    CornerRadius="6" Padding="12,10"
-                    ZIndex="90" MaxWidth="300">
-                <StackPanel Orientation="Vertical" Spacing="6">
-                    <TextBlock Text="EXP/HR ESTIMATE" FontSize="10" FontWeight="Bold"
-                               Foreground="#4FD3C4"/>
-                    <TextBlock FontSize="22" FontWeight="Bold"
-                               Foreground="{StaticResource ChromeFgBrush}"
-                               Text="{Binding ExpEstimator.ExpPerHour, StringFormat='{}{0:N0} exp/hr'}"/>
-                    <TextBlock FontSize="11"
-                               Foreground="{StaticResource ChromeFgSecBrush}"
-                               TextWrapping="Wrap"
-                               Text="{Binding ExpEstimator.Summary}"/>
-                    <ItemsControl ItemsSource="{Binding ExpEstimator.Lairs}"
-                                  Margin="0,2,0,0">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:ExpEstimatorLairRow">
-                                <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0" ColumnSpacing="8">
-                                    <TextBlock Grid.Column="0" FontSize="11"
-                                               Foreground="{StaticResource ChromeFgSecBrush}"
-                                               TextTrimming="CharacterEllipsis"
-                                               Text="{Binding Name}"/>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                                        <TextBlock FontSize="11" Foreground="#4FD3C4"
-                                                   Text="{Binding FiresLabel}"/>
-                                        <TextBlock FontSize="11"
-                                                   Classes="MissCell"
-                                                   Classes.NearMiss="{Binding NearMiss}"
-                                                   Text="{Binding MissLabel}"/>
-                                    </StackPanel>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
 
             <!-- Hover tooltip popup. MaxWidth + Wrap on the text keeps
                  long single-line content (e.g. multi-action commands
@@ -1451,26 +1386,75 @@
                                 </StackPanel>
                             </Expander>
 
-                            <!-- EXP/HR ESTIMATOR — build-time tool. The mode is
-                                 entered from the Overlays ▾ flyout (so it can sit
-                                 next to the other overlays and share the interlock);
-                                 this collapsible holds the click list, combat
-                                 tunables, load / save / discard. Controls render only
-                                 while the mode is active; otherwise a hint points at
-                                 the flyout. Starts collapsed like the other rail
-                                 sections. -->
+                            <!-- EXP/HR ESTIMATOR — build-time planning tool. Enter / exit
+                                 with the button right inside this section (locked while a
+                                 loop is being built — both modes consume map clicks). While
+                                 active, click rooms on the map to build a throwaway loop; the
+                                 estimate + per-lair breakdown surface here. Starts collapsed
+                                 like the other rail sections. -->
                             <Expander Classes="RailSection" IsExpanded="False">
                                 <Expander.Header>
                                     <TextBlock Classes="RailSectionHeader" Margin="0"
                                                Text="EXP/HR ESTIMATOR"/>
                                 </Expander.Header>
-                                <StackPanel Margin="6,4" Spacing="6">
-                                    <TextBlock IsVisible="{Binding !IsExpEstimatorMode}"
-                                               FontSize="11" TextWrapping="Wrap"
-                                               Foreground="{StaticResource ChromeFgSecBrush}"
-                                               Text="Turn on Exp/Hr Estimator in the Overlays ▾ menu, then click rooms on the map to build a route. (Locked while building a loop.)"/>
+                                <StackPanel Margin="6,4" Spacing="6" HorizontalAlignment="Stretch">
 
-                                    <StackPanel IsVisible="{Binding IsExpEstimatorMode}" Spacing="6">
+                                    <!-- Enter button lives in the section itself (no overlay
+                                         chip). Disabled while building a loop. -->
+                                    <Button IsVisible="{Binding !IsExpEstimatorMode}"
+                                            Content="Start estimating"
+                                            FontSize="11"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                            IsEnabled="{Binding !IsLoopMode}"
+                                            ToolTip.Tip="Click rooms on the map to build a throwaway loop and estimate exp/hr."
+                                            Command="{Binding ToggleExpEstimatorModeCommand}"/>
+                                    <TextBlock IsVisible="{Binding IsLoopMode}"
+                                               FontSize="10" TextWrapping="Wrap"
+                                               Foreground="{StaticResource ChromeFgSecBrush}"
+                                               Text="Locked while building a loop — save or run it first."/>
+
+                                    <StackPanel IsVisible="{Binding IsExpEstimatorMode}" Spacing="6"
+                                                HorizontalAlignment="Stretch">
+
+                                        <!-- Headline result. -->
+                                        <Border Background="{StaticResource ChromeBgElevBrush}"
+                                                BorderBrush="#2F8F83" BorderThickness="1"
+                                                CornerRadius="4" Padding="8,6">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock FontSize="18" FontWeight="Bold"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{StaticResource ChromeFgBrush}"
+                                                           Text="{Binding ExpEstimator.ExpPerHour, StringFormat='{}{0:N0} exp/hr'}"/>
+                                                <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource ChromeFgSecBrush}"
+                                                           Text="{Binding ExpEstimator.Summary}"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Per-lair breakdown: fires vs misses per hour, amber
+                                             when a miss was close (nudge the loop to catch it). -->
+                                        <ItemsControl ItemsSource="{Binding ExpEstimator.Lairs}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ExpEstimatorLairRow">
+                                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1" ColumnSpacing="6">
+                                                        <TextBlock Grid.Column="0" FontSize="11"
+                                                                   Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding Name}"/>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                            <TextBlock FontSize="11" Foreground="#4FD3C4"
+                                                                       Text="{Binding FiresLabel}"/>
+                                                            <TextBlock FontSize="11" Classes="MissCell"
+                                                                       Classes.NearMiss="{Binding NearMiss}"
+                                                                       Text="{Binding MissLabel}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
+
                                         <TextBox Text="{Binding ExpEstimator.ProposedName, Mode=TwoWay}"
                                                  PlaceholderText="Loop name" FontSize="11"/>
 
@@ -1515,33 +1499,50 @@
                                                   ToolTip.Tip="Off: kill one mob at a time (rounds per mob). On: engage every mob in the room at once (rounds per room)."
                                                   Content="Area combat (all at once)"/>
 
-                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
-                                              RowSpacing="3" ColumnSpacing="6">
-                                            <TextBlock Grid.Row="0" Grid.Column="0" FontSize="11" VerticalAlignment="Center"
-                                                       Text="Move speed (s/step)"/>
-                                            <NumericUpDown Grid.Row="0" Grid.Column="1" Width="92" FontSize="11"
+                                        <!-- Labels stack ABOVE each picker and wrap: the rail is only
+                                             290px wide, so a side-by-side label + full-size
+                                             NumericUpDown clips the value and a long single-line label
+                                             pushes the section wider than its neighbours. -->
+                                        <StackPanel Spacing="2">
+                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       Text="Move speed (seconds per step)"/>
+                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
                                                            Value="{Binding ExpEstimator.SecondsPerStep, Mode=TwoWay}"
                                                            Minimum="0" Maximum="30" Increment="0.1"
-                                                           FormatString="0.0" ShowButtonSpinner="True"/>
-                                            <TextBlock Grid.Row="1" Grid.Column="0" FontSize="11" VerticalAlignment="Center"
-                                                       Text="Rounds / mob"/>
-                                            <NumericUpDown Grid.Row="1" Grid.Column="1" Width="92" FontSize="11"
+                                                           FormatString="0.0" ShowButtonSpinner="True"
+                                                           ToolTip.Tip="How long the party takes to move one room. Stock vs Paradigm differ — set your realm's speed."/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       Text="Rounds to kill one mob"/>
+                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
                                                            Value="{Binding ExpEstimator.RoundsPerMob, Mode=TwoWay}"
                                                            Minimum="0.1" Maximum="50" Increment="0.5"
-                                                           FormatString="0.0" ShowButtonSpinner="True"/>
-                                            <TextBlock Grid.Row="2" Grid.Column="0" FontSize="11" VerticalAlignment="Center"
-                                                       Text="Rounds / room"/>
-                                            <NumericUpDown Grid.Row="2" Grid.Column="1" Width="92" FontSize="11"
+                                                           FormatString="0.0" ShowButtonSpinner="True"
+                                                           ToolTip.Tip="Average combat rounds to kill one monster (5s per round). Used when Area combat is off."/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       Text="Rounds to clear a room"/>
+                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
                                                            Value="{Binding ExpEstimator.RoundsPerRoom, Mode=TwoWay}"
                                                            Minimum="0.1" Maximum="50" Increment="0.5"
-                                                           FormatString="0.0" ShowButtonSpinner="True"/>
-                                            <TextBlock Grid.Row="3" Grid.Column="0" FontSize="11" VerticalAlignment="Center"
-                                                       Text="Real-world ×"/>
-                                            <NumericUpDown Grid.Row="3" Grid.Column="1" Width="92" FontSize="11"
+                                                           FormatString="0.0" ShowButtonSpinner="True"
+                                                           ToolTip.Tip="Average rounds to clear a whole room when engaging every mob at once. Used when Area combat is on."/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                       Text="Real-world multiplier (0–1)"/>
+                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
                                                            Value="{Binding ExpEstimator.RealConditionsMultiplier, Mode=TwoWay}"
                                                            Minimum="0.1" Maximum="1" Increment="0.01"
-                                                           FormatString="0.00" ShowButtonSpinner="True"/>
-                                        </Grid>
+                                                           FormatString="0.00" ShowButtonSpinner="True"
+                                                           ToolTip.Tip="Haircut for real conditions (regen breaks, missed rounds, travel). 1.0 = perfect play; 0.87 default."/>
+                                        </StackPanel>
 
                                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                                             <ComboBox Grid.Column="0" x:Name="EstimatorLoadCombo"
@@ -1567,6 +1568,7 @@
                                                     Command="{Binding SaveEstimatorAsLoopCommand}"/>
                                             <Button Grid.Column="1" Content="Discard" FontSize="11"
                                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                    ToolTip.Tip="Leave estimator mode without saving."
                                                     Command="{Binding DiscardEstimatorCommand}"/>
                                         </Grid>
 
