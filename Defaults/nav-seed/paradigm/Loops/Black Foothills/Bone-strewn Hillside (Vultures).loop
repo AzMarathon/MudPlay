@@ -1,0 +1,112 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bone-strewn Hillside (Vultures)",
+  "Waypoints": [
+    {
+      "Room": "2/9993",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9994",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10013",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9989",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9988",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9987",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9986",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9985",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9984",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9990",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9991",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9992",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black Foothills/BFBS)"
+}

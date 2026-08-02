@@ -1,0 +1,177 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Shrouded Mesa Loop 2",
+  "Waypoints": [
+    {
+      "Room": "16/10763",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10766",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10790",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10790",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10815",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10814",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10812",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10811",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10812",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10766",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shattered Expanse/SMLG)"
+}

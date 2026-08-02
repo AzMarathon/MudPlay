@@ -1,0 +1,197 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Hill Trolls (singles)",
+  "Waypoints": [
+    {
+      "Room": "2/11340",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11339",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11338",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11337",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11336",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11335",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11334",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11333",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11332",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11331",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11330",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11329",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11327",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11326",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11324",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11323",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11322",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11321",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11320",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11319",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11318",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11317",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11316",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11315",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11313",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11312",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11314",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11367",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11363",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11346",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11345",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11344",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11343",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rugged Plateau/RPHT)"
+}

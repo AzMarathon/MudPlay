@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Embalmed Horrors, East Loop",
+  "Waypoints": [
+    {
+      "Room": "12/2525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2540",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2526",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/TDES)"
+}

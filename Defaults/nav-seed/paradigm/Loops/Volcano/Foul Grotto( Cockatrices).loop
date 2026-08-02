@@ -1,0 +1,287 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Foul Grotto( Cockatrices)",
+  "Waypoints": [
+    {
+      "Room": "16/9587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9614",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9614",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9613",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9624",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9611",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9605",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9621",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9622",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9621",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9623",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9597",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9596",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9595",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9592",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9617",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9618",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9618",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9617",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9588",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Volcano/VUFG)"
+}

@@ -1,0 +1,377 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Slimy Sewers Loop (easy loop)",
+  "Waypoints": [
+    {
+      "Room": "1/2438",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/73",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/72",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/71",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/70",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/69",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/68",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/67",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/66",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/65",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/64",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/63",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/62",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/61",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/60",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/59",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/58",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/57",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/55",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/54",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/53",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/52",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/51",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/50",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/49",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/48",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/47",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/46",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/45",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/44",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/43",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/42",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/41",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/40",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/39",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/38",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/37",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/36",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/35",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/34",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/33",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/32",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/31",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/30",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/29",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/28",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/27",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/26",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/25",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/24",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/23",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/22",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/21",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/20",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/19",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/18",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/17",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/16",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/15",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/14",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/13",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/12",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/11",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/10",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/9",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/8",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/7",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/6",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/5",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/4",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/3",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/2",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/1",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Panda Monium (Sewers/SLST)"
+}

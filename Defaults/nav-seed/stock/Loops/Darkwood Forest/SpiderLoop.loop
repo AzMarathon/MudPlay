@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 3,
+  "Name": "SpiderLoop",
+  "Waypoints": [
+    {
+      "Room": "1/1678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1677",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Darkwood Forest/GSPI)"
+}

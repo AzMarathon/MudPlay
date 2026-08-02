@@ -1,0 +1,177 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bristledeep loop",
+  "Waypoints": [
+    {
+      "Room": "14/3561",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3577",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3579",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3580",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3582",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3592",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3605",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3582",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3573",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Bristlewood Forest/BFBD)"
+}

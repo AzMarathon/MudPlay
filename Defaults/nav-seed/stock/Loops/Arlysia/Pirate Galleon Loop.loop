@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Pirate Galleon Loop",
+  "Waypoints": [
+    {
+      "Room": "17/981",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/980",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/981",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/999",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/988",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/987",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/989",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/990",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/986",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/985",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/992",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/993",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/992",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/994",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/995",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/994",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/984",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/983",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/996",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/982",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Arlysia/ARAG)"
+}

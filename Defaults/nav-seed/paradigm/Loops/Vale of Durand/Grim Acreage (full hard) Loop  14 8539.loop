@@ -1,0 +1,232 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Grim Acreage (full hard) Loop  14 8539",
+  "Waypoints": [
+    {
+      "Room": "14/8539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8595",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8596",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8569",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8566",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8565",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8592",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8565",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8563",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8564",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8563",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8562",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8561",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8560",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8559",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8582",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8577",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8581",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8580",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8556",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8555",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8551",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8545",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Vale of Durand/CLMR)"
+}

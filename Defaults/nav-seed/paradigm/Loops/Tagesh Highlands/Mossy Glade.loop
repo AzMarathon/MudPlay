@@ -1,0 +1,227 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Mossy Glade",
+  "Waypoints": [
+    {
+      "Room": "14/3368",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3369",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3399",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3396",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3397",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3396",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3394",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3392",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3387",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3386",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3383",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3384",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3383",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3382",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3376",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3374",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3373",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3371",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3372",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3371",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3370",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/BWMG)"
+}

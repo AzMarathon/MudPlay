@@ -1,0 +1,37 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Webbed Thicket East Loop 2",
+  "Waypoints": [
+    {
+      "Room": "14/3202",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3207",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3206",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3205",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3204",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3203",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Bristlewood Forest/WTE2)"
+}

@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Alabaster Palace NW Loop",
+  "Waypoints": [
+    {
+      "Room": "17/9670",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9670",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9668",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9662",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9661",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9704",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ancient Fortress/APNE)"
+}

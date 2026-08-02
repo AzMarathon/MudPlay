@@ -1,0 +1,87 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Midnight unicorn",
+  "Waypoints": [
+    {
+      "Room": "17/954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/953",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/955",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/956",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/957",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/958",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/959",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/960",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/960",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/959",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/958",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/957",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/956",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/955",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/BFUF)"
+}

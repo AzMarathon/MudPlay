@@ -1,0 +1,77 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Smugglers",
+  "Waypoints": [
+    {
+      "Room": "9/222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/215",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/219",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/217",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/218",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/217",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/215",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/221",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Sewers/SSSQ)"
+}

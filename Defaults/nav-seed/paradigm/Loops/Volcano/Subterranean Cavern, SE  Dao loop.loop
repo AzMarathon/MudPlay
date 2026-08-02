@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Subterranean Cavern, SE  Dao loop",
+  "Waypoints": [
+    {
+      "Room": "16/12514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12605",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12597",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12596",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12595",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12515",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Volcano/SCVS)"
+}

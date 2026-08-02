@@ -1,0 +1,117 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Black Ice Cavern (Yetis)",
+  "Waypoints": [
+    {
+      "Room": "15/773",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/774",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/775",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/776",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/777",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/778",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/779",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/780",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/781",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/782",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/783",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/784",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/783",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/782",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/781",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/780",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/779",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/778",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/777",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/776",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/775",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/774",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rocky Trail/BICE)"
+}

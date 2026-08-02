@@ -1,0 +1,117 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Manscorpion Roomers Loop",
+  "Waypoints": [
+    {
+      "Room": "12/1662",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1661",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1659",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1657",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1656",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1655",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1654",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1653",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1652",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1651",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1650",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1649",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1648",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1646",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1663",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/LCRF)"
+}

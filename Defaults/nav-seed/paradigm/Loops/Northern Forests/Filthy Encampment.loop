@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Filthy Encampment",
+  "Waypoints": [
+    {
+      "Room": "3/544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/551",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/558",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/557",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/556",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/555",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/74",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/74",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Northern Forests/FLTH)"
+}

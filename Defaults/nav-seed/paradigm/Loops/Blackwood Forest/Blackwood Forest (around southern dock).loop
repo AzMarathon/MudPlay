@@ -1,0 +1,257 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Blackwood Forest (around southern dock)",
+  "Waypoints": [
+    {
+      "Room": "17/162",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/155",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/154",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/142",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/143",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/144",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/147",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/153",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/104",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/104",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/153",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/147",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/144",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/143",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/142",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/141",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/141",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/142",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/154",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/155",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/157",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/159",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/160",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/161",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/160",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/159",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/157",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/155",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/RTSD)"
+}

@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Underground Cavern Loop 2",
+  "Waypoints": [
+    {
+      "Room": "16/3185",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3181",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3175",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3174",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3173",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3172",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3161",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3160",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3159",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3163",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3169",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3168",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3164",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3165",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3166",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3179",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3178",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3186",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3187",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3184",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ocean/UCE2)"
+}

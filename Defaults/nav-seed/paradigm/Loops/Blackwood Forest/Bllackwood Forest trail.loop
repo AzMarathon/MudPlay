@@ -1,0 +1,232 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bllackwood Forest trail",
+  "Waypoints": [
+    {
+      "Room": "17/220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/787",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/788",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/787",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/787",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/786",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/787",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/223",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/230",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/231",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/230",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/202",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/203",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/199",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/200",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/201",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/202",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/228",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/BFFT)"
+}

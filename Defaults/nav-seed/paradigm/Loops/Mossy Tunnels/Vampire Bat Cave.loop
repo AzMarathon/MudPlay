@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Vampire Bat Cave",
+  "Waypoints": [
+    {
+      "Room": "3/35",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/811",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/790",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/789",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Mossy Tunnels/MTFC)"
+}

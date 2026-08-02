@@ -1,0 +1,47 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Stone Barracks South Loop",
+  "Waypoints": [
+    {
+      "Room": "14/6229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6219",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6230",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Baenglen/SBBD)"
+}

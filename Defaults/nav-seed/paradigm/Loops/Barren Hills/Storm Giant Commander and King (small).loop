@@ -1,0 +1,37 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Storm Giant Commander and King (small)",
+  "Waypoints": [
+    {
+      "Room": "16/1182",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1185",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1182",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1183",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1184",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1183",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Barren Hills/BHSH)"
+}

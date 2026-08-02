@@ -1,0 +1,127 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Jagged Cavern (full ropers) Loop  16 12165",
+  "Waypoints": [
+    {
+      "Room": "16/12165",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12166",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12173",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12178",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12179",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12186",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12185",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12184",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12188",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12183",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12182",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12181",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12180",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12179",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12178",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12173",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12172",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12171",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12170",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12169",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12168",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12175",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12167",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12166",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Volcano/JTTP)"
+}

@@ -1,0 +1,127 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Oasis Loop",
+  "Waypoints": [
+    {
+      "Room": "12/73",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/74",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/70",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/69",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/68",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/74",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/73",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/76",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/67",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/66",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/65",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/76",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/73",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/75",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/64",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/63",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/62",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/75",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/73",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/72",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/61",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/60",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/71",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/72",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Olorin (Scorching Desert/BOSP)"
+}

@@ -1,0 +1,312 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Crumbling Tunnels (upper level)",
+  "Waypoints": [
+    {
+      "Room": "9/244",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/263",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/266",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/267",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/293",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/292",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/300",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/299",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/298",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/297",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/296",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/301",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/302",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/303",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/304",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/305",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/306",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/307",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/309",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/310",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/311",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/321",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/320",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/319",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/318",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/317",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/316",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/315",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/314",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/313",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/312",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/311",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/310",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/309",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/307",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/308",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/269",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/270",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/271",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/272",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/273",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/274",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/288",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/287",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/286",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/285",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/284",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/283",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/282",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/281",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/280",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/289",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/290",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/291",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/292",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/293",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/267",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/266",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/263",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/264",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/263",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dragon\u0027s Teeth Hills/JAGH)"
+}

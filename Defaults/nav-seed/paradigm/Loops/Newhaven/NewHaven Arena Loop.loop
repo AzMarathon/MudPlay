@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 3,
+  "Name": "NewHaven Arena Loop",
+  "Waypoints": [
+    {
+      "Room": "1/2150",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2146",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Newhaven/NARN)"
+}

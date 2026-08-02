@@ -1,0 +1,117 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Manor Courtyard",
+  "Waypoints": [
+    {
+      "Room": "14/6189",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6189",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6189",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6168",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6169",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6170",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6171",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6172",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6173",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6174",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6175",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6176",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6177",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6178",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6179",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6180",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6165",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6166",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6167",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6168",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Baenglen/BGMS)"
+}

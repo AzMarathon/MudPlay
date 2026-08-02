@@ -1,0 +1,237 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Greater Wyverns Loop 1",
+  "Waypoints": [
+    {
+      "Room": "2/11831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11839",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11841",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11843",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11843",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11845",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11846",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11847",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11848",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11849",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11850",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11854",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11855",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11856",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11855",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11853",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11851",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11857",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11858",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11859",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11860",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11861",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11930",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11904",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11903",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11904",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11905",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11906",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11908",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11832",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rugged Plateau/RPRG)"
+}

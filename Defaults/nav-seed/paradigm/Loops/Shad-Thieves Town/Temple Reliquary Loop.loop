@@ -1,0 +1,67 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Temple Reliquary Loop",
+  "Waypoints": [
+    {
+      "Room": "5/410",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/411",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/427",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/412",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/413",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/414",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/415",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/414",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/411",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Thieves Town/SHTR)"
+}

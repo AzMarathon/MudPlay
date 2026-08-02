@@ -1,0 +1,402 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Torchlit Caverns Loop",
+  "Waypoints": [
+    {
+      "Room": "10/36",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/38",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/39",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/38",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/40",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/41",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/43",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/42",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/43",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/41",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/40",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/38",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/36",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/37",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/94",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/93",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/99",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/98",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/97",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/81",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/80",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/253",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/80",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/79",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/78",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/77",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/76",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/75",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/74",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/72",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/72",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/73",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/72",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/71",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/70",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/67",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/68",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/69",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/68",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/67",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/65",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/66",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/65",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/62",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/63",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/64",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/63",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/62",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/60",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/61",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/60",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/55",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/54",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/53",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/58",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/57",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/53",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/52",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/51",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/47",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/46",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/45",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/44",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Rocky Trail/TCVE)"
+}

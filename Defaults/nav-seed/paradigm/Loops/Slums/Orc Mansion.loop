@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Orc Mansion",
+  "Waypoints": [
+    {
+      "Room": "2/29",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/31",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/32",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/31",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/33",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/34",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/33",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/35",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/36",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/37",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/38",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/39",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/38",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/37",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/36",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/35",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/33",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/31",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/29",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1012",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Slums/ORCM)"
+}

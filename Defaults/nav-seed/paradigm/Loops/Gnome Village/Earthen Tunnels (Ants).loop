@@ -1,0 +1,417 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Earthen Tunnels (Ants)",
+  "Waypoints": [
+    {
+      "Room": "9/502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/517",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/551",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/555",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/556",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/555",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/551",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/503",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Gnome Village/GVET)"
+}

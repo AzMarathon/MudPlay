@@ -1,0 +1,27 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Crypt Level 1",
+  "Waypoints": [
+    {
+      "Room": "1/1061",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1051",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1049",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1068",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

@@ -1,0 +1,207 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Burning Plains (SW)",
+  "Waypoints": [
+    {
+      "Room": "17/9507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9605",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9617",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9618",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9579",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9577",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9613",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9611",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9569",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9605",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ancient Fortress/AFBP)"
+}

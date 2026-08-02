@@ -1,0 +1,147 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Saracens (outer easier)",
+  "Waypoints": [
+    {
+      "Room": "12/2089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2091",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2095",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2097",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2098",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2104",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2098",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2097",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2095",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (relaxed) from .mp (Scorching Desert/SHNE)"
+}

@@ -1,0 +1,197 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Wrackspawn 1",
+  "Waypoints": [
+    {
+      "Room": "16/10910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10936",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10935",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10934",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10933",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10933",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10930",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10920",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10917",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10939",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10911",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shattered Expanse/SESL)"
+}

@@ -1,0 +1,147 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Withered Farm, Fields Loop",
+  "Waypoints": [
+    {
+      "Room": "14/5862",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5861",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5860",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5859",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5858",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5857",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5856",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5855",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5854",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5853",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5851",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5850",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5849",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5848",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5874",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5871",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5868",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5865",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5864",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5867",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5870",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5873",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5872",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5869",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5866",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5863",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5861",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Baenglen/WFWP)"
+}

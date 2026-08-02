@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Thieves Guild",
+  "Waypoints": [
+    {
+      "Room": "5/572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/581",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/582",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/575",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Thieves Town/TTTG)"
+}

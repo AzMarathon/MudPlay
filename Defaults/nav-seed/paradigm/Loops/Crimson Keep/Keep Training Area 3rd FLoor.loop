@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Keep Training Area 3rd FLoor",
+  "Waypoints": [
+    {
+      "Room": "13/4105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4108",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Crimson Keep/CKTF)"
+}

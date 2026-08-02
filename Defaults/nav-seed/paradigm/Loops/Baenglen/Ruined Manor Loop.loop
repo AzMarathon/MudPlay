@@ -1,0 +1,117 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Ruined Manor Loop",
+  "Waypoints": [
+    {
+      "Room": "14/6201",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6199",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6200",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6199",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6203",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6199",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6201",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6202",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6208",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6209",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6210",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6212",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6213",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6212",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6214",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6212",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6210",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6209",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6208",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6202",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Baenglen/RMSD)"
+}

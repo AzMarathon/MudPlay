@@ -1,0 +1,192 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Magma Men Loop",
+  "Waypoints": [
+    {
+      "Room": "15/1017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1044",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1029",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1028",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1027",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1026",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1025",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1024",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1022",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1041",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1040",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1039",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1038",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1037",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1036",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1035",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1034",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1033",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1032",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1031",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1030",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1029",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1044",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1018",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Mistress (Lava Fields/LVF4)"
+}

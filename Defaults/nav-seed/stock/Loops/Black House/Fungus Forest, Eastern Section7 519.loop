@@ -1,0 +1,317 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Fungus Forest, Eastern Section7 519",
+  "Waypoints": [
+    {
+      "Room": "7/519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/493",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/492",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/493",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/494",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/425",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/426",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/384",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/386",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/387",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/427",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/426",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/425",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/424",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/423",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/392",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/394",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/396",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/397",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/409",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/410",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/411",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/412",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/413",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/412",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/414",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/415",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/517",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/518",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Kitty \u0026 Wulfman (Black House/EDGE)"
+}

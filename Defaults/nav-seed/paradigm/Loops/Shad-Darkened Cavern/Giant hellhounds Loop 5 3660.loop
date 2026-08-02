@@ -1,0 +1,237 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Giant hellhounds Loop 5 3660",
+  "Waypoints": [
+    {
+      "Room": "5/3665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3741",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3735",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3736",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3745",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3746",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3747",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3746",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3745",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3711",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Darkened Cavern/DKST)"
+}

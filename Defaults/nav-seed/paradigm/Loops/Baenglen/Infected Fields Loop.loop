@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Infected Fields Loop",
+  "Waypoints": [
+    {
+      "Room": "14/5922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5934",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5940",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5939",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5933",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5936",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5935",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5895",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5894",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5893",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5889",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5896",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5897",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5898",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5899",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5900",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5906",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5908",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5916",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Baenglen/IFNP)"
+}

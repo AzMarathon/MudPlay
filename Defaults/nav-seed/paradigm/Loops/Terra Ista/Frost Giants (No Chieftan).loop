@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Frost Giants (No Chieftan)",
+  "Waypoints": [
+    {
+      "Room": "13/873",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/872",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/871",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/870",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/869",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/868",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/867",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/866",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/865",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2551",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/885",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/880",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/881",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/880",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/864",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/865",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/866",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/879",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/878",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/877",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/876",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/875",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/874",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Terra Ista/IMSU)"
+}

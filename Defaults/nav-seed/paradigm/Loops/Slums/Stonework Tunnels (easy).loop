@@ -1,0 +1,267 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Stonework Tunnels (easy)",
+  "Waypoints": [
+    {
+      "Room": "1/9438",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9439",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9440",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9441",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9442",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9446",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9448",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9449",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9382",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9387",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9386",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9384",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9383",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9370",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9368",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9369",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9392",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9394",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9396",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9397",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9399",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9403",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9404",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9427",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9432",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9433",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9434",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9435",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9436",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9437",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Slums/STMD)"
+}

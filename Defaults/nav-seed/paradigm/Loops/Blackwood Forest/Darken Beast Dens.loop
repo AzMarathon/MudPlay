@@ -1,0 +1,152 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Darken Beast Dens",
+  "Waypoints": [
+    {
+      "Room": "17/7109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7122",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/BFDD)"
+}

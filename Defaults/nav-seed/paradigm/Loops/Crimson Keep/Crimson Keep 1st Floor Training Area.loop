@@ -1,0 +1,147 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Crimson Keep 1st Floor Training Area",
+  "Waypoints": [
+    {
+      "Room": "13/2709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2710",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Crimson Keep/CFKE)"
+}

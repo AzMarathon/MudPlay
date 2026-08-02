@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Tidepool (Longer)",
+  "Waypoints": [
+    {
+      "Room": "13/503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/427",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/426",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/367",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/432",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/433",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/434",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/435",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/436",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/437",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/438",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/439",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/440",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/441",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/496",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Terra Fuego/TFTP)"
+}

@@ -1,0 +1,177 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Smugglers Level 3",
+  "Waypoints": [
+    {
+      "Room": "9/205",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/206",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/207",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/208",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/209",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/210",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/209",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/208",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/207",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/206",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/212",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/213",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/212",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/214",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/215",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/217",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/218",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/217",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/219",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/215",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/215",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/214",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/206",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Sewers/WPRD)"
+}

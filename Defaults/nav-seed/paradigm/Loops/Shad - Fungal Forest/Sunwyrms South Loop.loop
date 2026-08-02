@@ -1,0 +1,207 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Sunwyrms South Loop",
+  "Waypoints": [
+    {
+      "Room": "5/3807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4335",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4336",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4337",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4338",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4339",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4340",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4341",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4342",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4343",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4344",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4345",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4346",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4347",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4348",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4349",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4334",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4333",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4332",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4331",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4330",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4329",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4328",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4327",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4326",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4324",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4323",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4322",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4315",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4314",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4321",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4318",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4317",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4316",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4305",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4306",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4307",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4308",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4285",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad - Fungal Forest/SPBC)"
+}

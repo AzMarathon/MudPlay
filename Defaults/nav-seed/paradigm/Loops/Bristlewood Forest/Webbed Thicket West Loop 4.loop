@@ -1,0 +1,27 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Webbed Thicket West Loop 4",
+  "Waypoints": [
+    {
+      "Room": "14/3225",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3224",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Bristlewood Forest/WTW3)"
+}

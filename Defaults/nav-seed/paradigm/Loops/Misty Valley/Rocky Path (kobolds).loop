@@ -1,0 +1,297 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Rocky Path (kobolds)",
+  "Waypoints": [
+    {
+      "Room": "6/191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/744",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/743",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/742",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/741",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/3288",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/736",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/735",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/3287",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/745",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/746",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/747",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/748",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/749",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/750",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/749",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/748",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/747",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/746",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/745",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/3287",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/735",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/736",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/3288",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/741",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/742",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/743",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/744",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/192",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Misty Valley/SWPF)"
+}

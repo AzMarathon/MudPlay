@@ -1,0 +1,317 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Ocean Floor, Deep Water Loop N (2 regens) 16 3712",
+  "Waypoints": [
+    {
+      "Room": "16/3712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3763",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3883",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3967",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4013",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3977",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3978",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3979",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3980",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4001",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3983",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3984",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3985",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3986",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3987",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3988",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3989",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3994",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4139",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4138",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4134",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4132",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4131",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4130",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3883",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3763",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ocean/OCDW)"
+}

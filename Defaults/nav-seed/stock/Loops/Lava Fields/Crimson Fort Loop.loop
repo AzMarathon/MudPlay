@@ -1,0 +1,87 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Crimson Fort Loop",
+  "Waypoints": [
+    {
+      "Room": "15/1054",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1071",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1069",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1067",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1066",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1064",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1063",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1061",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1060",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1059",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1058",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1056",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1055",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Lava Fields/CFMG)"
+}

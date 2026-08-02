@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Whipvines",
+  "Waypoints": [
+    {
+      "Room": "16/3030",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3031",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3032",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3033",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3034",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3035",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3034",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3033",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3032",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3031",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Jungle/SJNG)"
+}

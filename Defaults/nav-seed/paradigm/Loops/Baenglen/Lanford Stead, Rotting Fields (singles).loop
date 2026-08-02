@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Lanford Stead, Rotting Fields (singles)",
+  "Waypoints": [
+    {
+      "Room": "14/5759",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5760",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5771",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5790",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5788",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5787",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5773",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5772",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5771",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5760",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Baenglen/LSCP)"
+}

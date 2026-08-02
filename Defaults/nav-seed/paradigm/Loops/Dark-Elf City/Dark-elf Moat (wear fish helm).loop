@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark-elf Moat (wear fish helm)",
+  "Waypoints": [
+    {
+      "Room": "8/559",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/646",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/648",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/649",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/650",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/651",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/652",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/653",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/654",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/655",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/656",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/633",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/634",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/635",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/636",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/637",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/638",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/639",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/640",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/646",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (skip 1 dead-end step) from .mp (Dark-Elf City/DCMS)"
+}

@@ -1,0 +1,207 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Opulent Villa Loop",
+  "Waypoints": [
+    {
+      "Room": "13/12784",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12785",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12786",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12787",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12788",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12790",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12814",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12822",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12821",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12817",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12816",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12815",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12814",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12811",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12801",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tal\u0027kiran Ruins/TRVE)"
+}

@@ -3514,6 +3514,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (result.Success)
         {
             WriteTerminalStatus(BuildMdbCompleteStatus(result), TerminalStatusKindFor(result));
+            // Seed base navigation loops + GOTO favourites for the realm before we
+            // switch to the set, so the ensuing set-switch loads the seeded files.
+            // Once-only per set (marker), additive, best-effort.
+            NavSeedBootstrapper.SeedIfNeeded(result.FolderName, AppServices.Current.Log);
             SwitchActiveGameDataSet(result.FolderName);
         }
         else

@@ -1,0 +1,27 @@
+{
+  "SchemaVersion": 3,
+  "Name": "White Dragons (instant regen room)",
+  "Waypoints": [
+    {
+      "Room": "15/793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/792",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rocky Trail/BIIR)"
+}

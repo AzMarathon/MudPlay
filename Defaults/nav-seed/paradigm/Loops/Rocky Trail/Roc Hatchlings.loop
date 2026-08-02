@@ -1,0 +1,127 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Roc Hatchlings",
+  "Waypoints": [
+    {
+      "Room": "10/120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/134",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/132",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/130",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/131",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/130",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/122",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Rocky Trail/RTNP)"
+}

@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Alabaster Palace Doubles Loop",
+  "Waypoints": [
+    {
+      "Room": "17/9644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9670",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9713",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ancient Fortress/ALPA)"
+}

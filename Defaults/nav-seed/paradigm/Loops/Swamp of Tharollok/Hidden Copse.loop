@@ -1,0 +1,132 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Hidden Copse",
+  "Waypoints": [
+    {
+      "Room": "13/2995",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2996",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2997",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2999",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3001",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3013",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3015",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2996",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Swamp of Tharollok/STHC)"
+}

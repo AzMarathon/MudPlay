@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Darken Beast Lord Area Loop",
+  "Waypoints": [
+    {
+      "Room": "17/831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/839",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/841",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/843",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/843",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/841",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/839",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/830",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/829",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/828",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/829",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/830",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/DLPR)"
+}

@@ -1,0 +1,112 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Gnaj Golems (2 and 3 spawns-3)",
+  "Waypoints": [
+    {
+      "Room": "15/1476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1486",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1488",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1489",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10155",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1477",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (relaxed) from .mp (Old Mines/OMTF)"
+}

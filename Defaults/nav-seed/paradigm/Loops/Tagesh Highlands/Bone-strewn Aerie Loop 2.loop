@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bone-strewn Aerie Loop 2",
+  "Waypoints": [
+    {
+      "Room": "14/4616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4617",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4621",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4622",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4623",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4622",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4618",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4626",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4627",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4618",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4614",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4611",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4613",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4614",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/BSA2)"
+}

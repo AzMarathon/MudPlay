@@ -1,0 +1,217 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Broken Wastes Upper Singles",
+  "Waypoints": [
+    {
+      "Room": "16/10506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10507",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shattered Expanse/BWCE)"
+}

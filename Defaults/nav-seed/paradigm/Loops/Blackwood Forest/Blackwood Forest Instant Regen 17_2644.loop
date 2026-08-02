@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Blackwood Forest Instant Regen 17/2644",
+  "Waypoints": [
+    {
+      "Room": "17/2644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2604",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/BFI3)"
+}

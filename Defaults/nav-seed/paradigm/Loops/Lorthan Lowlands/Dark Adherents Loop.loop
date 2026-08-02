@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark Adherents Loop",
+  "Waypoints": [
+    {
+      "Room": "14/9079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9084",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9083",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Lorthan Lowlands/LLHC)"
+}

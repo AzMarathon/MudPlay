@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Blackwood Forest Mountain Trail Loop",
+  "Waypoints": [
+    {
+      "Room": "17/855",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/854",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/853",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/859",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/853",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/851",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/853",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/854",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Wintterhawk (Blackwood Forest/BFMT)"
+}

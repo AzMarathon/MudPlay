@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Taslois (easy - lower level)",
+  "Waypoints": [
+    {
+      "Room": "16/20",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/21",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/22",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/21",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/20",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/19",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/18",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/14",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/15",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/16",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/17",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/16",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/15",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/14",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/13",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/8",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/9",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/8",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/5",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/6",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/7",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/6",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/5",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/4",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/8",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/13",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/14",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/18",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/19",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Jungle/JTLT)"
+}

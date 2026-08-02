@@ -1,0 +1,277 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Hilltop Encampment Loop (w/ Darksong) 2 10134",
+  "Waypoints": [
+    {
+      "Room": "2/10134",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10132",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10131",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10130",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10126",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Black Foothills/BFFP)"
+}

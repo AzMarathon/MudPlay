@@ -1,0 +1,322 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Rugged Plateau (1-2 regen Razor Boars)  2 10194",
+  "Waypoints": [
+    {
+      "Room": "2/10517",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10517",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10566",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10540",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10541",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10540",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10569",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10569",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10562",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10561",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10560",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10559",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10558",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10557",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10556",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10555",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10551",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10516",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rugged Plateau/RBFK)"
+}

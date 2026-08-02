@@ -1,0 +1,177 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bandit Keep 2nd FLoor",
+  "Waypoints": [
+    {
+      "Room": "9/844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/845",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/846",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/847",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/848",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/847",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/850",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/851",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/853",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/854",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/855",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/856",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/857",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/862",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/857",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/858",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/859",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/858",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/860",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/861",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/860",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/858",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/857",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/856",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/855",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/854",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/853",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/851",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/850",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/847",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/846",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/845",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Darkwood Forest/HKRR)"
+}

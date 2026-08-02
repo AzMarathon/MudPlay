@@ -1,0 +1,192 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Swamp Trolls",
+  "Waypoints": [
+    {
+      "Room": "5/4063",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4153",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4063",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4064",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4063",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4067",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4066",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4069",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4091",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4075",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4071",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4075",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4076",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4077",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4084",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4062",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad - Fungal Forest/MSST)"
+}

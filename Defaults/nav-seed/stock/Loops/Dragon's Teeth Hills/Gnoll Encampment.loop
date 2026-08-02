@@ -1,0 +1,142 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Gnoll Encampment",
+  "Waypoints": [
+    {
+      "Room": "2/1122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1111",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Dragon\u0027s Teeth Hills/GNCH)"
+}

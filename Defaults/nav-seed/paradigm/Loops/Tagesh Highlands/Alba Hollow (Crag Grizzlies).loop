@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Alba Hollow (Crag Grizzlies)",
+  "Waypoints": [
+    {
+      "Room": "14/4460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4461",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/AHCM)"
+}

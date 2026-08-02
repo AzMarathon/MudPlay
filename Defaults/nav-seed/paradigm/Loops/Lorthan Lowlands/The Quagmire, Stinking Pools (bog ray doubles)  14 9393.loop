@@ -1,0 +1,112 @@
+{
+  "SchemaVersion": 3,
+  "Name": "The Quagmire, Stinking Pools (bog ray doubles)  14 9393",
+  "Waypoints": [
+    {
+      "Room": "14/9393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9396",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9341",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9339",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9340",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9342",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9343",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9344",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9345",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9347",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9348",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9349",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9350",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9351",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9352",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9353",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9354",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9355",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9392",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Lorthan Lowlands/TQSK)"
+}

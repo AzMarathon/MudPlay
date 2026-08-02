@@ -1,0 +1,77 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Brigand Camp (with Chief)",
+  "Waypoints": [
+    {
+      "Room": "2/909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9455",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9456",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9454",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9450",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dragon\u0027s Teeth Hills/DHBC)"
+}

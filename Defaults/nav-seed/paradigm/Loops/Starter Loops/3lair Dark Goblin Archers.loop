@@ -1,0 +1,22 @@
+{
+  "SchemaVersion": 3,
+  "Name": "3lair Dark Goblin Archers",
+  "Waypoints": [
+    {
+      "Room": "1/1679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1642",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

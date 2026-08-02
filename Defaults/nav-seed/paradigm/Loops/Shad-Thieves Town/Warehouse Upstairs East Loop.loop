@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Warehouse Upstairs East Loop",
+  "Waypoints": [
+    {
+      "Room": "5/1438",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1439",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1440",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1441",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1440",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1439",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1442",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1442",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1446",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1448",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1457",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1456",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1442",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1439",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Thieves Town/TTWS)"
+}

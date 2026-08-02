@@ -1,0 +1,22 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Webbed Lair Loop 4 (3 rooms)",
+  "Waypoints": [
+    {
+      "Room": "17/2677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2678",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/WLL4)"
+}

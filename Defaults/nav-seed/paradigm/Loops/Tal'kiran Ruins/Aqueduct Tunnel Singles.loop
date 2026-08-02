@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Aqueduct Tunnel Singles",
+  "Waypoints": [
+    {
+      "Room": "13/12735",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12735",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12736",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tal\u0027kiran Ruins/AQTS)"
+}

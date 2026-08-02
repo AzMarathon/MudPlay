@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark-elf Training Area (assassins)",
+  "Waypoints": [
+    {
+      "Room": "8/1724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1735",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1736",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1743",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1742",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1741",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1744",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1745",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1746",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1747",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1748",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1743",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1736",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1735",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dark-Elf City/DCTG)"
+}

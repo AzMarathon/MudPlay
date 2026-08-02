@@ -1,0 +1,217 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Fachans Loop 2",
+  "Waypoints": [
+    {
+      "Room": "14/4395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4394",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4396",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4397",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4399",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4400",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4399",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4401",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4404",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4405",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4423",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4419",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4420",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4419",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4424",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4425",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4426",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4427",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4426",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4425",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4424",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4419",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4405",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4404",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4401",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4399",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4398",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/SSCJ)"
+}

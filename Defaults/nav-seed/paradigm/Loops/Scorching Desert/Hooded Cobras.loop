@@ -1,0 +1,117 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Hooded Cobras",
+  "Waypoints": [
+    {
+      "Room": "12/2439",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2440",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2446",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2448",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2449",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2454",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2449",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2448",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2446",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2440",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Scorching Desert/CSDE)"
+}

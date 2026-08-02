@@ -1,0 +1,337 @@
+{
+  "SchemaVersion": 3,
+  "Name": "White Marble Corridor\u002B6 924",
+  "Waypoints": [
+    {
+      "Room": "6/924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/930",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/933",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/934",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/935",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/936",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/939",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/940",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/941",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/942",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/943",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/944",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/945",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/947",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/949",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/950",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/951",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/952",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/953",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/955",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/956",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/957",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/958",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/959",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/960",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/967",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/971",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/972",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/973",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/974",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/975",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/976",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/977",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/978",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/979",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/980",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/981",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/982",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/983",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/984",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/985",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/986",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/987",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/988",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/923",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Graveyard/WMCS)"
+}

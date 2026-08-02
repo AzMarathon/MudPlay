@@ -1,0 +1,67 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Animated Defenders (NW Loop)",
+  "Waypoints": [
+    {
+      "Room": "17/7039",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7041",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7064",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7063",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7062",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7061",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7075",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7067",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7040",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Arlysia/ALGH)"
+}

@@ -1,0 +1,97 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Green Demonliings (singles)",
+  "Waypoints": [
+    {
+      "Room": "15/1769",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1768",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1767",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1766",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1763",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1762",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1761",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1760",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1761",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1762",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1763",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1766",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1767",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1768",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dwarven Mines/DMGD)"
+}

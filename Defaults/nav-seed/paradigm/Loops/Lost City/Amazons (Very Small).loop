@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Amazons (Very Small)",
+  "Waypoints": [
+    {
+      "Room": "16/382",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/383",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/457",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/456",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/455",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/454",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/381",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Lost City/LCAC)"
+}

@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark-elf Prison (easy)",
+  "Waypoints": [
+    {
+      "Room": "8/493",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/494",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/499",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/500",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/501",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/502",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Dark-Elf City/DEPR)"
+}

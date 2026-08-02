@@ -1,0 +1,302 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Narrow Canyon (Giant Scorpions)",
+  "Waypoints": [
+    {
+      "Room": "17/9796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9821",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9822",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9823",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9824",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9826",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9827",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9830",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9830",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9841",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9827",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9826",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9828",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9829",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9817",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9816",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9815",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9814",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9812",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9811",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/9797",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/SDNC)"
+}

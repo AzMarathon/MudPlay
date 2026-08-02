@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Animated Servants",
+  "Waypoints": [
+    {
+      "Room": "2/11961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11967",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11971",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11972",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11973",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11972",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11974",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11975",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11976",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11977",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11974",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11972",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11971",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11962",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rugged Plateau/RPST)"
+}

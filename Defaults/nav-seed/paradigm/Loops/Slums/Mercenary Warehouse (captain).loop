@@ -1,0 +1,117 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Mercenary Warehouse (captain)",
+  "Waypoints": [
+    {
+      "Room": "1/1327",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/12",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/13",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/19",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/15",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/14",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/15",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/16",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/20",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/28",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/27",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/25",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/24",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/23",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/22",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/21",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/26",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/28",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/20",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/16",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/17",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/18",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Slums/SLAW)"
+}

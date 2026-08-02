@@ -1,0 +1,127 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Embalmed Horrors, West Loop",
+  "Waypoints": [
+    {
+      "Room": "12/2490",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2494",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2499",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2500",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2499",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2501",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2494",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2494",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/TDWS)"
+}

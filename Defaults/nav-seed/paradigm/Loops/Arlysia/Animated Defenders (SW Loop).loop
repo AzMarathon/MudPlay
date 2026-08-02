@@ -1,0 +1,67 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Animated Defenders (SW Loop)",
+  "Waypoints": [
+    {
+      "Room": "17/7039",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7044",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7046",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7047",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7069",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7066",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7040",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (relaxed) from .mp (Arlysia/ALGH)"
+}

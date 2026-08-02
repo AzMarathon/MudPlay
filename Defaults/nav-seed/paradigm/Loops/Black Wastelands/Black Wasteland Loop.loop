@@ -1,0 +1,327 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Black Wasteland Loop",
+  "Waypoints": [
+    {
+      "Room": "3/669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/670",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/759",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/758",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/757",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/756",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/755",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/749",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/750",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/751",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/752",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/753",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/754",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/736",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/735",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/727",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black Wastelands/VXW1)"
+}

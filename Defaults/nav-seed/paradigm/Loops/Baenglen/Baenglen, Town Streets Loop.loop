@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Baenglen, Town Streets Loop",
+  "Waypoints": [
+    {
+      "Room": "14/6025",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6024",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6015",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6016",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6022",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6016",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6015",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/6023",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Baenglen/BGAH)"
+}

@@ -1,0 +1,52 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Stonework Tunnels Easy Long",
+  "Waypoints": [
+    {
+      "Room": "1/9345",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9423",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9397",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9362",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9332",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9355",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9351",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

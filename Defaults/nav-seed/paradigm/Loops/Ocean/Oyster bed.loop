@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Oyster bed",
+  "Waypoints": [
+    {
+      "Room": "16/3225",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3290",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3289",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3288",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3223",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3224",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ocean/OFRF)"
+}

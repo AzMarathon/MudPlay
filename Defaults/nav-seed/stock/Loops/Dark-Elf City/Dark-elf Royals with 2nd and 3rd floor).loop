@@ -1,0 +1,362 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark-elf Royals with 2nd and 3rd floor)",
+  "Waypoints": [
+    {
+      "Room": "8/697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/659",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/657",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/596",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/577",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/579",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/580",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/562",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/560",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/561",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/564",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/565",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/566",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/566",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/581",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/582",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/596",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/657",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/659",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/696",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dark-Elf City/CAS4)"
+}

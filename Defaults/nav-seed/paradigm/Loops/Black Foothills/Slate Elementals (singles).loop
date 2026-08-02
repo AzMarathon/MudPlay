@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Slate Elementals (singles)",
+  "Waypoints": [
+    {
+      "Room": "2/10035",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10036",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10044",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10062",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10061",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10060",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10055",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10054",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10053",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10052",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10051",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10050",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10049",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10048",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10047",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10046",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10037",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black Foothills/BFSM)"
+}

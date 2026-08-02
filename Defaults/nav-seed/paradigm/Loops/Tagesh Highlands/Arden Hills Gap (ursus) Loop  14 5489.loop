@@ -1,0 +1,302 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Arden Hills Gap (ursus) Loop  14 5489",
+  "Waypoints": [
+    {
+      "Room": "14/5489",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5488",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5486",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5501",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5493",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5492",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5491",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5494",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5499",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5500",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5494",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5491",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5490",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Tagesh Highlands/ARGX)"
+}

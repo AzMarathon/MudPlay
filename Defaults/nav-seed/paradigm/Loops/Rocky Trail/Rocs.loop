@@ -1,0 +1,267 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Rocs",
+  "Waypoints": [
+    {
+      "Room": "10/120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/141",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/142",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/143",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/144",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/145",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/147",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/148",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/149",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/150",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/149",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/148",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/147",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/155",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/157",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/157",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/155",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/153",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/154",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/153",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/145",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/144",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/143",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/142",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/141",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/122",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Rocky Trail/RTNP)"
+}

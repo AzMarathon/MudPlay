@@ -1,0 +1,47 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Luginio\u0027s Warehouse",
+  "Waypoints": [
+    {
+      "Room": "5/1907",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1877",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1907",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1908",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1908",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (relaxed) from .mp (Shad-Thieves Town/TTLY)"
+}

@@ -1,0 +1,147 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bog Loop (2)",
+  "Waypoints": [
+    {
+      "Room": "13/3017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3022",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3024",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3025",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3026",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3027",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3028",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3029",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3030",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3031",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3030",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3029",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3028",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3027",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3026",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3025",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3024",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3018",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Swamp of Tharollok/SRB2)"
+}

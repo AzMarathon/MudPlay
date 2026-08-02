@@ -1,0 +1,257 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Shattered Island singles",
+  "Waypoints": [
+    {
+      "Room": "16/10325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10327",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10328",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10329",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10330",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10331",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10331",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10332",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10333",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10335",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10336",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10337",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10338",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10339",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10369",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10367",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10363",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10362",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10370",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10371",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10372",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10373",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10374",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10376",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10401",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10399",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10400",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10386",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10384",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10387",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10326",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shattered Expanse/SILG)"
+}

@@ -1,0 +1,232 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Stonegoyle Singles",
+  "Waypoints": [
+    {
+      "Room": "2/9817",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9821",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9822",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9823",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9824",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9826",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9827",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9828",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9829",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9830",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9817",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9819",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9839",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9841",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9843",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9845",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9846",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9847",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9848",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9849",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9850",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9851",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9853",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9854",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9855",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9819",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black Foothills/BFSG)"
+}

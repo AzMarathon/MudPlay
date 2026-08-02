@@ -1,0 +1,277 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Necromancers",
+  "Waypoints": [
+    {
+      "Room": "8/978",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/979",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/980",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1055",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1056",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1050",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1051",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/956",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1051",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1050",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1049",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/960",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1035",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/999",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1036",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1036",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/999",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/997",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1033",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1032",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1027",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1031",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1145",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1039",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/982",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/983",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/984",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/985",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/986",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1054",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1053",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/976",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/977",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Dameon Alexander (Negative Power Plane/NPPV)"
+}

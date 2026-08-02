@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Smoldering Fields (3-8 regens) 14 8672",
+  "Waypoints": [
+    {
+      "Room": "14/8672",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8626",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8627",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8629",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8638",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8639",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8640",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8650",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8649",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8657",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8648",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8639",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8638",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8646",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8655",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8618",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8621",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8622",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8623",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8624",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8626",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Vale of Durand/FHMR)"
+}

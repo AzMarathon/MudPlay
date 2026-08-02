@@ -1,0 +1,297 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Icy Mountain Level 3 Loop",
+  "Waypoints": [
+    {
+      "Room": "13/1031",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1030",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1032",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1033",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1034",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1035",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1036",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1037",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1038",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1039",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1040",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1041",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1044",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1046",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1047",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1048",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1049",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1050",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1051",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1052",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1053",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1054",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1055",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1056",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1057",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1058",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1001",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1013",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1015",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1016",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1022",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1024",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1025",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1026",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1027",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1028",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1029",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/1030",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (skip 1 dead-end step) from .mp (Terra Ista/IMP3)"
+}

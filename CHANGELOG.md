@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.18.0
+
+- Importing a new MajorMUD MDB now seeds the fresh game-data set with base navigation loops + GOTO favourites for its realm (stock or Paradigm, picked from the MDB's Legit field), so a newly-imported realm arrives pre-populated instead of empty
+- The seed is additive (never overwrites a loop or drops a favourite you already have) and once-only per set — re-importing, or deleting a seeded loop/favourite, never re-adds it
+- Seed bundles ship in the app's Defaults folder (`Defaults/nav-seed/{stock,paradigm}/`): 164 loops + 697 favourites for stock, 594 loops + 1,502 favourites for Paradigm
+
 ## 2.17.0
 
 - Navigation gains an Exp/Hr Estimator (its own collapsible in the map's right rail): press Start estimating, click rooms on the map to build a throwaway loop, and the estimated experience-per-hour plus a per-lair breakdown surface right there in the panel — then Save it as a real loop or Discard it

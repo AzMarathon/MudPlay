@@ -1,0 +1,132 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Lofty Cliff, Roost Loop  (Elder Gryphons)",
+  "Waypoints": [
+    {
+      "Room": "14/4557",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4558",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4559",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4560",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4561",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4562",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4563",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4564",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4565",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4566",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4558",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4569",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4569",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4577",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4558",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/LCLR)"
+}

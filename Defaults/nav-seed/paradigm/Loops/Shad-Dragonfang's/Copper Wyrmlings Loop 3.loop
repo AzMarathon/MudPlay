@@ -1,0 +1,257 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Copper Wyrmlings Loop 3",
+  "Waypoints": [
+    {
+      "Room": "5/2783",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4735",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4736",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4736",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4713",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Dragonfang\u0027s/DTE5)"
+}

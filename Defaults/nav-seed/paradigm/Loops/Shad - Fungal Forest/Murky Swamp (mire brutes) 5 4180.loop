@@ -1,0 +1,92 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Murky Swamp (mire brutes) 5 4180",
+  "Waypoints": [
+    {
+      "Room": "5/4180",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4181",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4182",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4183",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4184",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4185",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4186",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4187",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4188",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4189",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4194",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4189",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4188",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4192",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4193",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad - Fungal Forest/MSMB)"
+}

@@ -1,0 +1,77 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Cliffside Camp",
+  "Waypoints": [
+    {
+      "Room": "17/1795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1997",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1999",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/1998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2003",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (skip 2 dead-end step) from .mp (Black House/FFCC)"
+}

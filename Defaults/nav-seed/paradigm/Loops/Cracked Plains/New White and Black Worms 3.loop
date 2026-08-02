@@ -1,0 +1,242 @@
+{
+  "SchemaVersion": 3,
+  "Name": "New White and Black Worms 3",
+  "Waypoints": [
+    {
+      "Room": "7/1677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1676",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1675",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1674",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1673",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1674",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1675",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1676",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Cracked Plains/NWC2)"
+}

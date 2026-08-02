@@ -1,0 +1,327 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Western Road Pass",
+  "Waypoints": [
+    {
+      "Room": "2/9489",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9488",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9486",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9486",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/9488",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black Foothills/BFWR)"
+}

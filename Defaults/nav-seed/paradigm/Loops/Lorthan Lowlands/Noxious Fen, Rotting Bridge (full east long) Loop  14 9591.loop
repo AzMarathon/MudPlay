@@ -1,0 +1,482 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Noxious Fen, Rotting Bridge (full east long) Loop  14 9591",
+  "Waypoints": [
+    {
+      "Room": "14/9591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9564",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9563",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9565",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9566",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9569",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9577",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9579",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9580",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9581",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9582",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9517",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9541",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9551",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9555",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9556",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9557",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9558",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9559",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9560",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9561",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9562",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9563",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9564",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9590",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Lorthan Lowlands/NXRB)"
+}

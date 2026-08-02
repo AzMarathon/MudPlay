@@ -1,0 +1,122 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Gnoll Camp",
+  "Waypoints": [
+    {
+      "Room": "5/3461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3462",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Dragonfang\u0027s/SHGP)"
+}

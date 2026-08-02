@@ -1,0 +1,32 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Stonework Tunnels Easy",
+  "Waypoints": [
+    {
+      "Room": "1/9324",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9347",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9332",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9352",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/9351",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

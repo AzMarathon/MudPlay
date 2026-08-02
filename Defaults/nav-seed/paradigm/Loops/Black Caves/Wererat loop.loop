@@ -1,0 +1,337 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Wererat loop",
+  "Waypoints": [
+    {
+      "Room": "8/910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/911",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/917",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/920",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/930",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/935",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/936",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/933",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/934",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/939",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/940",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/941",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/942",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/943",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/944",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/945",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/947",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/949",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/945",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/944",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/943",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/942",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/941",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/942",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/943",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/944",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/917",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/912",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (skip 2 dead-end step) from .mp (Black Caves/ASTR)"
+}

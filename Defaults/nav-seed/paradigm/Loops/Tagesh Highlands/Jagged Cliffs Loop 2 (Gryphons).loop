@@ -1,0 +1,127 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Jagged Cliffs Loop 2 (Gryphons)",
+  "Waypoints": [
+    {
+      "Room": "14/4518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4520",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/JCR2)"
+}

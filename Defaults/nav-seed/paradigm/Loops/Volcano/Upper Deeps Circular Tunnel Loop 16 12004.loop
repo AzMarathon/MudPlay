@@ -1,0 +1,322 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Upper Deeps Circular Tunnel Loop 16 12004",
+  "Waypoints": [
+    {
+      "Room": "16/12004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12040",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12041",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12044",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12046",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12047",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12048",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12049",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12050",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12051",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12052",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12053",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12054",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12055",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12056",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12057",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12058",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12059",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12060",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12061",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12062",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12063",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12064",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12066",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12067",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12075",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12076",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12077",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12077",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12076",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12075",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12069",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12071",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12006",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Volcano/UDCJ)"
+}

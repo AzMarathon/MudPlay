@@ -1,0 +1,177 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Silvermere Sewers",
+  "Waypoints": [
+    {
+      "Room": "1/766",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/580",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/582",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/782",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/596",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/597",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/611",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/614",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/622",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/631",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/769",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

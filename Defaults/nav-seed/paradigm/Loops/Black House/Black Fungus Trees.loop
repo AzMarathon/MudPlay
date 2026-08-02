@@ -1,0 +1,332 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Black Fungus Trees",
+  "Waypoints": [
+    {
+      "Room": "7/696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1811",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1812",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/720",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black House/HBFT)"
+}

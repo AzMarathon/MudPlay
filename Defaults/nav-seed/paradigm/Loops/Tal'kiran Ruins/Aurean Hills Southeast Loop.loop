@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Aurean Hills Southeast Loop",
+  "Waypoints": [
+    {
+      "Room": "13/12634",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12635",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12676",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12675",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12674",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12673",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12672",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12671",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12670",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12668",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12662",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12661",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12659",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12657",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12656",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12640",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12639",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12638",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12637",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tal\u0027kiran Ruins/TRAF)"
+}

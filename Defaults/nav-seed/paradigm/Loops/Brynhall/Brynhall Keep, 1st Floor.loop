@@ -1,0 +1,357 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Brynhall Keep, 1st Floor",
+  "Waypoints": [
+    {
+      "Room": "14/5009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4967",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4971",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4972",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4973",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4974",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4975",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4976",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4977",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4978",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4979",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4980",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4981",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4982",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4983",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4984",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5013",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5015",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5016",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5015",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5024",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5025",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5026",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5027",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5026",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5025",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5028",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5029",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5030",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5031",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5032",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5031",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5033",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5031",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5030",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5029",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5022",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5018",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Brynhall/BHKE)"
+}

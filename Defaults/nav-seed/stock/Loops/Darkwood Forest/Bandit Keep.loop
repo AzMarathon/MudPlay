@@ -1,0 +1,397 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bandit Keep",
+  "Waypoints": [
+    {
+      "Room": "9/803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/790",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/775",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/776",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/777",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/778",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/779",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/780",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/781",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/782",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/783",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/784",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/785",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/786",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/787",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/788",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/769",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/770",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/771",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/772",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/773",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/774",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/749",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/750",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/751",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/752",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/753",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/754",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/755",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/756",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/757",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/758",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/759",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/760",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/761",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/762",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/763",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/766",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/767",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/768",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/769",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/802",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Darkwood Forest/HKEP)"
+}

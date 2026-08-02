@@ -1,0 +1,227 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dire Grizzlys",
+  "Waypoints": [
+    {
+      "Room": "2/10767",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10917",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10920",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10930",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10940",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10939",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10941",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10936",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10933",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10920",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10917",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10913",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rugged Plateau/RPGF)"
+}

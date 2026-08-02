@@ -1,0 +1,52 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Lava Imps",
+  "Waypoints": [
+    {
+      "Room": "16/2119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2120",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Volcano/VOLI)"
+}

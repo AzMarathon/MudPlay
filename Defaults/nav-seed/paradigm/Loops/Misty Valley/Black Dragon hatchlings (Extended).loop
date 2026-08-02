@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Black Dragon hatchlings (Extended)",
+  "Waypoints": [
+    {
+      "Room": "6/472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/471",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Misty Valley/MBDH)"
+}

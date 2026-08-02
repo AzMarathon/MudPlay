@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 3,
+  "Name": "PIES!!!!",
+  "Waypoints": [
+    {
+      "Room": "1/3443",
+      "Command": "ask old deliver",
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/311",
+      "Command": "ask barm pie",
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

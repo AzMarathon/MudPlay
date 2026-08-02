@@ -1,0 +1,127 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Pirate Galleon",
+  "Waypoints": [
+    {
+      "Room": "13/820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/821",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/830",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/829",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/827",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/826",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/845",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/843",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/839",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/821",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Terra Fuego/PGSB)"
+}

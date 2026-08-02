@@ -1,0 +1,317 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Blackwater sewers (North)",
+  "Waypoints": [
+    {
+      "Room": "14/382",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/376",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/374",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/373",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/372",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/371",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/353",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/352",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/351",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/350",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/349",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/348",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/347",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/346",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/346",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/347",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/348",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/354",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/355",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/356",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/357",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/358",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/359",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/360",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/361",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/376",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/383",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/384",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/386",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/387",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/392",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/394",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/419",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/424",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/423",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/420",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Port Blackwater/PBSL)"
+}

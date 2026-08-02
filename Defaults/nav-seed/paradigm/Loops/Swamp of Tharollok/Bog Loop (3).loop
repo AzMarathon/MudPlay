@@ -1,0 +1,192 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bog Loop (3)",
+  "Waypoints": [
+    {
+      "Room": "13/3033",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3050",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3049",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3048",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3047",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3046",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3044",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3040",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3041",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3040",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3039",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3037",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3038",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3037",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3036",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3035",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3034",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3051",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3052",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3053",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3054",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3055",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3056",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3057",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3058",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3057",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3056",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3055",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3054",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3053",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3052",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3051",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3034",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Swamp of Tharollok/STB3)"
+}

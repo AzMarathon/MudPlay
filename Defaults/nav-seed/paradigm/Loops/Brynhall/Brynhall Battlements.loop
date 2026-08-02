@@ -1,0 +1,127 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Brynhall Battlements",
+  "Waypoints": [
+    {
+      "Room": "14/5003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4985",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4986",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4987",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4988",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4989",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4990",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4991",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4992",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4993",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4994",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4995",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4996",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4997",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4999",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5001",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5002",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Brynhall/AKUC)"
+}

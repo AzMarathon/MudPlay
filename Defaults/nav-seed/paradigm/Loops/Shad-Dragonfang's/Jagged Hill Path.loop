@@ -1,0 +1,272 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Jagged Hill Path",
+  "Waypoints": [
+    {
+      "Room": "5/3395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3394",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3368",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3369",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3370",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3371",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3372",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3373",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3374",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3376",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3382",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3383",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3384",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3384",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3386",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3387",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3363",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3362",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3361",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3360",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3359",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3358",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3357",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3358",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3359",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3360",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3361",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3362",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3363",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3367",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3368",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3394",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Dragonfang\u0027s/SHTC)"
+}

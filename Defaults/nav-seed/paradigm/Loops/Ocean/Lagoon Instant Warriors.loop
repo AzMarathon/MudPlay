@@ -1,0 +1,27 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Lagoon Instant Warriors",
+  "Waypoints": [
+    {
+      "Room": "16/2653",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2654",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2653",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2654",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ocean/LRIW)"
+}

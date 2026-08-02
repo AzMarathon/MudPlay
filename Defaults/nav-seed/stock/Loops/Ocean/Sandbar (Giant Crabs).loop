@@ -1,0 +1,257 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Sandbar (Giant Crabs)",
+  "Waypoints": [
+    {
+      "Room": "16/272",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/291",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/292",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/293",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/294",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/295",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/296",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/295",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/294",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/298",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/299",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/298",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/294",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/293",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/292",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/291",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/272",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/273",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/274",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/275",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/276",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/277",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/278",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/279",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/280",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/281",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/282",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/283",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/284",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/285",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/286",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/288",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/289",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/290",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/289",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/288",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/286",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/285",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/284",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/283",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/282",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/281",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/280",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/279",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/278",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/277",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/276",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/275",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/274",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/273",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Fizban the Fabulous (Ocean/SAND)"
+}

@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Hill Giant Chief loop (instant regen)",
+  "Waypoints": [
+    {
+      "Room": "16/801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/800",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Barren Hills/BHHC)"
+}
