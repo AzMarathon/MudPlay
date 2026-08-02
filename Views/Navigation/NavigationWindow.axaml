@@ -61,6 +61,29 @@
             <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
         </Style>
 
+        <!-- Transparent, chrome-free ListBox for rail lists. Using a ListBox (not a
+             plain ItemsControl) is deliberate: its internal ScrollViewer +
+             HorizontalScrollBarVisibility=Disabled constrains row width to the rail,
+             so a long room name can't push the whole section wider than its
+             neighbours. Same pattern the CURRENT NAV list uses. -->
+        <Style Selector="ListBox.RailList">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.RailList ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox.RailList ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox.RailList ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+
         <!-- Top-right action button (Run / Stop / Loop mode / Lair mode) -->
         <Style Selector="Button.ActionChip">
             <Setter Property="Padding" Value="12,4"/>
@@ -1433,8 +1456,11 @@
 
                                         <!-- Per-lair breakdown: fires vs misses per hour, amber
                                              when a miss was close (nudge the loop to catch it). -->
-                                        <ItemsControl ItemsSource="{Binding ExpEstimator.Lairs}">
-                                            <ItemsControl.ItemTemplate>
+                                        <ListBox Classes="RailList" Focusable="False"
+                                                 ItemsSource="{Binding ExpEstimator.Lairs}"
+                                                 MaxHeight="180"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                            <ListBox.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ExpEstimatorLairRow">
                                                     <Grid ColumnDefinitions="*,Auto" Margin="0,1" ColumnSpacing="6">
                                                         <TextBlock Grid.Column="0" FontSize="11"
@@ -1450,8 +1476,8 @@
                                                         </StackPanel>
                                                     </Grid>
                                                 </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
 
                                         <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
 
@@ -1463,8 +1489,11 @@
                                                    Foreground="{StaticResource ChromeFgSecBrush}"
                                                    Text="Click rooms on the map to add waypoints."/>
 
-                                        <ItemsControl ItemsSource="{Binding ExpEstimator.Clicks}">
-                                            <ItemsControl.ItemTemplate>
+                                        <ListBox Classes="RailList" Focusable="False"
+                                                 ItemsSource="{Binding ExpEstimator.Clicks}"
+                                                 MaxHeight="200"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                            <ListBox.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:LoopBuilderRow">
                                                     <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto"
                                                           ColumnSpacing="3" Margin="0,1">
@@ -1476,28 +1505,28 @@
                                                                    Text="{Binding Name}"/>
                                                         <Button Grid.Column="2" Content="▲" FontSize="9" Padding="5,1"
                                                                 ToolTip.Tip="Move earlier"
-                                                                Command="{Binding $parent[ItemsControl].((vm:NavigationViewModel)DataContext).MoveEstimatorClickUpCommand}"
+                                                                Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).MoveEstimatorClickUpCommand}"
                                                                 CommandParameter="{Binding}"/>
                                                         <Button Grid.Column="3" Content="▼" FontSize="9" Padding="5,1"
                                                                 ToolTip.Tip="Move later"
-                                                                Command="{Binding $parent[ItemsControl].((vm:NavigationViewModel)DataContext).MoveEstimatorClickDownCommand}"
+                                                                Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).MoveEstimatorClickDownCommand}"
                                                                 CommandParameter="{Binding}"/>
                                                         <Button Grid.Column="4" Content="✕" FontSize="9" Padding="5,1"
                                                                 Foreground="{StaticResource AccentRedBrush}"
                                                                 ToolTip.Tip="Remove"
-                                                                Command="{Binding $parent[ItemsControl].((vm:NavigationViewModel)DataContext).RemoveEstimatorClickCommand}"
+                                                                Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RemoveEstimatorClickCommand}"
                                                                 CommandParameter="{Binding}"/>
                                                     </Grid>
                                                 </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
 
                                         <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
 
                                         <CheckBox IsChecked="{Binding ExpEstimator.AreaCombat, Mode=TwoWay}"
                                                   FontSize="11"
-                                                  ToolTip.Tip="Off: kill one mob at a time (rounds per mob). On: engage every mob in the room at once (rounds per room)."
-                                                  Content="Area combat (all at once)"/>
+                                                  ToolTip.Tip="On: you hit every mob in the room at once, so a room clears in your rounds-to-kill no matter how many mobs. Off: you kill mobs one at a time (room cost scales with the mob count)."
+                                                  Content="I'm Rooming"/>
 
                                         <!-- Labels stack ABOVE each picker and wrap: the rail is only
                                              290px wide, so a side-by-side label + full-size
@@ -1516,22 +1545,12 @@
                                         <StackPanel Spacing="2">
                                             <TextBlock FontSize="11" TextWrapping="Wrap"
                                                        Foreground="{StaticResource ChromeFgSecBrush}"
-                                                       Text="Rounds to kill one mob"/>
+                                                       Text="Rounds to kill a mob"/>
                                             <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
                                                            Value="{Binding ExpEstimator.RoundsPerMob, Mode=TwoWay}"
                                                            Minimum="0.1" Maximum="50" Increment="0.5"
                                                            FormatString="0.0" ShowButtonSpinner="True"
-                                                           ToolTip.Tip="Average combat rounds to kill one monster (5s per round). Used when Area combat is off."/>
-                                        </StackPanel>
-                                        <StackPanel Spacing="2">
-                                            <TextBlock FontSize="11" TextWrapping="Wrap"
-                                                       Foreground="{StaticResource ChromeFgSecBrush}"
-                                                       Text="Rounds to clear a room"/>
-                                            <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
-                                                           Value="{Binding ExpEstimator.RoundsPerRoom, Mode=TwoWay}"
-                                                           Minimum="0.1" Maximum="50" Increment="0.5"
-                                                           FormatString="0.0" ShowButtonSpinner="True"
-                                                           ToolTip.Tip="Average rounds to clear a whole room when engaging every mob at once. Used when Area combat is on."/>
+                                                           ToolTip.Tip="Average combat rounds to kill one monster (5s per round). When rooming, this is the rounds to clear the whole room."/>
                                         </StackPanel>
                                         <StackPanel Spacing="2">
                                             <TextBlock FontSize="11" TextWrapping="Wrap"
@@ -1544,22 +1563,10 @@
                                                            ToolTip.Tip="Haircut for real conditions (regen breaks, missed rounds, travel). 1.0 = perfect play; 0.87 default."/>
                                         </StackPanel>
 
-                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                            <ComboBox Grid.Column="0" x:Name="EstimatorLoadCombo"
-                                                      ItemsSource="{Binding Loops}"
-                                                      HorizontalAlignment="Stretch" FontSize="11"
-                                                      PlaceholderText="Load saved loop…">
-                                                <ComboBox.ItemTemplate>
-                                                    <DataTemplate x:DataType="vm:LoopRowViewModel">
-                                                        <TextBlock Text="{Binding Name}" FontSize="11"/>
-                                                    </DataTemplate>
-                                                </ComboBox.ItemTemplate>
-                                            </ComboBox>
-                                            <Button Grid.Column="1" Content="Load" FontSize="10" Padding="8,2"
-                                                    ToolTip.Tip="Load the selected loop into the estimator to analyse it."
-                                                    Command="{Binding LoadLoopIntoEstimatorRowCommand}"
-                                                    CommandParameter="{Binding #EstimatorLoadCombo.SelectedItem}"/>
-                                        </Grid>
+                                        <Button Content="Load loop…" FontSize="11"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                ToolTip.Tip="Browse for a saved .loop file to analyse (opens in the active set's Loops folder)."
+                                                Command="{Binding BrowseLoadLoopIntoEstimatorCommand}"/>
 
                                         <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
                                             <Button Grid.Column="0" Content="Save as loop" FontSize="11"

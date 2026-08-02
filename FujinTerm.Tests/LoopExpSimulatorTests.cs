@@ -19,7 +19,7 @@ public sealed class LoopExpSimulatorTests
     private static ExpTarget Lair(int mobs, double exp, int respawn) => new(mobs, exp, respawn);
 
     private static ExpSimSettings Single(double secPerStep, double roundsPerMob = 1)
-        => new(secPerStep, ExpCombatMode.SingleTarget, roundsPerMob, RoundsPerRoom: 1, RealConditionsMultiplier: 1);
+        => new(secPerStep, ExpCombatMode.SingleTarget, roundsPerMob, RealConditionsMultiplier: 1);
 
     [Fact]
     public void PureInstantMob_CapsAt720Rounds()
@@ -76,13 +76,13 @@ public sealed class LoopExpSimulatorTests
     [Fact]
     public void AreaMode_KillsRoomInParallel_ClearTimeIndependentOfMobCount()
     {
-        // AoE engages every mob in the room at once, so clearing a 2-mob and a
-        // 6-mob lair takes the same "rounds to clear a room" — you don't linger
+        // AoE ("rooming") engages every mob in the room at once, so clearing a
+        // 2-mob and a 6-mob lair takes the same rounds-to-kill — you don't linger
         // rounds×mobCount. Single-target lingers, scaling with the mob count.
         ExpRoute two = Route(Room(1, 100, Lair(2, 50, 1)), Empty(1, 101), Empty(1, 102));
         ExpRoute six = Route(Room(1, 100, Lair(6, 50, 1)), Empty(1, 101), Empty(1, 102));
-        var area = new ExpSimSettings(1, ExpCombatMode.AreaAllTargets, RoundsPerMob: 1, RoundsPerRoom: 2, RealConditionsMultiplier: 1);
-        var single = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 1, RoundsPerRoom: 2, RealConditionsMultiplier: 1);
+        var area = new ExpSimSettings(1, ExpCombatMode.AreaAllTargets, RoundsPerMob: 2, RealConditionsMultiplier: 1);
+        var single = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 2, RealConditionsMultiplier: 1);
 
         // AoE: same clear time regardless of mob count → same lap length.
         Assert.Equal(LoopExpSimulator.Simulate(two, area).AvgLapSeconds,

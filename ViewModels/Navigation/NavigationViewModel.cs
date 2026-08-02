@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using Avalonia;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -2046,11 +2048,36 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsExpEstimating));
     }
 
-    // Load-loop picker in the estimator collapsible → seed the session.
+    // "Load loop…" in the estimator collapsible → browse to a saved .loop file
+    // (default location: the active set's Loops folder) and seed the session.
     [RelayCommand]
-    private void LoadLoopIntoEstimatorRow(LoopRowViewModel? row)
+    private async Task BrowseLoadLoopIntoEstimator()
     {
-        if (row is not null) LoadLoopIntoEstimator(row.Source);
+        if (Application.Current?.ApplicationLifetime
+            is not Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime
+                { MainWindow: { } main })
+            return;
+
+        var options = new FilePickerOpenOptions
+        {
+            Title = "Load a loop to estimate",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Loop file") { Patterns = new[] { "*" + LoopManager.LoopFileSuffix } },
+                FilePickerFileTypes.All,
+            },
+        };
+
+        // Default to the active game-data set's Loops folder.
+        if (_services.Loops.SetName is { } set
+            && await main.StorageProvider.TryGetFolderFromPathAsync(AppPaths.GameDataSetLoopsFolder(set)) is { } start)
+            options.SuggestedStartLocation = start;
+
+        IReadOnlyList<IStorageFile> picked = await main.StorageProvider.OpenFilePickerAsync(options);
+        if (picked.Count == 0) return;
+        if (_services.Loops.LoadFile(picked[0].Path.LocalPath) is { } loop)
+            LoadLoopIntoEstimator(loop);
     }
 
     private void TearDownExpEstimator()

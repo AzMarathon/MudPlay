@@ -39,8 +39,11 @@ public sealed record ExpRoute(IReadOnlyList<ExpRoomVisit> Lap);
 public sealed record ExpSimSettings(
     double SecondsPerStep,
     ExpCombatMode CombatMode,
-    double RoundsPerMob,        // SingleTarget: rounds to kill one mob (killed one at a time)
-    double RoundsPerRoom,       // AreaAllTargets: rounds to clear a room (every mob engaged at once)
+    // Rounds to kill one mob. SingleTarget kills serially, so a room costs
+    // mobCount × this. AreaAllTargets ("rooming") hits every mob at once, so the
+    // whole room costs this flat, count-independent — there is no separate
+    // rounds-per-room knob; it IS rounds-per-mob.
+    double RoundsPerMob,
     double RealConditionsMultiplier = 0.87,
     double SecondsPerRound = 5.0);
 
@@ -143,7 +146,7 @@ public static class LoopExpSimulator
                 if (firedThisRoom.Count > 0)
                 {
                     double clearSeconds = s.CombatMode == ExpCombatMode.AreaAllTargets
-                        ? s.RoundsPerRoom * s.SecondsPerRound
+                        ? s.RoundsPerMob * s.SecondsPerRound
                         : firedMobs * s.RoundsPerMob * s.SecondsPerRound;
                     t += clearSeconds;
                     if (inWindow) measuredExp += roomExp;

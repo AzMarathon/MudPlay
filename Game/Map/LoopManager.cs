@@ -117,6 +117,24 @@ public sealed class LoopManager
     public Loop? Get(string name) =>
         _loops.TryGetValue(name, out Loop? loop) ? loop : null;
 
+    // Deserialize a single loop file the user browsed to (may live outside the
+    // active set's folder). Returns null if it isn't a valid loop. Doesn't add
+    // it to the catalogue — the caller decides what to do with it.
+    public Loop? LoadFile(string path)
+    {
+        try
+        {
+            Loop? loop = JsonStore.Load<Loop>(path);
+            if (loop is null || string.IsNullOrWhiteSpace(loop.Name)) return null;
+            UpgradeIfNeeded(loop);
+            return loop;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // Persist loop under GameDataSetLoopsFolder. No-op when no set is active.
     public void Save(Loop loop)
     {

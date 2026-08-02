@@ -47,9 +47,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
     // Tunables — each change re-runs the estimate.
     [ObservableProperty] private double _secondsPerStep = 1.0;
-    [ObservableProperty] private bool _areaCombat;                 // false = single-target, true = AoE
+    [ObservableProperty] private bool _areaCombat;                 // false = single-target, true = AoE ("rooming")
     [ObservableProperty] private double _roundsPerMob = 1.0;
-    [ObservableProperty] private double _roundsPerRoom = 1.0;
     [ObservableProperty] private double _realConditionsMultiplier = 0.87;
 
     // Results.
@@ -61,7 +60,6 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     partial void OnSecondsPerStepChanged(double value) => Recompute();
     partial void OnAreaCombatChanged(bool value) => Recompute();
     partial void OnRoundsPerMobChanged(double value) => Recompute();
-    partial void OnRoundsPerRoomChanged(double value) => Recompute();
     partial void OnRealConditionsMultiplierChanged(double value) => Recompute();
 
     public bool HasClicks => Clicks.Count > 0;
@@ -166,7 +164,6 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             Math.Max(0, SecondsPerStep),
             AreaCombat ? ExpCombatMode.AreaAllTargets : ExpCombatMode.SingleTarget,
             Math.Max(0.1, RoundsPerMob),
-            Math.Max(0.1, RoundsPerRoom),
             Math.Clamp(RealConditionsMultiplier, 0.1, 1.0));
         ExpSimResult r = LoopExpSimulator.Simulate(route, settings);
 
