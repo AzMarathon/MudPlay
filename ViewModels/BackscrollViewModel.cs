@@ -47,8 +47,15 @@ public sealed partial class BackscrollViewModel : ObservableObject
     // Fired when the user requests Jump to end (scroll to the newest row).
     public event Action? JumpToEndRequested;
 
-    public BackscrollViewModel(TerminalEmulator emulator)
+    // Rows the transcript advances per mouse-wheel notch (bound to the control's
+    // WheelLines). Read once at open from the BBS-tier BackscrollWheelLines
+    // setting — the window is a frozen snapshot, so reopening picks up a changed
+    // value, the same way it doesn't track live font settings either.
+    public int WheelLines { get; }
+
+    public BackscrollViewModel(TerminalEmulator emulator, int wheelLines = 5)
     {
+        WheelLines = Math.Max(1, wheelLines);
         ScrollbackBuffer buffer = emulator.Screen.Scrollback;
         foreach (ScrollbackBuffer.Row row in buffer.Enumerate())
         {

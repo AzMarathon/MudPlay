@@ -1722,6 +1722,13 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
   member-drop correlation as a disconnect so a trained follower is stamped into the reconnect grace
   window and auto-re-invited on their `just entered the Realm.` — and members who train at staggered
   times each re-invite as they individually re-enter within the window.
+  **Self perspective (the character doing the training):** entering the train-stats screen breaks up
+  OUR OWN party server-side, so our client must reset its own `PartyState` on train-stats entry to
+  match — a **leader** clears its whole roster (party disbanded), a **follower** clears the
+  "following `<leader>`" state (no longer following). Skipping this leaves a stale "following" state
+  that makes the client **reject the leader's fresh re-invite**: both the `@join` handler and the
+  invite auto-accept no-op on "already following `<leader>`", so the follower never rejoins (report
+  `stock-20260801-002423`).
 - **[CONFIRMED]** When a **non-leader party member dies**, they leave the active party — but in the
   leader's `par` the name shows as an **invited** (pending) slot **indistinguishable from a genuine
   pending invite**. So a member death is recognized **not** from `par` but from the room line

@@ -167,18 +167,6 @@ public sealed class CharacterProfile
     // null or empty = no stash rooms flagged.
     public List<RoomRef>? StashRooms { get; set; }
 
-    // User-bookmarked rooms shown in the Navigation window's GOTO pane.
-    // Per-character; each entry carries the Game.Map.RoomKey wire pair plus an
-    // optional custom label. Persisted as a flat list; consumed at runtime by
-    // FavoritesStore. null or empty = no favorites flagged.
-    public List<FavoriteRoom>? Favorites { get; set; }
-
-    // Folder paths in the GOTO tree that the user created but which hold no
-    // favourites yet (empty folders the item list alone can't reconstruct).
-    // Paths use / separators, same vocabulary as FavoriteRoom.Folder. null or
-    // empty = no empty folders to remember. Maintained by FavoritesStore.
-    public List<string>? FavoriteFolders { get; set; }
-
     // Recent walk-to destinations, newest first, capped at 10. Each entry is a
     // "map/room" coordinate string. Maintained by GotoHistoryStore; drives the
     // Navigation goto-button dropdown. null or empty = no history yet.

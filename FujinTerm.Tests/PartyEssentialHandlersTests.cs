@@ -1064,6 +1064,26 @@ public sealed class PartyEssentialHandlersTests
         Assert.Empty(relay);
     }
 
+    [Fact]
+    public void Join_FromBelievedLeader_RejoinsInsteadOfDenying()
+    {
+        // A leader never re-invites a current follower — so an @join from the very
+        // leader we still believe we're following proves our "following" state is
+        // stale (our train-stats trip broke the party server-side with no
+        // leave-line reaching us). Honour it: send join, don't deny (report
+        // stock-20260801-002423).
+        var (engine, _, _, party, players, relay) = Setup();
+        SeedPlayer(players, "Raijin", PlayerRemoteControls.RequestInvite);
+        party.Members.Add(new PartyMember { Name = "Raijin", IsLeader = true });
+        party.LeaderName = "Raijin";
+        party.IsInParty = true;
+        party.SelfIsLeader = false;
+
+        engine.DispatchForTests(Telepath("Raijin", "@join"));
+
+        Assert.Equal("join Raijin\r", Encoding.Latin1.GetString(relay[0]));
+    }
+
     // ===== @invite / @join while mortally wounded =====
 
     /// <summary>

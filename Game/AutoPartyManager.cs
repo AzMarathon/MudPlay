@@ -649,14 +649,25 @@ public sealed class AutoPartyManager : IDisposable
             if (!c.JoinPartyIfInvited) return;
         }
 
-        // Already in this player's party? The PartyManager would have
-        // populated PartyState.Members on the follow-confirmation line,
-        // so a duplicate follow command is a no-op — but skip it
-        // anyway to keep the wire quiet.
-        foreach (PartyMember m in _party.Members)
+        // Already in this player's party? The PartyManager would have populated
+        // PartyState.Members on the follow-confirmation line, so a duplicate follow
+        // is a no-op — skip it to keep the wire quiet. EXCEPT when the inviter is
+        // the very leader we still believe we're following: a leader never
+        // re-invites a current follower, so this invite proves our roster is stale
+        // (our train-stats trip broke the party server-side with no leave-line
+        // reaching us — report stock-20260801-002423). Accept it so we actually
+        // rejoin instead of silently skipping on the stale membership.
+        bool senderIsBelievedLeader =
+            _party.IsInParty && !_party.SelfIsLeader
+            && string.Equals(ExtractGiven(_party.LeaderName ?? string.Empty), sender,
+                             StringComparison.OrdinalIgnoreCase);
+        if (!senderIsBelievedLeader)
         {
-            if (string.Equals(ExtractGiven(m.Name), sender, StringComparison.OrdinalIgnoreCase))
-                return;
+            foreach (PartyMember m in _party.Members)
+            {
+                if (string.Equals(ExtractGiven(m.Name), sender, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
         }
 
         _wire.Send($"follow {sender}");

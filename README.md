@@ -1,13 +1,13 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.14.0**
-> - Emergency low-HP hangup now closes the connection itself after sending the realm exit command, instead of waiting on the server to drop it — a stuck or slow drop can no longer leave a mortally-wounded character sitting connected
-> - Loop builder: clicking a step in the CURRENT NAV build list now opens the Waypoint action editor to attach a command to that step (same as editing a saved loop), instead of deleting it — deletion moved to the roomier ✕ box, and the ↑ / ↓ / ✕ boxes are larger. Steps with a command show a ⚙ marker
-> - A hostile that spawns/appears in your room while a loop is running no longer gets left behind: the abandoned-combat halt now covers loops and auto-lair (not just point-to-point walks), and holds a short settle so a monster following you out re-asserts combat and gets fought instead of out-walked
-> - Restoring a client from the taskbar with the map (or another window) open now brings the main window up too, instead of surfacing only the child window and leaving the main minimized
-> - A follower coming out of the trainer stats screen no longer wrongly re-invites its party leader (which tangled the auto-rejoin) — only the leader reforms the party after a trainer trip; a follower waits for the leader's invite and auto-joins
-> - Dying no longer lets a stale destination re-drive you back into the room you died in: death now does a clean stop of every movement engine (walk-to, loop, auto-lair) and clears every retained destination — the same as hitting Stop — with no lingering halt, so your own manual or remote navigation afterward runs normally
+> **Version 2.16.0**
+> - Go To favourites management is back as a dedicated tab in the Navigation Management window: create / rename / delete folders (buttons, not just right-click), Add a favourite by room-name search or map/room number, drag favourites between folders, and per-favourite Walk / full Edit (name + map + room) / Move-to-folder (pick from a list) / Delete. The GOTO collapsible also gains a filter box, and adding a favourite from the map now auto-expands the pane so it's actually visible. GOTO folders in the rail start collapsed, matching the Loops/Lairs section
+> - Go To favourites are now stored per game-data set (shared by every character on that realm) rather than per-character — the same model as loops and lairs
+> - Filtering the Go To or Loops/Lairs collapsible now auto-expands folders that hold a match, so nested matches show immediately; clearing the filter restores your folders' expand state
+> - Backscroll window mouse-wheel now scrolls a configurable number of lines per notch (default 5, was 1) — set it in Settings → BBS + Display, right below Scrollback, saved per-BBS
+> - A party member's exact level from an `@level` reply is now recorded even when the reply lands after the query window closes — so a narrow level gate (e.g. a room admitting only level 10) no longer stays blocked on the coarse title-derived level band
+> - A party follower coming out of the train-stats screen is no longer left unable to rejoin: entering that screen breaks up the party server-side, so the follower now clears its own stale "following" state — and even if it lingers, an invite / @join from the leader you think you're following is now honored (a leader never re-invites a current follower) instead of rejected as "already following"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

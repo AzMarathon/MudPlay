@@ -640,6 +640,23 @@ public sealed partial class PartyManager : IDisposable
         ResetPartyMembership();
     }
 
+    // Entering the train-stats screen is a realm excursion that breaks up our party
+    // server-side (see GAME_MECHANICS "Party"). For a FOLLOWER, clear our own stale
+    // "following <leader>" roster now — no leave-line reaches our client, so nothing
+    // else clears it, and the stale state makes us REJECT the leader's fresh
+    // re-invite on return ("already following <leader>") instead of rejoining
+    // (report stock-20260801-002423). A LEADER is deliberately left alone: it
+    // reforms its group on trainer exit from a roster snapshot that needs
+    // SelfIsLeader intact (AutoPartyManager.OnTrainerMenuExited), and its own state
+    // resets from the game's "You are not in a party…" line on return.
+    public void NoteTrainStatsExcursion()
+    {
+        if (!State.IsInParty || State.SelfIsLeader) return;   // followers only
+        _parState = ParState.Idle;
+        _parBlockNames.Clear();
+        ResetPartyMembership();
+    }
+
     private void OnParHeader(MatchResult _)
     {
         // Safety net — if the previous par block is somehow still open (its

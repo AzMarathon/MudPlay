@@ -603,7 +603,16 @@ public sealed class PartyEssentialHandlers : IDisposable
     private void OnJoin(RemoteCommandContext ctx)
     {
         if (RejectIfMortallyWounded(ctx, "join")) return;
-        if (_party.IsInParty && !_party.SelfIsLeader)
+        string senderGiven = GivenName(ctx.Sender);
+        // Deny only when we're following someone OTHER than the sender. If the
+        // leader we believe we're following is the one @join-ing us, our
+        // "following" state is provably stale — a leader never re-invites a current
+        // follower — so honour it and rejoin instead of denying "already
+        // following". This is what un-sticks a follower whose train-stats trip
+        // broke the party server-side without any leave-line reaching our client
+        // (report stock-20260801-002423). Sending join when we somehow WERE still
+        // in the party is harmless (the game just says we already are).
+        if (_party.IsInParty && !_party.SelfIsLeader && !IsBelievedLeader(senderGiven))
         {
             if (!_engine.WarnOnDenial) return;
             string leader = GivenName(_party.LeaderName ?? string.Empty);
@@ -613,10 +622,18 @@ public sealed class PartyEssentialHandlers : IDisposable
             return;
         }
         if (_wireSender is null) return;
-        string senderGiven = GivenName(ctx.Sender);
         byte[] bytes = Encoding.Latin1.GetBytes($"join {senderGiven}\r");
         _wireSender(bytes);
     }
+
+    // True when the given name is the leader we currently believe we're following.
+    // A telepath from that leader asking us to (re)join / (re)invite means our
+    // "following" belief is stale — see OnJoin.
+    private bool IsBelievedLeader(string senderGiven)
+        => !string.IsNullOrEmpty(senderGiven)
+           && _party.IsInParty && !_party.SelfIsLeader
+           && string.Equals(GivenName(_party.LeaderName ?? string.Empty), senderGiven,
+                            StringComparison.OrdinalIgnoreCase);
 
     // ----- @wait / @ok receive -------------------------------------------
 

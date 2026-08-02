@@ -47,6 +47,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private readonly AutoWalkManager? _walker;
     private readonly MovementController? _movement;
     private readonly AutoLairManager? _autoLair;
+    private readonly FavoritesStore? _favorites;
     private readonly Action? _onDraftConsumed;
 
     // Flat backing rows for the Loops pane — source the tree is grouped from + drives HasLoops.
@@ -101,7 +102,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         RoomSearchService? search = null,
         AutoWalkManager? walker = null,
         MovementController? movement = null,
-        AutoLairManager? autoLair = null)
+        AutoLairManager? autoLair = null,
+        FavoritesStore? favorites = null)
     {
         ArgumentNullException.ThrowIfNull(loops);
         ArgumentNullException.ThrowIfNull(lairSetups);
@@ -123,6 +125,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _walker = walker;
         _movement = movement;
         _autoLair = autoLair;
+        _favorites = favorites;
         Draft = draft;
         _onDraftConsumed = onDraftConsumed;
         _runningLoopName = runner?.CurrentLoop?.Name ?? string.Empty;
@@ -132,8 +135,12 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         // Empty-folder creation produces no loop/lair change, so both
         // trees rebuild on the coordinator's own folder event too.
         if (_folders is not null) _folders.FoldersChanged += OnFoldersChanged;
+        // GOTO tab: favourites + their own (profile-backed) folder set. Their
+        // Changed event covers both favourite and folder mutations.
+        if (_favorites is not null) _favorites.Changed += RebuildFavorites;
         RebuildLoops();
         RebuildLairSetups();
+        RebuildFavorites();
     }
 
     private void OnFoldersChanged()
@@ -182,6 +189,158 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         ManagerLairSetupRow s => s.Source.Folder,
         _                     => string.Empty,
     };
+
+    // ----- GOTO favourites (second tab) ------------------------------
+    // Favourites are saved rooms with their OWN profile-backed folder set,
+    // separate from the on-disk loop/lair folders. This tab is the CRUD surface
+    // the pre-rework window used to host; the rail's GOTO collapsible mirrors the
+    // same store live.
+
+    // Flat backing rows for the GOTO pane — source the tree is grouped from.
+    public ObservableCollection<FavoriteRowViewModel> Favorites { get; } = new();
+
+    // Folder-grouped GOTO tree (NavFolderNodeViewModel folders + FavoriteRowViewModel leaves).
+    public ObservableCollection<object> FavoriteTree { get; } = new();
+
+    public bool HasFavorites => Favorites.Count > 0;
+    public bool HasFavoriteTree => FavoriteTree.Count > 0;
+
+    // Show the GOTO tab only when a FavoritesStore was supplied (the live Manage
+    // flow); the transient import-only instance leaves it null.
+    public bool HasGotoTab => _favorites is not null;
+
+    private void RebuildFavorites()
+    {
+        Favorites.Clear();
+        if (_favorites is not null)
+        {
+            var entries = new List<FavoriteRowViewModel>();
+            foreach (FavoriteRoom f in _favorites.All)
+            {
+                RoomKey key = new(f.Map, f.Room);
+                string label = !string.IsNullOrWhiteSpace(f.Label)
+                    ? f.Label!
+                    : _graph.GetRoom(key) is { } r ? r.Name : key.ToString();
+                entries.Add(new FavoriteRowViewModel(key, label, _favorites.FolderOf(key)));
+            }
+            entries.Sort((a, b) => string.Compare(a.Label, b.Label, StringComparison.OrdinalIgnoreCase));
+            foreach (FavoriteRowViewModel e in entries) Favorites.Add(e);
+        }
+        OnPropertyChanged(nameof(HasFavorites));
+        OnPropertyChanged(nameof(HasFolders));
+        RebuildFavoriteTree();
+    }
+
+    private void RebuildFavoriteTree()
+    {
+        IEnumerable<string> folders = _favorites?.AllFolders ?? Enumerable.Empty<string>();
+        NavTreeBuilder.Sync(FavoriteTree, Favorites, r => r.Folder, folders);
+        OnPropertyChanged(nameof(HasFavoriteTree));
+    }
+
+    // GOTO folder CRUD — mutates the favourites' profile-backed folder set.
+    [RelayCommand]
+    private async Task NewGotoFolderAsync(NavFolderNodeViewModel? parent)
+    {
+        if (_favorites is null) return;
+        string? name = await PromptFolderNameAsync(
+            "New folder", "Name the new folder (use / to nest).");
+        if (string.IsNullOrEmpty(name)) return;
+        string full = parent is null ? name : NavFolders.Combine(parent.Path, name);
+        _favorites.AddFolder(full);
+    }
+
+    [RelayCommand]
+    private async Task RenameGotoFolderAsync(NavFolderNodeViewModel? node)
+    {
+        if (_favorites is null || node is null) return;
+        string? name = await PromptFolderNameAsync(
+            "Rename folder", "New name for this folder.", node.Name);
+        if (string.IsNullOrEmpty(name)) return;
+        string target = name.Contains(NavFolders.Separator)
+            ? name
+            : NavFolders.Combine(NavFolders.Parent(node.Path), name);
+        _favorites.RenameFolder(node.Path, target);
+    }
+
+    [RelayCommand]
+    private async Task DeleteGotoFolderAsync(NavFolderNodeViewModel? node)
+    {
+        if (_favorites is null || node is null) return;
+        bool ok = await _confirm.ConfirmDeleteAsync(
+            $"folder \"{node.Name}\" (its favourites move up one level)");
+        if (!ok) return;
+        _favorites.RemoveFolder(node.Path, moveContentsToParent: true);
+    }
+
+    // Move a favourite into folder (empty = root). Used by drag-drop + context-menu.
+    public void MoveFavoriteToFolder(FavoriteRowViewModel? row, string? folder)
+    {
+        if (row is null || _favorites is null) return;
+        _favorites.MoveFavorite(row.Key, NavFolders.Normalize(folder));
+    }
+
+    // True while any GOTO folder exists — gates the "Move to folder…" affordance
+    // (there's nowhere to move a favourite with no folders).
+    public bool HasFolders => _favorites is { } f && f.AllFolders.Count > 0;
+
+    [RelayCommand]
+    private async Task MoveFavoriteAsync(FavoriteRowViewModel? row)
+    {
+        if (row is null || _favorites is null) return;
+        FolderPickerDialogViewModel vm = new(_favorites.AllFolders, row.Folder);
+        string? folder = await _dialogs
+            .OpenWindowAsync<FolderPickerDialogViewModel, string?>(vm);
+        if (folder is null) return;   // cancelled (root is "")
+        MoveFavoriteToFolder(row, folder);
+    }
+
+    // Full edit — name + map + room. Re-points the favourite at a different room
+    // when the coordinate changed (favourites are keyed by room), else relabels.
+    [RelayCommand]
+    private async Task EditFavoriteAsync(FavoriteRowViewModel? row)
+    {
+        if (row is null || _favorites is null) return;
+        FavoriteEditDialogViewModel vm = new(
+            row.Label, row.Key.Map, row.Key.Room,
+            (m, r) => _graph.GetRoom(new RoomKey(m, r))?.Name);
+        FavoriteEditResult? res = await _dialogs
+            .OpenWindowAsync<FavoriteEditDialogViewModel, FavoriteEditResult?>(vm);
+        if (res is null) return;
+        _favorites.Edit(row.Key, new RoomKey(res.Map, res.Room), res.Label);
+    }
+
+    [RelayCommand]
+    private async Task DeleteFavoriteAsync(FavoriteRowViewModel? row)
+    {
+        if (row is null || _favorites is null) return;
+        bool ok = await _confirm.ConfirmDeleteAsync($"favourite \"{row.Label}\"");
+        if (!ok) return;
+        _favorites.Remove(row.Key);
+    }
+
+    // Walk to a favourite — stops background automation, closes the manager, then
+    // hands off to the route picker (same terminal-walk shape as the footer search).
+    [RelayCommand]
+    private async Task WalkToFavoriteAsync(FavoriteRowViewModel? row)
+    {
+        if (row is null || _walker is null) return;
+        _movement?.Stop();
+        Close();
+        await RouteChoicePrompt.WalkAsync(AppServices.Current, row.Key);
+    }
+
+    // "Add" — pick a room by loose-match name search OR map/room number, then
+    // save it as a favourite (at the root; move it into a folder afterwards).
+    [RelayCommand]
+    private async Task AddFavoriteAsync()
+    {
+        if (_favorites is null || _search is null) return;
+        AddFavoriteDialogViewModel picker = new(_search);
+        RoomKey? chosen = await _dialogs
+            .OpenWindowAsync<AddFavoriteDialogViewModel, RoomKey?>(picker);
+        if (chosen is { } key) _favorites.Add(key);
+    }
 
     // ----- Loop row commands -----------------------------------------
 
@@ -674,6 +833,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _loops.LoopsChanged -= RebuildLoops;
         _lairSetups.SetupsChanged -= RebuildLairSetups;
         if (_folders is not null) _folders.FoldersChanged -= OnFoldersChanged;
+        if (_favorites is not null) _favorites.Changed -= RebuildFavorites;
         CloseRequested?.Invoke(true);
     }
 }

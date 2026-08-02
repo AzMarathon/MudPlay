@@ -1033,11 +1033,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // only matching leaves survive, empty folders are dropped (allFolders empty),
     // and folders auto-expand so hits are visible; unfiltered, folders start
     // collapsed so the compact rail opens tidy (per-folder expand overrides survive).
+    // Persistent folder expand-overrides for the loops/lairs tree + whether the
+    // last build was a filtered view — so a filter → clear cycle restores the
+    // user's resting expand state instead of the filtered all-expanded one.
+    private readonly HashSet<string> _navExpandOverrides = new(StringComparer.OrdinalIgnoreCase);
+    private bool _navWasFiltering;
+
     private void RebuildNavTree()
     {
         string filter = (LoopFilter ?? string.Empty).Trim();
+        bool filtering = filter.Length > 0;
         var rows = new List<object>(Setups.Count + Loops.Count);
-        if (filter.Length == 0)
+        if (!filtering)
         {
             rows.AddRange(Setups);
             rows.AddRange(Loops);
@@ -1050,9 +1057,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(l);
         }
 
-        bool filtering = filter.Length > 0;
+        // Default collapsed (tidy rail); a filter force-expands so nested matches
+        // show. Harvest the resting overrides only when the tree we're replacing
+        // isn't itself a filtered view (see NavTreeBuilder.Sync).
         IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.NavFolders.AllFolders;
-        NavTreeBuilder.Sync<object>(NavTree, rows, FolderOfNavRow, folders, defaultExpanded: filtering);
+        NavTreeBuilder.Sync<object>(NavTree, rows, FolderOfNavRow, folders,
+            defaultExpanded: false, _navExpandOverrides,
+            harvest: !_navWasFiltering, forceExpandAll: filtering);
+        _navWasFiltering = filtering;
         OnPropertyChanged(nameof(HasNavTree));
         OnPropertyChanged(nameof(HasNoLoopMatches));
     }
@@ -1282,6 +1294,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // drives tree-vs-placeholder visibility.
     public bool HasFavoriteTree => FavoriteTree.Count > 0;
 
+    // Live filter over the GOTO favourites — empty shows the full folder tree; a
+    // value keeps only favourites whose label matches and expands their folders.
+    // Rebuilds the tree only (not the flat Favorites list). Mirrors LoopFilter.
+    [ObservableProperty] private string _gotoFilter = string.Empty;
+
+    partial void OnGotoFilterChanged(string value) => RebuildFavoriteTree();
+
+    // Favourites exist but the current filter matches none — drives the GOTO
+    // "no matches" empty state (distinct from "no favourites saved").
+    public bool HasNoFavoriteMatches => HasFavorites && FavoriteTree.Count == 0;
+
     private void OnFavoritesChanged()
     {
         RefreshFavorites();
@@ -1312,9 +1335,37 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         entries.Sort((a, b) => string.Compare(a.Label, b.Label, StringComparison.OrdinalIgnoreCase));
         foreach (FavoriteRowViewModel e in entries) Favorites.Add(e);
-        NavTreeBuilder.Sync(FavoriteTree, Favorites, r => r.Folder, _services.Favorites.AllFolders);
         OnPropertyChanged(nameof(HasFavorites));
+        OnPropertyChanged(nameof(HasGotoFolders));
+        RebuildFavoriteTree();
+    }
+
+    // Rebuild the GOTO folder tree from the flat Favorites, honouring GotoFilter.
+    // With a filter active only matching favourites survive, empty folders are
+    // dropped, and folders auto-expand so hits are visible; unfiltered, the full
+    // folder set shows and per-folder expand overrides survive. Mirrors
+    // RebuildNavTree for loops/lairs.
+    // Persistent folder expand-overrides for the GOTO tree + last-build filter
+    // flag — same resting-state preservation as the loops/lairs tree.
+    private readonly HashSet<string> _gotoExpandOverrides = new(StringComparer.OrdinalIgnoreCase);
+    private bool _gotoWasFiltering;
+
+    private void RebuildFavoriteTree()
+    {
+        string filter = (GotoFilter ?? string.Empty).Trim();
+        bool filtering = filter.Length > 0;
+        IEnumerable<FavoriteRowViewModel> rows = filtering
+            ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            : Favorites;
+        // GOTO folders default collapsed (like the loops/lairs rail); a filter
+        // force-expands so a match under a collapsed folder still shows.
+        IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.Favorites.AllFolders;
+        NavTreeBuilder.Sync(FavoriteTree, rows, r => r.Folder, folders,
+            defaultExpanded: false, _gotoExpandOverrides,
+            harvest: !_gotoWasFiltering, forceExpandAll: filtering);
+        _gotoWasFiltering = filtering;
         OnPropertyChanged(nameof(HasFavoriteTree));
+        OnPropertyChanged(nameof(HasNoFavoriteMatches));
     }
 
     // Click a favourite → stage it as the queued destination, mirroring a pick
@@ -1339,21 +1390,20 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Favorites.Remove(row.Key);
     }
 
-    // Open a small modeless rename dialog for the favourite. The dialog
-    // returns the new label string on Save or null on Cancel; non-null
-    // results route through FavoritesStore.Rename which fires Changed and
-    // refreshes the rail.
+    // Open the full favourite editor (name + map + room). Editing the map/room
+    // re-points the favourite at a different room; the store's Edit re-keys and
+    // fires Changed, refreshing the rail.
     [RelayCommand]
     private async Task RenameFavoriteAsync(FavoriteRowViewModel? row)
     {
         if (row is null) return;
-        FavoriteRenameDialogViewModel vm = new(
-            currentLabel: row.Label,
-            coordTag: $"{row.Key.Map}/{row.Key.Room}");
-        string? newLabel = await _services.Dialogs
-            .OpenWindowAsync<FavoriteRenameDialogViewModel, string?>(vm);
-        if (newLabel is null) return;  // cancelled
-        _services.Favorites.Rename(row.Key, string.IsNullOrWhiteSpace(newLabel) ? null : newLabel);
+        FavoriteEditDialogViewModel vm = new(
+            row.Label, row.Key.Map, row.Key.Room,
+            (m, r) => _services.RoomGraph.GetRoom(new RoomKey(m, r))?.Name);
+        FavoriteEditResult? res = await _services.Dialogs
+            .OpenWindowAsync<FavoriteEditDialogViewModel, FavoriteEditResult?>(vm);
+        if (res is null) return;  // cancelled
+        _services.Favorites.Edit(row.Key, new RoomKey(res.Map, res.Room), res.Label);
     }
 
     [RelayCommand]
@@ -1599,17 +1649,23 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         MoveSetupToFolder(row, folder);
     }
 
-    // Context-menu "Move to folder…" for a GOTO favourite — prompts for a
-    // destination path.
+    // Context-menu "Move to folder…" for a GOTO favourite — pick a destination
+    // folder from a list (root included) rather than typing a path. Only shown
+    // when at least one folder exists (see HasGotoFolders).
     [RelayCommand]
     private async Task MoveFavoriteToFolderPromptAsync(FavoriteRowViewModel? row)
     {
         if (row is null) return;
-        string? folder = await PromptFolderNameAsync(
-            "Move favourite", "Destination folder (blank = root).", row.Folder);
-        if (folder is null) return;
+        FolderPickerDialogViewModel vm = new(_services.Favorites.AllFolders, row.Folder);
+        string? folder = await _services.Dialogs
+            .OpenWindowAsync<FolderPickerDialogViewModel, string?>(vm);
+        if (folder is null) return;   // cancelled (root is "")
         MoveFavoriteToFolder(row, folder);
     }
+
+    // True while any GOTO folder exists — gates the favourite "Move to folder…"
+    // menu item (nowhere to move to otherwise).
+    public bool HasGotoFolders => _services.Favorites.AllFolders.Count > 0;
 
     private async Task<string?> PromptFolderNameAsync(string title, string prompt, string initial = "")
     {
@@ -1812,9 +1868,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (ContextRoomKey is not { } k) return;
         if (_services.Favorites.IsFavorite(k))
+        {
             _services.Favorites.Remove(k);
+        }
         else
+        {
             _services.Favorites.Add(k);
+            // Reveal the result — the GOTO pane defaults collapsed, so an add is
+            // otherwise invisible and reads as a no-op (report context).
+            IsGotoExpanded = true;
+        }
         OnPropertyChanged(nameof(ContextIsFavorite));
     }
 
@@ -2066,7 +2129,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             search: _services.RoomSearch,
             walker: _services.Walker,
             movement: _services.MovementControl,
-            autoLair: _services.AutoLair);
+            autoLair: _services.AutoLair,
+            favorites: _services.Favorites);
         await _services.Dialogs
             .OpenWindowAsync<NavigationManagerDialogViewModel, bool>(vm);
     }

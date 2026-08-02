@@ -76,6 +76,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _terminalCols = 80;
     [ObservableProperty] private int _terminalRows = 25;
     [ObservableProperty] private int _scrollbackLines = 4_000;
+    [ObservableProperty] private int _backscrollWheelLines = 5;
 
     // ----- Game-menu commands (per-BBS) -----
     // The two main-menu picks for entering / leaving the realm. Stored
@@ -547,6 +548,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         BbsProfile? active = string.IsNullOrEmpty(activeName) ? null : _bbsStore.Get(activeName);
         BbsProfile values = active ?? new BbsProfile();
         _display.ScrollbackLines = values.ScrollbackLines;
+        _display.BackscrollWheelLines = values.BackscrollWheelLines;
         _display.TerminalCols = values.TerminalCols;
         _display.TerminalRows = values.TerminalRows;
     }
@@ -626,6 +628,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         TerminalCols = profile.TerminalCols;
         TerminalRows = profile.TerminalRows;
         ScrollbackLines = profile.ScrollbackLines;
+        BackscrollWheelLines = profile.BackscrollWheelLines;
         GameEntryCommand = profile.GameEntryCommand;
         GameExitCommand = profile.GameExitCommand;
         PlayerDiesAtHp = profile.PlayerDiesAtHp;
@@ -758,6 +761,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         TerminalCols = defaults.TerminalCols;
         TerminalRows = defaults.TerminalRows;
         ScrollbackLines = defaults.ScrollbackLines;
+        BackscrollWheelLines = defaults.BackscrollWheelLines;
         GameEntryCommand = defaults.GameEntryCommand;
         GameExitCommand = defaults.GameExitCommand;
         PlayerDiesAtHp = defaults.PlayerDiesAtHp;
@@ -801,6 +805,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         profile.TerminalCols = TerminalCols;
         profile.TerminalRows = TerminalRows;
         profile.ScrollbackLines = ScrollbackLines;
+        profile.BackscrollWheelLines = BackscrollWheelLines;
         profile.GameEntryCommand = string.IsNullOrWhiteSpace(GameEntryCommand)
             ? new BbsProfile().GameEntryCommand : GameEntryCommand.Trim();
         profile.GameExitCommand = string.IsNullOrWhiteSpace(GameExitCommand)
@@ -868,6 +873,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnTerminalRowsChanged(int value)               { PushToCache(); Dirty(); }
 
     partial void OnScrollbackLinesChanged(int value)            { PushToCache(); Dirty(); }
+    partial void OnBackscrollWheelLinesChanged(int value)       { PushToCache(); Dirty(); }
     partial void OnGameEntryCommandChanged(string value)        { PushToCache(); Dirty(); }
     partial void OnGameExitCommandChanged(string value)         { PushToCache(); Dirty(); }
     partial void OnPlayerDiesAtHpChanged(int value)             { PushToCache(); Dirty(); }

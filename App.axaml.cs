@@ -99,16 +99,29 @@ public partial class App : Application
                 FujinTerm.ViewModels.Settings.EventEditDialogViewModel,
                 FujinTerm.Views.Settings.EventEditDialog>();
 
-            // Favourite-room rename — Navigation GOTO pane pencil button.
-            AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.FavoriteRenameDialogViewModel,
-                FujinTerm.Views.Navigation.FavoriteRenameDialog>();
-
             // Folder name prompt — New / Rename folder on both the Manage
             // dialog (loops + lairs) and the rail (gotos).
             AppServices.Current.Dialogs.RegisterWindow<
                 FujinTerm.ViewModels.Navigation.NavFolderNameDialogViewModel,
                 FujinTerm.Views.Navigation.NavFolderNameDialog>();
+
+            // Add-favourite room picker — the Manage dialog's Go To tab "Add"
+            // button (search by name or map/room, then save as a favourite).
+            AppServices.Current.Dialogs.RegisterWindow<
+                FujinTerm.ViewModels.Navigation.AddFavoriteDialogViewModel,
+                FujinTerm.Views.Navigation.AddFavoriteDialog>();
+
+            // Full favourite editor — the Go To tab's Edit button (name + map +
+            // room, so a favourite can be re-pointed at a different room).
+            AppServices.Current.Dialogs.RegisterWindow<
+                FujinTerm.ViewModels.Navigation.FavoriteEditDialogViewModel,
+                FujinTerm.Views.Navigation.FavoriteEditDialog>();
+
+            // Folder picker — the Go To tab / rail "Move to folder…" action lists
+            // existing folders to choose from instead of typing a path.
+            AppServices.Current.Dialogs.RegisterWindow<
+                FujinTerm.ViewModels.Navigation.FolderPickerDialogViewModel,
+                FujinTerm.Views.Navigation.FolderPickerDialog>();
 
             // File → Open profile / Save profile as — custom modeless dialogs
             // replacing the platform file pickers (the per-folder layout means

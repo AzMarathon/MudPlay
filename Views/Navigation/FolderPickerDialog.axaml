@@ -1,0 +1,51 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FujinTerm.ViewModels.Navigation"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="360" d:DesignHeight="380"
+        x:Class="FujinTerm.Views.Navigation.FolderPickerDialog"
+        x:DataType="vm:FolderPickerDialogViewModel"
+        Title="Move to folder"
+        Width="360" Height="380"
+        WindowStartupLocation="CenterOwner">
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
+        <DockPanel LastChildFill="True">
+            <TextBlock DockPanel.Dock="Top"
+                       Text="Move to folder"
+                       Foreground="{StaticResource ChromeFgBrush}"
+                       FontSize="{StaticResource FontSizeLg}"
+                       FontWeight="SemiBold"/>
+            <TextBlock DockPanel.Dock="Top"
+                       Text="Pick a destination folder, then Save."
+                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                       FontSize="11"
+                       Margin="0,4,0,8"/>
+
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Center" Margin="0,10,0,0">
+                <Button Content="Save" Width="100"
+                        Command="{Binding SaveCommand}"
+                        IsDefault="True"/>
+                <Button Content="Cancel" Width="100"
+                        Command="{Binding CancelCommand}"
+                        IsCancel="True"/>
+            </StackPanel>
+
+            <Border BorderBrush="{StaticResource ChromeBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3">
+                <ListBox ItemsSource="{Binding Folders}"
+                         SelectedItem="{Binding Selected, Mode=TwoWay}"
+                         Background="Transparent">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:FolderChoice">
+                            <TextBlock Text="{Binding Display}" FontSize="11" Padding="4,3"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </DockPanel>
+    </Border>
+</Window>

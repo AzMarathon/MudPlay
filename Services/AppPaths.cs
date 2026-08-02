@@ -283,6 +283,12 @@ public static class AppPaths
     public static string GameDataSetLoopsFolder(string setName) =>
         Path.Combine(GameDataSetDir(setName), "Loops");
 
+    // Per-game-data-set GOTO favourites file. Keyed on the set (the realm's MDB)
+    // rather than the character, so favourites follow the realm across every BBS /
+    // character that points at that set — same rationale as the loop library above.
+    public static string GameDataSetFavoritesFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), "Favorites.json");
+
     // Legacy per-BBS folder that held Auto-Lair setups before the Loops + Lairs
     // storage unification. Kept around as a source for the one-shot migration in
     // Game.Map.LairManager.LoadAll; once empty, the folder is removed and never
