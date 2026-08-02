@@ -1357,11 +1357,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         IEnumerable<FavoriteRowViewModel> rows = filtering
             ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
             : Favorites;
-        // GOTO folders default expanded; a filter force-expands so a match under a
-        // folder the user had collapsed still shows.
+        // GOTO folders default collapsed (like the loops/lairs rail); a filter
+        // force-expands so a match under a collapsed folder still shows.
         IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.Favorites.AllFolders;
         NavTreeBuilder.Sync(FavoriteTree, rows, r => r.Folder, folders,
-            defaultExpanded: true, _gotoExpandOverrides,
+            defaultExpanded: false, _gotoExpandOverrides,
             harvest: !_gotoWasFiltering, forceExpandAll: filtering);
         _gotoWasFiltering = filtering;
         OnPropertyChanged(nameof(HasFavoriteTree));

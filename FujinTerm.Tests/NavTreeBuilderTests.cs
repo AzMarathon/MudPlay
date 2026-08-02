@@ -8,8 +8,8 @@ namespace FujinTerm.Tests;
 
 // Pins NavTreeBuilder's per-surface default expand state and the rebuild
 // preservation that keeps a user's per-folder override across a Sync. The rail's
-// Loops+Lairs tree opts into collapse-by-default (defaultExpanded: false); the
-// Manage dialog and GOTO tree keep expand-by-default.
+// Loops+Lairs and Go To trees opt into collapse-by-default (defaultExpanded: false);
+// the Manage dialog's trees keep expand-by-default.
 public sealed class NavTreeBuilderTests
 {
     private static List<NavFolderNodeViewModel> Folders(IEnumerable<object> nodes)
