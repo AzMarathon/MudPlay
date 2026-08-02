@@ -59,6 +59,7 @@ public static class BugReportBuilder
             new("Player Workshop", SafeSection(() => BuildWorkshop(svc))),
             new("Movement engine", SafeSection(() => BuildMovement(svc))),
             new("Navigation engines", SafeSection(() => BuildNavigationEngines(svc))),
+            new("Exp/Hr estimator", SafeSection(() => BuildExpEstimator(svc))),
             new("Special room markers", SafeSection(() => BuildRoomMarkers(svc))),
             new("Auto-mode", SafeSection(() => BuildAutoMode(svc))),
             new("Keybindings", SafeSection(() => BuildKeybindings(svc))),
@@ -574,6 +575,38 @@ public static class BugReportBuilder
         Kv(sb, "Phase", pyr.PhaseName);
         Kv(sb, "Goal", pyr.Goal is { } pg ? $"{pg.Map}/{pg.Room}" : "(none)");
         Kv(sb, "Steps driven", pyr.StepsDriven.ToString());
+
+        return sb.ToString();
+    }
+
+    // The live Exp/Hr Estimator session, if one's active — route, tunables, and the
+    // computed estimate + per-lair breakdown the user was looking at. The estimator
+    // is a build-time UI tool whose state lives only on the Navigation view-model, so
+    // it reaches the report through a snapshot provider the VM registers on
+    // AppServices; null (provider unset or not estimating) reads as inactive. A
+    // "the exp/hr number looks wrong" report needs exactly this to reproduce.
+    private static string BuildExpEstimator(AppServices svc)
+    {
+        Game.Map.ExpEstimatorSnapshot? snap = svc.ExpEstimatorSnapshotProvider?.Invoke();
+        if (snap is null) return "_(estimator not active)_";
+
+        StringBuilder sb = new();
+        Kv(sb, "Proposed loop name", snap.ProposedName);
+        Kv(sb, "Estimate", $"{snap.ExpPerHour:N0} exp/hr");
+        Kv(sb, "Laps", $"{snap.LapsPerHour} laps/hr · {snap.AvgLapSeconds:N1}s/lap");
+        Kv(sb, "Summary", snap.Summary);
+        Kv(sb, "Combat mode", snap.AreaCombat ? "area (rooming)" : "single-target");
+        Kv(sb, "Seconds per step", $"{snap.SecondsPerStep:0.0}");
+        Kv(sb, "Rounds to kill a mob", $"{snap.RoundsPerMob:0.0}");
+        Kv(sb, "Real-world multiplier", $"{snap.RealConditionsMultiplier:0.00}");
+
+        sb.Append("\n**Route** (").Append(snap.Rooms.Count).Append(")\n\n");
+        if (snap.Rooms.Count == 0) sb.Append("_(none)_\n");
+        else foreach (string r in snap.Rooms) sb.Append("- ").Append(r).Append('\n');
+
+        sb.Append("\n**Per-lair** (").Append(snap.Lairs.Count).Append(")\n\n");
+        if (snap.Lairs.Count == 0) sb.Append("_(none)_\n");
+        else foreach (string l in snap.Lairs) sb.Append("- ").Append(l).Append('\n');
 
         return sb.ToString();
     }

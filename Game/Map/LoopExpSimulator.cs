@@ -62,6 +62,24 @@ public sealed record ExpSimResult(
     int LapsPerHour,
     IReadOnlyList<ExpLairStat> Lairs);
 
+// Self-contained point-in-time snapshot of a live Exp/Hr Estimator session for the
+// bug report — the route, tunables, and computed result the user was looking at, so
+// a "the estimate looks wrong / it crashed" report is diagnosable. Rooms and lairs
+// are pre-formatted lines so the report just prints them; kept in this layer (plain
+// strings + primitives) so Services can read it without a ViewModels reference.
+public sealed record ExpEstimatorSnapshot(
+    string ProposedName,
+    IReadOnlyList<string> Rooms,     // "N. map/room  Name" per clicked waypoint, in order
+    double SecondsPerStep,
+    bool AreaCombat,
+    double RoundsPerMob,
+    double RealConditionsMultiplier,
+    double ExpPerHour,
+    double AvgLapSeconds,
+    int LapsPerHour,
+    string Summary,
+    IReadOnlyList<string> Lairs);    // "map/room  Name — fires/hr, misses" per resolved lair
+
 public static class LoopExpSimulator
 {
     private const double HorizonSeconds = 3600.0;

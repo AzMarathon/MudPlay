@@ -105,6 +105,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshCrawlerChords();
         RefreshTeleportRooms();
         RefreshDeathRooms();
+
+        // Let the bug report snapshot the live estimator when one's active. The
+        // lambda reads the current ExpEstimator (null when not estimating), so a
+        // single registration covers every enter/exit without per-transition wiring.
+        _services.ExpEstimatorSnapshotProvider = () => ExpEstimator?.ToSnapshot();
     }
 
     // Per-second pump for CURRENT NAV lair countdowns. Cheap to leave
@@ -3656,12 +3661,37 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ClearEstimatorClicks() => ExpEstimator?.Clear();
 
-    // Persist the estimated click-list as a normal Loop, then leave estimator
-    // mode (the user is happy with it — parity with "save or discard").
+    // "Save as loop" → system Save-As dialog so the user can rename the loop and
+    // choose where it lands (defaults to the active set's Loops folder — saving
+    // there makes it a managed, runnable loop; elsewhere it's a plain export). On a
+    // successful save, leave estimator mode; cancelling keeps the session open.
     [RelayCommand]
-    private void SaveEstimatorAsLoop()
+    private async Task SaveEstimatorAsLoop()
     {
-        if (ExpEstimator?.Save() is null) return;
+        if (ExpEstimator is not { CanSave: true } est || est.BuildTransient() is not { } loop) return;
+        if (Application.Current?.ApplicationLifetime
+            is not Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime
+                { MainWindow: { } main })
+            return;
+
+        var options = new FilePickerSaveOptions
+        {
+            Title = "Save loop",
+            SuggestedFileName = est.ProposedName + LoopManager.LoopFileSuffix,
+            DefaultExtension = LoopManager.LoopFileSuffix.TrimStart('.'),
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("Loop file") { Patterns = new[] { "*" + LoopManager.LoopFileSuffix } },
+            },
+        };
+        if (_services.Loops.SetName is { } set
+            && await main.StorageProvider.TryGetFolderFromPathAsync(AppPaths.GameDataSetLoopsFolder(set)) is { } start)
+            options.SuggestedStartLocation = start;
+
+        IStorageFile? file = await main.StorageProvider.SaveFilePickerAsync(options);
+        if (file is null) return;   // cancelled — stay in estimator mode
+
+        _services.Loops.SaveToPath(loop, file.Path.LocalPath);
         TearDownExpEstimator();
         CurrentMode = NavigationMode.Idle;
     }

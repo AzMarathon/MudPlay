@@ -1490,6 +1490,12 @@ public sealed class AppServices
     // drops on ActiveSetChanged (same app-lifetime pattern as LairTimers).
     public Game.Map.RouteExpResolver ExpResolver { get; private set; } = null!;
 
+    // Set by the Navigation window's view-model; the bug report calls it to snapshot
+    // the live Exp/Hr Estimator session (route + tunables + result). Returns null
+    // when the estimator isn't active, so a report captured any other time just
+    // notes it as inactive. Bridges VM-only state into the AppServices-based report.
+    public Func<Game.Map.ExpEstimatorSnapshot?>? ExpEstimatorSnapshotProvider { get; set; }
+
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
     // / delete folders; reloads both catalogues after a filesystem

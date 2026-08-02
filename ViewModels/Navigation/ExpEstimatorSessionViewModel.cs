@@ -118,21 +118,33 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         for (int i = 0; i < Clicks.Count; i++) Clicks[i] = Clicks[i] with { Index = i + 1 };
     }
 
-    // Persist the current loop under ProposedName; returns the saved Loop or null.
-    public Loop? Save()
-    {
-        Loop? loop = BuildTransient();
-        if (loop is null) return null;
-        _loops.Save(loop);
-        return loop;
-    }
-
     public Loop? BuildTransient()
     {
         if (_clicks.Count < 2) return null;
         var waypoints = new List<LoopWaypoint>(_clicks.Count);
         foreach (RoomKey k in _clicks) waypoints.Add(new LoopWaypoint(k));
         return new Loop(ProposedName, waypoints);
+    }
+
+    // Freeze the current session for a bug-report capture — route, tunables, and
+    // the live estimate + per-lair breakdown, pre-formatted so the report is a
+    // straight print.
+    public ExpEstimatorSnapshot ToSnapshot()
+    {
+        var rooms = new List<string>(Clicks.Count);
+        foreach (LoopBuilderRow r in Clicks)
+            rooms.Add($"{r.Index}. {r.Key.Map}/{r.Key.Room}  {r.Name}");
+
+        var lairs = new List<string>(Lairs.Count);
+        foreach (ExpEstimatorLairRow l in Lairs)
+        {
+            string miss = l.MissesPerHour == 0 ? "no misses" : $"{l.MissesPerHour}/hr miss ({l.MissLabel})";
+            lairs.Add($"{l.Room.Map}/{l.Room.Room}  {l.Name} — {l.FiresLabel}, {miss}");
+        }
+
+        return new ExpEstimatorSnapshot(
+            ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
+            ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs);
     }
 
     private void Recompute()
