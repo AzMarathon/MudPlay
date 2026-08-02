@@ -140,6 +140,22 @@ public static class LoopExpSimulator
 
         double tick = s.SecondsPerRound > 0 ? s.SecondsPerRound : 5.0;   // combat cadence
 
+        // One full lap's combat time (every lair fired once) — the pacing cap. A
+        // deterministic greedy-skip replay is unstable at the loop's real operating
+        // point: the moment one lair is skipped the lap shortens, more get outrun,
+        // and it cascades to a "fire every 2nd lap" floor far below what a real run
+        // achieves. So instead of racing ahead we PACE — when a lair isn't up yet we
+        // hold for its repop rather than lapping past it — as long as that hold is
+        // shorter than lapping the whole loop back. That settles the sim on the same
+        // steady state a well-run loop actually holds. The per-lair "early by N"
+        // readout still shows how early each lair is hit (i.e. how over-visited).
+        double loopCombatSeconds = 0;
+        foreach (ExpRoomVisit v in lap)
+            foreach (ExpTarget tg in v.Targets)
+                if (tg.Included && !tg.IsInstant && tg.MobCount > 0 && tg.ExpPerMob > 0)
+                    loopCombatSeconds += (s.CombatMode == ExpCombatMode.AreaAllTargets
+                        ? s.RoundsPerMob : tg.MobCount * s.RoundsPerMob) * tick;
+
         double wall = 0;                 // wall-clock seconds; combat quantized to the tick
         double measuredExp = 0;
         int lapsInWindow = 0;
@@ -167,54 +183,92 @@ public static class LoopExpSimulator
                 double roomExp = 0;
                 int firedMobs = 0;
 
+                // Soonest a not-yet-up lair here will repop (for the pace-vs-skip
+                // decision) and how early we'd be arriving.
+                double soonestReady = double.MaxValue;
+                int soonestJ = -1;
+                double soonestShortfall = 0;
+
                 for (int j = 0; j < targets.Count; j++)
                 {
                     ExpTarget tg = targets[j];
                     if (!tg.Included || tg.MobCount <= 0 || tg.ExpPerMob <= 0) continue;
                     var key = (lap[i].Room, j);
 
-                    bool up;
                     if (tg.IsInstant)
-                    {
-                        up = true;
-                    }
-                    else
-                    {
-                        double since = lastKill.TryGetValue(key, out double lk) ? wall - lk : double.MaxValue;
-                        up = since >= tg.RespawnSeconds;
-                        if (!up && inWindow)
-                        {
-                            misses[key] = misses.GetValueOrDefault(key) + 1;
-                            double shortfall = tg.RespawnSeconds - since;
-                            if (!closest.TryGetValue(key, out double c) || shortfall < c) closest[key] = shortfall;
-                        }
-                    }
-
-                    if (up)
                     {
                         firedThisRoom.Add(key);
                         firedMobs += tg.MobCount;
                         roomExp += tg.ExpPerClear;
-                        if (inWindow && !tg.IsInstant) fires[key] = fires.GetValueOrDefault(key) + 1;
+                        continue;
+                    }
+
+                    double lk = lastKill.TryGetValue(key, out double v) ? v : double.NegativeInfinity;
+                    double ready = lk + tg.RespawnSeconds;
+                    if (wall >= ready)
+                    {
+                        firedThisRoom.Add(key);
+                        firedMobs += tg.MobCount;
+                        roomExp += tg.ExpPerClear;
+                        if (inWindow) fires[key] = fires.GetValueOrDefault(key) + 1;
+                    }
+                    else if (ready < soonestReady)
+                    {
+                        soonestReady = ready;
+                        soonestJ = j;
+                        soonestShortfall = ready - wall;   // how early we are
                     }
                 }
 
-                if (firedThisRoom.Count == 0) continue;      // nothing live here: keep travelling
+                // Nothing up here. Pace, don't race ahead: if the soonest lair will
+                // repop within a combat lap, hold for it (the operating point a real
+                // loop holds) rather than lapping past and cascading down. If it's
+                // slower than a whole lap, skip-and-return is genuinely faster — a
+                // real miss. The early arrival is recorded either way so the readout
+                // shows how early ("early by N") the loop hits it.
+                if (firedThisRoom.Count == 0)
+                {
+                    if (soonestJ < 0 || soonestShortfall > loopCombatSeconds)
+                    {
+                        if (soonestJ >= 0 && inWindow)
+                        {
+                            var mk = (lap[i].Room, soonestJ);
+                            misses[mk] = misses.GetValueOrDefault(mk) + 1;
+                            if (!closest.TryGetValue(mk, out double c) || soonestShortfall < c) closest[mk] = soonestShortfall;
+                        }
+                        continue;   // skip: too slow to hold for
+                    }
 
-                // Travel is free while it hides in the downtime after a kill; only
-                // whole ticks spent standing in monster-less rooms are dropped.
-                double transitSeconds = pendingSteps * s.SecondsPerStep;
-                wall += Math.Floor(transitSeconds / tick) * tick;
+                    // Hold for it: charge the travel to arrive, wait out the repop,
+                    // then fire it (fall through to the shared kill below).
+                    wall += Math.Floor(pendingSteps * s.SecondsPerStep / tick) * tick;
+                    pendingSteps = 0;
+                    wall = Math.Max(wall, soonestReady);
+                    var fk = (lap[i].Room, soonestJ);
+                    ExpTarget wtg = targets[soonestJ];
+                    firedThisRoom.Add(fk);
+                    firedMobs += wtg.MobCount;
+                    roomExp += wtg.ExpPerClear;
+                    if (inWindow)
+                    {
+                        fires[fk] = fires.GetValueOrDefault(fk) + 1;
+                        misses[fk] = misses.GetValueOrDefault(fk) + 1;   // arrived early
+                        if (!closest.TryGetValue(fk, out double c) || soonestShortfall < c) closest[fk] = soonestShortfall;
+                    }
+                }
+
+                // Fire the room: charge the transit then the kill. Travel is free
+                // while it hides in the downtime after a kill; only whole ticks in
+                // monster-less rooms are dropped. Single-target lingers mobCount ×
+                // per-mob rounds; area clears the room flat.
+                wall += Math.Floor(pendingSteps * s.SecondsPerStep / tick) * tick;
                 pendingSteps = 0;
-
-                // Combat resolves on the tick: single-target lingers mobCount × the
-                // per-mob rounds; area ("rooming") clears the whole room flat.
                 double killTicks = s.CombatMode == ExpCombatMode.AreaAllTargets
                     ? s.RoundsPerMob
                     : firedMobs * s.RoundsPerMob;
                 wall += killTicks * tick;
 
-                if (inWindow) measuredExp += roomExp;   // count at engagement, like fires/misses above
+                if (inWindow) measuredExp += roomExp;
                 foreach ((RoomKey, int) key in firedThisRoom) lastKill[key] = wall;   // respawn clock starts at the kill
                 lapFired = true;
             }

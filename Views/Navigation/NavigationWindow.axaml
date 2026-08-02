@@ -1489,7 +1489,7 @@
                                                         <TextBlock Grid.Column="0" FontSize="11"
                                                                    Foreground="{StaticResource ChromeFgSecBrush}"
                                                                    TextTrimming="CharacterEllipsis"
-                                                                   Text="{Binding Name}"/>
+                                                                   Text="{Binding RoomLabel}"/>
                                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                                             <TextBlock FontSize="11" Foreground="#4FD3C4"
                                                                        Text="{Binding FiresLabel}"/>

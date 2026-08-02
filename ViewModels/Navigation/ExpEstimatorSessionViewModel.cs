@@ -220,6 +220,10 @@ public sealed record ExpEstimatorLairRow(
 {
     public bool NearMiss => MissesPerHour > 0 && ClosestMissShortfallSeconds > 0 && ClosestMissShortfallSeconds <= 15;
 
+    // Map/room identifier — the list shows this rather than the (often repeated)
+    // room name so each lair is individually identifiable.
+    public string RoomLabel => $"{Room.Map}/{Room.Room}";
+
     public string FiresLabel => $"{FiresPerHour}/hr";
 
     public string MissLabel => MissesPerHour == 0

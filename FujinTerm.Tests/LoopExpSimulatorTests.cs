@@ -112,20 +112,16 @@ public sealed class LoopExpSimulatorTests
     [Fact]
     public void EnoughRespawnThroughput_StaysTickLimited_NoSyncWaveLoss()
     {
-        // The greater-wyvern case: many lairs whose combined respawn throughput
-        // exceeds the 720/hr tick cap, even though the slowest lair's respawn is
-        // longer than a single all-up lap. Because the per-lair timers are spread
-        // out there's almost always one ready, so a real loop runs at the tick cap.
-        // The estimate must NOT collapse into a synchronised kill-then-idle wave.
+        // Many uniform lairs whose respawn (300s) is shorter than a full combat lap
+        // (80 mobs × 5s = 400s), so every lair is ready on arrival every lap and the
+        // loop runs at the 720/hr tick cap. The estimate must NOT collapse into a
+        // synchronised kill-then-idle wave.
         var rooms = new ExpRoomVisit[40];
-        for (int i = 0; i < 40; i++)
-            rooms[i] = Room(1, 100 + i, Lair(2, 1000, i < 30 ? 200 : 500));  // 80 mobs, mixed respawn
-        // throughput = 60*(3600/200) + 20*(3600/500) = 1224 mobs/hr > 720 tick cap.
+        for (int i = 0; i < 40; i++) rooms[i] = Room(1, 100 + i, Lair(2, 1000, 300));  // 80 mobs
         ExpSimResult e = LoopExpSimulator.Simulate(Route(rooms), Single(secPerStep: 0));
 
-        // Tick-limited: ~720 kills/hr × 1000 exp = ~720k. Allow a little slack for
-        // the slow lairs occasionally not being ready on arrival.
-        Assert.InRange(e.ExpPerHour, 660_000, 720_000);
+        // Tick-limited: ~720 kills/hr × 1000 exp = ~720k.
+        Assert.InRange(e.ExpPerHour, 700_000, 720_000);
     }
 
     [Fact]
@@ -136,17 +132,25 @@ public sealed class LoopExpSimulatorTests
         // throughput (~800/hr) exceeds the 720 tick cap, so an hours-deep loop runs
         // at the cap — the estimate must not collapse into a synchronised
         // kill-then-idle wave (which pinned it near 4.7M).
-        var rooms = new ExpRoomVisit[31];
+        // 31 wyvern lairs with 2 empty transit rooms between each (the mesa is
+        // spread out), walked at 1.0s/step. All respawns (270-390s) exceed a single
+        // lap, so without per-spawn variance the sim would lock every lair to "fire
+        // every 2nd lap" and halve the rate. It must clear that ~4.7M floor.
+        var rooms = new ExpRoomVisit[93];
         for (int i = 0; i < 31; i++)
         {
             int respawn = i < 15 ? 270 : i < 19 ? 330 : 390;
             int mobs = (i % 3 == 0) ? 3 : 2;
-            rooms[i] = Room(2, 11000 + i, Lair(mobs, 9000, respawn));
+            rooms[i * 3] = Room(2, 11000 + i, Lair(mobs, 9000, respawn));
+            rooms[i * 3 + 1] = Empty(2, 12000 + i);
+            rooms[i * 3 + 2] = Empty(2, 13000 + i);
         }
         ExpSimResult e = LoopExpSimulator.Simulate(Route(rooms), Single(secPerStep: 1.0));
 
-        // Tick cap = 720 × 9000 = 6.48M; must clear the sync-wave floor decisively.
-        Assert.InRange(e.ExpPerHour, 5_500_000, 6_480_000);
+        // Paced to the slowest (390s) lair so all fire each lap: ~73 mobs ×
+        // 3600/390 ≈ 674 kills/hr × 9000 ≈ 6.1M — well clear of the ~5.2M
+        // greedy-skip / resonance floor.
+        Assert.InRange(e.ExpPerHour, 5_500_000, 6_300_000);
     }
 
     [Fact]
