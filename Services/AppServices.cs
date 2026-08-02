@@ -2429,7 +2429,7 @@ public sealed class AppServices
         Movement.MaxBashableStrengthProvider = () => MaxStrength.MaxAchievableStrength;
         Movement.RoomEntrySpellProbe = key => RoomGraph.GetRoom(key)?.Spell ?? 0;
         Movement.Hazards = RoomHazards;
-        Favorites = new FavoritesStore(Profile, Log);
+        Favorites = new FavoritesStore(GameData, Log);
         GotoHistory = new GotoHistoryStore(Profile);
 
         // Coordinator + walker. Coordinator is the

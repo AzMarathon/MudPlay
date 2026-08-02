@@ -11,9 +11,9 @@ public sealed class FavoriteRoom
     public string? Label { get; set; }
 
     // Folder path this favourite lives under in the GOTO tree, using / as the
-    // separator (e.g. "Cities/Silvermere"). Null or empty = the tree root. This
-    // mirrors a filesystem folder layout while still being stored inside the
-    // character profile — the GOTO tree splits the path on / to build its nodes.
+    // separator (e.g. "Cities/Silvermere"). Null or empty = the tree root. Mirrors
+    // a filesystem folder layout; the GOTO tree splits the path on / to build its
+    // nodes.
     public string? Folder { get; set; }
 
     public FavoriteRoom() { }
