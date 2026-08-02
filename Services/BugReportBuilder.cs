@@ -134,6 +134,18 @@ public static class BugReportBuilder
         Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
         Kv(sb, "Character", svc.Profile.CurrentProfileName ?? "(none loaded)");
         Kv(sb, "BBS", svc.Profile.CurrentBbsName ?? "(none)");
+        // Retry/reconnect config for the active BBS. A "won't stop redialing" or
+        // "never reconnected" report hinges on whether InfiniteRetries is on (which
+        // overrides the count+pause to unlimited @ 3s) and which triggers are armed.
+        var bbs = svc.ResolveActiveBbs();
+        Kv(sb, "Retry behaviour", bbs is null
+            ? "(no active BBS)"
+            : (bbs.InfiniteRetries ? "infinite @ 3s" : $"{bbs.MaxRedials} redials @ {bbs.RedialPauseSeconds}s")
+              + "; triggers:"
+              + (bbs.ReconnectOnFailedConnect ? " failed-connect" : "")
+              + (bbs.ReconnectOnCarrierLost ? " carrier-lost" : "")
+              + (bbs.ReconnectOnNoResponse ? " no-response" : "")
+              + (bbs.ReconnectOnFailedConnect || bbs.ReconnectOnCarrierLost || bbs.ReconnectOnNoResponse ? "" : " none"));
         // Startup profile-load setting — diagnoses "it didn't reopen my profile".
         Kv(sb, "Auto-load last profile", svc.Settings.Current.AutoLoadLastProfile ? "on" : "off");
         Kv(sb, "Last-used profile", svc.Settings.Current.LastUsedProfile is { } lp

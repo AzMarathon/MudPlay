@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.19.0
+
+- BBS Settings → Retry behaviour: new "Infinite retries w/ 3 second pause" checkbox that retries reconnects forever at a fixed 3-second pause
+- When enabled it overrides (and greys out) the Max redials + Redial pause tickers; the "Reconnect when" triggers are unaffected
+- Bug report now records the active BBS's retry config (infinite/redial counts + which reconnect triggers are armed)
+
 ## 2.18.0
 
 - Importing a new MajorMUD MDB now seeds the fresh game-data set with base navigation loops + GOTO favourites for its realm (stock or Paradigm, picked from the MDB's Legit field), so a newly-imported realm arrives pre-populated instead of empty

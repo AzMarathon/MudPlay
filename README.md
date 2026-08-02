@@ -1,10 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.18.0**
-> - Importing a new MajorMUD MDB now seeds the fresh game-data set with base navigation loops + GOTO favourites for its realm (stock or Paradigm, picked from the MDB's Legit field), so a newly-imported realm arrives pre-populated instead of empty
-> - The seed is additive (never overwrites a loop or drops a favourite you already have) and once-only per set — re-importing, or deleting a seeded loop/favourite, never re-adds it
-> - Seed bundles ship in the app's Defaults folder (`Defaults/nav-seed/{stock,paradigm}/`): 164 loops + 697 favourites for stock, 594 loops + 1,502 favourites for Paradigm
+> **Version 2.19.0**
+> - BBS Settings → Retry behaviour: new "Infinite retries w/ 3 second pause" checkbox that retries reconnects forever at a fixed 3-second pause
+> - When enabled it overrides (and greys out) the Max redials + Redial pause tickers; the "Reconnect when" triggers are unaffected
+> - Bug report now records the active BBS's retry config (infinite/redial counts + which reconnect triggers are armed)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -48,6 +48,13 @@ public sealed class BbsProfile
     // Seconds to wait between connect attempts.
     public int RedialPauseSeconds { get; set; } = 5;
 
+    // Never give up: retry forever at a fixed 3s pause. Overrides both
+    // MaxRedials (→ unlimited) and RedialPauseSeconds (→ 3s) everywhere a
+    // retry fires. Does NOT change WHICH events trigger a reconnect — the
+    // ReconnectOn* toggles still gate that; this only changes the count and
+    // pause once a retry is already in play.
+    public bool InfiniteRetries { get; set; }
+
     // Minutes the BBS is offline for its nightly auto-cleanup. Used by the
     // ReconnectAfterCleanup schedule: when the CleanupWarningWatcher catches
     // a "shutting down in N minutes" announcement, the client arms a

@@ -1674,12 +1674,19 @@ public partial class MainWindowViewModel : ObservableObject
         // when off, the user gets one shot and we surface the error — no
         // silent retries. When on, the loop runs up to MaxRedials with
         // RedialPauseSeconds between attempts. Defaults fall through to
-        // a 1-attempt floor if a BBS has bogus values.
+        // a 1-attempt floor if a BBS has bogus values. InfiniteRetries
+        // overrides both: unlimited attempts at a fixed 3s pause (still
+        // gated on ReconnectOnFailedConnect — it changes the count/pause,
+        // not whether we retry at all).
         BbsProfile? activeBbs = ResolveActiveBbs();
+        bool infiniteRetries = activeBbs?.InfiniteRetries ?? false;
         int maxAttempts = (activeBbs?.ReconnectOnFailedConnect ?? false)
-            ? Math.Max(1, activeBbs?.MaxRedials ?? 1)
+            ? (infiniteRetries ? int.MaxValue : Math.Max(1, activeBbs?.MaxRedials ?? 1))
             : 1;
-        TimeSpan retryDelay = TimeSpan.FromSeconds(Math.Max(1, activeBbs?.RedialPauseSeconds ?? 5));
+        TimeSpan retryDelay = infiniteRetries
+            ? TimeSpan.FromSeconds(3)
+            : TimeSpan.FromSeconds(Math.Max(1, activeBbs?.RedialPauseSeconds ?? 5));
+        string ofMax = infiniteRetries ? "" : $"/{maxAttempts}";
 
         _connectCts = new CancellationTokenSource();
         IsConnecting = true;
@@ -1691,7 +1698,7 @@ public partial class MainWindowViewModel : ObservableObject
 
                 WriteTerminalStatus($"[CONNECTING TO: {Host} {Port}]", TerminalStatusKind.Notice);
                 AppServices.Current.Log.Info("Connect",
-                    $"Connecting to {Host}:{Port} (attempt {attempt}/{maxAttempts})…");
+                    $"Connecting to {Host}:{Port} (attempt {attempt}{ofMax})…");
 
                 TelnetClient client = BuildTelnetClient();
 
@@ -2132,10 +2139,13 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Redial budget — same MaxRedials knob the in-flight retry loop
         // uses. Stop arming once we've burned through it; the user can
-        // still click Connect manually.
+        // still click Connect manually. InfiniteRetries removes the budget
+        // entirely: we never give up (and the pause below drops to 3s).
+        bool infinite = bbs.InfiniteRetries;
         int maxRedials = Math.Max(1, bbs.MaxRedials);
+        string ofBudget = infinite ? "" : $"/{maxRedials}";
         _reactiveReconnectCount++;
-        if (_reactiveReconnectCount > maxRedials)
+        if (!infinite && _reactiveReconnectCount > maxRedials)
         {
             WriteTerminalStatus(
                 $"[AUTO-RECONNECT GAVE UP AFTER {maxRedials} REDIAL{(maxRedials == 1 ? "" : "S")}.]",
@@ -2152,10 +2162,13 @@ public partial class MainWindowViewModel : ObservableObject
         // the BBS's CleanupPeriodMinutes setting (default 0 → fall
         // back to RedialPauseSeconds so the behaviour is unchanged
         // when the user hasn't configured the field).
+        // Cleanup-mode's long-delay override still wins (its CleanupPeriodMinutes
+        // ticker stays live under InfiniteRetries) — no point hammering a BBS
+        // that's mid-maintenance every 3s. Otherwise InfiniteRetries forces 3s.
         bool cleanupMode = AppServices.Current.Cleanup.InCleanupMode;
         TimeSpan delay = cleanupMode && bbs.CleanupPeriodMinutes > 0
             ? TimeSpan.FromMinutes(bbs.CleanupPeriodMinutes)
-            : TimeSpan.FromSeconds(Math.Max(1, bbs.RedialPauseSeconds));
+            : TimeSpan.FromSeconds(infinite ? 3 : Math.Max(1, bbs.RedialPauseSeconds));
 
         _cleanupReconnectCts?.Cancel();
         _cleanupReconnectCts?.Dispose();
@@ -2175,11 +2188,11 @@ public partial class MainWindowViewModel : ObservableObject
         // form so the terminal doesn't get spammed with the full text
         // ten times in a row.
         string bannerText = _reactiveReconnectCount == 1
-            ? $"[AUTO-RECONNECT ARMED ({reasonLabel.ToUpperInvariant()}, REDIAL {_reactiveReconnectCount}/{maxRedials}) — DIALING IN {FormatDelay(delay)}. PRESS CONNECT TO CANCEL.]"
-            : $"[ATTEMPTING REDIAL {_reactiveReconnectCount}/{maxRedials} IN {FormatDelay(delay)}.]";
+            ? $"[AUTO-RECONNECT ARMED ({reasonLabel.ToUpperInvariant()}, REDIAL {_reactiveReconnectCount}{ofBudget}) — DIALING IN {FormatDelay(delay)}. PRESS CONNECT TO CANCEL.]"
+            : $"[ATTEMPTING REDIAL {_reactiveReconnectCount}{ofBudget} IN {FormatDelay(delay)}.]";
         WriteTerminalStatus(bannerText, TerminalStatusKind.Notice);
         AppServices.Current.Log.Info("Reconnect",
-            $"Reactive reconnect scheduled ({reasonLabel}, redial {_reactiveReconnectCount}/{maxRedials}) in {FormatDelay(delay)}.");
+            $"Reactive reconnect scheduled ({reasonLabel}, redial {_reactiveReconnectCount}{ofBudget}) in {FormatDelay(delay)}.");
 
         StartReconnectCountdown(delay);
 

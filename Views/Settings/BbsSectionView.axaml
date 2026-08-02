@@ -103,9 +103,15 @@
 
                     <TextBlock Classes="GroupHeader" Text="Retry behaviour"/>
 
+                    <CheckBox IsChecked="{Binding InfiniteRetries, Mode=TwoWay}"
+                              Content="Infinite retries w/ 3 second pause"
+                              Margin="0,0,0,4"
+                              ToolTip.Tip="Retry forever at a fixed 3-second pause, ignoring the Max redials / Redial pause values below. Does not change which events trigger a reconnect — those stay under 'Reconnect when'."/>
+
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
                         <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Max redials:"/>
                         <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                       IsEnabled="{Binding RedialTickersEnabled}"
                                        Value="{Binding MaxRedials, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                        Minimum="1" Maximum="9999" Increment="1"
                                        FormatString="0" Width="140"
@@ -113,6 +119,7 @@
 
                         <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Redial pause (s):"/>
                         <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                       IsEnabled="{Binding RedialTickersEnabled}"
                                        Value="{Binding RedialPauseSeconds, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                        Minimum="1" Maximum="300" Increment="1"
                                        FormatString="0" Width="140"
