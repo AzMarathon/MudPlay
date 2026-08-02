@@ -93,6 +93,23 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
+    public void TravelInDowntimeIsFree_ButLongTransitDropsTicks()
+    {
+        // One instant mob + 3 empty transit rooms. Combat ticks every 5s; a hop
+        // that finishes inside the downtime re-engages before the next tick and
+        // drops no round. 4 moves/lap × 1s = 4s < 5s → free → still the 720 cap.
+        ExpRoute loop = Route(Room(1, 1, Instant(100)), Empty(1, 2), Empty(1, 3), Empty(1, 4));
+        ExpSimResult free = LoopExpSimulator.Simulate(loop, Single(secPerStep: 1));
+        Assert.Equal(72000.0, free.ExpPerHour, 3);
+
+        // Slow steps: 4 × 2s = 8s → floor(8/5)=1 dropped tick/lap, so each lap is a
+        // kill tick plus a wasted tick → roughly half the kills. Travel now bites.
+        ExpSimResult slow = LoopExpSimulator.Simulate(loop, Single(secPerStep: 2));
+        Assert.InRange(slow.ExpPerHour, 34_000, 38_000);
+        Assert.True(slow.ExpPerHour < free.ExpPerHour);
+    }
+
+    [Fact]
     public void ExcludedTarget_IsNotFought()
     {
         // Excluding the low-value lair leaves only the worm → the pure 72k cap.

@@ -3,20 +3,23 @@ using System.Collections.Generic;
 
 namespace FujinTerm.Game.Map;
 
-// Timed exp/hr model for a loop route. A closed-form average of lair yields is
-// wrong once lairs have different respawn timers and sit at different points in
-// the loop: whether a lair "fires" on a pass depends on how long since YOU last
-// killed it, which depends on the loop's geometry and the variable lap length
-// (a pass that skips a not-yet-respawned lair is shorter, shifting everything
-// downstream). So this replays the loop on a clock instead.
+// Tick-based exp/hr model for a lair loop. Combat resolves on a fixed 5-second
+// global tick (720/hour): you bank exp only on a tick where you're engaged with a
+// live mob, and movement between lairs rides the downtime between ticks — a hop
+// that completes before the next tick drops no round, so travel is FREE until a
+// stretch is long enough to leave you standing in a monster-less room when a tick
+// fires. Charging travel as wall-clock time added on top of combat (a naive lap
+// model) understates a tight loop, because that travel overlaps the downtime and
+// costs no ticks. See GAME_MECHANICS.md "Combat tick & exp accrual".
 //
-// Walk the ordered lap on a running time t (travel per step + a room's clear
-// time by combat mode). Each lair carries a last-kill timestamp; on arrival it
-// fires only if t - lastKill >= its respawn T (instant / NPC fixtures fire every
-// pass). A fired target earns its exp, adds its clear time, and re-stamps its
-// clock. One warm-up lap window sheds the "everything's ready at t=0" transient;
-// then exp earned over an hour-long window is the rate. See GAME_MECHANICS.md
-// "Lair respawn timers & NPC-placed monsters".
+// Replay: walk the ordered lap on a wall clock. Each lair carries a last-kill
+// timestamp and fires only if wall - lastKill >= its respawn (instant / NPC
+// fixtures fire every pass). Firing costs mobCount × roundsToKill ticks (single-
+// target) or roundsToKill flat (rooming), banks the lair's exp, and re-stamps its
+// clock. Transit between engagements costs floor(transitSeconds / 5) dropped ticks
+// — the downtime after a kill absorbs the first tick-interval free. A warm-up
+// window sheds the "everything's ready at t=0" burst; exp banked over the following
+// hour is the rate.
 
 public enum ExpCombatMode { SingleTarget, AreaAllTargets }
 
@@ -88,25 +91,31 @@ public static class LoopExpSimulator
         var misses = new Dictionary<(RoomKey, int), int>();
         var closest = new Dictionary<(RoomKey, int), double>();
 
-        double t = 0;
+        double tick = s.SecondsPerRound > 0 ? s.SecondsPerRound : 5.0;   // combat cadence
+
+        double wall = 0;                 // wall-clock seconds; combat quantized to the tick
         double measuredExp = 0;
         int lapsInWindow = 0;
         bool first = true;
         int iter = 0;
+        double pendingSteps = 0;         // transit steps accrued since the last engagement
 
         var firedThisRoom = new List<(RoomKey, int)>(4);
 
-        while (t < measureEnd && iter < MaxIterations)
+        while (wall < measureEnd && iter < MaxIterations)
         {
+            double wallAtLapStart = wall;
+            bool lapFired = false;
+
             for (int i = 0; i < lap.Count; i++)
             {
                 iter++;
-                if (!(first && i == 0)) t += s.SecondsPerStep;   // step into this room
+                if (!(first && i == 0)) pendingSteps += 1;   // one move to enter this room
 
                 IReadOnlyList<ExpTarget> targets = lap[i].Targets;
-                if (targets.Count == 0) continue;
+                if (targets.Count == 0) continue;            // empty room: pure transit
 
-                bool inWindow = t >= measureStart && t < measureEnd;
+                bool inWindow = wall >= measureStart && wall < measureEnd;
                 firedThisRoom.Clear();
                 double roomExp = 0;
                 int firedMobs = 0;
@@ -124,7 +133,7 @@ public static class LoopExpSimulator
                     }
                     else
                     {
-                        double since = lastKill.TryGetValue(key, out double lk) ? t - lk : double.MaxValue;
+                        double since = lastKill.TryGetValue(key, out double lk) ? wall - lk : double.MaxValue;
                         up = since >= tg.RespawnSeconds;
                         if (!up && inWindow)
                         {
@@ -143,19 +152,37 @@ public static class LoopExpSimulator
                     }
                 }
 
-                if (firedThisRoom.Count > 0)
-                {
-                    double clearSeconds = s.CombatMode == ExpCombatMode.AreaAllTargets
-                        ? s.RoundsPerMob * s.SecondsPerRound
-                        : firedMobs * s.RoundsPerMob * s.SecondsPerRound;
-                    t += clearSeconds;
-                    if (inWindow) measuredExp += roomExp;
-                    foreach ((RoomKey, int) key in firedThisRoom) lastKill[key] = t;   // respawn clock starts at the kill
-                }
+                if (firedThisRoom.Count == 0) continue;      // nothing live here: keep travelling
+
+                // Travel is free while it hides in the downtime after a kill; only
+                // whole ticks spent standing in monster-less rooms are dropped.
+                double transitSeconds = pendingSteps * s.SecondsPerStep;
+                wall += Math.Floor(transitSeconds / tick) * tick;
+                pendingSteps = 0;
+
+                // Combat resolves on the tick: single-target lingers mobCount × the
+                // per-mob rounds; area ("rooming") clears the whole room flat.
+                double killTicks = s.CombatMode == ExpCombatMode.AreaAllTargets
+                    ? s.RoundsPerMob
+                    : firedMobs * s.RoundsPerMob;
+                wall += killTicks * tick;
+
+                if (inWindow) measuredExp += roomExp;   // count at engagement, like fires/misses above
+                foreach ((RoomKey, int) key in firedThisRoom) lastKill[key] = wall;   // respawn clock starts at the kill
+                lapFired = true;
             }
 
             first = false;
-            if (t >= measureStart && t < measureEnd) lapsInWindow++;
+            if (lapFired && wall >= measureStart && wall < measureEnd) lapsInWindow++;
+
+            // Break a stall: a whole lap that engaged nothing (every lair still
+            // respawning) advances no clock, so respawns would never catch up.
+            // Flush the pending transit as elapsed time (at least one tick).
+            if (wall == wallAtLapStart)
+            {
+                wall += Math.Max(pendingSteps * s.SecondsPerStep, tick);
+                pendingSteps = 0;
+            }
         }
 
         double mult = s.RealConditionsMultiplier;

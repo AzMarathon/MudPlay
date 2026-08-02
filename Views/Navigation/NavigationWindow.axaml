@@ -1540,7 +1540,7 @@
                                                            Value="{Binding ExpEstimator.SecondsPerStep, Mode=TwoWay}"
                                                            Minimum="0" Maximum="30" Increment="0.1"
                                                            FormatString="0.0" ShowButtonSpinner="True"
-                                                           ToolTip.Tip="How long the party takes to move one room. Stock vs Paradigm differ — set your realm's speed."/>
+                                                           ToolTip.Tip="Seconds to move one room (Stock ~0.5–1, Paradigm ~1–3.5 — set your realm's speed). Only costs exp when a lair-to-lair hop is too long to finish inside a 5s combat round; short hops ride the downtime for free."/>
                                         </StackPanel>
                                         <StackPanel Spacing="2">
                                             <TextBlock FontSize="11" TextWrapping="Wrap"
