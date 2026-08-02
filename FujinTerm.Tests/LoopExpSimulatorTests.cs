@@ -129,6 +129,27 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
+    public void GreaterWyvernLikeLoop_ReachesTickCap_NotSyncWave()
+    {
+        // Mirrors the real greater-wyvern loop: 31 lairs, respawn mix 270/330/390s,
+        // Max 2-3 wyverns (9000 exp) per room, walked at 1.0s/step. Combined respawn
+        // throughput (~800/hr) exceeds the 720 tick cap, so an hours-deep loop runs
+        // at the cap — the estimate must not collapse into a synchronised
+        // kill-then-idle wave (which pinned it near 4.7M).
+        var rooms = new ExpRoomVisit[31];
+        for (int i = 0; i < 31; i++)
+        {
+            int respawn = i < 15 ? 270 : i < 19 ? 330 : 390;
+            int mobs = (i % 3 == 0) ? 3 : 2;
+            rooms[i] = Room(2, 11000 + i, Lair(mobs, 9000, respawn));
+        }
+        ExpSimResult e = LoopExpSimulator.Simulate(Route(rooms), Single(secPerStep: 1.0));
+
+        // Tick cap = 720 × 9000 = 6.48M; must clear the sync-wave floor decisively.
+        Assert.InRange(e.ExpPerHour, 5_500_000, 6_480_000);
+    }
+
+    [Fact]
     public void ExcludedTarget_IsNotFought()
     {
         // Excluding the low-value lair leaves only the worm → the pure 72k cap.

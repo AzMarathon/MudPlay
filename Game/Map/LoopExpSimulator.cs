@@ -114,8 +114,12 @@ public static class LoopExpSimulator
         // synchronised wave — clear the whole loop, then idle while it all repops at
         // once — which loses ticks a real, hours-deep loop never loses: its per-lair
         // timers are spread out, so with enough lairs there's almost always one
-        // ready. Spread each lair's first ready-time evenly across the slowest
-        // respawn so the replay settles on that steady state, not the synced start.
+        // ready. Spread each lair's first ready-time with a golden-ratio
+        // low-discrepancy sequence rather than in loop order: an in-order spread
+        // just makes the walker move WITH the ready-wave and still stall, whereas a
+        // decorrelated spread guarantees a live lair is always somewhere ahead, so
+        // the replay settles on the steady state (tick cap) instead of the synced
+        // transient. See GAME_MECHANICS.md "Combat tick & exp accrual".
         var lairInit = new List<((RoomKey, int) Key, int Respawn)>();
         var seenLair = new HashSet<(RoomKey, int)>();
         for (int i = 0; i < lap.Count; i++)
@@ -129,7 +133,8 @@ public static class LoopExpSimulator
         if (lairInit.Count > 1 && maxTimer > 0)
             for (int k = 0; k < lairInit.Count; k++)
             {
-                double readyAt = (double)k / lairInit.Count * maxTimer;   // spread over [0, maxTimer]
+                double frac = (k * 0.618033988749895) % 1.0;   // golden-ratio spread, decorrelated from walk order
+                double readyAt = frac * maxTimer;
                 lastKill[lairInit[k].Key] = readyAt - lairInit[k].Respawn;   // ready exactly at readyAt
             }
 

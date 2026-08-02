@@ -1446,7 +1446,7 @@
                                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                                     IsEnabled="{Binding ExpEstimator.CanSave}"
                                                     Command="{Binding SaveEstimatorAsLoopCommand}"/>
-                                            <Button Grid.Column="1" Content="Discard" FontSize="11"
+                                            <Button Grid.Column="1" Content="Stop Estimating" FontSize="11"
                                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                                     ToolTip.Tip="Leave estimator mode without saving."
                                                     Command="{Binding DiscardEstimatorCommand}"/>
@@ -1483,7 +1483,9 @@
                                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ExpEstimatorLairRow">
-                                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1" ColumnSpacing="6">
+                                                    <!-- Right margin reserves space for the overlay scrollbar so it
+                                                         doesn't cover the fires / early-by figures when the list is long. -->
+                                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1,14,1" ColumnSpacing="6">
                                                         <TextBlock Grid.Column="0" FontSize="11"
                                                                    Foreground="{StaticResource ChromeFgSecBrush}"
                                                                    TextTrimming="CharacterEllipsis"
