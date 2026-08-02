@@ -42,7 +42,13 @@ it isn't here and you're unsure, ask.
 - **Movement rides the downtime between ticks.** A hop from one lair to the next that completes
   within the ~5s gap re-engages you before the next tick, so it drops **no** combat round — travel
   is effectively free when it fits. Travel only costs exp when a stretch is long enough that a tick
-  fires while you're standing in a monster-less room mid-transit.
+  fires while you're standing in a monster-less room mid-transit. Concretely (user): at **1.0–1.2s
+  per step you can cross 4 empty (non-lair) rooms** between lairs without dropping a round; **above
+  1.2s it drops to 3** — i.e. ~`floor(5s ÷ step-seconds)` free rooms per hop.
+- **Each monster slot in a lair carries its own respawn timer**, tracked independently — separate
+  from every other lair, even lairs with the same monster type and size. So a dense multi-lair loop
+  desynchronises: with enough slots there's almost always one ready, and the loop runs pinned at the
+  720/hr tick cap rather than clearing everything then idling for a synchronised repop.
 - Consequence: a perfectly streamlined lair loop keeps a live mob engaged on all 720 ticks, so the
   ceiling is `720 × avg-exp-per-kill` (matches the "720 kills/hour" cave-worm cap). Charging travel
   as wall-clock time *added to* combat (as a naive lap model does) understates a tight loop, because
