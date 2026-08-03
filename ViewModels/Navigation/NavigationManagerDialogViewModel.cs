@@ -79,6 +79,40 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // True when the combined tree has any node (loop, lair, or empty folder) — drives tree-vs-placeholder visibility.
     public bool HasWalkTree => WalkTree.Count > 0;
 
+    // ----- Filter (combined loops + lairs tree) ----------------------
+    // Debounced + flat-while-filtering, exactly like the Navigation rail, so a
+    // broad match over the seeded lists doesn't stall. The resting tree starts
+    // collapsed (fast tab-swap); a filter shows a flat, virtualized match list.
+    [ObservableProperty] private string _walkFilter = string.Empty;
+
+    // Any loops/lairs exist to filter — drives the filter box's visibility,
+    // independent of the current filter.
+    public bool HasWalkItems => HasLoops || HasLairSetups;
+
+    // Filtering matched nothing though the BBS does have loops/lairs — distinct
+    // from the "nothing saved yet" empty state so the placeholder text stays right.
+    public bool HasNoWalkMatches => HasWalkItems && WalkTree.Count == 0;
+
+    private static readonly TimeSpan FilterDebounceDelay = TimeSpan.FromMilliseconds(150);
+    private readonly HashSet<string> _walkExpandOverrides = new(StringComparer.OrdinalIgnoreCase);
+    private bool _walkWasFiltering;
+    private Avalonia.Threading.DispatcherTimer? _walkFilterDebounce;
+
+    partial void OnWalkFilterChanged(string value)
+    {
+        _walkFilterDebounce ??= new Avalonia.Threading.DispatcherTimer { Interval = FilterDebounceDelay };
+        _walkFilterDebounce.Stop();
+        _walkFilterDebounce.Tick -= OnWalkFilterDebounceTick;
+        _walkFilterDebounce.Tick += OnWalkFilterDebounceTick;
+        _walkFilterDebounce.Start();
+    }
+
+    private void OnWalkFilterDebounceTick(object? sender, EventArgs e)
+    {
+        _walkFilterDebounce?.Stop();
+        RebuildWalkTree();
+    }
+
     public bool HasDraft => Draft is not null;
 
     // True when the runner is currently driving a loop. The "Save running
@@ -159,6 +193,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         foreach (Loop loop in _loops.Loops.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase))
             Loops.Add(new ManagerLoopRow(loop));
         OnPropertyChanged(nameof(HasLoops));
+        OnPropertyChanged(nameof(HasWalkItems));
         RebuildWalkTree();
     }
 
@@ -168,6 +203,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         foreach (LairSetup setup in _lairSetups.Setups)
             LairSetups.Add(new ManagerLairSetupRow(setup));
         OnPropertyChanged(nameof(HasLairSetups));
+        OnPropertyChanged(nameof(HasWalkItems));
         RebuildWalkTree();
     }
 
@@ -176,11 +212,34 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // picks a leaf DataTemplate by runtime row type.
     private void RebuildWalkTree()
     {
+        string filter = (WalkFilter ?? string.Empty).Trim();
+        bool filtering = filter.Length > 0;
         var rows = new List<object>(LairSetups.Count + Loops.Count);
-        rows.AddRange(LairSetups);
-        rows.AddRange(Loops);
-        NavTreeBuilder.Sync<object>(WalkTree, rows, FolderOfWalkRow, FolderSeed);
+        if (!filtering)
+        {
+            rows.AddRange(LairSetups);
+            rows.AddRange(Loops);
+        }
+        else
+        {
+            foreach (ManagerLairSetupRow s in LairSetups)
+                if (s.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(s);
+            foreach (ManagerLoopRow l in Loops)
+                if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(l);
+        }
+
+        // Collapsed at rest (fast tab-swap); while filtering, build flat so the
+        // tree's VirtualizingStackPanel realises only visible matches instead of
+        // force-expanding every folder (an expanded folder tree defeats
+        // virtualization — see the rail's RebuildNavTree).
+        Func<object, string?> folderOf = filtering ? (static _ => null) : FolderOfWalkRow;
+        IEnumerable<string> folders = filtering ? Array.Empty<string>() : FolderSeed;
+        NavTreeBuilder.Sync<object>(WalkTree, rows, folderOf, folders,
+            defaultExpanded: false, _walkExpandOverrides,
+            harvest: !_walkWasFiltering, forceExpandAll: false);
+        _walkWasFiltering = filtering;
         OnPropertyChanged(nameof(HasWalkTree));
+        OnPropertyChanged(nameof(HasNoWalkMatches));
     }
 
     private static string FolderOfWalkRow(object row) => row switch
@@ -204,6 +263,32 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
 
     public bool HasFavorites => Favorites.Count > 0;
     public bool HasFavoriteTree => FavoriteTree.Count > 0;
+
+    // ----- Filter (GOTO favourites tree) -----------------------------
+    [ObservableProperty] private string _gotoFilter = string.Empty;
+
+    // Filtering matched nothing though favourites exist — distinct from the
+    // "no favourites yet" empty state.
+    public bool HasNoGotoMatches => HasFavorites && FavoriteTree.Count == 0;
+
+    private readonly HashSet<string> _gotoExpandOverrides = new(StringComparer.OrdinalIgnoreCase);
+    private bool _gotoWasFiltering;
+    private Avalonia.Threading.DispatcherTimer? _gotoFilterDebounce;
+
+    partial void OnGotoFilterChanged(string value)
+    {
+        _gotoFilterDebounce ??= new Avalonia.Threading.DispatcherTimer { Interval = FilterDebounceDelay };
+        _gotoFilterDebounce.Stop();
+        _gotoFilterDebounce.Tick -= OnGotoFilterDebounceTick;
+        _gotoFilterDebounce.Tick += OnGotoFilterDebounceTick;
+        _gotoFilterDebounce.Start();
+    }
+
+    private void OnGotoFilterDebounceTick(object? sender, EventArgs e)
+    {
+        _gotoFilterDebounce?.Stop();
+        RebuildFavoriteTree();
+    }
 
     // Show the GOTO tab only when a FavoritesStore was supplied (the live Manage
     // flow); the transient import-only instance leaves it null.
@@ -233,9 +318,23 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
 
     private void RebuildFavoriteTree()
     {
-        IEnumerable<string> folders = _favorites?.AllFolders ?? Enumerable.Empty<string>();
-        NavTreeBuilder.Sync(FavoriteTree, Favorites, r => r.Folder, folders);
+        string filter = (GotoFilter ?? string.Empty).Trim();
+        bool filtering = filter.Length > 0;
+        IEnumerable<FavoriteRowViewModel> rows = filtering
+            ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            : Favorites;
+        // Collapsed at rest; flat while filtering so the tree virtualizes (see
+        // RebuildWalkTree).
+        Func<FavoriteRowViewModel, string?> folderOf = filtering ? (static _ => null) : static r => r.Folder;
+        IEnumerable<string> folders = filtering
+            ? Array.Empty<string>()
+            : _favorites?.AllFolders ?? Enumerable.Empty<string>();
+        NavTreeBuilder.Sync(FavoriteTree, rows, folderOf, folders,
+            defaultExpanded: false, _gotoExpandOverrides,
+            harvest: !_gotoWasFiltering, forceExpandAll: false);
+        _gotoWasFiltering = filtering;
         OnPropertyChanged(nameof(HasFavoriteTree));
+        OnPropertyChanged(nameof(HasNoGotoMatches));
     }
 
     // GOTO folder CRUD — mutates the favourites' profile-backed folder set.
@@ -830,6 +929,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private void Close()
     {
         _searchDebounce?.Stop();
+        _walkFilterDebounce?.Stop();
+        _gotoFilterDebounce?.Stop();
         _loops.LoopsChanged -= RebuildLoops;
         _lairSetups.SetupsChanged -= RebuildLairSetups;
         if (_folders is not null) _folders.FoldersChanged -= OnFoldersChanged;

@@ -1075,13 +1075,29 @@
                                                MaxWidth="250"
                                                HorizontalAlignment="Left"
                                                IsVisible="{Binding HasNoFavoriteMatches}"/>
+                                    <!-- MaxHeight bounds the tree's own scroll viewport so its
+                                         VirtualizingStackPanel engages — without a finite viewport
+                                         (it sits in the rail's outer ScrollViewer) every row of a
+                                         broad filter match realises at once and the first keystroke
+                                         stalls. Folders rest collapsed, so the cap only bites once a
+                                         filter expands a large match set. -->
                                     <TreeView Name="FavoriteTreeView"
                                               ItemsSource="{Binding FavoriteTree}"
                                               IsVisible="{Binding HasFavoriteTree}"
                                               Background="Transparent"
                                               Margin="0,0,8,0"
+                                              MaxHeight="400"
                                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                                               DragDrop.AllowDrop="True">
+                                        <!-- Virtualize the top-level rows: while filtering the tree
+                                             is built flat (no folders), so this panel realises only
+                                             the visible matches instead of the whole set. -->
+                                        <TreeView.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel/>
+                                            </ItemsPanelTemplate>
+                                        </TreeView.ItemsPanel>
                                         <!-- Right-click empty tree space → create a
                                              root-level GOTO folder (null parent). -->
                                         <TreeView.ContextMenu>
@@ -1247,13 +1263,24 @@
                                          Folder create / rename / delete is reachable via
                                          the folder-node context menu here (and the Manage
                                          dialog); there is no "+ Folder" button on the rail. -->
+                                    <!-- MaxHeight bounds the scroll viewport so virtualization
+                                         engages on broad filter matches — see FavoriteTreeView. -->
                                     <TreeView Name="NavTreeView"
                                               ItemsSource="{Binding NavTree}"
                                               IsVisible="{Binding HasNavTree}"
                                               Background="Transparent"
                                               Margin="0,0,8,0"
+                                              MaxHeight="400"
                                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                                               DragDrop.AllowDrop="True">
+                                        <!-- Virtualize top-level rows (flat while filtering) — see
+                                             FavoriteTreeView. -->
+                                        <TreeView.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel/>
+                                            </ItemsPanelTemplate>
+                                        </TreeView.ItemsPanel>
                                         <TreeView.Styles>
                                             <!-- Stretch + no horizontal scroll constrains each
                                                  row to the rail width so the Load / Run buttons

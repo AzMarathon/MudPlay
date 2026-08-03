@@ -125,6 +125,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         _lairTick.Stop();
         _sailingTick.Stop();
+        _searchDebounce?.Stop();
+        _loopFilterDebounce?.Stop();
+        _gotoFilterDebounce?.Stop();
         _services.RoomTracker.StateChanged -= OnTrackerStateChanged;
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
         _services.Walker.Event -= OnWalkerEvent;
@@ -1008,7 +1011,27 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // their folders. Rebuilds the tree only (not the flat backing lists).
     [ObservableProperty] private string _loopFilter = string.Empty;
 
-    partial void OnLoopFilterChanged(string value) => RebuildNavTree();
+    // Debounce filter keystrokes: with hundreds of seeded loops/lairs a broad
+    // single-char match rebuilds a large tree, so run the rebuild once the user
+    // pauses rather than on every character (a fast "wy" then never rebuilds for
+    // the broad "w"). Same shape as the map-search debounce above.
+    private DispatcherTimer? _loopFilterDebounce;
+    private static readonly TimeSpan FilterDebounceDelay = TimeSpan.FromMilliseconds(150);
+
+    partial void OnLoopFilterChanged(string value)
+    {
+        _loopFilterDebounce ??= new DispatcherTimer { Interval = FilterDebounceDelay };
+        _loopFilterDebounce.Stop();
+        _loopFilterDebounce.Tick -= OnLoopFilterDebounceTick;
+        _loopFilterDebounce.Tick += OnLoopFilterDebounceTick;
+        _loopFilterDebounce.Start();
+    }
+
+    private void OnLoopFilterDebounceTick(object? sender, EventArgs e)
+    {
+        _loopFilterDebounce?.Stop();
+        RebuildNavTree();
+    }
 
     // Any loop or lair setup exists before filtering — gates the filter box and
     // tells "nothing saved" apart from "nothing matches the filter".
@@ -1064,13 +1087,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(l);
         }
 
-        // Default collapsed (tidy rail); a filter force-expands so nested matches
-        // show. Harvest the resting overrides only when the tree we're replacing
-        // isn't itself a filtered view (see NavTreeBuilder.Sync).
+        // While filtering, build a FLAT list — no folder grouping. An expanded
+        // folder tree defeats virtualization (Avalonia realises every child of an
+        // expanded node), so a broad match renders hundreds of rows at once and
+        // the first keystroke stalls. Flat top-level rows let the tree's
+        // VirtualizingStackPanel realise only what's visible. The resting
+        // (unfiltered) view keeps the folder tree. Harvest the resting overrides
+        // only when the tree we're replacing isn't itself a filtered view.
+        Func<object, string?> folderOf = filtering ? (static _ => null) : FolderOfNavRow;
         IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.NavFolders.AllFolders;
-        NavTreeBuilder.Sync<object>(NavTree, rows, FolderOfNavRow, folders,
+        NavTreeBuilder.Sync<object>(NavTree, rows, folderOf, folders,
             defaultExpanded: false, _navExpandOverrides,
-            harvest: !_navWasFiltering, forceExpandAll: filtering);
+            harvest: !_navWasFiltering, forceExpandAll: false);
         _navWasFiltering = filtering;
         OnPropertyChanged(nameof(HasNavTree));
         OnPropertyChanged(nameof(HasNoLoopMatches));
@@ -1306,7 +1334,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Rebuilds the tree only (not the flat Favorites list). Mirrors LoopFilter.
     [ObservableProperty] private string _gotoFilter = string.Empty;
 
-    partial void OnGotoFilterChanged(string value) => RebuildFavoriteTree();
+    private DispatcherTimer? _gotoFilterDebounce;
+
+    partial void OnGotoFilterChanged(string value)
+    {
+        _gotoFilterDebounce ??= new DispatcherTimer { Interval = FilterDebounceDelay };
+        _gotoFilterDebounce.Stop();
+        _gotoFilterDebounce.Tick -= OnGotoFilterDebounceTick;
+        _gotoFilterDebounce.Tick += OnGotoFilterDebounceTick;
+        _gotoFilterDebounce.Start();
+    }
+
+    private void OnGotoFilterDebounceTick(object? sender, EventArgs e)
+    {
+        _gotoFilterDebounce?.Stop();
+        RebuildFavoriteTree();
+    }
 
     // Favourites exist but the current filter matches none — drives the GOTO
     // "no matches" empty state (distinct from "no favourites saved").
@@ -1364,12 +1407,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         IEnumerable<FavoriteRowViewModel> rows = filtering
             ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
             : Favorites;
-        // GOTO folders default collapsed (like the loops/lairs rail); a filter
-        // force-expands so a match under a collapsed folder still shows.
+        // While filtering, build a FLAT list — no folder grouping — so the tree's
+        // VirtualizingStackPanel realises only visible rows (an expanded folder
+        // tree defeats virtualization; see RebuildNavTree). The resting view keeps
+        // the folder tree.
+        Func<FavoriteRowViewModel, string?> folderOf = filtering ? (static _ => null) : static r => r.Folder;
         IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.Favorites.AllFolders;
-        NavTreeBuilder.Sync(FavoriteTree, rows, r => r.Folder, folders,
+        NavTreeBuilder.Sync(FavoriteTree, rows, folderOf, folders,
             defaultExpanded: false, _gotoExpandOverrides,
-            harvest: !_gotoWasFiltering, forceExpandAll: filtering);
+            harvest: !_gotoWasFiltering, forceExpandAll: false);
         _gotoWasFiltering = filtering;
         OnPropertyChanged(nameof(HasFavoriteTree));
         OnPropertyChanged(nameof(HasNoFavoriteMatches));

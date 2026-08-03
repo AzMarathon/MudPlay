@@ -1,10 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.19.2**
-> - Character-creation stat box now flips to direct-input mode on entry, so the arrow keys move between stat fields instead of cycling the given/family names (detects the box on-screen, incl. ParaMUD's abbreviated "Char. Creation" title)
-> - Items bought during character creation (before the first inventory dump) now register, so "Equip all" sees them instead of an empty pack
-> - Bug report now records whether direct-input mode is active
+> **Version 2.21.0**
+> - Navigation Management window: added filter boxes above the Loops & Auto-Lairs and Go To trees (debounced, flat + virtualized while filtering) to quickly find an entry
+> - Folders in both Manage tabs now start collapsed, so switching tabs is snappy instead of laggy with large seeded lists
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

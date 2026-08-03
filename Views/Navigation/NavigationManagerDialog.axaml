@@ -191,18 +191,37 @@
                                             ToolTip.Tip="Persist the currently-running loop to disk under the typed name."/>
                                 </Grid>
                             </Border>
+                            <TextBox Text="{Binding WalkFilter, Mode=TwoWay}"
+                                     PlaceholderText="Filter loops / lairs…"
+                                     FontSize="11" Margin="0,0,0,3"
+                                     IsVisible="{Binding HasWalkItems}"/>
                             <TextBlock Text="No loops or Auto-Lair setups saved on this BBS yet — build one from the Navigation map, or click New Loop / New Lair."
                                        Padding="8"
                                        FontSize="11"
                                        TextWrapping="Wrap"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
-                                       IsVisible="{Binding !HasWalkTree}"/>
+                                       IsVisible="{Binding !HasWalkItems}"/>
+                            <TextBlock Text="No loops or lairs match the filter."
+                                       Padding="8"
+                                       FontSize="11"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       IsVisible="{Binding HasNoWalkMatches}"/>
+                            <!-- MaxHeight + VirtualizingStackPanel bound the viewport so the
+                                 flat filtered list virtualizes; folders rest collapsed so a
+                                 tab-swap only realises headers. See the rail's trees. -->
                             <TreeView Name="WalkTreeView"
                                       ItemsSource="{Binding WalkTree}"
                                       IsVisible="{Binding HasWalkTree}"
                                       Background="Transparent"
+                                      MaxHeight="440"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                                       DragDrop.AllowDrop="True">
+                                <TreeView.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel/>
+                                    </ItemsPanelTemplate>
+                                </TreeView.ItemsPanel>
                                 <TreeView.Styles>
                                     <Style Selector="TreeViewItem">
                                         <Setter Property="HorizontalAlignment" Value="Stretch"/>
@@ -431,16 +450,32 @@
                                           HorizontalScrollBarVisibility="Disabled"
                                           VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="0,0,14,0">
+                                    <TextBox Text="{Binding GotoFilter, Mode=TwoWay}"
+                                             PlaceholderText="Filter favourites…"
+                                             FontSize="11" Margin="0,0,0,3"
+                                             IsVisible="{Binding HasFavorites}"/>
                                     <TextBlock Text="No favourites yet — click Add, or right-click a room on the map → Add to favorites."
                                                Padding="8" FontSize="11" TextWrapping="Wrap"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
-                                               IsVisible="{Binding !HasFavoriteTree}"/>
+                                               IsVisible="{Binding !HasFavorites}"/>
+                                    <TextBlock Text="No favourites match the filter."
+                                               Padding="8" FontSize="11"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                               IsVisible="{Binding HasNoGotoMatches}"/>
+                                    <!-- Virtualized + collapsed at rest — see the Loops tab tree. -->
                                     <TreeView Name="GotoTreeView"
                                               ItemsSource="{Binding FavoriteTree}"
                                               IsVisible="{Binding HasFavoriteTree}"
                                               Background="Transparent"
+                                              MaxHeight="440"
                                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                                               DragDrop.AllowDrop="True">
+                                        <TreeView.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel/>
+                                            </ItemsPanelTemplate>
+                                        </TreeView.ItemsPanel>
                                         <TreeView.Styles>
                                             <Style Selector="TreeViewItem">
                                                 <Setter Property="HorizontalAlignment" Value="Stretch"/>
