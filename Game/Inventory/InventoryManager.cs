@@ -480,6 +480,13 @@ public sealed partial class InventoryManager : IDisposable
             // a purchase), so it lands in the carried list until the player wears
             // or sells it.
             string boughtName = bought.Groups[1].Value.TrimEnd();
+            // A purchase is a definitive "item entered the pack" signal, but
+            // PatchCarried is gated on a loaded baseline (the first full `i`).
+            // During character creation that `i` hasn't run — it only fires on
+            // realm entry — so without seeding a baseline here the buy is dropped
+            // and "Equip all" sees an empty pack (the reported bug). Treat the
+            // first purchase as the baseline.
+            EnsureLoadedBaseline();
             PatchCarried(list => { list.Add(boughtName); return true; });
             AdjustItemWeight(boughtName, +1);
 
@@ -778,6 +785,31 @@ public sealed partial class InventoryManager : IDisposable
             }
         }
         if (changed) Changed?.Invoke();
+    }
+
+    // Establish the loaded baseline from an acquisition when no full 'i' has run
+    // yet. PatchCarried/PatchEquipped are no-ops until _loaded so a stray mid-game
+    // patch can't imply a one-item pack — but character creation reaches the
+    // starting-gear store before any 'i' (that only fires on realm entry), so
+    // creation-time purchases would be dropped. A purchase is unambiguous, and
+    // the creation pack legitimately holds only what was just bought, so the
+    // first buy seeds the baseline. Self-correcting: the realm-entry 'i' later
+    // replaces the carried list wholesale (ParseFullInventory), so even a wrong
+    // guess is overwritten.
+    private void EnsureLoadedBaseline()
+    {
+        bool seeded = false;
+        lock (_lock)
+        {
+            if (!_loaded)
+            {
+                _loaded = true;
+                seeded = true;
+            }
+        }
+        if (seeded)
+            _log?.Info(LogCategory,
+                "Seeded inventory baseline from a purchase (no prior full inventory) — creation-time buys now track.");
     }
 
     // Carried-list counterpart to PatchEquipped: same loaded-baseline gate (an

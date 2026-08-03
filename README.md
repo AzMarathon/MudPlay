@@ -1,10 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.19.0**
-> - BBS Settings → Retry behaviour: new "Infinite retries w/ 3 second pause" checkbox that retries reconnects forever at a fixed 3-second pause
-> - When enabled it overrides (and greys out) the Max redials + Redial pause tickers; the "Reconnect when" triggers are unaffected
-> - Bug report now records the active BBS's retry config (infinite/redial counts + which reconnect triggers are armed)
+> **Version 2.19.2**
+> - Character-creation stat box now flips to direct-input mode on entry, so the arrow keys move between stat fields instead of cycling the given/family names (detects the box on-screen, incl. ParaMUD's abbreviated "Char. Creation" title)
+> - Items bought during character creation (before the first inventory dump) now register, so "Equip all" sees them instead of an empty pack
+> - Bug report now records whether direct-input mode is active
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

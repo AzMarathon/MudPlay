@@ -137,6 +137,15 @@ it isn't here and you're unsure, ask.
   realm-independent signal is the outbound `train stats` command itself.
 - **Stock** realms render the same screen inline (scrolling text), so the marker row is emitted
   normally.
+- **Initial character creation reaches this box with NO outbound `train stats`** *([CONFIRMED]
+  2026-08-02, capture `paradigm-20260802-164301`)* — the menu walks class → race → alignment →
+  training on its own. So on Paradigm neither signal is available during creation (no command to
+  arm on, and the cursor-drawn marker row never emits inline), which leaves the client's arrow keys
+  bound to command-history recall — up/down cycle the just-typed given/family names instead of
+  moving between stat fields. The only reliable entry signal is **scanning the live screen** for the
+  box (the `Point Cost Chart` panel beside the `Char. Creation` / `Character Creation` title, both on
+  the top row). The banner text is literally abbreviated **`Char. Creation`** on Paradigm, not the
+  stock `Character Creation`.
 - **The stat box's first field is the "Family Name" (surname / last name)** *([CONFIRMED] — user
   report)*. The cursor starts there, and a plain Enter advances past it (the auto-trainer replays a
   bare Enter and never edits it). So any automated `<text>\r` that fires while the user is parked on
@@ -1960,7 +1969,8 @@ glass jug               5               2 gold crowns
 | Event | Line |
 |---|---|
 | Buy OK | `You just bought <item> for <amount> <currency>.` |
-| Buy — free item | `You just bought <item> for nothing.` |
+| Buy — free item (stock) | `You just bought <item> for nothing.` |
+| Buy — free item (ParaMUD) | `You just bought <item> for 0 copper farthings.` *([CONFIRMED] 2026-08-02, capture `paradigm-20260802-164843`)* |
 | Buy — can't afford | `You cannot afford <item>.` |
 | Sell OK | `You sold <item> for <amount> <currency>.` |
 | Sell — worthless | `You sold <item> for 0 copper farthings.` |

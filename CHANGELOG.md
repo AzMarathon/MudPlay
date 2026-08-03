@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.19.2
+
+- Character-creation stat box now flips to direct-input mode on entry, so the arrow keys move between stat fields instead of cycling the given/family names (detects the box on-screen, incl. ParaMUD's abbreviated "Char. Creation" title)
+- Items bought during character creation (before the first inventory dump) now register, so "Equip all" sees them instead of an empty pack
+- Bug report now records whether direct-input mode is active
+- bug reports addressed: paradigm-20260802-164301, paradigm-20260802-164843
+
 ## 2.19.0
 
 - BBS Settings → Retry behaviour: new "Infinite retries w/ 3 second pause" checkbox that retries reconnects forever at a fixed 3-second pause

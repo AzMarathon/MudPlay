@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -479,6 +480,14 @@ public partial class MainWindowViewModel : ObservableObject
     {
         Lines = new LineExtractor(Emulator);
         Capture = new CaptureSession(Emulator.Screen.Scrollback);
+
+        // Live-screen watch for the character-creation stat box. It's drawn with
+        // cursor positioning, so its marker row never completes as an emitted
+        // line until teardown — too late to flip arrow keys into direct-input
+        // mode. Scanning the screen each feed lets TrainerMenuTracker arm
+        // character mode the moment the box appears. Cheap: pre-filtered on the
+        // stat-box marker and skipped entirely once armed.
+        Emulator.ScreenUpdated += OnScreenUpdatedForTrainerMenu;
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a
@@ -2571,6 +2580,48 @@ public partial class MainWindowViewModel : ObservableObject
             // want to crash the dialog because the socket died mid-send.
             return false;
         }
+    }
+
+    // Per-feed screen watch feeding TrainerMenuTracker's live-screen detection
+    // of the character-creation stat box (see the ScreenUpdated wiring in the
+    // ctor). Early-outs once character mode is armed, and pre-filters with an
+    // allocation-free marker scan so the string build below only runs when a
+    // stat box is actually on screen.
+    private void OnScreenUpdatedForTrainerMenu()
+    {
+        if (AppServices.Current.TrainerMenu.IsInputMenuActive) return;
+        if (!ScreenShowsStatBoxMarker()) return;
+        AppServices.Current.TrainerMenu.ObserveScreen(BuildVisibleScreenText());
+    }
+
+    // Allocation-free hot-path check: does any visible row carry the stat-box
+    // marker? Almost never true outside the creation/train screen, so the full
+    // screen-text build is skipped on nearly every feed.
+    private bool ScreenShowsStatBoxMarker()
+    {
+        TerminalScreen screen = Emulator.Screen;
+        Span<char> buf = stackalloc char[screen.Cols];
+        for (int y = 0; y < screen.Rows; y++)
+        {
+            ReadOnlySpan<Cell> row = screen.Row(y);
+            for (int x = 0; x < row.Length; x++) buf[x] = row[x].Char;
+            if (buf[..row.Length].IndexOf(Game.TrainerMenuTracker.StatBoxMarker.AsSpan()) >= 0)
+                return true;
+        }
+        return false;
+    }
+
+    // Flatten the live screen grid to newline-joined text for content scans.
+    private string BuildVisibleScreenText()
+    {
+        TerminalScreen screen = Emulator.Screen;
+        StringBuilder sb = new(screen.Rows * (screen.Cols + 1));
+        for (int y = 0; y < screen.Rows; y++)
+        {
+            foreach (Cell cell in screen.Row(y)) sb.Append(cell.Char);
+            sb.Append('\n');
+        }
+        return sb.ToString();
     }
 
     // Send raw key bytes from the terminal control to the server. Called

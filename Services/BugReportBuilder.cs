@@ -156,6 +156,11 @@ public static class BugReportBuilder
         // them off has Info-only logs. Surface the state so a triager knows why.
         Kv(sb, "Debug diagnostics", (svc.Log.Diagnostics?.DebugDiagnostics ?? false) ? "on" : "off");
         Kv(sb, "Combat diagnostics", (svc.Log.Diagnostics?.CombatDiagnostics ?? false) ? "on" : "off");
+        // Direct-input (character) mode: on while a trainer / character-creation
+        // stat box owns the keyboard, so arrow keys pass to the wire instead of
+        // recalling command history. An "arrows don't move between stat fields"
+        // report hinges on whether this flipped on entering the box.
+        Kv(sb, "Direct-input mode", svc.TrainerMenu.MenuOwnsKeyboard ? "on (trainer/creation box)" : "off");
         return sb.ToString();
     }
 
