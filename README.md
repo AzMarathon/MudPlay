@@ -1,10 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.22.0**
-> - Auto-recover deathpiles now uses the correct Stock mechanic: on entering the death room it reads the "You notice" survey and, if your `corpse of <given-name>` is there, sends one `recover corpse <name>` — instead of blindly spamming `get <item>` for every pile item
-> - If the corpse isn't in the room (looted/decayed), the pile is marked Missing (new grey status) and nothing is sent — no more repeated "You don't see X here." spam
-> - Recovery completes on the `You have recovered the corpse of <name>.` line; an over-encumbered partial recovery correctly stays Partial (retried on re-entry) rather than being marked recovered
+> **Version 2.23.0**
+> - Exp/Hr Estimator now handles bosses (a monster with game-limit 1 or a regen of an hour+), whether in a lair OR placed in a room: it's pulled out of the lair/fixture handling and added once as `boss exp ÷ regen-hours` — so a 15-hour crowned spider adds ~80k/hr instead of inflating every room every lap, and a placed 3-hour juggernaut adds ~433k/hr instead of its full value every pass
+> - A boss that can appear in any room of a multi-room lair (or a placed boss) is counted once for the whole loop, not per room; a new "Bosses" line in the breakdown shows each one's contribution
+> - Monster exp now reads `EXP × ExpMulti` (the boss multiplier) instead of raw `EXP`, so a ×20 boss no longer shows 1/20th its value
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -1529,6 +1529,28 @@
                                             </ListBox.ItemTemplate>
                                         </ListBox>
 
+                                        <!-- Bosses (GameLimit 1 / long regen): pulled out of the lair
+                                             average and amortised over their regen (once per Nh), so
+                                             they add a flat exp/hr instead of firing on every pass. -->
+                                        <StackPanel IsVisible="{Binding ExpEstimator.HasBosses}" Spacing="1">
+                                            <TextBlock Text="Bosses (amortised over regen)" FontSize="10"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}" Margin="0,3,0,0"/>
+                                            <ItemsControl ItemsSource="{Binding ExpEstimator.Bosses}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:ExpEstimatorBossRow">
+                                                        <Grid ColumnDefinitions="*,Auto" Margin="0,1,14,1" ColumnSpacing="6">
+                                                            <TextBlock Grid.Column="0" FontSize="11"
+                                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Text="{Binding Label}"/>
+                                                            <TextBlock Grid.Column="1" FontSize="11" Foreground="#E0B060"
+                                                                       Text="{Binding ContribLabel}"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
                                         <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
 
                                         <TextBox Text="{Binding ExpEstimator.ProposedName, Mode=TwoWay}"

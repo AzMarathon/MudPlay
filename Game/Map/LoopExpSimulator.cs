@@ -21,9 +21,16 @@ namespace FujinTerm.Game.Map;
 
 public enum ExpCombatMode { SingleTarget, AreaAllTargets }
 
-// One exp target in a room: a lair group or an NPC fixture. RespawnSeconds 0 = an
-// instant / NPC fixture (fires every pass). Included lets the UI cherry-pick.
-public readonly record struct ExpTarget(int MobCount, double ExpPerMob, int RespawnSeconds, bool Included = true)
+// One exp target in a room: a lair group, an NPC fixture, or a boss.
+// RespawnSeconds 0 = an instant / NPC fixture (fires every pass). Included lets
+// the UI cherry-pick. A boss (IsBoss) is a monster with GameLimit 1 or a
+// RegenTime ≥ 1h: it's pulled OUT of the lair average and counted once across the
+// whole loop (deduped by MonsterId) at ExpPerMob ÷ (RespawnSeconds in hours) —
+// killable only as often as its regen, so it adds a flat exp/hr, not a per-lap
+// clear. RespawnSeconds carries the boss's regen (hours×3600) for that math.
+public readonly record struct ExpTarget(
+    int MobCount, double ExpPerMob, int RespawnSeconds,
+    bool Included = true, int MonsterId = 0, bool IsBoss = false, string MonsterName = "")
 {
     public bool IsInstant => RespawnSeconds <= 0;
     public double ExpPerClear => MobCount * ExpPerMob;
@@ -54,11 +61,18 @@ public sealed record ExpSimSettings(
 public readonly record struct ExpLairStat(
     RoomKey Room, int FiresPerHour, int MissesPerHour, double ClosestMissShortfallSeconds);
 
+// A boss's flat contribution: killable once per RegenHours, so it adds
+// ExpPerHour = boss exp ÷ RegenHours regardless of how many rooms it can spawn in
+// (counted once across the loop). Kept apart from the lair stats so the breakdown
+// can show "crowned spider — +80k/hr, once per 15h" distinctly.
+public readonly record struct ExpBossStat(string Name, double ExpPerHour, int RegenHours);
+
 public sealed record ExpSimResult(
     double ExpPerHour,
     double AvgLapSeconds,
     int LapsPerHour,
-    IReadOnlyList<ExpLairStat> Lairs);
+    IReadOnlyList<ExpLairStat> Lairs,
+    IReadOnlyList<ExpBossStat> Bosses);
 
 // Self-contained point-in-time snapshot of a live Exp/Hr Estimator session for the
 // bug report — the route, tunables, and computed result the user was looking at, so
@@ -76,7 +90,8 @@ public sealed record ExpEstimatorSnapshot(
     double AvgLapSeconds,
     int LapsPerHour,
     string Summary,
-    IReadOnlyList<string> Lairs);    // "map/room  Name — fires/hr, misses" per resolved lair
+    IReadOnlyList<string> Lairs,     // "map/room  Name — fires/hr, misses" per resolved lair
+    IReadOnlyList<string> Bosses);   // "Name — +exp/hr, once per Nh" per amortised boss
 
 public static class LoopExpSimulator
 {
@@ -88,25 +103,36 @@ public static class LoopExpSimulator
         ArgumentNullException.ThrowIfNull(s);
 
         IReadOnlyList<ExpRoomVisit> lap = route.Lap;
-        if (lap.Count == 0) return new ExpSimResult(0, 0, 0, Array.Empty<ExpLairStat>());
+        if (lap.Count == 0) return new ExpSimResult(0, 0, 0, Array.Empty<ExpLairStat>(), Array.Empty<ExpBossStat>());
 
         double tick = s.SecondsPerRound > 0 ? s.SecondsPerRound : 5.0;   // combat cadence
         double roundsPerMob = Math.Max(0.01, s.RoundsPerMob);
         bool area = s.CombatMode == ExpCombatMode.AreaAllTargets;
 
         // Deduped lair / fixture targets (a room revisited in the lap shares one
-        // respawn clock, so count it once).
+        // respawn clock, so count it once). Bosses are pulled aside here: one boss
+        // is a single entity across every room it can spawn in, so it's keyed by
+        // monster id (deduped loop-wide) and kept OUT of the lap combat — it's a
+        // flat exp/hr addition (once per its regen), added after the fixed point.
         var lairs = new List<(RoomKey Room, double Respawn, int Mobs, double ExpPerMob, bool Instant)>();
+        var bosses = new Dictionary<int, (double Exp, int RegenSeconds, string Name)>();
         var seen = new HashSet<(RoomKey, int)>();
         for (int i = 0; i < lap.Count; i++)
             for (int j = 0; j < lap[i].Targets.Count; j++)
             {
                 ExpTarget tg = lap[i].Targets[j];
                 if (!tg.Included || tg.MobCount <= 0 || tg.ExpPerMob <= 0) continue;
+                if (tg.IsBoss)
+                {
+                    if (tg.MonsterId > 0 && tg.RespawnSeconds > 0)
+                        bosses.TryAdd(tg.MonsterId, (tg.ExpPerMob, tg.RespawnSeconds, tg.MonsterName));
+                    continue;
+                }
                 if (!seen.Add((lap[i].Room, j))) continue;
                 lairs.Add((lap[i].Room, tg.RespawnSeconds, tg.MobCount, tg.ExpPerMob, tg.IsInstant));
             }
-        if (lairs.Count == 0) return new ExpSimResult(0, 0, 0, Array.Empty<ExpLairStat>());
+        if (lairs.Count == 0 && bosses.Count == 0)
+            return new ExpSimResult(0, 0, 0, Array.Empty<ExpLairStat>(), Array.Empty<ExpBossStat>());
 
         // Full-path walk time (continuous) plus travel waste — whole ticks lost to
         // lair-to-lair hops too long to hide in a kill's downtime. Both fixed by the
@@ -121,7 +147,7 @@ public static class LoopExpSimulator
             firstRoom = false;
             bool isLair = false;
             foreach (ExpTarget tg in lap[i].Targets)
-                if (tg.Included && tg.MobCount > 0 && tg.ExpPerMob > 0) { isLair = true; break; }
+                if (tg.Included && !tg.IsBoss && tg.MobCount > 0 && tg.ExpPerMob > 0) { isLair = true; break; }
             if (isLair)
             {
                 travelWasteSeconds += Math.Floor(stepsSinceLair * s.SecondsPerStep / tick) * tick;
@@ -171,8 +197,22 @@ public static class LoopExpSimulator
                     (int)Math.Round((1.0 - frac) * lapsPerHour),   // laps you arrive early on
                     Math.Max(0.0, l.Respawn - lapSeconds)));        // how early
         }
+
+        // Bosses: a flat once-per-regen contribution, independent of the lap. Each
+        // is counted ONCE across the loop (already deduped by monster id), at
+        // exp ÷ regen-hours — a 15h-regen 1.2M boss adds 80k/hr, not 1.2M per pass
+        // in every room it can appear.
+        var bossStats = new List<ExpBossStat>();
+        foreach (var b in bosses.Values)
+        {
+            double regenHours = b.RegenSeconds / 3600.0;
+            double bossHr = regenHours > 0 ? b.Exp / regenHours : 0;
+            expPerHour += bossHr;
+            bossStats.Add(new ExpBossStat(b.Name, bossHr * s.RealConditionsMultiplier,
+                (int)Math.Round(regenHours)));
+        }
         expPerHour *= s.RealConditionsMultiplier;
 
-        return new ExpSimResult(expPerHour, lapSeconds, (int)Math.Round(lapsPerHour), stats);
+        return new ExpSimResult(expPerHour, lapSeconds, (int)Math.Round(lapsPerHour), stats, bossStats);
     }
 }

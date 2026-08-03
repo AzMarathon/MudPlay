@@ -17,6 +17,8 @@ public sealed class LoopExpSimulatorTests
         => new(new RoomKey(map, room), Array.Empty<ExpTarget>());
     private static ExpTarget Instant(int exp) => new(1, exp, 0);
     private static ExpTarget Lair(int mobs, double exp, int respawn) => new(mobs, exp, respawn);
+    private static ExpTarget Boss(int id, double exp, int regenHours, string name = "boss")
+        => new(1, exp, regenHours * 3600, MonsterId: id, IsBoss: true, MonsterName: name);
 
     private static ExpSimSettings Single(double secPerStep, double roundsPerMob = 1)
         => new(secPerStep, ExpCombatMode.SingleTarget, roundsPerMob, RealConditionsMultiplier: 1);
@@ -179,5 +181,73 @@ public sealed class LoopExpSimulatorTests
 
         Assert.Equal(72000.0, e.ExpPerHour, 3);
         Assert.Empty(e.Lairs);   // the excluded lair never fires or misses
+    }
+
+    [Fact]
+    public void Boss_AmortizedOverRegen_AddsFlatExpPerHour_NotPerLap()
+    {
+        // A 1.2M boss with a 15h regen adds 1.2M ÷ 15 = 80,000/hr — once, flat —
+        // not 1.2M on every lap. It's a boss, not a lair.
+        ExpSimResult e = LoopExpSimulator.Simulate(
+            Route(Room(1, 100, Boss(929, 1_200_000, 15, "crowned spider"))),
+            Single(secPerStep: 1));
+
+        Assert.Equal(80_000.0, e.ExpPerHour, 0);
+        Assert.Empty(e.Lairs);
+        ExpBossStat b = Assert.Single(e.Bosses);
+        Assert.Equal("crowned spider", b.Name);
+        Assert.Equal(80_000.0, b.ExpPerHour, 0);
+        Assert.Equal(15, b.RegenHours);
+    }
+
+    [Fact]
+    public void Boss_SharedAcrossRooms_CountedOnce()
+    {
+        // The same boss (same monster id) can spawn in any of the loop's rooms —
+        // it's ONE entity, so it's counted once (80k), not once per room (240k).
+        ExpSimResult e = LoopExpSimulator.Simulate(
+            Route(
+                Room(1, 100, Boss(929, 1_200_000, 15)),
+                Room(1, 101, Boss(929, 1_200_000, 15)),
+                Room(1, 102, Boss(929, 1_200_000, 15))),
+            Single(secPerStep: 1));
+
+        Assert.Equal(80_000.0, e.ExpPerHour, 0);
+        Assert.Single(e.Bosses);
+    }
+
+    [Fact]
+    public void Boss_ExcludedFromLairAverage_LairFiresUnchanged()
+    {
+        // A room with a regular lair AND a boss: the lair fires on its own respawn
+        // exactly as it would alone (the boss isn't averaged in or added to the
+        // lap), and the boss contributes its separate flat 80k.
+        ExpRoute withBoss = Route(Room(1, 100, Lair(3, 9000, 30), Boss(929, 1_200_000, 15)));
+        ExpRoute lairOnly = Route(Room(1, 100, Lair(3, 9000, 30)));
+        var s = Single(secPerStep: 1);
+
+        ExpSimResult a = LoopExpSimulator.Simulate(withBoss, s);
+        ExpSimResult b = LoopExpSimulator.Simulate(lairOnly, s);
+
+        Assert.Equal(b.AvgLapSeconds, a.AvgLapSeconds, 3);          // boss adds no lap time
+        Assert.Single(a.Lairs);                                     // the boss is not a lair row
+        Assert.Equal(80_000.0, a.ExpPerHour - b.ExpPerHour, 0);     // boss adds exactly its 80k
+    }
+
+    [Fact]
+    public void PlacedBoss_AmortizedOverRegen_NotEveryPass()
+    {
+        // A boss placed via the room's NPC field (not a lair) — the animated
+        // juggernaut (1.3M, GameLimit 1, 3h regen) — amortises to 1.3M ÷ 3 =
+        // 433k/hr once, not 1.3M grabbed on every lap like a normal fixture. The
+        // resolver emits the same IsBoss target for a placed boss as a lair boss.
+        ExpSimResult e = LoopExpSimulator.Simulate(
+            Route(Room(17, 7055, Boss(1211, 1_300_000, 3, "animated juggernaut"))),
+            Single(secPerStep: 1));
+
+        Assert.Equal(1_300_000.0 / 3, e.ExpPerHour, 0);
+        ExpBossStat b = Assert.Single(e.Bosses);
+        Assert.Equal("animated juggernaut", b.Name);
+        Assert.Equal(3, b.RegenHours);
     }
 }
