@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.20.0
+
+- Navigation filters (Go To / Loops / Auto-Lairs) no longer lag on the first keystroke with large seeded lists: filtering is debounced and the lists now virtualize
+- Each filtered list scrolls within a bounded height (only visible rows render) instead of expanding the whole rail
+
 ## 2.19.2
 
 - Character-creation stat box now flips to direct-input mode on entry, so the arrow keys move between stat fields instead of cycling the given/family names (detects the box on-screen, incl. ParaMUD's abbreviated "Char. Creation" title)

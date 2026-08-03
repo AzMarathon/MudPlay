@@ -1,10 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.19.2**
-> - Character-creation stat box now flips to direct-input mode on entry, so the arrow keys move between stat fields instead of cycling the given/family names (detects the box on-screen, incl. ParaMUD's abbreviated "Char. Creation" title)
-> - Items bought during character creation (before the first inventory dump) now register, so "Equip all" sees them instead of an empty pack
-> - Bug report now records whether direct-input mode is active
+> **Version 2.20.0**
+> - Navigation filters (Go To / Loops / Auto-Lairs) no longer lag on the first keystroke with large seeded lists: filtering is debounced and the lists now virtualize
+> - Each filtered list scrolls within a bounded height (only visible rows render) instead of expanding the whole rail
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
