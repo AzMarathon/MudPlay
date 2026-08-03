@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.21.0
+
+- Navigation Management window: added filter boxes above the Loops & Auto-Lairs and Go To trees (debounced, flat + virtualized while filtering) to quickly find an entry
+- Folders in both Manage tabs now start collapsed, so switching tabs is snappy instead of laggy with large seeded lists
+
 ## 2.20.0
 
 - Navigation filters (Go To / Loops / Auto-Lairs) no longer lag with large seeded lists: filtering is debounced, and while filtering the matches show as a flat, virtualized list (only visible rows render) instead of force-expanding every folder

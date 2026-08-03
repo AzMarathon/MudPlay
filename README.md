@@ -1,9 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.20.0**
-> - Navigation filters (Go To / Loops / Auto-Lairs) no longer lag with large seeded lists: filtering is debounced, and while filtering the matches show as a flat, virtualized list (only visible rows render) instead of force-expanding every folder
-> - Each filtered list scrolls within a bounded height; the unfiltered view keeps the folder tree
+> **Version 2.21.0**
+> - Navigation Management window: added filter boxes above the Loops & Auto-Lairs and Go To trees (debounced, flat + virtualized while filtering) to quickly find an entry
+> - Folders in both Manage tabs now start collapsed, so switching tabs is snappy instead of laggy with large seeded lists
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
