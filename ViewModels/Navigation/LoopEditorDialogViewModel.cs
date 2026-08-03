@@ -35,7 +35,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // waypoint list to the current room at Start, so a positional diff against
     // it would false-positive; a restart re-rotates anyway, making rotation
     // irrelevant to whether the run would differ.
-    private readonly List<(string Room, string? Command, int DelayMs)> _openedSteps;
+    private readonly List<(string Room, string? Command, int DelayMs, bool DoNotRest)> _openedSteps;
 
     // Window title — flips between "Create Loop" (when the dialog was opened
     // on a fresh empty loop) and "Edit Loop" (mutating an existing saved
@@ -121,7 +121,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         // (row.Key.ToString() / Command / DelayMs) so the dirty check is an
         // apples-to-apples comparison immune to Room-string reformatting.
         _openedSteps = Waypoints
-            .Select(r => (r.Key.ToString(), r.Command, r.DelayMs))
+            .Select(r => (r.Key.ToString(), r.Command, r.DelayMs, r.DoNotRest))
             .ToList();
     }
 
@@ -178,12 +178,14 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         WaypointActionEditDialogViewModel vm = new(
             waypointLabel: row.DisplayLabel,
             command: row.Command,
-            delayMs: row.DelayMs);
+            delayMs: row.DelayMs,
+            doNotRest: row.DoNotRest);
         WaypointActionEditResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
         if (result is null) return;
         row.Command = result.Command;
         row.DelayMs = result.DelayMs;
+        row.DoNotRest = result.DoNotRest;
         row.RefreshDisplay();
     }
 
@@ -415,7 +417,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
 
         var waypoints = new List<LoopWaypoint>(Waypoints.Count);
         foreach (LoopWaypointRowViewModel row in Waypoints)
-            waypoints.Add(new LoopWaypoint(row.Key, row.Command, row.DelayMs));
+            waypoints.Add(new LoopWaypoint(row.Key, row.Command, row.DelayMs, row.DoNotRest));
 
         bool renamed = !string.Equals(newName, _original.Name, StringComparison.OrdinalIgnoreCase);
         string oldName = _original.Name;
@@ -484,13 +486,14 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         if (current.Count != _openedSteps.Count) return true;
         for (int i = 0; i < current.Count; i++)
         {
-            (string room, string? command, int delayMs) = _openedSteps[i];
+            (string room, string? command, int delayMs, bool doNotRest) = _openedSteps[i];
             if (!string.Equals(current[i].Room, room, StringComparison.OrdinalIgnoreCase))
                 return true;
             if (!string.Equals(current[i].Command ?? string.Empty, command ?? string.Empty,
                     StringComparison.Ordinal))
                 return true;
             if (current[i].DelayMs != delayMs) return true;
+            if (current[i].DoNotRest != doNotRest) return true;
         }
         return false;
     }
@@ -522,9 +525,13 @@ public sealed partial class LoopWaypointRowViewModel : ObservableObject
     [ObservableProperty] private string _displayLabel = string.Empty;
     [ObservableProperty] private string? _command;
     [ObservableProperty] private int _delayMs;
+    [ObservableProperty] private bool _doNotRest;
 
     // True when this waypoint has a command attached — drives the row's command badge in the AXAML.
     public bool HasCommand => !string.IsNullOrEmpty(Command);
+
+    // Drives the row's "no rest" badge in the AXAML.
+    public bool HasDoNotRest => DoNotRest;
 
     // One-line summary for the row's cyan badge — combines Command with
     // DelayMs when both are set, so the user can see at a glance what the
@@ -548,6 +555,7 @@ public sealed partial class LoopWaypointRowViewModel : ObservableObject
         Key = source.Key;
         _command = source.Command;
         _delayMs = source.DelayMs;
+        _doNotRest = source.DoNotRest;
         RefreshDisplayFor(graph);
     }
 
@@ -555,6 +563,7 @@ public sealed partial class LoopWaypointRowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasCommand));
         OnPropertyChanged(nameof(CommandSummary));
+        OnPropertyChanged(nameof(HasDoNotRest));
     }
 
     private void RefreshDisplayFor(RoomGraphManager graph)

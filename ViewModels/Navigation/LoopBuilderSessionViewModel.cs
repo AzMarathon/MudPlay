@@ -92,11 +92,16 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     // driven by clicking the row in the loop-builder strip, which opens the same
     // WaypointActionEditDialog the loop editor uses. Commands don't change the
     // gap-filled path, so no re-expand. No-op when index is out of range.
-    public void SetClickAction(int index, string? command, int delayMs)
+    public void SetClickAction(int index, string? command, int delayMs, bool doNotRest = false)
     {
         if (index < 0 || index >= Clicks.Count) return;
         string? cmd = string.IsNullOrWhiteSpace(command) ? null : command;
-        Clicks[index] = Clicks[index] with { Command = cmd, DelayMs = cmd is null ? 0 : Math.Max(0, delayMs) };
+        Clicks[index] = Clicks[index] with
+        {
+            Command = cmd,
+            DelayMs = cmd is null ? 0 : Math.Max(0, delayMs),
+            DoNotRest = doNotRest,
+        };
     }
 
     // Move the click at fromIndex to toIndex (CURRENT NAV drag-reorder).
@@ -163,7 +168,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         // move. Iterate Clicks (which holds the actions), parallel to _clicks.
         var waypoints = new List<LoopWaypoint>(Clicks.Count);
         foreach (LoopBuilderRow row in Clicks)
-            waypoints.Add(new LoopWaypoint(row.Key, row.Command, row.DelayMs));
+            waypoints.Add(new LoopWaypoint(row.Key, row.Command, row.DelayMs, row.DoNotRest));
 
         return new Loop(ProposedName, waypoints)
         {
@@ -225,7 +230,9 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
 // (same as the loop editor's per-waypoint action). Carried into the saved loop's
 // LoopWaypoint on Save/BuildTransient. HasCommand drives the row's "has an action"
 // marker.
-public sealed record LoopBuilderRow(int Index, RoomKey Key, string Name, string? Command = null, int DelayMs = 0)
+public sealed record LoopBuilderRow(
+    int Index, RoomKey Key, string Name, string? Command = null, int DelayMs = 0, bool DoNotRest = false)
 {
     public bool HasCommand => !string.IsNullOrWhiteSpace(Command);
+    public bool HasDoNotRest => DoNotRest;
 }

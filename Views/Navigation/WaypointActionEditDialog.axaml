@@ -47,7 +47,11 @@
                            VerticalAlignment="Center"/>
             </Grid>
 
-            <Grid Grid.Row="3"/>
+            <CheckBox Grid.Row="3" VerticalAlignment="Top"
+                      IsChecked="{Binding DoNotRest, Mode=TwoWay}"
+                      Content="Do not rest in this room"
+                      FontSize="11"
+                      ToolTip.Tip="When HP/MA drop below your 'rest if below' gates, the loop won't rest in THIS room — it advances to the next room instead. Only this exact room is protected; resting resumes the moment you step out (loops only)."/>
 
             <StackPanel Grid.Row="4" Orientation="Horizontal"
                         HorizontalAlignment="Right" Spacing="8">

@@ -103,6 +103,7 @@ public sealed class HealthManager : IDisposable
     private Func<bool>? _shadowRestSolo;        // not in a party (ShadowRest is a solo behavior)
     private Action? _onShadowRestRecovered;     // recovery hit rest-max — resume combat
     private bool _shadowRestWasHolding;         // falling-edge latch for the resume callback
+    private Func<bool>? _shouldSkipRestHere;    // running loop's current room is a "do not rest" waypoint
     private bool _partyWaitSignaled;            // @wait sent, awaiting @ok
     private bool _hpGateAsserted;
     private bool _maGateAsserted;
@@ -322,6 +323,16 @@ public sealed class HealthManager : IDisposable
         _isSelfPoisoned = isSelfPoisoned;
     }
 
+    // Wire the loop's per-waypoint "do not rest here" check: returns true when a
+    // loop is running and the room we're standing in is a waypoint flagged
+    // DoNotRest, so the rest hold is suppressed and the loop advances out of it.
+    // Left unwired, resting is unaffected.
+    public void SetDoNotRestSelector(Func<bool> shouldSkipRestHere)
+    {
+        ArgumentNullException.ThrowIfNull(shouldSkipRestHere);
+        _shouldSkipRestHere = shouldSkipRestHere;
+    }
+
     // Wire ShadowRest (Paradigm): classes with the ability can rest while
     // hidden/sneaking in a room with monsters without being attacked (see
     // GAME_MECHANICS "ShadowRest"). All three predicates plus the
@@ -515,6 +526,13 @@ public sealed class HealthManager : IDisposable
         // rest-max. Defaults to leader/solo when no role selector is wired.
         bool follower = _isPartyFollower?.Invoke() ?? false;
 
+        // A loop can flag the room it's standing in as "do not rest here" (too
+        // dangerous to sit still). While in such a room we never raise the rest
+        // hold — the loop stays running and advances out of it — and we release
+        // the hold if it was already up. Only THIS room is protected; the moment
+        // the loop steps into another room this re-evaluates and rests normally.
+        bool skipRest = _shouldSkipRestHere?.Invoke() ?? false;
+
         // ----- HP gate transitions ---------------------------------
         int hpRestTrigger = PoolThreshold.Resolve(s.HpThresholdMode, s.RestIfBelowHp, _state.MaxHp);
         int hpRestMax     = PoolThreshold.Resolve(s.HpThresholdMode, s.RestMaxHp, _state.MaxHp);
@@ -526,19 +544,21 @@ public sealed class HealthManager : IDisposable
         // under N, never AT N. (Equal-or-less traps a level-2 mystic: 1 max
         // KAI, trigger 0, spend the KAI → MA 0 == trigger 0 would pause for
         // mana forever.)
-        if (!_hpGateAsserted && _state.MaxHp > 0 && _state.Hp < hpRestTrigger)
+        if (!skipRest && !_hpGateAsserted && _state.MaxHp > 0 && _state.Hp < hpRestTrigger)
         {
             _hpGateAsserted = true;
             _coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate,
                 AsserterName,
                 $"HP {_state.Hp}/{_state.MaxHp} < rest-trigger={hpRestTrigger}");
         }
-        else if (_hpGateAsserted && _state.Hp >= hpRestTarget)
+        else if (_hpGateAsserted && (skipRest || _state.Hp >= hpRestTarget))
         {
             _hpGateAsserted = false;
             _coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate,
                 AsserterName,
-                $"HP {_state.Hp}/{_state.MaxHp} >= rest-target={hpRestTarget}");
+                skipRest
+                    ? "do-not-rest room — advancing instead of resting"
+                    : $"HP {_state.Hp}/{_state.MaxHp} >= rest-target={hpRestTarget}");
         }
 
         // ----- MA gate transitions ---------------------------------
@@ -549,19 +569,21 @@ public sealed class HealthManager : IDisposable
             : maRestMax;
 
         // Strictly below (see HP gate above) — the mystic-at-level-2 case.
-        if (!_maGateAsserted && _state.Ma < maRestTrigger && _state.MaxMa > 0)
+        if (!skipRest && !_maGateAsserted && _state.Ma < maRestTrigger && _state.MaxMa > 0)
         {
             _maGateAsserted = true;
             _coordinator.AssertGate(MovementCoordinator.ManaRecoveryGate,
                 AsserterName,
                 $"MA {_state.Ma}/{_state.MaxMa} < rest-trigger={maRestTrigger}");
         }
-        else if (_maGateAsserted && _state.Ma >= maRestTarget)
+        else if (_maGateAsserted && (skipRest || _state.Ma >= maRestTarget))
         {
             _maGateAsserted = false;
             _coordinator.ClearGate(MovementCoordinator.ManaRecoveryGate,
                 AsserterName,
-                $"MA {_state.Ma}/{_state.MaxMa} >= rest-target={maRestTarget}");
+                skipRest
+                    ? "do-not-rest room — advancing instead of resting"
+                    : $"MA {_state.Ma}/{_state.MaxMa} >= rest-target={maRestTarget}");
         }
 
         // ----- party-follower @wait / @ok --------------------------

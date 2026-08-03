@@ -140,6 +140,47 @@ public sealed class LoopBuilderSessionTests : IDisposable
     }
 
     [Fact]
+    public void SetClickAction_DoNotRest_CarriedIntoBuiltLoop()
+    {
+        // The "do not rest in this room" flag rides from the builder row into the
+        // built loop's LoopWaypoint, independent of any command.
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+
+        s.SetClickAction(0, command: null, delayMs: 0, doNotRest: true);
+        Assert.True(s.Clicks[0].DoNotRest);
+        Assert.False(s.Clicks[1].DoNotRest);
+
+        Loop? loop = s.BuildTransient();
+        Assert.NotNull(loop);
+        Assert.True(loop!.Waypoints[0].DoNotRest);
+        Assert.False(loop.Waypoints[1].DoNotRest);
+    }
+
+    [Fact]
+    public void DoNotRest_JsonRoundTrips_AndDefaultsFalseForOlderFiles()
+    {
+        // New loops persist the flag; older .loop files lacking it load as false —
+        // so no file migration is needed.
+        var loop = new Loop("t", new List<LoopWaypoint>
+        {
+            new(new RoomKey(1, 1), doNotRest: true),
+            new(new RoomKey(1, 3)),
+        });
+        string json = System.Text.Json.JsonSerializer.Serialize(loop);
+        Loop? round = System.Text.Json.JsonSerializer.Deserialize<Loop>(json);
+        Assert.NotNull(round);
+        Assert.True(round!.Waypoints[0].DoNotRest);
+        Assert.False(round.Waypoints[1].DoNotRest);
+
+        const string legacy = """{"SchemaVersion":3,"Name":"old","Waypoints":[{"Room":"1/1"}]}""";
+        Loop? old = System.Text.Json.JsonSerializer.Deserialize<Loop>(legacy);
+        Assert.NotNull(old);
+        Assert.False(old!.Waypoints[0].DoNotRest);
+    }
+
+    [Fact]
     public void SetClickAction_BlankCommand_ClearsActionAndZeroesDelay()
     {
         (LoopBuilderSessionViewModel s, _) = NewSession();

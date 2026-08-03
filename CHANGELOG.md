@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.25.0
+
+- Loop waypoints gain a "Do not rest in this room" checkbox (in the waypoint action editor): when a running loop is in that room and HP/MA drop below your "rest if below" gates, it advances to the next room instead of resting — for rooms too dangerous to sit still in
+- Only that exact room is protected; the moment the loop steps out (into a path room or an unmarked waypoint), resting resumes normally. Loops only (walk-to / auto-lair are unaffected); marked waypoints show a ⛔ badge
+
 ## 2.24.0
 
 - Right-clicking a map room with an up and/or down exit now offers "Go Up → …" / "Go Down → …" menu items that jump the map view to the room on that floor (view-only, mirroring "Use Teleport" — your character doesn't move)
