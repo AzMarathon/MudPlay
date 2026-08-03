@@ -1760,6 +1760,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ContextIsStash));
         OnPropertyChanged(nameof(ContextIsFavorite));
         RebuildContextTeleports(value);
+        RebuildContextFloorMoves(value);
     }
 
     public bool ContextIsAvoided => ContextRoomKey is { } k && _services.Movement.IsAvoided(k);
@@ -1862,6 +1863,49 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void UseTeleport()
     {
         if (_contextTeleportDests.Count > 0) OnFloorChangeRequested(_contextTeleportDests[0]);
+    }
+
+    // ----- "Go Up / Go Down" (right-click an up/down room) -----------
+    // An up/down exit leads to a room on a different floor, not shown on the
+    // current map. These items jump the map VIEW to that room — the same
+    // view-recenter as Use Teleport (via OnFloorChangeRequested), NOT character
+    // movement. A room has at most one up and one down exit, so one item each.
+    private RoomKey? _contextUpTarget;
+    private RoomKey? _contextDownTarget;
+
+    public bool ContextHasUp => _contextUpTarget is not null;
+    public bool ContextHasDown => _contextDownTarget is not null;
+    public string ContextUpLabel => FloorMoveLabel("Go Up", _contextUpTarget);
+    public string ContextDownLabel => FloorMoveLabel("Go Down", _contextDownTarget);
+
+    private string FloorMoveLabel(string verb, RoomKey? target) =>
+        target is { } t ? $"{verb} → {Graph?.GetRoom(t)?.Name ?? "(unknown)"}  ({t})" : verb;
+
+    private void RebuildContextFloorMoves(RoomKey? value)
+    {
+        _contextUpTarget = null;
+        _contextDownTarget = null;
+        if (value is { } k && Graph?.GetRoom(k) is { } room)
+        {
+            if (room.Exits.TryGetValue(Direction.U, out RoomExit up)) _contextUpTarget = up.Target;
+            if (room.Exits.TryGetValue(Direction.D, out RoomExit down)) _contextDownTarget = down.Target;
+        }
+        OnPropertyChanged(nameof(ContextHasUp));
+        OnPropertyChanged(nameof(ContextHasDown));
+        OnPropertyChanged(nameof(ContextUpLabel));
+        OnPropertyChanged(nameof(ContextDownLabel));
+    }
+
+    [RelayCommand]
+    private void GoUpFloor()
+    {
+        if (_contextUpTarget is { } t) OnFloorChangeRequested(t);
+    }
+
+    [RelayCommand]
+    private void GoDownFloor()
+    {
+        if (_contextDownTarget is { } t) OnFloorChangeRequested(t);
     }
 
     [RelayCommand]

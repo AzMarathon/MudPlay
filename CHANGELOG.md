@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.24.0
+
+- Right-clicking a map room with an up and/or down exit now offers "Go Up → …" / "Go Down → …" menu items that jump the map view to the room on that floor (view-only, mirroring "Use Teleport" — your character doesn't move)
+
 ## 2.23.0
 
 - Exp/Hr Estimator now handles bosses (a monster with game-limit 1 or a regen of an hour+), whether in a lair OR placed in a room: it's pulled out of the lair/fixture handling and added once as `boss exp ÷ regen-hours` — so a 15-hour crowned spider adds ~80k/hr instead of inflating every room every lap, and a placed 3-hour juggernaut adds ~433k/hr instead of its full value every pass
