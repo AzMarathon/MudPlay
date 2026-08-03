@@ -43,15 +43,18 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private bool _disposed;
 
     // In-progress recovery context — one deathpile at a time (you stand in one
-    // room). _activeRecovery is the record we're recovering; _remaining holds
-    // the pile item names not yet seen picked up; _recoveryTotal is the pile
-    // size when recovery began. _pendingRecoverNow is a record the user pressed
-    // "Recover Now" on while away — it forces a grab on arrival even when
-    // Auto-Recover is off.
+    // room). _activeRecovery is the record we're recovering. Stock's deathpile is
+    // a single "corpse of <given-name>" object recovered by ONE `recover corpse
+    // <name>` command (not a per-item get), so there's no per-item remaining set:
+    // the corpse either shows in the room's "You notice" survey (recover it) or it
+    // doesn't (mark Missing). _grabOnSurvey arms the recover for the next survey —
+    // the survey line lands AFTER the room-change fires, so we can't read it on
+    // entry. _pendingRecoverNow is a record the user pressed "Recover Now" on while
+    // away — it forces a grab on arrival even when Auto-Recover is off.
     private DeathRecord? _activeRecovery;
     private DeathRecord? _pendingRecoverNow;
-    private readonly HashSet<string> _remaining = new(StringComparer.OrdinalIgnoreCase);
-    private int _recoveryTotal;
+    private bool _grabOnSurvey;
+    private GroundItemTracker? _groundItems;
 
     public DeathRecoveryManager(
         DeathLineWatcher deathWatcher,
@@ -110,6 +113,20 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = lines;
         _lines.LineEmitted += OnLine;
+    }
+
+    // Bind the room's floor-survey tracker. Auto-recover reads its parsed "You
+    // notice" list to confirm the corpse is actually in the room before sending
+    // `recover corpse`, and arms off its SurveyUpdated event (the survey lands
+    // after the room-change fires, so it can't be read on entry). Wired by
+    // AppServices once GroundItems exists (it's built after this manager).
+    public void AttachGroundItems(GroundItemTracker ground)
+    {
+        ArgumentNullException.ThrowIfNull(ground);
+        if (ReferenceEquals(_groundItems, ground)) return;
+        if (_groundItems is not null) _groundItems.SurveyUpdated -= OnSurveyUpdated;
+        _groundItems = ground;
+        _groundItems.SurveyUpdated += OnSurveyUpdated;
     }
 
     // Bind the live inventory snapshot provider so SimulateDeath captures a
@@ -230,8 +247,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         if (inRoom)
         {
-            _log?.Info(LogCategory, $"recover-now: in death room {where} — grabbing pile");
+            _log?.Info(LogCategory, $"recover-now: in death room {where} — surveying for the corpse");
             BeginRecovery(record, autoGrab: true);
+            // Already standing here, so no room-change survey is coming — re-look
+            // to re-render the "You notice" list, which fires SurveyUpdated and
+            // drives the corpse grab.
+            Send("look");
             return true;
         }
 
@@ -260,7 +281,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             && (room is null || ar.Map != room.Key.Map || ar.Room != room.Key.Room))
         {
             _activeRecovery = null;
-            _remaining.Clear();
+            _grabOnSurvey = false;
         }
 
         if (room is null || t.NewConfidence != RoomConfidence.Confirmed) return;
@@ -280,116 +301,145 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         DeathRecord? best = null;
         foreach (DeathRecord r in list)
         {
-            if (r.Status == DeathRecoveryStatus.Recovered) continue;
+            // Recovered + Missing are terminal — a Missing pile (corpse wasn't in
+            // the room) must not re-arm on re-entry, or it would spam-retry again.
+            // The user re-tries a Missing pile explicitly via Recover Now.
+            if (r.Status is DeathRecoveryStatus.Recovered or DeathRecoveryStatus.Missing) continue;
             if (r.Room is not { } room || room.Map != key.Map || room.Room != key.Room) continue;
             if (best is null || r.RecordNumber > best.RecordNumber) best = r;
         }
         return best;
     }
 
-    // Start (or restart) recovering a deathpile: mark the record Partial, arm the
-    // per-item tracker, and — when autoGrab — send a get for every pile item.
-    // Active → Partial → Recovered then follows observed "You pick up ..." lines.
-    // A known-empty pile (nothing was lost) jumps straight to Recovered.
+    // Start (or restart) recovering a deathpile. Mark the record Partial and,
+    // when autoGrab, ARM the corpse grab for the room's next floor survey — the
+    // "You notice" line lands after this room-change fires, so we can't read it
+    // yet (see OnSurveyUpdated / TryCorpseRecover). A known-empty pile (nothing
+    // was lost) jumps straight to Recovered.
     private void BeginRecovery(DeathRecord record, bool autoGrab)
     {
         _activeRecovery = record;
-        _remaining.Clear();
-        AddNames(_remaining, record.EquippedAtDeath);
-        AddNames(_remaining, record.LostItems);
-        _recoveryTotal = _remaining.Count;
-        record.UnrecoveredItems = _remaining.Count > 0 ? new List<string>(_remaining) : null;
+        _grabOnSurvey = false;
+
+        List<string> pile = PileNames(record);
+        record.UnrecoveredItems = pile.Count > 0 ? pile : null;   // corpse contents, for the detail panel
 
         bool known = record.EquippedAtDeath is not null || record.LostItems is not null;
-        if (known && _recoveryTotal == 0)
+        if (known && pile.Count == 0)
         {
             FinalizeRecovered(record, "Nothing was lost at death.");
             return;
         }
 
-        if (record.Status == DeathRecoveryStatus.Active)
+        // Active/Missing → Partial: we're back in the room. Missing flips back
+        // when the user Recover-Nows a pile whose corpse has reappeared.
+        if (record.Status is DeathRecoveryStatus.Active or DeathRecoveryStatus.Missing)
             SetStatus(record, DeathRecoveryStatus.Partial, "Returned to the death room — recovering.");
 
-        if (!autoGrab) return;
-        foreach (string name in _remaining)
-        {
-            _log?.Info(LogCategory, $"auto-recover: get {name}");
-            Send($"get {name}");
-        }
+        _grabOnSurvey = autoGrab;
     }
 
-    // Watch for "You pick up <item>." confirmations while a recovery is in
-    // progress. Each matched pile item is cleared from the remaining set (and
-    // re-equipped when Auto-Equip is on and it was worn at death); the record
-    // flips to Recovered once the set empties.
-    private void OnLine(LineExtractor.EmittedLine line)
+    // The room's floor survey ("You notice … here.") was just reparsed. If we're
+    // armed to auto-recover a pile here, act on it now: recover the corpse if it's
+    // present, else mark the pile Missing (nothing on the floor to grab).
+    private void OnSurveyUpdated()
     {
-        if (line.IsPromptLine || _activeRecovery is null || _remaining.Count == 0) return;
+        if (_activeRecovery is { } record && _grabOnSurvey) TryCorpseRecover(record);
+    }
 
-        Match m = PickUpRegex().Match(line.Text);
-        if (!m.Success) return;
-        string picked = m.Groups[1].Value;
-
-        // The pickup wording may carry an article ("You pick up a torch.")
-        // while the recorded name is bare ("torch"), so match by containment —
-        // but bounded to whole words so a recorded "war" doesn't get marked
-        // recovered when we pick up a "warhammer".
-        List<string>? hits = null;
-        foreach (string name in _remaining)
+    // Stock deathpile = one "corpse of <given-name>" object. If our corpse is in
+    // the survey, send ONE `recover corpse <name>` (own corpse needs no password,
+    // and naming it disambiguates when several corpses share the room). If it
+    // isn't there, the pile is gone — mark Missing so we neither retry nor spam.
+    private void TryCorpseRecover(DeathRecord record)
+    {
+        _grabOnSurvey = false;   // one shot per arming — never loop
+        string? corpse = FindOurCorpse();
+        if (corpse is null)
         {
-            if (ContainsWord(picked, name))
-                (hits ??= new()).Add(name);
-        }
-        if (hits is null) return;
-
-        DeathRecord record = _activeRecovery;
-        foreach (string name in hits)
-        {
-            _remaining.Remove(name);
-            ReequipIfWorn(record, name);
-        }
-
-        if (_remaining.Count == 0)
-        {
-            FinalizeRecovered(record, $"Recovered {_recoveryTotal} item(s).");
+            _log?.Info(LogCategory, "auto-recover: corpse not in the room survey — marking Missing.");
+            SetStatus(record, DeathRecoveryStatus.Missing, "Corpse was not in the room — pile appears lost.");
+            _activeRecovery = null;
             return;
         }
-
-        // Still items outstanding — snapshot them onto the record + persist +
-        // notify so the detail panel shows exactly what's keeping this Partial
-        // (report stock-20260730-214157).
-        record.UnrecoveredItems = new List<string>(_remaining);
-        _profile.Save();
-        OnPropertyChanged(nameof(Records));
+        _log?.Info(LogCategory, $"auto-recover: recover corpse {corpse}");
+        Send($"recover corpse {corpse}");
     }
 
-    // Whole-word containment (case-insensitive): true when needle appears in
-    // haystack not flanked by word characters on either side. Lookarounds rather
-    // than \b so a needle that starts / ends with a non-word char (e.g. a
-    // "+2"-suffixed item) still matches. Prevents a recorded "war" matching a
-    // picked-up "warhammer" that a plain substring check would.
-    private static bool ContainsWord(string haystack, string needle)
+    // The given name of OUR corpse as it appears in the floor survey ("corpse of
+    // Ermias" → "Ermias"), or null when no matching corpse is on the floor. The
+    // survey shows the GIVEN name only, so we compare against the first token of
+    // our character name. With several corpses we require the name match so we
+    // never recover another player's corpse; a single corpse in our own death
+    // room is taken when we have no name to match against.
+    private string? FindOurCorpse()
     {
-        if (string.IsNullOrEmpty(needle)) return false;
-        return Regex.IsMatch(haystack, $@"(?<!\w){Regex.Escape(needle)}(?!\w)",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (_groundItems is not { } ground) return null;
+        string ourGiven = FirstToken(_profile.Current?.Name);
+        string? loneCorpse = null;
+        int corpseCount = 0;
+        foreach (string item in ground.Items)
+        {
+            Match cm = CorpseRegex().Match(item);
+            if (!cm.Success) continue;
+            corpseCount++;
+            string given = cm.Groups["name"].Value.Trim();
+            if (ourGiven.Length > 0 && string.Equals(given, ourGiven, StringComparison.OrdinalIgnoreCase))
+                return given;
+            loneCorpse ??= given;
+        }
+        return ourGiven.Length == 0 && corpseCount == 1 ? loneCorpse : null;
     }
 
-    private void ReequipIfWorn(DeathRecord record, string name)
+    private static string FirstToken(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim().Split(' ')[0];
+
+    private static List<string> PileNames(DeathRecord record)
+    {
+        var names = new List<string>();
+        if (record.EquippedAtDeath is { } worn)
+            names.AddRange(worn.Where(i => !string.IsNullOrWhiteSpace(i.Name)).Select(i => i.Name));
+        if (record.LostItems is { } lost)
+            names.AddRange(lost.Where(i => !string.IsNullOrWhiteSpace(i.Name)).Select(i => i.Name));
+        return names;
+    }
+
+    // Watch for the single "You have recovered the corpse of <name>." line that
+    // ends a `recover corpse` — the whole pile (items + coins) is back at once, so
+    // finalise and (Auto-Equip) re-wear everything that was worn at death. Works
+    // for a manual `recover corpse` too, since we key off the confirmation, not
+    // who sent the command.
+    private void OnLine(LineExtractor.EmittedLine line)
+    {
+        if (line.IsPromptLine || _activeRecovery is null) return;
+        if (!CorpseRecoveredRegex().IsMatch(line.Text)) return;
+
+        DeathRecord record = _activeRecovery;
+        int total = PileNames(record).Count;
+        ReequipAllWorn(record);
+        FinalizeRecovered(record,
+            total > 0 ? $"Recovered the corpse ({total} item(s))." : "Recovered the corpse.");
+    }
+
+    // Re-wear every item worn at death after the corpse is recovered (Auto-Equip).
+    // The recover command drops everything back into the pack; this puts the worn
+    // half back on with its slot-correct verb (hold for a held weapon, else wear).
+    private void ReequipAllWorn(DeathRecord record)
     {
         if (!AutoEquip || record.EquippedAtDeath is not { } worn) return;
-        DeathItem? item = worn.FirstOrDefault(i =>
-            string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (item is null) return;
-        string verb = item.IsHeld ? "hold" : "wear";
-        _log?.Info(LogCategory, $"auto-equip: {verb} {name}");
-        Send($"{verb} {name}");
+        foreach (DeathItem item in worn)
+        {
+            if (string.IsNullOrWhiteSpace(item.Name)) continue;
+            string verb = item.IsHeld ? "hold" : "wear";
+            _log?.Info(LogCategory, $"auto-equip: {verb} {item.Name}");
+            Send($"{verb} {item.Name}");
+        }
     }
 
     private void FinalizeRecovered(DeathRecord record, string message)
     {
         _activeRecovery = null;
-        _remaining.Clear();
+        _grabOnSurvey = false;
         record.UnrecoveredItems = null;   // everything accounted for
         SetStatus(record, DeathRecoveryStatus.Recovered, message);
     }
@@ -401,13 +451,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         record.RecoveryMessage = message;
         _profile.Save();
         OnPropertyChanged(nameof(Records));
-    }
-
-    private static void AddNames(HashSet<string> set, List<DeathItem>? items)
-    {
-        if (items is null) return;
-        foreach (DeathItem i in items)
-            if (!string.IsNullOrWhiteSpace(i.Name)) set.Add(i.Name);
     }
 
     private void Send(string text)
@@ -572,12 +615,21 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _roomTracker.PlayerDeathObserved -= OnDeathObserved;
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
+        if (_groundItems is not null) _groundItems.SurveyUpdated -= OnSurveyUpdated;
+        _groundItems = null;
     }
 
-    // "You pick up <item>." — the get-confirmation MajorMUD prints when an
-    // item leaves the ground and enters inventory. A realm that phrases this
-    // differently simply leaves the record Partial (the user can Mark
-    // Recovered); no false transition occurs.
-    [GeneratedRegex(@"^You pick up (.+?)\.$", RegexOptions.CultureInvariant)]
-    private static partial Regex PickUpRegex();
+    // A floor-survey entry naming our deathpile corpse: "corpse of <given-name>"
+    // (stock renders the given name only, no article). The captured name is the
+    // exact token `recover corpse <name>` takes.
+    [GeneratedRegex(@"^corpse of (?<name>.+?)\s*$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex CorpseRegex();
+
+    // "You have recovered the corpse of <name>." — the single line that ends a
+    // successful `recover corpse`, after which the whole pile (items + coins) is
+    // back in the pack. A realm that phrases this differently simply leaves the
+    // record Partial (the user can Mark Recovered); no false transition occurs.
+    [GeneratedRegex(@"^You have recovered the corpse of .+?\.$", RegexOptions.CultureInvariant)]
+    private static partial Regex CorpseRecoveredRegex();
 }

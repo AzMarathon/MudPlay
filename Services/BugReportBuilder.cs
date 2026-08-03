@@ -161,6 +161,16 @@ public static class BugReportBuilder
         // recalling command history. An "arrows don't move between stat fields"
         // report hinges on whether this flipped on entering the box.
         Kv(sb, "Direct-input mode", svc.TrainerMenu.MenuOwnsKeyboard ? "on (trainer/creation box)" : "off");
+        // Death-pile auto-recovery: the toggles + the most recent death record's
+        // state, so a "corpse didn't auto-recover" report shows whether it was
+        // armed and how the last pile resolved (Recovered / Partial / Missing).
+        Kv(sb, "Auto-recover deathpiles", svc.DeathRecovery.AutoRecover ? "on" : "off");
+        Kv(sb, "Auto-equip on recovery", svc.DeathRecovery.AutoEquip ? "on" : "off");
+        var lastDeath = svc.DeathRecovery.Records.Count > 0 ? svc.DeathRecovery.Records[^1] : null;
+        Kv(sb, "Latest deathpile", lastDeath is null
+            ? "(none)"
+            : $"{lastDeath.Status} @ {lastDeath.RoomKeyText}"
+              + (lastDeath.RecoveryMessage is { Length: > 0 } msg ? $" — {msg}" : ""));
         return sb.ToString();
     }
 
