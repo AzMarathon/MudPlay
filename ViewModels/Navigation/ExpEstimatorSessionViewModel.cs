@@ -41,6 +41,12 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     // Per-lair readout: how often each fires / misses, and the closest miss.
     public ObservableCollection<ExpEstimatorLairRow> Lairs { get; } = new();
 
+    // Boss readout: monsters (GameLimit 1 / long regen) pulled out of the lair
+    // average and amortised over their regen — a flat exp/hr contribution counted
+    // once for the whole loop, not per room.
+    public ObservableCollection<ExpEstimatorBossRow> Bosses { get; } = new();
+    public bool HasBosses => Bosses.Count > 0;
+
     [ObservableProperty] private string _proposedName = "";
     [ObservableProperty] private IReadOnlyList<RoomKey>? _previewedRoomKeys;
     [ObservableProperty] private IReadOnlyList<RoomKey>? _waypointKeys;
@@ -142,15 +148,21 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             lairs.Add($"{l.Room.Map}/{l.Room.Room}  {l.Name} — {l.FiresLabel}, {miss}");
         }
 
+        var bosses = new List<string>(Bosses.Count);
+        foreach (ExpEstimatorBossRow b in Bosses)
+            bosses.Add($"{b.Label} — {b.ContribLabel}");
+
         return new ExpEstimatorSnapshot(
             ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
-            ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs);
+            ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses);
     }
 
     private void Recompute()
     {
         WaypointKeys = _clicks.Count == 0 ? null : new List<RoomKey>(_clicks);
         Lairs.Clear();
+        Bosses.Clear();
+        OnPropertyChanged(nameof(HasBosses));
 
         if (_clicks.Count < 2)
         {
@@ -188,6 +200,9 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             Lairs.Add(new ExpEstimatorLairRow(
                 stat.Room, name, stat.FiresPerHour, stat.MissesPerHour, stat.ClosestMissShortfallSeconds));
         }
+        foreach (ExpBossStat b in r.Bosses)
+            Bosses.Add(new ExpEstimatorBossRow(b.Name, b.ExpPerHour, b.RegenHours));
+        OnPropertyChanged(nameof(HasBosses));
 
         Summary = unreachable.Count > 0
             ? $"{unreachable.Count} unreachable segment(s) — fix the loop"
@@ -229,4 +244,13 @@ public sealed record ExpEstimatorLairRow(
     public string MissLabel => MissesPerHour == 0
         ? "full"
         : $"early by {ClosestMissShortfallSeconds:N0}s";
+}
+
+// One boss on the route: killable only once per RegenHours, so it adds a flat
+// ExpPerHour (boss exp ÷ regen), independent of the lap and counted once for the
+// whole loop. Shown apart from the lairs so its share of the estimate is visible.
+public sealed record ExpEstimatorBossRow(string Name, double ExpPerHour, int RegenHours)
+{
+    public string Label => string.IsNullOrWhiteSpace(Name) ? "boss" : Name;
+    public string ContribLabel => $"+{ExpPerHour:N0}/hr · once per {RegenHours}h";
 }

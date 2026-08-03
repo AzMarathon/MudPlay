@@ -635,6 +635,12 @@ public static class BugReportBuilder
         if (snap.Lairs.Count == 0) sb.Append("_(none)_\n");
         else foreach (string l in snap.Lairs) sb.Append("- ").Append(l).Append('\n');
 
+        if (snap.Bosses.Count > 0)
+        {
+            sb.Append("\n**Bosses** (").Append(snap.Bosses.Count).Append(")\n\n");
+            foreach (string b in snap.Bosses) sb.Append("- ").Append(b).Append('\n');
+        }
+
         return sb.ToString();
     }
 

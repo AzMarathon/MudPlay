@@ -24,7 +24,13 @@ public sealed class RouteExpResolver : IDisposable
     private readonly LairTimerStore _timers;
     private readonly GameDataCache _cache;
 
-    private Dictionary<int, int>? _monsters;   // monster Number -> EXP
+    private Dictionary<int, MonsterInfo>? _monsters;   // monster Number -> resolved info
+
+    // Per-monster facts the estimator needs. Exp is the true value EXP × ExpMulti
+    // (bosses store the un-multiplied EXP with a separate multiplier). A boss —
+    // GameLimit 1 or a RegenTime of an hour or more — is killable only once per its
+    // regen, so it's pulled out of the lair average and amortised over RegenHours.
+    private readonly record struct MonsterInfo(int Exp, bool IsBoss, int RegenHours, string Name);
 
     public RouteExpResolver(RoomGraphManager graph, BfsMapper bfs, LairTimerStore timers, GameDataCache cache)
     {
@@ -71,23 +77,42 @@ public sealed class RouteExpResolver : IDisposable
             // NPC-placed fixture: respawns instantly on entry (RespawnSeconds 0),
             // regardless of the monster's RegenTime — that timer governs LAIR
             // respawn, not fixtures. See GAME_MECHANICS.md.
-            int exp = Monster(room.Npc);
+            int exp = Monster(room.Npc).Exp;
             if (exp > 0) (targets ??= new List<ExpTarget>()).Add(new ExpTarget(1, exp, 0));
         }
-        if (room.HasLair && LairYield(room.RawLairTag) is (int mobs, double expPerMob) && expPerMob > 0)
+        if (room.HasLair && ParseLair(room.RawLairTag) is (int mobs, List<int> ids))
         {
             int respawn = _timers.DefaultRespawnSeconds(key) ?? 0;
-            (targets ??= new List<ExpTarget>()).Add(new ExpTarget(mobs, expPerMob, respawn));
+            // Split the lair: bosses (GameLimit 1 / long regen) come out of the
+            // average and become their own once-per-regen target; the rest average
+            // as normal lair mobs on the room's respawn.
+            long sum = 0;
+            int n = 0;
+            foreach (int id in ids)
+            {
+                MonsterInfo m = Monster(id);
+                if (m.Exp <= 0) continue;
+                if (m.IsBoss)
+                {
+                    (targets ??= new List<ExpTarget>()).Add(new ExpTarget(
+                        1, m.Exp, m.RegenHours * 3600, MonsterId: id, IsBoss: true, MonsterName: m.Name));
+                    continue;
+                }
+                sum += m.Exp;
+                n++;
+            }
+            if (n > 0)
+                (targets ??= new List<ExpTarget>()).Add(new ExpTarget(mobs, (double)sum / n, respawn));
         }
         return targets ?? (IReadOnlyList<ExpTarget>)Array.Empty<ExpTarget>();
     }
 
     // Parse the raw MDB lair cell "(Max N): id,id,...,[group-maxregen]" → the
-    // per-room max simultaneous spawn count and the average EXP of the listed
-    // monsters. This is the on-disk shape for these sets; LairTagParser targets
-    // a different (transformed) format the data doesn't use, which is why the
-    // monster ids are read straight from the cell here.
-    private (int Mobs, double ExpPerMob)? LairYield(string? raw)
+    // per-room max simultaneous spawn count and the listed monster ids. This is the
+    // on-disk shape for these sets; LairTagParser targets a different (transformed)
+    // format the data doesn't use, which is why the ids are read straight from the
+    // cell here. Boss-vs-regular split + averaging happens in ResolveTargets.
+    private static (int Mobs, List<int> Ids)? ParseLair(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
 
@@ -99,28 +124,34 @@ public sealed class RouteExpResolver : IDisposable
         int bracket = raw.IndexOf('[', colon);
         int end = bracket > colon ? bracket : raw.Length;
 
-        long sum = 0;
-        int n = 0;
+        var ids = new List<int>();
         foreach (string tok in raw[(colon + 1)..end].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (int.TryParse(tok, out int id) && id > 0) { sum += Monster(id); n++; }
-        }
-        return n > 0 ? (mobs, (double)sum / n) : null;
+            if (int.TryParse(tok, out int id) && id > 0) ids.Add(id);
+        return ids.Count > 0 ? (mobs, ids) : null;
     }
 
-    private int Monster(int id) => Monsters().TryGetValue(id, out int exp) ? exp : 0;
+    private MonsterInfo Monster(int id) => Monsters().TryGetValue(id, out MonsterInfo m) ? m : default;
 
-    private Dictionary<int, int> Monsters()
+    private Dictionary<int, MonsterInfo> Monsters()
     {
         if (_monsters is not null) return _monsters;
-        var map = new Dictionary<int, int>();
+        var map = new Dictionary<int, MonsterInfo>();
         if (_cache.GetRawTable("Monsters") is { } doc && doc.RootElement.ValueKind == JsonValueKind.Array)
         {
             foreach (JsonElement row in doc.RootElement.EnumerateArray())
             {
                 if (!row.TryGetProperty("Number", out JsonElement n) || !n.TryGetInt32(out int id)) continue;
-                int exp = row.TryGetProperty("EXP", out JsonElement e) && e.TryGetInt32(out int ev) ? ev : 0;
-                map[id] = exp;
+                int baseExp = row.TryGetProperty("EXP", out JsonElement e) && e.TryGetInt32(out int ev) ? ev : 0;
+                // True exp is EXP × ExpMulti (the boss/exp multiplier). The Game-Data
+                // browser already displays it this way; the estimator read only EXP
+                // before, so a ×20 boss showed 1/20th its real value.
+                int multi = row.TryGetProperty("ExpMulti", out JsonElement em) && em.TryGetInt32(out int mvv) && mvv > 0 ? mvv : 1;
+                int regen = row.TryGetProperty("RegenTime", out JsonElement rt) && rt.TryGetInt32(out int rv) ? rv : 0;
+                int limit = row.TryGetProperty("GameLimit", out JsonElement gl) && gl.TryGetInt32(out int lv) ? lv : 0;
+                string name = row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String
+                    ? nm.GetString() ?? string.Empty : string.Empty;
+                bool isBoss = limit == 1 || regen >= 1;   // RegenTime is in HOURS
+                map[id] = new MonsterInfo(baseExp * multi, isBoss, Math.Max(1, regen), name);
             }
         }
         return _monsters = map;

@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.23.0
+
+- Exp/Hr Estimator now handles lair bosses (a monster with game-limit 1 or a regen of an hour+): it's pulled out of the lair average and added once as `boss exp ÷ regen-hours` — so a 15-hour crowned spider adds ~80k/hr instead of inflating every room every lap
+- A boss that can spawn in any room of a multi-room lair is counted once for the whole loop, not per room; a new "Bosses" line in the breakdown shows each one's contribution
+- Monster exp now reads `EXP × ExpMulti` (the boss multiplier) instead of raw `EXP`, so a ×20 boss no longer shows 1/20th its value
+- bug reports addressed: paradigm-20260803-035136
+
 ## 2.22.0
 
 - Auto-recover deathpiles now uses the correct Stock mechanic: on entering the death room it reads the "You notice" survey and, if your `corpse of <given-name>` is there, sends one `recover corpse <name>` — instead of blindly spamming `get <item>` for every pile item

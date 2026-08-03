@@ -518,6 +518,22 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
 - For a **loop**, an instant mob still yields only once per lap (bounded by lap time); only a
   stay-in-room **rooming** setup kills it every round.
 
+**Boss lair monsters — a game-limited / long-regen singleton.** *([CONFIRMED] 2026-08-03, user + report `paradigm-20260803-035136`)*
+- A lair monster is a **boss** if its **`GameLimit` is 1** (only one exists in the game at a time) OR
+  its **`RegenTime` is ≥ 1 hour**. A boss can be killed **only as often as its regen timer** — the
+  crowned spider (`Number 929`, `GameLimit 1`, `RegenTime 15`) is killable **once per 15 hours**, and
+  it can spawn in **any** room of a multi-room lair (still just the one entity across all of them).
+- **A boss's `RegenTime` is in HOURS** (the Game-Data browser renders it "15 hour"), distinct from the
+  lair-mob `AvgDelay`/`RegenTime` path above.
+- **True monster exp is `EXP × ExpMulti`.** The Monsters table stores a base `EXP` and a separate
+  `ExpMulti` (the boss/exp multiplier); crowned spider `EXP 60000 × ExpMulti 20 = 1,200,000`. Read them
+  together (the Game-Data browser already shows "60,000 (×20)"); `EXP` alone under-reports a
+  multiplied monster.
+- **Exp/hr estimation of a boss:** pull it OUT of its lair's per-mob average and add its amortised
+  contribution **`boss exp ÷ regen-hours`, counted once** for the whole loop (a single time no matter
+  how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room.
+  The regular (non-boss) lair mobs still fire per-room on the room delay.
+
 ## Vitality — HP, dropping, and death
 
 **Max-HP sources** *([CONFIRMED])*
