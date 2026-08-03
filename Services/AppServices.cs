@@ -3352,6 +3352,9 @@ public sealed class AppServices
         // mistaken for coin (see IsCashEntry).
         GroundItems = new Game.Inventory.GroundItemTracker(Router, Currency,
             isKnownItem: IsKnownGroundItem);
+        // Auto-recover reads the floor survey to confirm our corpse is in the room
+        // before sending `recover corpse` (and arms off its SurveyUpdated event).
+        DeathRecovery.AttachGroundItems(GroundItems);
 
         // Read-only inventory queries — @wealth / @enc / @have report off the
         // InventoryManager snapshot; @what reports the GroundItems survey. No

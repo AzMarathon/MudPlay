@@ -7,7 +7,8 @@ using FujinTerm.Models.Profile;
 namespace FujinTerm.ViewModels;
 
 // XAML converter mapping a DeathRecoveryStatus to a stoplight brush for the
-// Workshop DEATH grid: Active → red, Partial → amber, Recovered → green.
+// Workshop DEATH grid: Active → red, Partial → amber, Recovered → green,
+// Missing → muted grey (the corpse was gone; nothing to recover).
 // Single static instance — no per-binding state.
 public sealed class DeathStatusBrushConverter : IValueConverter
 {
@@ -19,12 +20,15 @@ public sealed class DeathStatusBrushConverter : IValueConverter
         new ImmutableSolidColorBrush(Color.FromRgb(0xFF, 0xC8, 0x57)); // bright amber
     private static readonly IBrush RecoveredBrush =
         new ImmutableSolidColorBrush(Color.FromRgb(0x6B, 0xD6, 0x8A)); // bright green
+    private static readonly IBrush MissingBrush =
+        new ImmutableSolidColorBrush(Color.FromRgb(0x9A, 0x9A, 0x9A)); // muted grey
 
     public object Convert(object? value, System.Type targetType, object? parameter, CultureInfo culture)
         => value is DeathRecoveryStatus s ? s switch
         {
             DeathRecoveryStatus.Recovered => RecoveredBrush,
             DeathRecoveryStatus.Partial   => PartialBrush,
+            DeathRecoveryStatus.Missing   => MissingBrush,
             _                             => ActiveBrush,
         } : ActiveBrush;
 

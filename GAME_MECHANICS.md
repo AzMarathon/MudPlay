@@ -562,13 +562,26 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
   - the character is **teleported to the graveyard room** appropriate to the **map** they died on.
 - Graveyard rooms are **per-map**; two known graveyards are **`1/2189`** (map 1, room 2189) and
   **`16/542`** (map 16, room 542).
-- **[CONFIRMED]** **Deathpile vs corpse depends on the realm type.**
-  - **Stock** realms have **no corpse object**: non-loyal items and coins drop **loose to the
-    ground** of the death room, and **loyal items stay on the player**. Anyone in the room can pick
-    the loose pile up.
-  - **Paradigm** realms put the dropped items into a **container "corpse"** rather than loose on the
-    ground — recoverable only by the **owning player**, or by another player who has that player's
-    **corpse password**.
+- **[CONFIRMED]** (2026-08-03, user + captures) **The deathpile is a `corpse` object, recovered with
+  one `recover corpse <given-name>` command — NOT a per-item `get`.** (This corrects an earlier note
+  that said stock drops items loose to the ground; it does not.)
+  - On death, non-loyal items **and** coins go into a **corpse of <player>** on the death-room floor;
+    loyal items stay on the player.
+  - The room's **floor survey names it by the player's GIVEN name only**, no article:
+    `You notice corpse of Ermias here.` (character "Ermias Asghedom" → the corpse reads "Ermias").
+  - Recover it with **`recover corpse <given-name>`** (e.g. `recover corpse ermias`). Bare
+    `recover corpse` also works but **gets confused when several corpses share the room**, so always
+    name it. **Recovering your OWN corpse never needs a password**, even with corpse passwords set;
+    the password system only gates *other* players looting your corpse.
+  - **One command pulls the WHOLE pile back at once** — coins and items together. The output is:
+    `You begin to pick through the corpse of <name>...`, then `You picked up N <denom>.` per coin
+    denomination and `You took <item>.` per item, ending with the green completion line
+    **`You have recovered the corpse of <name>.`** — the single reliable "pile recovered" marker.
+  - So auto-recovery must: on entering the death room, read the `You notice … here.` survey; if it
+    holds `corpse of <ourGivenName>`, send one `recover corpse <name>` and finalise on
+    `You have recovered the corpse of <name>.`; if the corpse is NOT in the survey, the pile is gone
+    (looted / decayed) — mark it Missing and send nothing (never per-item `get`, which just spams
+    `You don't see <item> here.`).
 
 **Death readout & overkill** *([CONFIRMED])*
 - There is **no "overkill" message**. The HP figure visible at death is just the value HP was driven

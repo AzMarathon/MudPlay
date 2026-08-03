@@ -1,9 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.21.0**
-> - Navigation Management window: added filter boxes above the Loops & Auto-Lairs and Go To trees (debounced, flat + virtualized while filtering) to quickly find an entry
-> - Folders in both Manage tabs now start collapsed, so switching tabs is snappy instead of laggy with large seeded lists
+> **Version 2.22.0**
+> - Auto-recover deathpiles now uses the correct Stock mechanic: on entering the death room it reads the "You notice" survey and, if your `corpse of <given-name>` is there, sends one `recover corpse <name>` — instead of blindly spamming `get <item>` for every pile item
+> - If the corpse isn't in the room (looted/decayed), the pile is marked Missing (new grey status) and nothing is sent — no more repeated "You don't see X here." spam
+> - Recovery completes on the `You have recovered the corpse of <name>.` line; an over-encumbered partial recovery correctly stays Partial (retried on re-entry) rather than being marked recovered
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
