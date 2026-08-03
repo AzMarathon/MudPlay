@@ -1,0 +1,197 @@
+{
+  "SchemaVersion": 3,
+  "Name": "The Quagmire (horned basikisks) Pool, Loop 14 9430",
+  "Waypoints": [
+    {
+      "Room": "14/9430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9427",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9423",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9420",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9419",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9416",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9415",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9414",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9413",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9412",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9411",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9426",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9425",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9424",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9423",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9427",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9432",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9433",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9440",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9439",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9438",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9437",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9436",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9435",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9434",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9433",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9432",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Lorthan Lowlands/QTTT)"
+}

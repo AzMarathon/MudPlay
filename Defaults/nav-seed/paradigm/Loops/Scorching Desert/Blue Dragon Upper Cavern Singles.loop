@@ -1,0 +1,312 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Blue Dragon Upper Cavern Singles",
+  "Waypoints": [
+    {
+      "Room": "12/2546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2581",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2557",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2558",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2559",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2556",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2558",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2560",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2562",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2560",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2557",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2579",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2580",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2605",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2611",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2613",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2577",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2581",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2547",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/SDUS)"
+}

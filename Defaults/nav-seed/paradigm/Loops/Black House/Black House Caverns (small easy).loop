@@ -1,0 +1,177 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Black House Caverns (small easy)",
+  "Waypoints": [
+    {
+      "Room": "1/1459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1460",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black House/BHCL)"
+}

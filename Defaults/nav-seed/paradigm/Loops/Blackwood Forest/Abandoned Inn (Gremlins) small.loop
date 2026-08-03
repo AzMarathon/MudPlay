@@ -1,0 +1,77 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Abandoned Inn (Gremlins) small",
+  "Waypoints": [
+    {
+      "Room": "17/2800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2811",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2801",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (skip 2 dead-end step) from .mp (Blackwood Forest/AICR)"
+}

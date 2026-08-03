@@ -1,0 +1,37 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Webbed Thicket Center Loop",
+  "Waypoints": [
+    {
+      "Room": "14/3188",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3189",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3213",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3193",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/3189",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Bristlewood Forest/WBTH)"
+}

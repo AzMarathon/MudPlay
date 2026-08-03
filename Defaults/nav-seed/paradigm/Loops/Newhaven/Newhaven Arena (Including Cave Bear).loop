@@ -1,0 +1,27 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Newhaven Arena (Including Cave Bear)",
+  "Waypoints": [
+    {
+      "Room": "1/2150",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2152",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Spork ZSpoon (Newhaven/NARN)"
+}

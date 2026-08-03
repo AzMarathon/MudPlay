@@ -1,0 +1,47 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Tentacled Monstrosities",
+  "Waypoints": [
+    {
+      "Room": "5/3639",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3640",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3646",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Darkened Cavern/DCPF)"
+}

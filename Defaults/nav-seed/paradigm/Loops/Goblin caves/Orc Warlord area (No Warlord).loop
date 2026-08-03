@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Orc Warlord area (No Warlord)",
+  "Waypoints": [
+    {
+      "Room": "15/180",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/142",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/141",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/139",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/138",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/134",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/141",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/142",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/143",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/144",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/147",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/148",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/150",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/149",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/145",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/144",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/143",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/142",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Goblin caves/OBOW)"
+}

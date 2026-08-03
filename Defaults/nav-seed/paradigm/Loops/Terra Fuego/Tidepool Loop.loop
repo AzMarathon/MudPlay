@@ -1,0 +1,87 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Tidepool Loop",
+  "Waypoints": [
+    {
+      "Room": "13/503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/504",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Terra Fuego/TFTP)"
+}

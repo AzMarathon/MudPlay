@@ -1,0 +1,197 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Slate Elementals (RoomersLloop)",
+  "Waypoints": [
+    {
+      "Room": "2/10057",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10058",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10069",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10067",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10066",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10071",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10091",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10084",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10077",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10076",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10075",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10071",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10064",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10063",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10059",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black Foothills/SMRF)"
+}

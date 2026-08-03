@@ -1,0 +1,27 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Family Tomb (Drooling Geists)",
+  "Waypoints": [
+    {
+      "Room": "17/360",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/3248",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/360",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/3249",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/FTDG)"
+}

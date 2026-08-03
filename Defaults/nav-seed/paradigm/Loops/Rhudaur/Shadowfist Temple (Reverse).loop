@@ -1,0 +1,317 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Shadowfist Temple (Reverse)",
+  "Waypoints": [
+    {
+      "Room": "9/913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/947",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/960",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/959",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/958",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/957",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/956",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/955",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/953",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/952",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/951",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/950",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/972",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/971",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/950",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/949",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/944",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/943",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/942",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/941",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/940",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/939",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/936",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/935",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/934",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/933",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/920",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/914",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rhudaur/SHAD)"
+}

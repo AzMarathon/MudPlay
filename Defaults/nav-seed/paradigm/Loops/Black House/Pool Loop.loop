@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Pool Loop",
+  "Waypoints": [
+    {
+      "Room": "1/1531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1527",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black House/DCPE)"
+}

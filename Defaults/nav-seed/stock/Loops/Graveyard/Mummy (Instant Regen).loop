@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Mummy (Instant Regen)",
+  "Waypoints": [
+    {
+      "Room": "1/1309",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1297",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Graveyard/CRST)"
+}

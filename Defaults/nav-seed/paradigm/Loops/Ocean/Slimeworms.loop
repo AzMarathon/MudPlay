@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Slimeworms",
+  "Waypoints": [
+    {
+      "Room": "16/227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/230",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/231",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/232",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/233",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/232",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/231",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/230",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/234",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/235",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/236",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/237",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/236",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/238",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/240",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/241",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/240",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/242",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/240",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/243",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/240",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/238",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/236",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/235",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/234",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/226",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ocean/ULSW)"
+}

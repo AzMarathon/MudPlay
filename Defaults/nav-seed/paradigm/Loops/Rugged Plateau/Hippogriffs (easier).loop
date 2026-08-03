@@ -1,0 +1,117 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Hippogriffs (easier)",
+  "Waypoints": [
+    {
+      "Room": "2/10871",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10870",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10869",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10859",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10860",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10823",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10822",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10821",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10819",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10817",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10816",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10815",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10814",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10812",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10872",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10873",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10874",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/10870",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rugged Plateau/RPAC)"
+}

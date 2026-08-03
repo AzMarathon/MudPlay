@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "White Corridor Single Regen Rooms",
+  "Waypoints": [
+    {
+      "Room": "7/1530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/225",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/255",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/260",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/259",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/254",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/252",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/258",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/257",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/256",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/250",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/249",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/245",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/199",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/198",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/246",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/248",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/251",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/252",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/253",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/228",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black House/WCCR)"
+}

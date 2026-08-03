@@ -1,0 +1,237 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Aurean Hills Northwest Loop",
+  "Waypoints": [
+    {
+      "Room": "13/12469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12573",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12569",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12742",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12572",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12499",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12500",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12501",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12579",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12743",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12744",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12545",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tal\u0027kiran Ruins/ARCL)"
+}

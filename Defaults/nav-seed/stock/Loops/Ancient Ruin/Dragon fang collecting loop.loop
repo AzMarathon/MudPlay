@@ -1,0 +1,37 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dragon fang collecting loop",
+  "Waypoints": [
+    {
+      "Room": "3/595",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/592",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/594",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Ancient Ruin/PRSD)"
+}

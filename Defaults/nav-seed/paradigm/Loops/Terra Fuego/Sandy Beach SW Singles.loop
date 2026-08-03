@@ -1,0 +1,232 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Sandy Beach SW Singles",
+  "Waypoints": [
+    {
+      "Room": "13/468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/486",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/592",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/489",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/486",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/473",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/469",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Terra Fuego/SBSE)"
+}

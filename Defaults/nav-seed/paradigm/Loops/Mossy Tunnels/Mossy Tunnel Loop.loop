@@ -1,0 +1,242 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Mossy Tunnel Loop",
+  "Waypoints": [
+    {
+      "Room": "3/1",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/2",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/3",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/4",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/5",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/6",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/5",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/4",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/7",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/8",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/7",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/31",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/32",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/33",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/34",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/33",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/23",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/22",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/9",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/10",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/11",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/12",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/13",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/14",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/15",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/16",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/18",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/21",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/25",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/24",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/26",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/36",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/26",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/27",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/28",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/29",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/30",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/19",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/20",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/19",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/17",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/16",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/15",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/14",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/13",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/12",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/2",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Mossy Tunnels/MOST)"
+}

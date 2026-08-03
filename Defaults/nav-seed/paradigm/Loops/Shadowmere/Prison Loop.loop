@@ -1,0 +1,217 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Prison Loop",
+  "Waypoints": [
+    {
+      "Room": "5/1313",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1340",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1339",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1338",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1337",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1336",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1335",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1334",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1333",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1332",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1331",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1330",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1329",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1328",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1327",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1326",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1341",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1348",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1347",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1346",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1345",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1346",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1347",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1348",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1349",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1352",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1349",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1348",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1341",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1324",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1323",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1322",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1321",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1320",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1319",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1318",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1317",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1316",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1315",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1314",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shadowmere/PYGT)"
+}

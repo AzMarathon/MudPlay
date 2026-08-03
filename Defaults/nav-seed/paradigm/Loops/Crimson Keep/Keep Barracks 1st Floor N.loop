@@ -1,0 +1,37 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Keep Barracks 1st Floor N",
+  "Waypoints": [
+    {
+      "Room": "13/2758",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2759",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2761",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2763",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2762",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/2760",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (relaxed) from .mp (Crimson Keep/CBN1)"
+}

@@ -1,0 +1,87 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Freezing Tunnel (Ice Wraiths, Golems)",
+  "Waypoints": [
+    {
+      "Room": "15/813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/814",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/815",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/819",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/819",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/815",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/814",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/824",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/824",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/812",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rocky Trail/BITT)"
+}

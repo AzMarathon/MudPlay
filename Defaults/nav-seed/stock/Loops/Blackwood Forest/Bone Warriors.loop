@@ -1,0 +1,117 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bone Warriors",
+  "Waypoints": [
+    {
+      "Room": "17/2647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2648",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2790",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2794",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2790",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2648",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Blackwood Forest/BFDF)"
+}

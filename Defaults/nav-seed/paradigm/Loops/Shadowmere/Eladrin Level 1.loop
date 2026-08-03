@@ -1,0 +1,187 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Eladrin Level 1",
+  "Waypoints": [
+    {
+      "Room": "5/876",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/903",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/904",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/903",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/905",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/906",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/907",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/908",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/911",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/917",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/911",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/908",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/907",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/906",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/905",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/903",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shadowmere/OGTR)"
+}

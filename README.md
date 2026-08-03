@@ -1,11 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.17.0**
-> - Navigation gains an Exp/Hr Estimator (its own collapsible in the map's right rail): press Start estimating, click rooms on the map to build a throwaway loop, and the estimated experience-per-hour plus a per-lair breakdown surface right there in the panel — then Save it as a real loop or Discard it
-> - The estimate is built on the game's 5-second combat tick (720 kills/hour ceiling): movement between lairs rides the downtime, so a short hop is free and only a long stretch costs a round. It solves the loop's steady lap time as a fixed point (each lair fires min(1, lap ÷ respawn) of the laps), so a free-travel dense loop lands at the cap and a spread-out one lands lower; the per-lair readout shows how early ("early by Ns") each lair is hit. The real-world multiplier is the haircut from that ceiling to live conditions (~0.9)
-> - Tunable per your character: movement speed (seconds per step), an "I'm Rooming" toggle for area vs single-target combat, rounds to kill a mob, and a real-world multiplier; a per-lair readout shows how often each fires vs is missed and by how many seconds, so you can nudge the loop to catch a near-miss
-> - Locked out while a loop is being built (both consume map clicks as waypoints); available again once the loop is running. "Save as loop" opens a system dialog to rename and choose the location (defaults to the active set's Loops folder); "Load loop…" browses for a saved .loop file to analyse. A live estimator session is captured in the bug report
+> **Version 2.19.2**
+> - Character-creation stat box now flips to direct-input mode on entry, so the arrow keys move between stat fields instead of cycling the given/family names (detects the box on-screen, incl. ParaMUD's abbreviated "Char. Creation" title)
+> - Items bought during character creation (before the first inventory dump) now register, so "Equip all" sees them instead of an empty pack
+> - Bug report now records whether direct-input mode is active
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

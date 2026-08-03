@@ -1,0 +1,237 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Ogre Gladiators Singles",
+  "Waypoints": [
+    {
+      "Room": "15/2321",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2322",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2323",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2206",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2200",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2201",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2202",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2208",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2326",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2327",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2328",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2296",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2292",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2288",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2284",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2276",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2277",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2281",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2280",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2300",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2304",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2308",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2313",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2312",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2311",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2306",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2302",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2298",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2278",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2274",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2275",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2283",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2287",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2286",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2290",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2294",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2330",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2329",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2328",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2327",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2326",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2325",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2324",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2323",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2322",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Goblin caves/HCNT)"
+}

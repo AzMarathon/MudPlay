@@ -1,0 +1,527 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Sandworms (roomers)",
+  "Waypoints": [
+    {
+      "Room": "12/1352",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1373",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1374",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1376",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1382",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1376",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1374",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1373",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1383",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1384",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1386",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1387",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1394",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1396",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1397",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1399",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1400",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1401",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1405",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1406",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1407",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1408",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1409",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1410",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1411",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1412",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1413",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1414",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1419",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1420",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1423",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1424",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1423",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1420",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1420",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1414",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1415",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1416",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1415",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1414",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1413",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1412",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1411",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1410",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1409",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1408",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1407",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1406",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1405",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1403",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1404",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1403",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1402",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1401",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1400",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1399",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1397",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1396",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1394",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1392",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1387",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1386",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1385",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1384",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1383",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1373",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/SDSF)"
+}

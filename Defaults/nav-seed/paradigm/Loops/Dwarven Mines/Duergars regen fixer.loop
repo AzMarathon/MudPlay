@@ -1,0 +1,222 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Duergars regen fixer",
+  "Waypoints": [
+    {
+      "Room": "6/2620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2614",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2613",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2611",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2605",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2597",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2596",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2595",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2592",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2618",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2617",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2619",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dwarven Mines/DMLP)"
+}

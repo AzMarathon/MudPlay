@@ -1,0 +1,72 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bone-strewn Aerie Loop 1",
+  "Waypoints": [
+    {
+      "Room": "14/4598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4605",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4599",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/BACE)"
+}

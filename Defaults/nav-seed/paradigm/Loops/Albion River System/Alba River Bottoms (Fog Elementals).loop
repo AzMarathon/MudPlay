@@ -1,0 +1,397 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Alba River Bottoms (Fog Elementals)",
+  "Waypoints": [
+    {
+      "Room": "14/5714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5676",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5741",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5706",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5713",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Albion River System/ARBD)"
+}

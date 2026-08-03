@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Aldreth Loop",
+  "Waypoints": [
+    {
+      "Room": "1/1709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1734",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1738",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

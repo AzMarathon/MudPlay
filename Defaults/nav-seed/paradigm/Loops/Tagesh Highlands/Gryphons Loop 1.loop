@@ -1,0 +1,147 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Gryphons Loop 1",
+  "Waypoints": [
+    {
+      "Room": "14/4511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4555",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4556",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4455",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4454",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4454",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4455",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4510",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/JCLR)"
+}

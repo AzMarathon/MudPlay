@@ -1,0 +1,127 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Ravaged Farm Singles Loop",
+  "Waypoints": [
+    {
+      "Room": "14/5948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5952",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5953",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5957",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5958",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5968",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5967",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5952",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5983",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5984",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5985",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5984",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5983",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5970",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5969",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5952",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Baenglen/RVCP)"
+}

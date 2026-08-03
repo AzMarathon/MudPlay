@@ -1,0 +1,257 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Spring-fed Lake Loop",
+  "Waypoints": [
+    {
+      "Room": "13/12692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12706",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12717",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tal\u0027kiran Ruins/SLAO)"
+}

@@ -1,0 +1,292 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Tagesh Plateau Wilderness Loop",
+  "Waypoints": [
+    {
+      "Room": "14/5212",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5210",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5209",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5208",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5207",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5205",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5201",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5202",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5203",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5204",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5203",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5202",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5201",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5200",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5206",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5225",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5230",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5231",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5232",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5233",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5234",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5235",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5236",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5237",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5238",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5239",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5240",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5213",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5212",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5214",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5241",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5242",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5244",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5245",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5260",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5259",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5258",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5257",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5255",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5254",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5253",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5252",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5251",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5250",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5249",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5248",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5247",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5246",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5243",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5242",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5241",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5214",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/TPWF)"
+}

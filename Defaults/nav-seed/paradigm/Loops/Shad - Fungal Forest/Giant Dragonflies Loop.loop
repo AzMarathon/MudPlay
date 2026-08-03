@@ -1,0 +1,177 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Giant Dragonflies Loop",
+  "Waypoints": [
+    {
+      "Room": "5/4016",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4015",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4013",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4215",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4214",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4215",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4177",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4178",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4218",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4217",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4210",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4205",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4206",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4207",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4208",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4209",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4017",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad - Fungal Forest/FFSE)"
+}

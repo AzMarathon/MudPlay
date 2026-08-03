@@ -1,0 +1,317 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Blackwood Garden (easy)",
+  "Waypoints": [
+    {
+      "Room": "17/703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/706",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2816",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2817",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2819",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2824",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2826",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2824",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2821",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2822",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2823",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2822",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2821",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2819",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2817",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2816",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/706",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/704",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/BWFG)"
+}

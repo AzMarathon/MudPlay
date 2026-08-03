@@ -1,0 +1,237 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Marshlands Loop",
+  "Waypoints": [
+    {
+      "Room": "13/3790",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3839",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3830",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3829",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3828",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3827",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3826",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3824",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3823",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3822",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3821",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3819",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3817",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3816",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3815",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3814",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3812",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3811",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/3792",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Swamp of Tharollok/STAM)"
+}

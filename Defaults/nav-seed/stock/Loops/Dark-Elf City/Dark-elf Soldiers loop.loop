@@ -1,0 +1,117 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark-elf Soldiers loop",
+  "Waypoints": [
+    {
+      "Room": "8/1699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1706",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/1701",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dark-Elf City/DCSQ)"
+}

@@ -1,0 +1,67 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Brgands Perimeter",
+  "Waypoints": [
+    {
+      "Room": "2/909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/908",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/906",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/907",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/887",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/886",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/884",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/883",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/882",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/911",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/910",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dragon\u0027s Teeth Hills/DHBC)"
+}

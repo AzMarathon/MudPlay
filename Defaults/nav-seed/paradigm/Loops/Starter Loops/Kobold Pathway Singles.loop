@@ -1,0 +1,47 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Kobold Pathway Singles",
+  "Waypoints": [
+    {
+      "Room": "6/192",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/743",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/752",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

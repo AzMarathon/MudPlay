@@ -1,0 +1,297 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Stone Ruins Loop",
+  "Waypoints": [
+    {
+      "Room": "13/12760",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12762",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12766",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12767",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12768",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12767",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12762",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12763",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12762",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12760",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12769",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12770",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12780",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12781",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12783",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12781",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12780",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12782",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12780",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12770",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12771",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12772",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12774",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12776",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12774",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12777",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12774",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12775",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12774",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12772",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12778",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12779",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12778",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12772",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12773",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12772",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12771",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12770",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12769",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12760",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12759",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12758",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12756",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12756",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12757",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12756",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12761",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12756",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12758",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/12759",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tal\u0027kiran Ruins/SRPL)"
+}

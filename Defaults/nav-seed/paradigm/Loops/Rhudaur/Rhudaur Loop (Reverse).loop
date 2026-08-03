@@ -1,0 +1,297 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Rhudaur Loop (Reverse)",
+  "Waypoints": [
+    {
+      "Room": "2/2523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2592",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2597",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2562",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2579",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/1808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2583",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2582",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2530",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2522",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (relaxed) from .mp (Rhudaur/RHUC)"
+}

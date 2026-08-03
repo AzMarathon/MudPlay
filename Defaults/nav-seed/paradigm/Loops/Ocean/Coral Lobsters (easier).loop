@@ -1,0 +1,182 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Coral Lobsters (easier)",
+  "Waypoints": [
+    {
+      "Room": "16/585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/597",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/596",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/595",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/592",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/584",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ocean/LRCL)"
+}

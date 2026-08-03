@@ -1,0 +1,287 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Gnaj Zombies Singles Loop 2",
+  "Waypoints": [
+    {
+      "Room": "15/1523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1517",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1517",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1499",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1500",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1501",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1501",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1500",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1499",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1522",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Old Mines/OMST)"
+}

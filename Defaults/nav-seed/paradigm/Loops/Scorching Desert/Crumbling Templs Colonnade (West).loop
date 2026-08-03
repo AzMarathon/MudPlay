@@ -1,0 +1,217 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Crumbling Templs Colonnade (West)",
+  "Waypoints": [
+    {
+      "Room": "12/2389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2392",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2405",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2406",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2407",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2408",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2435",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2436",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2437",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2438",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2420",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2419",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2432",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2433",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2434",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2435",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2408",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2409",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2410",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2411",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2412",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2413",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2414",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2415",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2416",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2432",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2433",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2434",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2435",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2408",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2407",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2406",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2405",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2392",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2391",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Scorching Desert/CTSS)"
+}

@@ -1,0 +1,32 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Animal Pen (wardogs)",
+  "Waypoints": [
+    {
+      "Room": "16/795",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/666",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Barren Hills/NGAP)"
+}

@@ -1,0 +1,147 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Orc Training area (easy)",
+  "Waypoints": [
+    {
+      "Room": "15/5",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/6",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/31",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/32",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/33",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/34",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/35",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/36",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/37",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/38",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/39",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/40",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/41",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/44",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/43",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/42",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/55",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/45",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/46",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/54",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/58",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/59",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/60",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/65",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/64",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/63",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/62",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/51",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Goblin caves/HCTA)"
+}

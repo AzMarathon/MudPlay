@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Arden Rock (Skyterrors)",
+  "Waypoints": [
+    {
+      "Room": "14/5454",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5455",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5456",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5457",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5446",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5448",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5449",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5453",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/ARC2)"
+}

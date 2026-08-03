@@ -1,0 +1,37 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Oysters",
+  "Waypoints": [
+    {
+      "Room": "16/307",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/308",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/309",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/310",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/309",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/308",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ocean/UROB)"
+}

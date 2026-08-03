@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Twin Docks, East Warehouse",
+  "Waypoints": [
+    {
+      "Room": "5/1604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1624",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1636",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1624",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1626",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1638",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1639",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1627",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1629",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1629",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1630",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1631",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1632",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1633",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1634",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1635",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1624",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Thieves Town/WDTD)"
+}

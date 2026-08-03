@@ -1,0 +1,187 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Rotting Morass (3 regens) 14 9789",
+  "Waypoints": [
+    {
+      "Room": "14/9789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9706",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9745",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9744",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9743",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9742",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9702",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Lorthan Lowlands/ASST)"
+}

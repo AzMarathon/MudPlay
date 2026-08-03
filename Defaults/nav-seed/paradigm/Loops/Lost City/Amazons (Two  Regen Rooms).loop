@@ -1,0 +1,47 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Amazons (Two  Regen Rooms)",
+  "Waypoints": [
+    {
+      "Room": "16/382",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/381",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/383",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/381",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Lost City/LCAC)"
+}

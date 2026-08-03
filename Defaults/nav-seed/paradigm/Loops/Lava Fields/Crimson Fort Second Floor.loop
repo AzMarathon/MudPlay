@@ -1,0 +1,97 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Crimson Fort Second Floor",
+  "Waypoints": [
+    {
+      "Room": "15/1097",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1098",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1091",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1095",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1096",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Lava Fields/CFSF)"
+}

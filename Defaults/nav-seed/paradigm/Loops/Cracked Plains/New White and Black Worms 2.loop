@@ -1,0 +1,247 @@
+{
+  "SchemaVersion": 3,
+  "Name": "New White and Black Worms 2",
+  "Waypoints": [
+    {
+      "Room": "7/1633",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1672",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1671",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1670",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1668",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1662",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1661",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1659",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1657",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1656",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1655",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1654",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1653",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1652",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1651",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1650",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1649",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1648",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1646",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1633",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1632",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1631",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1630",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1629",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1627",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1626",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1626",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1627",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1629",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1630",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1631",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1632",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Cracked Plains/NWC1)"
+}

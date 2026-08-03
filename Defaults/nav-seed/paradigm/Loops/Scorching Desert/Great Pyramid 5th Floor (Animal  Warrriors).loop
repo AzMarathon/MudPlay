@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Great Pyramid 5th Floor (Animal  Warrriors)",
+  "Waypoints": [
+    {
+      "Room": "12/2085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2077",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2084",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2081",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/GP5F)"
+}

@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Ancient Crypt",
+  "Waypoints": [
+    {
+      "Room": "1/1943",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1944",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1945",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1947",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1949",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1950",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1953",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1955",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1956",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1957",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1958",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1959",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1960",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1960",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1959",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1958",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1957",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1944",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Island/ACRY)"
+}

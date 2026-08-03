@@ -1,0 +1,237 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Broken Wastes Singles",
+  "Waypoints": [
+    {
+      "Room": "16/10441",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10457",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10446",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10457",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10492",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10493",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10494",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10494",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10490",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10489",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10488",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10489",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10490",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10494",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10493",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10492",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10443",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shattered Expanse/BWLG)"
+}

@@ -1,0 +1,227 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bore Worms (Loop 1)",
+  "Waypoints": [
+    {
+      "Room": "5/3603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3668",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3674",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3675",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3676",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3676",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3675",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3674",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3670",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3671",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3672",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3673",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3672",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3671",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3670",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3668",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3666",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Darkened Cavern/SSTW)"
+}

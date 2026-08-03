@@ -1,0 +1,367 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Rhudaur Sewers",
+  "Waypoints": [
+    {
+      "Room": "2/2602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2605",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2611",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2613",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2614",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2621",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/871",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/872",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/873",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/874",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/875",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/876",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/877",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/878",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/879",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/880",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/881",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/882",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/883",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/884",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/885",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/886",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/887",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/888",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/889",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/890",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/891",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/892",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/893",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2656",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2655",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2654",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2651",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2652",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2653",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2640",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2637",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2636",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2635",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2634",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2633",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2624",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2626",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2627",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2657",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/2658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/902",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/901",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/900",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/899",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/898",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/897",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/896",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rhudaur/RHRS)"
+}

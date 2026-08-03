@@ -1,0 +1,337 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark Wyrms Loop 2",
+  "Waypoints": [
+    {
+      "Room": "16/10907",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10906",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10905",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10904",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10903",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10845",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10846",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10847",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10848",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10849",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10850",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10869",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10870",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10869",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10887",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10886",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10882",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10883",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10884",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10885",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10839",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10877",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10878",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10877",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10839",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10875",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10876",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10875",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10874",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10873",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10872",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10871",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10870",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10869",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10887",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10886",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10882",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10883",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10884",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10885",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10837",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10841",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10843",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10845",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10903",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10904",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10905",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10906",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shattered Expanse/VCBP)"
+}

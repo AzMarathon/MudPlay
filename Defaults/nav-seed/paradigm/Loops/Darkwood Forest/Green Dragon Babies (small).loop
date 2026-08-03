@@ -1,0 +1,87 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Green Dragon Babies (small)",
+  "Waypoints": [
+    {
+      "Room": "1/1358",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2803",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Darkwood Forest/GDDF)"
+}

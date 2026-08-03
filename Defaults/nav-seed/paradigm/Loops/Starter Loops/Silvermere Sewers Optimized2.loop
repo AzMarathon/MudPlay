@@ -1,0 +1,67 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Silvermere Sewers Optimized2",
+  "Waypoints": [
+    {
+      "Room": "1/655",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/571",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/766",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/631",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/709",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

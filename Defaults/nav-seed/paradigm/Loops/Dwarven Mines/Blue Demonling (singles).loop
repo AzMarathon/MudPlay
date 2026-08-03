@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Blue Demonling (singles)",
+  "Waypoints": [
+    {
+      "Room": "15/1720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1733",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1732",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1731",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1730",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1729",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1728",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1727",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1726",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1725",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1721",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dwarven Mines/DMBF)"
+}

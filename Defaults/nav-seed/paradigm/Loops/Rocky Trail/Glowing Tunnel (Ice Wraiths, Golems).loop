@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Glowing Tunnel (Ice Wraiths, Golems)",
+  "Waypoints": [
+    {
+      "Room": "15/806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/803",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/805",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rocky Trail/BIGT)"
+}

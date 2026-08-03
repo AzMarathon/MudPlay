@@ -1,0 +1,182 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Webbed Lair (complete)",
+  "Waypoints": [
+    {
+      "Room": "17/2674",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2675",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2676",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2682",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/BFWL)"
+}

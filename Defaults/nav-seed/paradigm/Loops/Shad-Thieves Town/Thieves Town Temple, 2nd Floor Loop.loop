@@ -1,0 +1,77 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Thieves Town Temple, 2nd Floor Loop",
+  "Waypoints": [
+    {
+      "Room": "5/436",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/437",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/438",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/439",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/438",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/437",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/436",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/442",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/436",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/441",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Thieves Town/TSFS)"
+}

@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Siren Trees",
+  "Waypoints": [
+    {
+      "Room": "5/4045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4041",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4040",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4039",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4038",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4037",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4036",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4029",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4028",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4027",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4026",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4025",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4024",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4022",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4057",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4056",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4055",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4058",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4059",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4058",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4055",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad - Fungal Forest/FFGR)"
+}

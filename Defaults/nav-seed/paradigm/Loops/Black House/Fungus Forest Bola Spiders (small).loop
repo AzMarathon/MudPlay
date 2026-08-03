@@ -1,0 +1,197 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Fungus Forest Bola Spiders (small)",
+  "Waypoints": [
+    {
+      "Room": "7/156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/281",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/282",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/283",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/288",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/289",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/290",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/291",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/292",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/293",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/295",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/296",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/297",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/298",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/297",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/177",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/176",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/175",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/174",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/173",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/294",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/173",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/172",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/171",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/170",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/169",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/168",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/167",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/166",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/165",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/164",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/163",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/162",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/161",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/160",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/159",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/157",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black House/FUNG)"
+}

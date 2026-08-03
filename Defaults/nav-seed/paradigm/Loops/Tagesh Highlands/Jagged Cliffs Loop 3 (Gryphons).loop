@@ -1,0 +1,92 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Jagged Cliffs Loop 3 (Gryphons)",
+  "Waypoints": [
+    {
+      "Room": "14/4549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4541",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4540",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4541",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4550",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/JCR3)"
+}

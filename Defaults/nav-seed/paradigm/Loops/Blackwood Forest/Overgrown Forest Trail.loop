@@ -1,0 +1,197 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Overgrown Forest Trail",
+  "Waypoints": [
+    {
+      "Room": "17/16",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/17",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/17",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/16",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/18",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/19",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/20",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/51",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/50",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/49",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/50",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/51",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7001",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/59",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/58",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/57",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/55",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/54",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/55",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/57",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/58",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/59",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7001",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/20",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/19",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/18",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Blackwood Forest/BFOT)"
+}

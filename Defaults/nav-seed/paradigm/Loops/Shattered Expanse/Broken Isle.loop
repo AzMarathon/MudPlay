@@ -1,0 +1,382 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Broken Isle",
+  "Waypoints": [
+    {
+      "Room": "16/11064",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11069",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11071",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11077",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11084",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11095",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11097",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11098",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11099",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11138",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11138",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11132",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11132",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11130",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11131",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11130",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/11066",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shattered Expanse/BILG)"
+}

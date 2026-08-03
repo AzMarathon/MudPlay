@@ -1,0 +1,217 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Feral Ogres singles",
+  "Waypoints": [
+    {
+      "Room": "2/11057",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11058",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11059",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11060",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11061",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11062",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11061",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11063",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11084",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11077",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11075",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11076",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11071",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11067",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11069",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11067",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11066",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11064",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11063",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11061",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11060",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11059",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11058",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rugged Plateau/RPTP)"
+}

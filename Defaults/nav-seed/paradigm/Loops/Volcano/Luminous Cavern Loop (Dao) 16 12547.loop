@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Luminous Cavern Loop (Dao) 16 12547",
+  "Waypoints": [
+    {
+      "Room": "16/12547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/12546",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Volcano/UDLC)"
+}

@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Arlysia Park",
+  "Waypoints": [
+    {
+      "Room": "17/2280",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2457",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2456",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2455",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2454",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2466",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2465",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2449",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2448",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2446",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2443",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Arlysia/ARPE)"
+}

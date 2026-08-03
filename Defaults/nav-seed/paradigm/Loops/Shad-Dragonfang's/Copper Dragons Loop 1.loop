@@ -1,0 +1,122 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Copper Dragons Loop 1",
+  "Waypoints": [
+    {
+      "Room": "5/2669",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2654",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2653",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2652",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2651",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2650",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2648",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2647",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2715",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Dragonfang\u0027s/DTE!)"
+}

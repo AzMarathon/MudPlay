@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Red Demonlings",
+  "Waypoints": [
+    {
+      "Room": "15/1737",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1738",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1741",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1742",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1743",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1744",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1745",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1746",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1747",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1748",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1749",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1750",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1751",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1752",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1753",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1752",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1751",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1750",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1749",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1748",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1747",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1746",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1745",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1744",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1743",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1742",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1741",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1740",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1739",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1738",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dwarven Mines/DMRF)"
+}

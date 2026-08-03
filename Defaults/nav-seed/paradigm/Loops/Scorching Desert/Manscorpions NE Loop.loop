@@ -1,0 +1,317 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Manscorpions NE Loop",
+  "Waypoints": [
+    {
+      "Room": "12/1686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1706",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1706",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/1687",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/LCFE)"
+}

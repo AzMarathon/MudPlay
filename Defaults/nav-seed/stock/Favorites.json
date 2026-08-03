@@ -1,0 +1,4225 @@
+{
+  "Favorites": [
+    {
+      "Map": 1,
+      "Room": 297,
+      "Label": null,
+      "Folder": null
+    },
+    {
+      "Map": 1,
+      "Room": 2327,
+      "Label": null,
+      "Folder": null
+    },
+    {
+      "Map": 17,
+      "Room": 2854,
+      "Label": "Ancient Fortress, Jail Cell",
+      "Folder": "Ancient Fortress"
+    },
+    {
+      "Map": 12,
+      "Room": 2368,
+      "Label": "Ancient Fortress, Jail Entrance",
+      "Folder": "Ancient Fortress"
+    },
+    {
+      "Map": 3,
+      "Room": 606,
+      "Label": "Ancient Ruin Dark Alley",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 557,
+      "Label": "Ancient Ruin Doors",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 632,
+      "Label": "Ancient Ruin Ice Forge",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 619,
+      "Label": "Ancient Ruin Icy Building",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 637,
+      "Label": "Ancient Ruin Library",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 560,
+      "Label": "Ancient Ruin Plaza",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 661,
+      "Label": "Ancient Ruin, Palace Gates (closed)",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 641,
+      "Label": "Beholder",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 583,
+      "Label": "Chimera",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 668,
+      "Label": "Goru-Nezar",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 574,
+      "Label": "Huge Basilisk",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 613,
+      "Label": "Pillaged Museum Vortex",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 595,
+      "Label": "Prismatic Dragon",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 608,
+      "Label": "Unholy Idol",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 3,
+      "Room": 650,
+      "Label": "Wraithlord",
+      "Folder": "Ancient Ruin"
+    },
+    {
+      "Map": 17,
+      "Room": 2433,
+      "Label": "Aeriana's Apothecary",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2415,
+      "Label": "An Open Grave",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 981,
+      "Label": "Ancient Galleon",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 580,
+      "Label": "Arlysia, City Docks",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 515,
+      "Label": "Arlysia, Outer Wall",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2435,
+      "Label": "Bank of Arlysia",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 473,
+      "Label": "City of Arlysia, Town Gates",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2020,
+      "Label": "Filthy Room, Old Man",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 1746,
+      "Label": "Ghost of Justice Darkbane",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2439,
+      "Label": "Hap's General Store",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2423,
+      "Label": "Inquisitor Armandriel",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2548,
+      "Label": "Jail Cell",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2436,
+      "Label": "Jandar's Missile Weapons",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 1790,
+      "Label": "Library Steps - Old Hermit",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 1791,
+      "Label": "Library Steps",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2438,
+      "Label": "Lud's Smithy",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2590,
+      "Label": "Office of the Pastor (wooden box)",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2418,
+      "Label": "Pastor Lander",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2019,
+      "Label": "Rotting Beholder",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2441,
+      "Label": "Tavern",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 2440,
+      "Label": "The Goode Seamstress",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 1733,
+      "Label": "White Forest, Diamond",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 1641,
+      "Label": "White Forest, Landing",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 17,
+      "Room": 1642,
+      "Label": "White Forest",
+      "Folder": "Arlysia"
+    },
+    {
+      "Map": 16,
+      "Room": 836,
+      "Label": "Barren Hills, Rock Quarry",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 786,
+      "Label": "Fortress Gate",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 832,
+      "Label": "Gaunt One Messenger",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 795,
+      "Label": "Giant Fortress, Animal Pen",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 801,
+      "Label": "Hill Giant Chieftain",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 1068,
+      "Label": "Mountain Plateau",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 15,
+      "Room": 640,
+      "Label": "Narrow Ledge",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 1083,
+      "Label": "Stone Encampment, Entrance",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 1095,
+      "Label": "Stone Giant Chieftain",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 1160,
+      "Label": "Storm Fortress (inside gate)",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 1159,
+      "Label": "Storm Fortress (outside gate)",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 1182,
+      "Label": "Storm Fortress, Hallway",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 1185,
+      "Label": "Storm Giant Commander",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 1184,
+      "Label": "Storm Giant King",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 902,
+      "Label": "Storm Mountain, Rocky Path lev 12",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 947,
+      "Label": "Storm Mountain, Rocky Path lev 18",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 1001,
+      "Label": "Storm Mountain,Outside Lallim",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 551,
+      "Label": "Treetops, Closed Door",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 16,
+      "Room": 550,
+      "Label": "Treetops",
+      "Folder": "Barren Hills"
+    },
+    {
+      "Map": 8,
+      "Room": 955,
+      "Label": "Ancient Stronghold (Apparatus)",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 951,
+      "Label": "Ancient Stronghold (Puzzle Door)",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 910,
+      "Label": "Ancient Stronghold",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 398,
+      "Label": "Black Caves (Bloodstone Orb)",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 900,
+      "Label": "Black Caves Level 1",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 140,
+      "Label": "Black Caves Level 2",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 321,
+      "Label": "Black Caves Level 3",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 6,
+      "Room": 996,
+      "Label": "Black Caves, Mushroom Cave",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 880,
+      "Label": "Dark-elf Emissary",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 925,
+      "Label": "Ghost Knight",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 459,
+      "Label": "Gnome Commander",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 872,
+      "Label": "Hilltop Fortress",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 6,
+      "Room": 1102,
+      "Label": "Mushroom Cave, Black mushrooms",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 8,
+      "Room": 879,
+      "Label": "Slave Lord",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 2,
+      "Room": 2819,
+      "Label": "Stone Tunnel, Dead End",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 7,
+      "Room": 1245,
+      "Label": "Alchemist",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1182,
+      "Label": "Black Fortress",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1285,
+      "Label": "Champion of Blood",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1227,
+      "Label": "Dark Bishop",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1251,
+      "Label": "Dark Cell",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1258,
+      "Label": "Dark Wizard",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 15,
+      "Room": 477,
+      "Label": "Darkened Tunnels",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1136,
+      "Label": "Dreary Shop",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1133,
+      "Label": "Dreary Village",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 3,
+      "Room": 785,
+      "Label": "Dreary Vortex",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1222,
+      "Label": "Fortress Secret Entrance",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1282,
+      "Label": "Massive Chest",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1283,
+      "Label": "Master Assassin",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 15,
+      "Room": 416,
+      "Label": "New Master Assassin",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1254,
+      "Label": "Outside Dark Wizard",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 8,
+      "Room": 1262,
+      "Label": "Outside Master Assassin",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 7,
+      "Room": 1281,
+      "Label": "Room Of Change",
+      "Folder": "Black Fort"
+    },
+    {
+      "Map": 1,
+      "Room": 1450,
+      "Label": "Black House, Basement",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 1,
+      "Room": 1313,
+      "Label": "Black House, Foyer",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 1,
+      "Room": 1541,
+      "Label": "Cave Worm Area",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 1,
+      "Room": 2428,
+      "Label": "Cave Worm Obelisk",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 730,
+      "Label": "Cyclops",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 1008,
+      "Label": "Dhelvanen",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 519,
+      "Label": "Fungus Forest (Hazy Swamp Edge)",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 199,
+      "Label": "Fungus Forest (Stone Bridge)",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 246,
+      "Label": "Fungus Forest, Hole to Tunnels",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 156,
+      "Label": "Fungus Forest",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 1405,
+      "Label": "Fungus Tunnel",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 150,
+      "Label": "Grand Stair (Gate)",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 152,
+      "Label": "Grand Stair (Guardroom)",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 1,
+      "Room": 2331,
+      "Label": "Grand Stair (Landing)",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 3,
+      "Room": 782,
+      "Label": "Hazy Swamp Vortex",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 1,
+      "Room": 1595,
+      "Label": "Hellhound Area",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 15,
+      "Room": 290,
+      "Label": "Lady of the Dark",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 1040,
+      "Label": "Serpentkin Chieftain",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 1027,
+      "Label": "Serpentkin Village",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 1041,
+      "Label": "Serpentkin Witchdoctor",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 1,
+      "Room": 1462,
+      "Label": "Under Black House",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 7,
+      "Room": 1530,
+      "Label": "White Corridor, Crystal",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 3,
+      "Room": 786,
+      "Label": "Black Wasteland, East of Magus",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 3,
+      "Room": 675,
+      "Label": "Black Wasteland, West of Magus",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 3,
+      "Room": 787,
+      "Label": "Mind Flayer Magus",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 1,
+      "Room": 2426,
+      "Label": "Wastelands Obelisk",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 3,
+      "Room": 699,
+      "Label": "Wastelands Vortex (Copperwood)",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 3,
+      "Room": 740,
+      "Label": "Wastelands Vortex (Darkwood )",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 3,
+      "Room": 776,
+      "Label": "Wastelands Vortex (Dreary Village)",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 3,
+      "Room": 762,
+      "Label": "Wastelands Vortex (DTH)",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 3,
+      "Room": 681,
+      "Label": "Wastelands Vortex (Mossy Tunnels)",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 3,
+      "Room": 731,
+      "Label": "Wastelands Vortex (NPP)",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 3,
+      "Room": 669,
+      "Label": "Wastelands Vortex (Pillaged Museum)",
+      "Folder": "Black Wastelands"
+    },
+    {
+      "Map": 17,
+      "Room": 2800,
+      "Label": "Abandoned Inn, Common Room",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2638,
+      "Label": "Blackwood Forest (webbed  fork)",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 806,
+      "Label": "Blackwood Forest, Docks",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 602,
+      "Label": "Blackwood Forest, Garden Fork",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 703,
+      "Label": "Blackwood Forest, Garden",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2674,
+      "Label": "Blackwood Forest, Webbed Lair",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 591,
+      "Label": "Bloody Executioner",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2718,
+      "Label": "Covered Tent, Lord Feyr",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 831,
+      "Label": "Darken Beast Lord",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 314,
+      "Label": "Death Minion",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 41,
+      "Label": "Dirt Path Large Sign",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 979,
+      "Label": "Dreadlord of Blood",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2632,
+      "Label": "Dying Fields, West Side",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2647,
+      "Label": "Dying Fields",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 472,
+      "Label": "Eastern Road, Outside Inn",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2586,
+      "Label": "Enigma Lord",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 366,
+      "Label": "Farmstead",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 483,
+      "Label": "Fork, Town/Inn/Fields",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 10,
+      "Room": 297,
+      "Label": "Frozen Cavern, Cave Opening",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 81,
+      "Label": "Graveyard Entrance, Main Road",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 64,
+      "Label": "Graveyard Entrance, Southern Gate",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 358,
+      "Label": "Graveyard, Outside Drakas Tomb",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 248,
+      "Label": "Graveyard, Warrior Statue",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 776,
+      "Label": "Gypsy Wagon - Ancient Gypsy Woman",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 728,
+      "Label": "HangingTree",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 377,
+      "Label": "Mammoth Rotworm",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 246,
+      "Label": "Mausoleum, Entrance",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2097,
+      "Label": "Mausoleum, Second Floor",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2068,
+      "Label": "Mausoleum, Stone Hallway !st Flr",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2126,
+      "Label": "Mausoleum, Stone Hallway 2nd Flr",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2205,
+      "Label": "Mausoleum, Third Floor",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2812,
+      "Label": "Outside Darken Beast Lord",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 875,
+      "Label": "Outside Dreadlord of Blood",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 2243,
+      "Label": "Ozrinom",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 424,
+      "Label": "Private Road, Farms",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 17,
+      "Room": 162,
+      "Label": "Road to the Southern Dock",
+      "Folder": "Blackwood Forest"
+    },
+    {
+      "Map": 7,
+      "Room": 732,
+      "Label": "Cracked Plain",
+      "Folder": "Cracked Plains"
+    },
+    {
+      "Map": 7,
+      "Room": 1439,
+      "Label": "Cracked Tunnel(start of purples)",
+      "Folder": "Cracked Plains"
+    },
+    {
+      "Map": 7,
+      "Room": 1406,
+      "Label": "Cracked Tunnel",
+      "Folder": "Cracked Plains"
+    },
+    {
+      "Map": 8,
+      "Room": 633,
+      "Label": "Black Moat, Trap Door",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 530,
+      "Label": "Captain of the Guard",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 558,
+      "Label": "Dark-elf Archmage",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 604,
+      "Label": "Dark-elf Castle Level 1",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 584,
+      "Label": "Dark-elf Castle Level 2",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 658,
+      "Label": "Dark-elf Castle Level 3",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 697,
+      "Label": "Dark-elf Castle Level 4",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 559,
+      "Label": "Dark-elf City, Moatside",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 490,
+      "Label": "Dark-elf High Priestess",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 705,
+      "Label": "Dark-elf Queen",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 1699,
+      "Label": "Dark-elf Soldier's Quarters",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 1749,
+      "Label": "Dark-elf Temple, Entrance",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 460,
+      "Label": "Dark-elff City (Hole up)",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 513,
+      "Label": "Fighter's Guild, Entrance",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 706,
+      "Label": "Guardian Beast",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 1797,
+      "Label": "Guild of the Ebon Blade, Dark Psg",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 512,
+      "Label": "Master Torturer",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 1697,
+      "Label": "Narrow Alley",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 531,
+      "Label": "Outside Archmage Tower",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 1678,
+      "Label": "Outside Ebon Guild",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 707,
+      "Label": "Royal Treasure Vault",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 486,
+      "Label": "Sleazy Shopkeeper",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 532,
+      "Label": "Tower Antechamber",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 462,
+      "Label": "Town Gates, Archway",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 1724,
+      "Label": "Training Grounds",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 8,
+      "Room": 689,
+      "Label": "Wererat Emissary",
+      "Folder": "Dark-Elf City"
+    },
+    {
+      "Map": 9,
+      "Room": 1423,
+      "Label": "Ancient Tree (Morukai)",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 9,
+      "Room": 1291,
+      "Label": "Ancient Tree Portal",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 9,
+      "Room": 1341,
+      "Label": "Ancient Tree Spiral Stairs",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 9,
+      "Room": 1339,
+      "Label": "Caves of Chaos, Staircase",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 2425,
+      "Label": "Darkwood Forest Obelisk",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 3,
+      "Room": 784,
+      "Label": "Darkwood Forest Vortex",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 149,
+      "Label": "Darkwood Forest, Grassy Clearing",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 1391,
+      "Label": "Darkwood Forest, Main Road (Sign)",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 9,
+      "Room": 724,
+      "Label": "Darkwood Forest, Outside Hidden Kp",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 7,
+      "Room": 87,
+      "Label": "Elder Darkwood Grove, Stone Arch",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 2419,
+      "Label": "Elder Grove Obelisk",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 7,
+      "Room": 141,
+      "Label": "Elder Grove, Thornwalled Path",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 7,
+      "Room": 21,
+      "Label": "Elder Grove",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 1678,
+      "Label": "Giant Spider",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 3111,
+      "Label": "Great Green Dragon",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 3052,
+      "Label": "Green Dragons ( Inner Loop)",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 1358,
+      "Label": "Green Dragons",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 9,
+      "Room": 803,
+      "Label": "Hidden Keep (Entrance)",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 9,
+      "Room": 863,
+      "Label": "Hidden Keep (Treasure Room)",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 7,
+      "Room": 140,
+      "Label": "High Druid Arch",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 7,
+      "Room": 142,
+      "Label": "High Druid",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 239,
+      "Label": "Horner The Hide",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 7,
+      "Room": 20,
+      "Label": "Huge Darkwood Tree",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 9,
+      "Room": 870,
+      "Label": "Leo The Quick",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 9,
+      "Room": 1425,
+      "Label": "Morukai",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 153,
+      "Label": "Small Hill",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 160,
+      "Label": "The Grey Lord",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 3442,
+      "Label": "Woodard's Ranch, Courtyard",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 1,
+      "Room": 411,
+      "Label": "Wyverns",
+      "Folder": "Darkwood Forest"
+    },
+    {
+      "Map": 2,
+      "Room": 2368,
+      "Label": "Black Mountains",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 9,
+      "Room": 497,
+      "Label": "Black Orc Boss",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 2518,
+      "Label": "Commander Markus",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 3,
+      "Room": 783,
+      "Label": "Dragon's Teeth Hills (Vortex)",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 404,
+      "Label": "Dragon's Teeth Hills, Rocky Passag",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 2367,
+      "Label": "Giant Pulsating Cocoon",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 1482,
+      "Label": "Glowing Pool",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 1122,
+      "Label": "Gnoll Chieftain",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 1110,
+      "Label": "Gnoll Encampment, Trail Crossroad",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 1106,
+      "Label": "Gnoll Encampment",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 9,
+      "Room": 244,
+      "Label": "Jagged Hills Path",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 2366,
+      "Label": "Mermex Queen",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 6,
+      "Room": 76,
+      "Label": "Metallic Monstrosity",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 176,
+      "Label": "Rocky Valley, Massive Doors",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 6,
+      "Room": 1,
+      "Label": "Smoking Crater",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 115,
+      "Label": "Western Road Avalanche",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 61,
+      "Label": "Western Road Fork",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 6,
+      "Room": 1811,
+      "Label": "Bottom of Ancient Stair",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 1801,
+      "Label": "Copper Mine (Ancient Stair)",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 1626,
+      "Label": "Copper Mine (Level 2)",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 1898,
+      "Label": "Copper/Silver Mine (Level 3)",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 1791,
+      "Label": "Diamond Mine (Devil Fiend area)",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 15,
+      "Room": 1683,
+      "Label": "Diamond Mine Tunnel, Cart Ramp",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 2649,
+      "Label": "Duergar Lord",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 2338,
+      "Label": "Gemstone Juggernaut",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 2690,
+      "Label": "Gold Mine (Level 5)",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 1,
+      "Room": 2680,
+      "Label": "Gold Mine NPP Portal",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 3108,
+      "Label": "Gulgulthra",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 1889,
+      "Label": "Huge Obsidian Golem",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 1569,
+      "Label": "Iron Mine (Level 1)",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 2890,
+      "Label": "Mithril Mine (Level 6)",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 2047,
+      "Label": "Redstone Tunnel (Level 3)",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 2257,
+      "Label": "Redstone Tunnel",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 6,
+      "Room": 2354,
+      "Label": "Silver Mine (Level 4)",
+      "Folder": "Dwarven Mines"
+    },
+    {
+      "Map": 15,
+      "Room": 933,
+      "Label": "Entrance Black House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 947,
+      "Label": "Entrance Blue House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 862,
+      "Label": "Entrance Gold House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 923,
+      "Label": "Entrance Green House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 874,
+      "Label": "Entrance Orange House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 903,
+      "Label": "Entrance Red House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 908,
+      "Label": "Entrance Silver House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 891,
+      "Label": "Entrance Violet House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 850,
+      "Label": "Entrance White House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 882,
+      "Label": "Entrance Yellow House Room",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 979,
+      "Label": "Main Road Shop, Black House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 978,
+      "Label": "Main Road Shop, Blue House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 981,
+      "Label": "Main Road Shop, Gold House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 976,
+      "Label": "Main Road Shop, Green House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 974,
+      "Label": "Main Road Shop, Orange House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 973,
+      "Label": "Main Road Shop, Red House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 980,
+      "Label": "Main Road Shop, Silver House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 977,
+      "Label": "Main Road Shop, Violet House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 982,
+      "Label": "Main Road Shop, White House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 15,
+      "Room": 975,
+      "Label": "Main Road Shop, Yellow House",
+      "Folder": "Gang Houses"
+    },
+    {
+      "Map": 6,
+      "Room": 566,
+      "Label": "General Store",
+      "Folder": "Gnome Village"
+    },
+    {
+      "Map": 6,
+      "Room": 645,
+      "Label": "Gnome Alchemist",
+      "Folder": "Gnome Village"
+    },
+    {
+      "Map": 6,
+      "Room": 577,
+      "Label": "Gnome Enchantress",
+      "Folder": "Gnome Village"
+    },
+    {
+      "Map": 6,
+      "Room": 644,
+      "Label": "Gnome Inventor",
+      "Folder": "Gnome Village"
+    },
+    {
+      "Map": 6,
+      "Room": 552,
+      "Label": "Gnome Village",
+      "Folder": "Gnome Village"
+    },
+    {
+      "Map": 6,
+      "Room": 567,
+      "Label": "Jeweler's Shop",
+      "Folder": "Gnome Village"
+    },
+    {
+      "Map": 9,
+      "Room": 717,
+      "Label": "Queen Ant",
+      "Folder": "Gnome Village"
+    },
+    {
+      "Map": 1,
+      "Room": 1750,
+      "Label": "Goblin Caves",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 1,
+      "Room": 1797,
+      "Label": "Guardian Golem",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 15,
+      "Room": 5,
+      "Label": "Huge Cavern, Training Area",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 15,
+      "Room": 171,
+      "Label": "Orc Barracks, East Side",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 15,
+      "Room": 105,
+      "Label": "Orc Barracks, West Side",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 15,
+      "Room": 183,
+      "Label": "Orc Warlord",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 7,
+      "Room": 11,
+      "Label": "Slave Master",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 1,
+      "Room": 1765,
+      "Label": "Slime Beast",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 7,
+      "Room": 1363,
+      "Label": "Small Stone Passage",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 1,
+      "Room": 1810,
+      "Label": "Thrag",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 7,
+      "Room": 19,
+      "Label": "Werewolf",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 1,
+      "Room": 1028,
+      "Label": "Crypt Level 1",
+      "Folder": "Graveyard"
+    },
+    {
+      "Map": 1,
+      "Room": 1237,
+      "Label": "Crypt Level 2",
+      "Folder": "Graveyard"
+    },
+    {
+      "Map": 1,
+      "Room": 1276,
+      "Label": "Crypt Level 3",
+      "Folder": "Graveyard"
+    },
+    {
+      "Map": 1,
+      "Room": 1309,
+      "Label": "Crypt, Sealed Tomb (Mummy)",
+      "Folder": "Graveyard"
+    },
+    {
+      "Map": 1,
+      "Room": 180,
+      "Label": "Graveyard Bridge",
+      "Folder": "Graveyard"
+    },
+    {
+      "Map": 1,
+      "Room": 2418,
+      "Label": "Graveyard Obelisk",
+      "Folder": "Graveyard"
+    },
+    {
+      "Map": 1,
+      "Room": 834,
+      "Label": "Graveyard, Tomb Entrance",
+      "Folder": "Graveyard"
+    },
+    {
+      "Map": 6,
+      "Room": 994,
+      "Label": "Spectral Knight",
+      "Folder": "Graveyard"
+    },
+    {
+      "Map": 6,
+      "Room": 861,
+      "Label": "Tomb Vault, Stairwell",
+      "Folder": "Graveyard"
+    },
+    {
+      "Map": 1,
+      "Room": 1943,
+      "Label": "Ancient Crypt",
+      "Folder": "Island"
+    },
+    {
+      "Map": 1,
+      "Room": 1952,
+      "Label": "Banshee",
+      "Folder": "Island"
+    },
+    {
+      "Map": 1,
+      "Room": 1815,
+      "Label": "Island Beach Landing",
+      "Folder": "Island"
+    },
+    {
+      "Map": 1,
+      "Room": 1832,
+      "Label": "Labyrinth Entrance",
+      "Folder": "Island"
+    },
+    {
+      "Map": 1,
+      "Room": 2417,
+      "Label": "Labyrinth Obelisk",
+      "Folder": "Island"
+    },
+    {
+      "Map": 1,
+      "Room": 2124,
+      "Label": "Minotaur Champion",
+      "Folder": "Island"
+    },
+    {
+      "Map": 1,
+      "Room": 2123,
+      "Label": "Minotaur Chest",
+      "Folder": "Island"
+    },
+    {
+      "Map": 1,
+      "Room": 1865,
+      "Label": "Minotaur Chieftain",
+      "Folder": "Island"
+    },
+    {
+      "Map": 1,
+      "Room": 2122,
+      "Label": "Outside minotaur champion (lever)",
+      "Folder": "Island"
+    },
+    {
+      "Map": 1,
+      "Room": 1875,
+      "Label": "Wooden Passages",
+      "Folder": "Island"
+    },
+    {
+      "Map": 16,
+      "Room": 1412,
+      "Label": "Abandoned Temple",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1235,
+      "Label": "Bottom of the Life Tree",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 2228,
+      "Label": "Earthen Catacombs (no idol)",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 2268,
+      "Label": "Earthen Catacombs, Outside Kuel",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1510,
+      "Label": "Jungle Cave",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 1,
+      "Room": 2685,
+      "Label": "Jungle NPP Portal",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 2667,
+      "Label": "Kuel",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1405,
+      "Label": "Large Mound",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 50,
+      "Label": "Massive Web",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1247,
+      "Label": "Shallow Jungle, Mud Pit 1",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1248,
+      "Label": "Shallow Jungle, Mud Pit 2",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1264,
+      "Label": "Shallow Jungle, Mud Pit 3",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1382,
+      "Label": "Sylk",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 12,
+      "Label": "Tasloi Animal Master",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 24,
+      "Label": "Tasloi Chief",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 38,
+      "Label": "Tasloi Shaman",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1,
+      "Label": "Tasloi Village, Entrance",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 20,
+      "Label": "Tasloi Village, Large Tree",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 8,
+      "Label": "Tasloi Village",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1209,
+      "Label": "Vine Bridge, Life Tree",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 16,
+      "Room": 1201,
+      "Label": "Vine Bridge, Wooden Gateway",
+      "Folder": "Jungle"
+    },
+    {
+      "Map": 6,
+      "Room": 1524,
+      "Label": "Ancient Sand Dragon (neutral)",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1336,
+      "Label": "Axe of Fury Weapon Store",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1334,
+      "Label": "Bank of Khazarad",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1338,
+      "Label": "Champion Gudruk",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1344,
+      "Label": "Drotha's Deadly Weaponry",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1335,
+      "Label": "Dwarven General Store",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1347,
+      "Label": "Dwarven Temple Healer",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1332,
+      "Label": "Frothing Mug Tavern (dwarven ale)",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1346,
+      "Label": "Gorthun's Gemstones",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1343,
+      "Label": "Gurdal's Leather Goods",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1342,
+      "Label": "Harkul's Haberdashery",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1566,
+      "Label": "Kai Master",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1257,
+      "Label": "Khazarad Center",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1328,
+      "Label": "Khazarad Inn",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1249,
+      "Label": "Khazarad, Entry Arch",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1387,
+      "Label": "King Kulgar",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1382,
+      "Label": "Loremaster Thulgraf",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1337,
+      "Label": "Martok's Battered Breastplate",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1357,
+      "Label": "Master Smith Martok",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1567,
+      "Label": "Miner's Guild",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1544,
+      "Label": "Mountain Ledge, Nekojin Vil. Fork",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 1,
+      "Room": 2681,
+      "Label": "Redstone Tunnel, NPP Portal",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1353,
+      "Label": "Rubbish Disposal Chamber",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 6,
+      "Room": 1406,
+      "Label": "Spiral Stairwell, Cave-In",
+      "Folder": "Khazarad"
+    },
+    {
+      "Map": 7,
+      "Room": 1358,
+      "Label": "Adult She-Dragon",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1168,
+      "Label": "Choira Pyromancer",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1099,
+      "Label": "Crazed Inquisitor",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1053,
+      "Label": "Crimson Fortress, Entrance",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1101,
+      "Label": "Crimson Fortress, Inquis Fulgore",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1054,
+      "Label": "Crimson Fortress, Main Gate",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1111,
+      "Label": "Crimson Fortress, Massive Door",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1112,
+      "Label": "Crimson High Priest",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1046,
+      "Label": "Crimson Tunnel",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 6,
+      "Room": 1243,
+      "Label": "Efreeti",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1127,
+      "Label": "Flame Pit (Demoness Irikani)",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 7,
+      "Room": 1402,
+      "Label": "Kotar Bloodthorn",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 9,
+      "Room": 1427,
+      "Label": "Lake of Fire",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1017,
+      "Label": "Lava Cavern, Obsidian Cliffs",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1164,
+      "Label": "Lava Tube (outside Choira)",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 7,
+      "Room": 1288,
+      "Label": "Lava Tube (Red Dragons)",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 6,
+      "Room": 1237,
+      "Label": "Lava Tube, Efreeti Fork",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 7,
+      "Room": 1367,
+      "Label": "Magma River, Dragon Nest",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 6,
+      "Room": 1210,
+      "Label": "Salamander Tubes",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 15,
+      "Room": 1126,
+      "Label": "Temple of Fire, Massive Door",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 7,
+      "Room": 884,
+      "Label": "Tunnel Mouth",
+      "Folder": "Lava Fields"
+    },
+    {
+      "Map": 16,
+      "Room": 382,
+      "Label": "Amazon Craftswoman",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 318,
+      "Label": "Armour Shop, Back Room",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 317,
+      "Label": "Armour Shop, Front Room",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 320,
+      "Label": "Bank of the Lost City",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 356,
+      "Label": "Deranged Priest",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 1,
+      "Room": 380,
+      "Label": "Elders' Council Chambers, Wait/Rm",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 436,
+      "Label": "General Store, Back Room",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 435,
+      "Label": "General Store, Front Room",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 329,
+      "Label": "Hides Shop",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 434,
+      "Label": "Jewelry Shop",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 433,
+      "Label": "Magic Shop, Back Room",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 432,
+      "Label": "Magic Shop, Front Room",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 541,
+      "Label": "Practice Dummy",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 396,
+      "Label": "Queen's Room (East)",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 368,
+      "Label": "Queen's Room (West)",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 1521,
+      "Label": "Spiral Staircase",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 311,
+      "Label": "Temple Stairs",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 542,
+      "Label": "Training Grounds, Halls/ the Dead",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 331,
+      "Label": "Weapons Shop, Back Room",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 330,
+      "Label": "Weapons Shop, Front Room",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 16,
+      "Room": 425,
+      "Label": "Well Lit Alley, Dead End",
+      "Folder": "Lost City"
+    },
+    {
+      "Map": 6,
+      "Room": 108,
+      "Label": "Aurumvorax",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 539,
+      "Label": "Giant Two-Headed Troll",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 124,
+      "Label": "Gypsy Encampment",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 426,
+      "Label": "Huge Black Dragon",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 834,
+      "Label": "Kobold King",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 754,
+      "Label": "Kobold Tunnels",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 387,
+      "Label": "Misty Bog (Black Dragons Area)",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 1,
+      "Room": 2682,
+      "Label": "Misty Bog NPP Portal",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 414,
+      "Label": "Misty Bog, Black Dragon Fork",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 126,
+      "Label": "Orfeo Talespinner",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 3109,
+      "Label": "Overgrown Shrine",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 133,
+      "Label": "Swamp Ridge Path Crossroads",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 217,
+      "Label": "Swampside Path, Darkwood Fork",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 6,
+      "Room": 219,
+      "Label": "Swampside Path, Northern Fork",
+      "Folder": "Misty Valley"
+    },
+    {
+      "Map": 9,
+      "Room": 1032,
+      "Label": "Catacombs",
+      "Folder": "Mossy Tunnels"
+    },
+    {
+      "Map": 9,
+      "Room": 1012,
+      "Label": "Crumbling Ruins",
+      "Folder": "Mossy Tunnels"
+    },
+    {
+      "Map": 9,
+      "Room": 1177,
+      "Label": "Haunting Spirit",
+      "Folder": "Mossy Tunnels"
+    },
+    {
+      "Map": 3,
+      "Room": 20,
+      "Label": "Mossy Tunnel (Lichen)",
+      "Folder": "Mossy Tunnels"
+    },
+    {
+      "Map": 3,
+      "Room": 25,
+      "Label": "Mossy Tunnel (Vortex)",
+      "Folder": "Mossy Tunnels"
+    },
+    {
+      "Map": 3,
+      "Room": 1,
+      "Label": "Mossy Tunnel",
+      "Folder": "Mossy Tunnels"
+    },
+    {
+      "Map": 9,
+      "Room": 1431,
+      "Label": "Necromancer",
+      "Folder": "Mossy Tunnels"
+    },
+    {
+      "Map": 3,
+      "Room": 37,
+      "Label": "Night Hag",
+      "Folder": "Mossy Tunnels"
+    },
+    {
+      "Map": 8,
+      "Room": 1040,
+      "Label": "Fallen Angel",
+      "Folder": "Negative Power Plane"
+    },
+    {
+      "Map": 8,
+      "Room": 978,
+      "Label": "Negative Power Plane Vortex",
+      "Folder": "Negative Power Plane"
+    },
+    {
+      "Map": 1,
+      "Room": 2142,
+      "Label": "Armour Shop (Betram)",
+      "Folder": "Newhaven"
+    },
+    {
+      "Map": 1,
+      "Room": 2156,
+      "Label": "Mineshaft Cave Bear",
+      "Folder": "Newhaven"
+    },
+    {
+      "Map": 1,
+      "Room": 2150,
+      "Label": "Newhaven Arena",
+      "Folder": "Newhaven"
+    },
+    {
+      "Map": 1,
+      "Room": 2146,
+      "Label": "Newhaven Town",
+      "Folder": "Newhaven"
+    },
+    {
+      "Map": 1,
+      "Room": 2140,
+      "Label": "Newhaven, Village Entrance",
+      "Folder": "Newhaven"
+    },
+    {
+      "Map": 1,
+      "Room": 2144,
+      "Label": "Spell Shop (Rayth)",
+      "Folder": "Newhaven"
+    },
+    {
+      "Map": 1,
+      "Room": 2190,
+      "Label": "Temple Healer",
+      "Folder": "Newhaven"
+    },
+    {
+      "Map": 1,
+      "Room": 2141,
+      "Label": "Weapons Shop (Nathaniel)",
+      "Folder": "Newhaven"
+    },
+    {
+      "Map": 3,
+      "Room": 533,
+      "Label": "Ancient Tree",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 214,
+      "Label": "Ancient Willow",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 140,
+      "Label": "Bee Hive",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 348,
+      "Label": "Bloodbear cave, Cramped Passageway",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 1,
+      "Room": 2420,
+      "Label": "Bronzewood Obelisk",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 381,
+      "Label": "Brown Nuts Tree",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 393,
+      "Label": "Copperwood Vortex",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 198,
+      "Label": "Dying Grove",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 541,
+      "Label": "Elven Shop",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 497,
+      "Label": "Evil Passage, Inside Silverwood",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 420,
+      "Label": "Faerie Ring",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 544,
+      "Label": "Filthy Encampment",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 148,
+      "Label": "Green Fruit Tree",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 105,
+      "Label": "Ironwood Forest, Twisted Growth",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 254,
+      "Label": "Quickling Lord",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 1,
+      "Room": 2400,
+      "Label": "Silver River, Dank Forest Opening",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 1,
+      "Room": 2415,
+      "Label": "Silver River, Murky Pool",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 1,
+      "Room": 2393,
+      "Label": "Silver River, Small Fork",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 1,
+      "Room": 2411,
+      "Label": "Silvery Pool",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 3,
+      "Room": 543,
+      "Label": "Woodelf Lord",
+      "Folder": "Northern Forests"
+    },
+    {
+      "Map": 16,
+      "Room": 637,
+      "Label": "Damp Cavern, Wellspring",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 663,
+      "Label": "Giant River Turtle",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 297,
+      "Label": "King Crab",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 2658,
+      "Label": "Lagoon, Reef",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 2633,
+      "Label": "Putakwa",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 2161,
+      "Label": "River Landing, Dirt Path",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 272,
+      "Label": "Sandbar",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 2489,
+      "Label": "Sandy Beach, Entrance",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 2531,
+      "Label": "Sandy Beach",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 2666,
+      "Label": "Seher'Sahham",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 1617,
+      "Label": "Ship Captains Quarters",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 1513,
+      "Label": "Ship Entrance",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 120,
+      "Label": "Slimeworm Lair",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 271,
+      "Label": "Underground Lake End",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 190,
+      "Label": "Underground Lake",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 16,
+      "Room": 2665,
+      "Label": "Wounded Sailor",
+      "Folder": "Ocean"
+    },
+    {
+      "Map": 9,
+      "Room": 1180,
+      "Label": "Abandoned Asylum, Dead End",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2577,
+      "Label": "Balthazar",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2568,
+      "Label": "Bank of Rhudaur",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 9,
+      "Room": 930,
+      "Label": "Dread Mystic",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 9,
+      "Room": 1007,
+      "Label": "Flesh Golem",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 9,
+      "Room": 1259,
+      "Label": "Old Man",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2567,
+      "Label": "Rhudaur Armour Shop",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2523,
+      "Label": "Rhudaur Center",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2566,
+      "Label": "Rhudaur Exotic Weapons",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2563,
+      "Label": "Rhudaur Missile Weapon Shop",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2574,
+      "Label": "Rhudaur Mystical Items Store",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2572,
+      "Label": "Rhudaur Temple Healer",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2561,
+      "Label": "Rhudaur Thieve's Guild",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2562,
+      "Label": "Rhudaur Weapon Shop",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 2,
+      "Room": 2519,
+      "Label": "Rhudaur",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 9,
+      "Room": 913,
+      "Label": "Shadow Fist Temple",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 9,
+      "Room": 1008,
+      "Label": "Shadowfist Temple, Ancient Librry",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 9,
+      "Room": 972,
+      "Label": "Shadowfist Temple, Towering Statue",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 9,
+      "Room": 1182,
+      "Label": "Warped Asylum",
+      "Folder": "Rhudaur"
+    },
+    {
+      "Map": 10,
+      "Room": 273,
+      "Label": "Aged Titan Spells Shop",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 15,
+      "Room": 773,
+      "Label": "Black Ice Cavern, Crystal",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 15,
+      "Room": 784,
+      "Label": "Black Ice Cavern, Dragon Fork",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 1,
+      "Room": 1333,
+      "Label": "Chancellor Annora",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 218,
+      "Label": "Frozen Cavern (Large Yeti)",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 35,
+      "Label": "Frozen Cavern",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 15,
+      "Room": 720,
+      "Label": "Glacial Cavern, Staircase Bottom",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 201,
+      "Label": "Gypsy Spirit",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 6,
+      "Room": 1209,
+      "Label": "Ice Lake (Water Spirit)",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 241,
+      "Label": "Ice Tower (Ice Golem)",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 245,
+      "Label": "Ice Tower (Ice Sorceress)",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 15,
+      "Room": 794,
+      "Label": "Massive White Dragon",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 1,
+      "Room": 1375,
+      "Label": "Monastery, Courtyard",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 1,
+      "Room": 1331,
+      "Label": "Monastery, Inner Gate",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 109,
+      "Label": "Nomadic Chieftain",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 16,
+      "Label": "Rocky Trail (Base of Mountain)",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 22,
+      "Label": "Rocky Trail (Titan Fork)",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 15,
+      "Room": 1001,
+      "Label": "Sharh'Kur (druid only)",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 1,
+      "Room": 2429,
+      "Label": "Torchlit Caverns Obelisk",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 36,
+      "Label": "Torchlit Caverns",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 10,
+      "Room": 235,
+      "Label": "Tower, Bedroom",
+      "Folder": "Rocky Trail"
+    },
+    {
+      "Map": 12,
+      "Room": 2303,
+      "Label": "Blue Dragons Entrance",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1043,
+      "Label": "Bountiful Oasis, East Entrance",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 66,
+      "Label": "Bountiful Oasis, Golden Palace",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 73,
+      "Label": "Bountiful Oasis, Shimmering Pool",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1042,
+      "Label": "Bountiful Oasis, South Entrance",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 52,
+      "Label": "Dusty Village, Common Room",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1047,
+      "Label": "Dusty Village, Eastern Entrance",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1046,
+      "Label": "Dusty Village, Northern Entrance",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 59,
+      "Label": "Dusty Village, Ornate Tent",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1045,
+      "Label": "Dusty Village, South Entrance",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 49,
+      "Label": "Dusty Village, Village Store",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1,
+      "Label": "Dusty Village, Western Entrance",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2338,
+      "Label": "Enormous Blue Dragon",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 118,
+      "Label": "Golden Palace Courtyard, Well",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2257,
+      "Label": "Golden Palace, Feline Prisoner",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 1,
+      "Room": 2683,
+      "Label": "Golden Palace, NPP Portal",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2248,
+      "Label": "Golden Palace, Secret Library",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2247,
+      "Label": "Golden Palace,Rakshasha Rajah",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1800,
+      "Label": "Great Pyramid, Entrance",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2002,
+      "Label": "Great Pyramid, Level 3 Entrance",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2052,
+      "Label": "Great Pyramid, Level 4",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2077,
+      "Label": "Great Pyramid, Level 5",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1920,
+      "Label": "Great Pyramid, Sphinx Lvl 1",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1799,
+      "Label": "Hydra",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1305,
+      "Label": "Limestone Caverns ,Up To Desert",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 1,
+      "Room": 2684,
+      "Label": "Limestone Caverns NPP Portal",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 15,
+      "Room": 1000,
+      "Label": "Limestone Caverns, Argak the Grey",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 15,
+      "Room": 1169,
+      "Label": "Limestone Caverns, Outside Argak",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1797,
+      "Label": "Limetone caverns, Hydra Door",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1573,
+      "Label": "Manscorpion Fork",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1766,
+      "Label": "Manscorpion King",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1120,
+      "Label": "Mummified Miner",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1171,
+      "Label": "Red Iron Mine, (Hideous Abom.",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1086,
+      "Label": "Sandstone Quarry",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2143,
+      "Label": "Saracen Commander",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2099,
+      "Label": "Saracen Hideout, Entrance Hall",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1041,
+      "Label": "Saracen Hideout, Fortress Gates",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2109,
+      "Label": "Saracen Hideout, Guardroom Fork",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2118,
+      "Label": "Saracen Hideout, Guardroom",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2123,
+      "Label": "Saracen Hideout, Narrow Precipic",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2089,
+      "Label": "Saracen Hideout, Northern End",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2193,
+      "Label": "Saracen High Priest",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2145,
+      "Label": "Saracens, Plaster Hall Iron Door",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1239,
+      "Label": "Scorched Cavern, Firepit",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 221,
+      "Label": "Scorching Desert, Ancient Jail",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1051,
+      "Label": "Scorching Desert, Nomad Tent",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1173,
+      "Label": "Small Pyramid,  (Guard Sergeant)",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1192,
+      "Label": "Small Pyramid, Seeress's Den",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1190,
+      "Label": "Small Pyramid, Stone Stairway",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1191,
+      "Label": "Small Pyramid, Trader's Office",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 1182,
+      "Label": "Small Pyramid, Withered Old Man",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 12,
+      "Room": 2250,
+      "Label": "Tomb of the Pharaoh",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 9,
+      "Room": 501,
+      "Label": "Crumbling Tunnels",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 1,
+      "Room": 866,
+      "Label": "Dark Cave (instant cave worm)",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 1,
+      "Room": 2323,
+      "Label": "Mad Wizard",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 1,
+      "Room": 598,
+      "Label": "Sewer Tunnel, Brass Street",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 1,
+      "Room": 766,
+      "Label": "Sewer Tunnel, Junction (below TS)",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 1,
+      "Room": 607,
+      "Label": "Sewer Tunnel, River Street",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 1,
+      "Room": 723,
+      "Label": "Shifty Dwarf",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 1,
+      "Room": 2438,
+      "Label": "Slimy Sewer Tunnel",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 1,
+      "Room": 877,
+      "Label": "Slum Sewer Tunnel, Bend",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 9,
+      "Room": 223,
+      "Label": "Smuggler Boss",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 9,
+      "Room": 151,
+      "Label": "Smuggler's Hideout (Fork)",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 9,
+      "Room": 146,
+      "Label": "White Jelly",
+      "Folder": "Sewers"
+    },
+    {
+      "Map": 1,
+      "Room": 206,
+      "Label": "Arena (Practice Dummy)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 2519,
+      "Label": "Arena (Tough Practice Dummy)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 851,
+      "Label": "Bard's Song Store",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 312,
+      "Label": "Cloakroom",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 354,
+      "Label": "Colin's Maces",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 332,
+      "Label": "Curio Shop (Meia)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 1314,
+      "Label": "Druid Spell Shop",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 140,
+      "Label": "Fountain",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 334,
+      "Label": "General Store (Giovanni)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 390,
+      "Label": "Guild Street, Northern End",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 546,
+      "Label": "Guildmaster",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 2189,
+      "Label": "Halls of the Dead",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 355,
+      "Label": "Helfgrim's Blades",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 315,
+      "Label": "Homely Hearth (Hooded Traveller)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 159,
+      "Label": "Jael's Missile Weapons",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 168,
+      "Label": "Junkyard, Entrance",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 398,
+      "Label": "Magic Shoppe (Aiken)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 2308,
+      "Label": "Ninja Supply Shop",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 1813,
+      "Label": "Pier (Boatman)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 15,
+      "Room": 732,
+      "Label": "Realm Deeds Shop",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 21,
+      "Label": "River St & Guild St",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 290,
+      "Label": "Sarkhee's Jewellery",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 2154,
+      "Label": "Sentara's Clothing (Head/Feet)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 309,
+      "Label": "Sentara's Clothing (Robes)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 2153,
+      "Label": "Skali's Back Room (Shields)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 305,
+      "Label": "Skali's Front Room (Accessories)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 306,
+      "Label": "Skali's Show Room (Armour)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 225,
+      "Label": "Sovereign St Nth",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 525,
+      "Label": "Temple Chapel (bishop)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 520,
+      "Label": "Temple Entrance",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 527,
+      "Label": "Temple Healer (Wounded Messenger)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 522,
+      "Label": "Temple Spell Store",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 307,
+      "Label": "Thuluk's Axes",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 1,
+      "Label": "Town Gates",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 224,
+      "Label": "Town Square",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 2437,
+      "Label": "Trina's Exotic Armours",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 1,
+      "Room": 392,
+      "Label": "Wailing Tavern (Nasty-Looking Man)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 8,
+      "Room": 798,
+      "Label": "Building Rooftop (Slaver Leader)",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 2324,
+      "Label": "Grungy Shop",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 2,
+      "Room": 29,
+      "Label": "Orc Mansion",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 2,
+      "Room": 40,
+      "Label": "Orc Warleader",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 1224,
+      "Label": "Outside Black House",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 2325,
+      "Label": "Shadowy healer",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 1076,
+      "Label": "Slum Crossroads",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 1089,
+      "Label": "Slum Square",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 1187,
+      "Label": "Slum Street (Outside Grungy)",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 1139,
+      "Label": "Slum Street,Forest Gate",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 382,
+      "Label": "Spectral Mage",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 65,
+      "Label": "Strange Mansion, Entrance",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 2307,
+      "Label": "Unholy Spell Shop",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 1,
+      "Room": 1098,
+      "Label": "Western Door",
+      "Folder": "Slums"
+    },
+    {
+      "Map": 10,
+      "Room": 271,
+      "Label": "Aged Titan (21-50)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2278,
+      "Label": "Bard Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 852,
+      "Label": "Bard Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2258,
+      "Label": "Cleric Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 523,
+      "Label": "Cleric Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2303,
+      "Label": "Druid Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 501,
+      "Label": "Druid Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 6,
+      "Room": 1352,
+      "Label": "Dwarven Trainer (12-30)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 17,
+      "Room": 3247,
+      "Label": "EasyTrainer, Key Shop (76+)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 3,
+      "Room": 542,
+      "Label": "Elven Trainer (21-50)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 1041,
+      "Label": "Ethereal Prison (Timelord) (41-54)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2300,
+      "Label": "Gypsy Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 384,
+      "Label": "Gypsy Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2302,
+      "Label": "Mage Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 399,
+      "Label": "Mage Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 500,
+      "Label": "Missionary Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2240,
+      "Label": "Mystic Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 333,
+      "Label": "Mystic Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2273,
+      "Label": "Ninja Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 200,
+      "Label": "Ninja Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2260,
+      "Label": "Paladin Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 499,
+      "Label": "Paladin Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2256,
+      "Label": "Priest Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 526,
+      "Label": "Priest Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 1377,
+      "Label": "Quest Hall",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2241,
+      "Label": "Ranger Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2275,
+      "Label": "Thief Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 201,
+      "Label": "Thief Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2305,
+      "Label": "Tree House (Aldreth) (12-20)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 1376,
+      "Label": "Universal Trainer  (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2301,
+      "Label": "Warlock Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 274,
+      "Label": "Warlock Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2231,
+      "Label": "Warrior Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 497,
+      "Label": "Warrior Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2236,
+      "Label": "Witchunter Spirit (11)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 498,
+      "Label": "Witchunter Trainer (2-10)",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 16,
+      "Room": 1765,
+      "Label": "Aged Earth Dragon Entrance",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 2160,
+      "Label": "Dark Phoenix",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 2892,
+      "Label": "Fire Twins",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 1839,
+      "Label": "Gaunt One Elder",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 2145,
+      "Label": "Giant Efreetis",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 2159,
+      "Label": "Outside Dark Phoenix",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 2118,
+      "Label": "Red Demonling",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 1743,
+      "Label": "Undermountain Caverns, Fork",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 1569,
+      "Label": "Undermountain Caverns, Level 11",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 1624,
+      "Label": "Undermountain Caverns, Level 13",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 1678,
+      "Label": "Undermountain Caverns, Level 14",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 2105,
+      "Label": "Use polished key",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 1874,
+      "Label": "Volcano Entrance",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 2709,
+      "Label": "Volcano, Burnt Witchunter",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 2127,
+      "Label": "Volcano, Cramped Tunnels",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 1992,
+      "Label": "Volcano, Darkened Tunnels Start",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 2011,
+      "Label": "Volcano, Darkened Tunnels",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 1995,
+      "Label": "Volcano, start of east side loop",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 16,
+      "Room": 1980,
+      "Label": "Volcano, start of west side loop",
+      "Folder": "Volcano"
+    },
+    {
+      "Map": 1,
+      "Room": 2262,
+      "Label": "Missionary Spirit",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2147,
+      "Label": "Newhaven Adventurer's Guild",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 1,
+      "Room": 2696,
+      "Label": "Gnaj the Creator",
+      "Folder": "Negative Power Plane"
+    },
+    {
+      "Map": 12,
+      "Room": 868,
+      "Label": "Scorching Desert, Basalt Obelisk",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 16,
+      "Room": 384,
+      "Label": "Amazon Battle Master",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 2,
+      "Room": 2570,
+      "Label": "Rhudaur Grizzled Trainer",
+      "Folder": "Trainers"
+    },
+    {
+      "Map": 8,
+      "Room": 836,
+      "Label": "Black Caves (Greasy Bracelet)",
+      "Folder": "Black Caves"
+    },
+    {
+      "Map": 1,
+      "Room": 2421,
+      "Label": "Fungus Forest (Obelisk)",
+      "Folder": "Black House"
+    },
+    {
+      "Map": 1,
+      "Room": 2424,
+      "Label": "Black Mountains Obelisk",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 487,
+      "Label": "Dragon's Teeth Hills (Hole)",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 1,
+      "Room": 2422,
+      "Label": "Dragon's Teeth Hills (Obelisk 1)",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 1,
+      "Room": 2423,
+      "Label": "Dragon's Teeth Hills (Obelisk 2)",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 2,
+      "Room": 687,
+      "Label": "Dragon's Teeth Hills (Talisman)",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 1,
+      "Room": 2427,
+      "Label": "Stone Tunnels Obelisk",
+      "Folder": "Dragon's Teeth Hills"
+    },
+    {
+      "Map": 1,
+      "Room": 1789,
+      "Label": "Goblin Caves (green metal key door)",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 1,
+      "Room": 1794,
+      "Label": "Goblin Caves (large iron key door)",
+      "Folder": "Goblin caves"
+    },
+    {
+      "Map": 8,
+      "Room": 1068,
+      "Label": "Negative Power Plane (outside Angel)",
+      "Folder": "Negative Power Plane"
+    },
+    {
+      "Map": 1,
+      "Room": 310,
+      "Label": "Sentara's Clothing (Torso/Legs/Hands)",
+      "Folder": "Silvermere"
+    },
+    {
+      "Map": 12,
+      "Room": 2088,
+      "Label": "Saracens Hideout, No Drawbridge",
+      "Folder": "Scorching Desert"
+    },
+    {
+      "Map": 1,
+      "Room": 502,
+      "Label": "Ranger Trainer",
+      "Folder": "Trainers"
+    }
+  ],
+  "FavoriteFolders": [
+    "Ancient Fortress",
+    "Ancient Ruin",
+    "Arlysia",
+    "Barren Hills",
+    "Black Caves",
+    "Black Fort",
+    "Black House",
+    "Black Wastelands",
+    "Blackwood Forest",
+    "Cracked Plains",
+    "Dark-Elf City",
+    "Darkwood Forest",
+    "Dragon's Teeth Hills",
+    "Dwarven Mines",
+    "Gang Houses",
+    "Gnome Village",
+    "Goblin caves",
+    "Graveyard",
+    "Island",
+    "Jungle",
+    "Khazarad",
+    "Lava Fields",
+    "Lost City",
+    "Misty Valley",
+    "Mossy Tunnels",
+    "Negative Power Plane",
+    "Newhaven",
+    "Northern Forests",
+    "Ocean",
+    "Rhudaur",
+    "Rocky Trail",
+    "Scorching Desert",
+    "Sewers",
+    "Silvermere",
+    "Slums",
+    "Trainers",
+    "Volcano"
+  ]
+}

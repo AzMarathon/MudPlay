@@ -1,0 +1,282 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Djinn (mostly) Singles",
+  "Waypoints": [
+    {
+      "Room": "17/10175",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10174",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10173",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10172",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10171",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10170",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10169",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10168",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10167",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10166",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10165",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10164",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10163",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10162",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10161",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10160",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10159",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10157",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10158",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10192",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10193",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10194",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10195",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10154",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10153",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10152",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10150",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10149",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10148",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10147",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10146",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10145",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10144",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10141",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10139",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10138",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10132",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10196",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10134",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10188",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10178",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10175",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10179",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10180",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/10179",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/SSMJ)"
+}

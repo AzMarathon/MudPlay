@@ -1,0 +1,282 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Corpse-riden Field (full, hard) Loop  14 8441",
+  "Waypoints": [
+    {
+      "Room": "14/8441",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8455",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8456",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8457",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8458",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8459",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8460",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8461",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8462",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8467",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8492",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8493",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8488",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8471",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8490",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8491",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8501",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8468",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8454",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8453",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8452",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8451",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8450",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8449",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8448",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8447",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8446",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8443",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8442",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Vale of Durand/VDCR)"
+}

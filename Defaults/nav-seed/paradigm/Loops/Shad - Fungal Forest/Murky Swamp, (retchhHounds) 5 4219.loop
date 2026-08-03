@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Murky Swamp, (retchhHounds) 5 4219",
+  "Waypoints": [
+    {
+      "Room": "5/4219",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4223",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4224",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4225",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4230",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4231",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4232",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4233",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4234",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4235",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4236",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4237",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4238",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4239",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4240",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4241",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4242",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4241",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4240",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4239",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4238",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4237",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4236",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad - Fungal Forest/MSRH)"
+}

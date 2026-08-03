@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Cave Bear loop",
+  "Waypoints": [
+    {
+      "Room": "1/2156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2152",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Newhaven/NMCB)"
+}

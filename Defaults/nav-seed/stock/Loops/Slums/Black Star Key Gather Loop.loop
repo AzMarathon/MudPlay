@@ -1,0 +1,207 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Black Star Key Gather Loop",
+  "Waypoints": [
+    {
+      "Room": "1/1224",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1225",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1230",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1141",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1139",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1138",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1136",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1134",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1132",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1131",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1131",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1130",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1215",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1217",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1218",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1203",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1202",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1201",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1200",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1199",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1225",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Slums/SLMB)"
+}

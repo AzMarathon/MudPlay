@@ -1,0 +1,357 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Magma Fields, Cavern Wall (west) Loop  5 4417",
+  "Waypoints": [
+    {
+      "Room": "5/4417",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4419",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4420",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4421",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4423",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4422",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4427",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4428",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4429",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4430",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4432",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4433",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4434",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4435",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4436",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4437",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4438",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4488",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4491",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4492",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4493",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4495",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4496",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4497",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4498",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4499",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4499",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4500",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4410",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4411",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4412",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4413",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4413",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4414",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4415",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/4416",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Shad - Fungal Forest/MFCW)"
+}

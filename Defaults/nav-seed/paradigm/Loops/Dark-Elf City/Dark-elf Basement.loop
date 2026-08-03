@@ -1,0 +1,187 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark-elf Basement",
+  "Waypoints": [
+    {
+      "Room": "8/604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/617",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/617",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/626",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/627",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/624",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/614",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/613",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/612",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/611",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/621",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/610",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/618",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/609",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/622",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/623",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/608",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/607",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/606",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/605",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dark-Elf City/CAS1)"
+}

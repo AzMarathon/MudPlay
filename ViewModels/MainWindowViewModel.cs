@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -479,6 +480,14 @@ public partial class MainWindowViewModel : ObservableObject
     {
         Lines = new LineExtractor(Emulator);
         Capture = new CaptureSession(Emulator.Screen.Scrollback);
+
+        // Live-screen watch for the character-creation stat box. It's drawn with
+        // cursor positioning, so its marker row never completes as an emitted
+        // line until teardown — too late to flip arrow keys into direct-input
+        // mode. Scanning the screen each feed lets TrainerMenuTracker arm
+        // character mode the moment the box appears. Cheap: pre-filtered on the
+        // stat-box marker and skipped entirely once armed.
+        Emulator.ScreenUpdated += OnScreenUpdatedForTrainerMenu;
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a
@@ -1674,12 +1683,19 @@ public partial class MainWindowViewModel : ObservableObject
         // when off, the user gets one shot and we surface the error — no
         // silent retries. When on, the loop runs up to MaxRedials with
         // RedialPauseSeconds between attempts. Defaults fall through to
-        // a 1-attempt floor if a BBS has bogus values.
+        // a 1-attempt floor if a BBS has bogus values. InfiniteRetries
+        // overrides both: unlimited attempts at a fixed 3s pause (still
+        // gated on ReconnectOnFailedConnect — it changes the count/pause,
+        // not whether we retry at all).
         BbsProfile? activeBbs = ResolveActiveBbs();
+        bool infiniteRetries = activeBbs?.InfiniteRetries ?? false;
         int maxAttempts = (activeBbs?.ReconnectOnFailedConnect ?? false)
-            ? Math.Max(1, activeBbs?.MaxRedials ?? 1)
+            ? (infiniteRetries ? int.MaxValue : Math.Max(1, activeBbs?.MaxRedials ?? 1))
             : 1;
-        TimeSpan retryDelay = TimeSpan.FromSeconds(Math.Max(1, activeBbs?.RedialPauseSeconds ?? 5));
+        TimeSpan retryDelay = infiniteRetries
+            ? TimeSpan.FromSeconds(3)
+            : TimeSpan.FromSeconds(Math.Max(1, activeBbs?.RedialPauseSeconds ?? 5));
+        string ofMax = infiniteRetries ? "" : $"/{maxAttempts}";
 
         _connectCts = new CancellationTokenSource();
         IsConnecting = true;
@@ -1691,7 +1707,7 @@ public partial class MainWindowViewModel : ObservableObject
 
                 WriteTerminalStatus($"[CONNECTING TO: {Host} {Port}]", TerminalStatusKind.Notice);
                 AppServices.Current.Log.Info("Connect",
-                    $"Connecting to {Host}:{Port} (attempt {attempt}/{maxAttempts})…");
+                    $"Connecting to {Host}:{Port} (attempt {attempt}{ofMax})…");
 
                 TelnetClient client = BuildTelnetClient();
 
@@ -2132,10 +2148,13 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Redial budget — same MaxRedials knob the in-flight retry loop
         // uses. Stop arming once we've burned through it; the user can
-        // still click Connect manually.
+        // still click Connect manually. InfiniteRetries removes the budget
+        // entirely: we never give up (and the pause below drops to 3s).
+        bool infinite = bbs.InfiniteRetries;
         int maxRedials = Math.Max(1, bbs.MaxRedials);
+        string ofBudget = infinite ? "" : $"/{maxRedials}";
         _reactiveReconnectCount++;
-        if (_reactiveReconnectCount > maxRedials)
+        if (!infinite && _reactiveReconnectCount > maxRedials)
         {
             WriteTerminalStatus(
                 $"[AUTO-RECONNECT GAVE UP AFTER {maxRedials} REDIAL{(maxRedials == 1 ? "" : "S")}.]",
@@ -2152,10 +2171,13 @@ public partial class MainWindowViewModel : ObservableObject
         // the BBS's CleanupPeriodMinutes setting (default 0 → fall
         // back to RedialPauseSeconds so the behaviour is unchanged
         // when the user hasn't configured the field).
+        // Cleanup-mode's long-delay override still wins (its CleanupPeriodMinutes
+        // ticker stays live under InfiniteRetries) — no point hammering a BBS
+        // that's mid-maintenance every 3s. Otherwise InfiniteRetries forces 3s.
         bool cleanupMode = AppServices.Current.Cleanup.InCleanupMode;
         TimeSpan delay = cleanupMode && bbs.CleanupPeriodMinutes > 0
             ? TimeSpan.FromMinutes(bbs.CleanupPeriodMinutes)
-            : TimeSpan.FromSeconds(Math.Max(1, bbs.RedialPauseSeconds));
+            : TimeSpan.FromSeconds(infinite ? 3 : Math.Max(1, bbs.RedialPauseSeconds));
 
         _cleanupReconnectCts?.Cancel();
         _cleanupReconnectCts?.Dispose();
@@ -2175,11 +2197,11 @@ public partial class MainWindowViewModel : ObservableObject
         // form so the terminal doesn't get spammed with the full text
         // ten times in a row.
         string bannerText = _reactiveReconnectCount == 1
-            ? $"[AUTO-RECONNECT ARMED ({reasonLabel.ToUpperInvariant()}, REDIAL {_reactiveReconnectCount}/{maxRedials}) — DIALING IN {FormatDelay(delay)}. PRESS CONNECT TO CANCEL.]"
-            : $"[ATTEMPTING REDIAL {_reactiveReconnectCount}/{maxRedials} IN {FormatDelay(delay)}.]";
+            ? $"[AUTO-RECONNECT ARMED ({reasonLabel.ToUpperInvariant()}, REDIAL {_reactiveReconnectCount}{ofBudget}) — DIALING IN {FormatDelay(delay)}. PRESS CONNECT TO CANCEL.]"
+            : $"[ATTEMPTING REDIAL {_reactiveReconnectCount}{ofBudget} IN {FormatDelay(delay)}.]";
         WriteTerminalStatus(bannerText, TerminalStatusKind.Notice);
         AppServices.Current.Log.Info("Reconnect",
-            $"Reactive reconnect scheduled ({reasonLabel}, redial {_reactiveReconnectCount}/{maxRedials}) in {FormatDelay(delay)}.");
+            $"Reactive reconnect scheduled ({reasonLabel}, redial {_reactiveReconnectCount}{ofBudget}) in {FormatDelay(delay)}.");
 
         StartReconnectCountdown(delay);
 
@@ -2558,6 +2580,48 @@ public partial class MainWindowViewModel : ObservableObject
             // want to crash the dialog because the socket died mid-send.
             return false;
         }
+    }
+
+    // Per-feed screen watch feeding TrainerMenuTracker's live-screen detection
+    // of the character-creation stat box (see the ScreenUpdated wiring in the
+    // ctor). Early-outs once character mode is armed, and pre-filters with an
+    // allocation-free marker scan so the string build below only runs when a
+    // stat box is actually on screen.
+    private void OnScreenUpdatedForTrainerMenu()
+    {
+        if (AppServices.Current.TrainerMenu.IsInputMenuActive) return;
+        if (!ScreenShowsStatBoxMarker()) return;
+        AppServices.Current.TrainerMenu.ObserveScreen(BuildVisibleScreenText());
+    }
+
+    // Allocation-free hot-path check: does any visible row carry the stat-box
+    // marker? Almost never true outside the creation/train screen, so the full
+    // screen-text build is skipped on nearly every feed.
+    private bool ScreenShowsStatBoxMarker()
+    {
+        TerminalScreen screen = Emulator.Screen;
+        Span<char> buf = stackalloc char[screen.Cols];
+        for (int y = 0; y < screen.Rows; y++)
+        {
+            ReadOnlySpan<Cell> row = screen.Row(y);
+            for (int x = 0; x < row.Length; x++) buf[x] = row[x].Char;
+            if (buf[..row.Length].IndexOf(Game.TrainerMenuTracker.StatBoxMarker.AsSpan()) >= 0)
+                return true;
+        }
+        return false;
+    }
+
+    // Flatten the live screen grid to newline-joined text for content scans.
+    private string BuildVisibleScreenText()
+    {
+        TerminalScreen screen = Emulator.Screen;
+        StringBuilder sb = new(screen.Rows * (screen.Cols + 1));
+        for (int y = 0; y < screen.Rows; y++)
+        {
+            foreach (Cell cell in screen.Row(y)) sb.Append(cell.Char);
+            sb.Append('\n');
+        }
+        return sb.ToString();
     }
 
     // Send raw key bytes from the terminal control to the server. Called
@@ -3514,6 +3578,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (result.Success)
         {
             WriteTerminalStatus(BuildMdbCompleteStatus(result), TerminalStatusKindFor(result));
+            // Seed base navigation loops + GOTO favourites for the realm before we
+            // switch to the set, so the ensuing set-switch loads the seeded files.
+            // Once-only per set (marker), additive, best-effort.
+            NavSeedBootstrapper.SeedIfNeeded(result.FolderName, AppServices.Current.Log);
             SwitchActiveGameDataSet(result.FolderName);
         }
         else

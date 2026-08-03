@@ -1,0 +1,172 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Living Gneiss ( lvl 1 North )",
+  "Waypoints": [
+    {
+      "Room": "14/4112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4104",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4099",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4098",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4097",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4095",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4095",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4097",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4098",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4099",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4104",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4111",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Tagesh Highlands/SSS1)"
+}

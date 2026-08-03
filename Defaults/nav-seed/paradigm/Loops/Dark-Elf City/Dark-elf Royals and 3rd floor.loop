@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark-elf Royals and 3rd floor",
+  "Waypoints": [
+    {
+      "Room": "8/697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/667",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/666",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/696",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dark-Elf City/CAS4)"
+}

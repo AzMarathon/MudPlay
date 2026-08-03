@@ -1,0 +1,67 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Ice Golems (no sorceress)",
+  "Waypoints": [
+    {
+      "Room": "10/241",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/242",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/243",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/244",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/243",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/242",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/241",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/240",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/239",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/238",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/239",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "10/240",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rocky Trail/ICEG)"
+}

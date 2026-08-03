@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Hill Giant Fortress",
+  "Waypoints": [
+    {
+      "Room": "16/786",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/788",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/793",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/791",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/661",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/788",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/786",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/785",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/784",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/783",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/782",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/783",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/784",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/785",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Barren Hills/BHFG)"
+}

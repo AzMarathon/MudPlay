@@ -349,6 +349,78 @@ public sealed class TrainerMenuTrackerTests
     }
 
     [Fact]
+    public void CharCreationAbbreviatedRow_WithoutOutbound_EntersMenu()
+    {
+        // ParaMUD abbreviates the box title to "Char. Creation" (not the stock
+        // "Character Creation"); the emitted-line marker path must accept it too,
+        // or the party-roster excursion detection never confirms on that realm.
+        var (tracker, router, _) = Setup();
+        Dispatch(router, "  / P A R A D I G M   Char. Creation /   Point Cost Chart");
+        Assert.True(tracker.IsInTrainerMenu);
+    }
+
+    [Fact]
+    public void ObserveScreen_ParadigmCreationBox_ArmsInputMode()
+    {
+        // Live-screen path: ParaMUD paints the creation stat box with cursor
+        // positioning, so the "Point Cost Chart" marker row never emits inline
+        // and the arrows stay bound to history recall. Scanning the live screen
+        // (with the abbreviated "Char. Creation" title) must arm character mode.
+        var (tracker, _, _) = Setup();
+        int entered = 0;
+        tracker.InputMenuEntered += () => entered++;
+
+        tracker.ObserveScreen(
+            "   / P A R A D I G M      Char. Creation /    \\  +-    Point Cost Chart    -+\n"
+            + "  | Given Name   Ermias   |   1st 10 points: 1 CP each |\n");
+
+        Assert.Equal(1, entered);
+        Assert.True(tracker.IsInputMenuActive);
+        Assert.True(tracker.MenuOwnsKeyboard);
+    }
+
+    [Fact]
+    public void ObserveScreen_StockCreationBox_ArmsInputMode()
+    {
+        var (tracker, _, _) = Setup();
+        tracker.ObserveScreen("  MAJOR MUD Character Creation      Point Cost Chart\n");
+        Assert.True(tracker.IsInputMenuActive);
+    }
+
+    [Fact]
+    public void ObserveScreen_MarkerWithoutCreationTitle_DoesNotArm()
+    {
+        // The in-game `train stats` box shows "Point Cost Chart" with no creation
+        // title; that path arms off the outbound command, not the screen scan.
+        // The live-screen detector must ignore it — and any chat mention.
+        var (tracker, _, _) = Setup();
+        tracker.ObserveScreen("  Ye Olde Trainer      Point Cost Chart\n");
+        Assert.False(tracker.IsInputMenuActive);
+    }
+
+    [Fact]
+    public void ObserveScreen_NoMarker_DoesNotArm()
+    {
+        var (tracker, _, _) = Setup();
+        tracker.ObserveScreen("You are standing in a field.\nExits: north, south.\n");
+        Assert.False(tracker.IsInputMenuActive);
+    }
+
+    [Fact]
+    public void ObserveScreen_AlreadyArmed_DoesNotReFire()
+    {
+        // Fired once per feed while the box is up; the early-out keeps it from
+        // re-invoking InputMenuEntered on every subsequent feed.
+        var (tracker, _, _) = Setup();
+        int entered = 0;
+        tracker.InputMenuEntered += () => entered++;
+        const string box = "  MAJOR MUD Character Creation      Point Cost Chart\n";
+        tracker.ObserveScreen(box);
+        tracker.ObserveScreen(box);
+        Assert.Equal(1, entered);
+    }
+
+    [Fact]
     public void EntryToMenu_SnapshotsNonSelfRoster()
     {
         var (tracker, router, state) = Setup();

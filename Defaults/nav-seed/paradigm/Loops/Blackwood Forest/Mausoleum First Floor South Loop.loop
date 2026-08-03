@@ -1,0 +1,197 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Mausoleum First Floor South Loop",
+  "Waypoints": [
+    {
+      "Room": "17/2094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2054",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2053",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2091",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2053",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2054",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2048",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2048",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2049",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2049",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2048",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2042",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2041",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2041",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2040",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2047",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2046",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2045",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2044",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2095",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2044",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2043",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2093",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/M1SE)"
+}

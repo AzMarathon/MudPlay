@@ -1,0 +1,352 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Red Dragon Hatchlings (party loop)",
+  "Waypoints": [
+    {
+      "Room": "7/1367",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1367",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1368",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1369",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1370",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1403",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1342",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1341",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1340",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1343",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1340",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1339",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1336",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1337",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1338",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1337",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1336",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1335",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1318",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1316",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1317",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1316",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1315",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1314",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1308",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1309",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1310",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1311",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1312",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1313",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1312",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1311",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1310",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1309",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1308",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1305",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1303",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1305",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1308",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1314",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1315",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1316",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1318",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1335",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1336",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1339",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1340",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1341",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1342",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1403",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1370",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1371",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1372",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1373",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1374",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1379",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1369",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1368",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1380",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1375",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1376",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1377",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1378",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "7/1377",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Viper (Lava Fields/DNES)"
+}

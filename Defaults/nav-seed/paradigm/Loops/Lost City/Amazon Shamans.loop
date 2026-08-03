@@ -1,0 +1,77 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Amazon Shamans",
+  "Waypoints": [
+    {
+      "Room": "16/311",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/474",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/470",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/469",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/464",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/463",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/444",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/445",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/477",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Lost City/LCSE)"
+}

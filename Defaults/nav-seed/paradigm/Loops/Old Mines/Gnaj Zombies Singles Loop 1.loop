@@ -1,0 +1,97 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Gnaj Zombies Singles Loop 1",
+  "Waypoints": [
+    {
+      "Room": "15/10203",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1400",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1401",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1400",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1399",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1397",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1396",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1395",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1394",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1393",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1392",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1391",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1390",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1389",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1388",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1387",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1386",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (relaxed) from .mp (Old Mines/OMGZ)"
+}

@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Keep Training Area 2nd Floor",
+  "Waypoints": [
+    {
+      "Room": "13/4066",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4069",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4071",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4075",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4077",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4076",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4084",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4085",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4069",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Crimson Keep/CKSF)"
+}

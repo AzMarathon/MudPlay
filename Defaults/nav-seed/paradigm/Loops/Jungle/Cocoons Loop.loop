@@ -1,0 +1,197 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Cocoons Loop",
+  "Waypoints": [
+    {
+      "Room": "16/50",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/51",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/52",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/53",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2142",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/53",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/54",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/55",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/55",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/99",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/98",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2143",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/98",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/99",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/86",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2144",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/86",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/56",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/55",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/55",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/54",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/53",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/52",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/51",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Jungle/JTMW)"
+}

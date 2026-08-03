@@ -1,0 +1,177 @@
+{
+  "SchemaVersion": 3,
+  "Name": "North Training Area (Glads and Captains)",
+  "Waypoints": [
+    {
+      "Room": "15/2225",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2224",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2223",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2219",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2218",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2217",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2319",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2215",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2214",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2213",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2212",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2143",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2131",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2229",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2228",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2227",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2226",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2216",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2319",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2217",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2218",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2219",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2232",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2231",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2230",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2233",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2245",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/2234",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Goblin caves/OBNT)"
+}

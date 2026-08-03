@@ -1,0 +1,67 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Sandy Beach Roomers Loop",
+  "Waypoints": [
+    {
+      "Room": "16/2523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/2522",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhhawk (Ocean/SBNE)"
+}

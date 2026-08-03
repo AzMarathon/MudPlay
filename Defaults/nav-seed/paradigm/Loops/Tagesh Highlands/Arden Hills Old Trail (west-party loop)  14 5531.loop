@@ -1,0 +1,257 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Arden Hills Old Trail (west-party loop)  14 5531",
+  "Waypoints": [
+    {
+      "Room": "14/5531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5531",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5577",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5521",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5517",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5540",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5541",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5540",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5526",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5527",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5528",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5530",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Tagesh Highlands/AHSP)"
+}

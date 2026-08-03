@@ -1,0 +1,37 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Keep Barracks 3rd Floor S",
+  "Waypoints": [
+    {
+      "Room": "13/4142",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4141",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4140",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4139",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4138",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/4143",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Crimson Keep/KB3S)"
+}

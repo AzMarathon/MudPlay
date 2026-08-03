@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 3,
+  "Name": "White  Corridor Instant Regen Loop",
+  "Waypoints": [
+    {
+      "Room": "15/319",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/320",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black House/WCIR)"
+}

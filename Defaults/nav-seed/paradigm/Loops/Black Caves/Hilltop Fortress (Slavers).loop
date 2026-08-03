@@ -1,0 +1,267 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Hilltop Fortress (Slavers)",
+  "Waypoints": [
+    {
+      "Room": "8/872",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/849",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/861",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/864",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/865",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/864",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/861",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/862",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/863",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/866",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/867",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/866",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/863",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/847",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/846",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/845",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/841",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/841",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/843",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/857",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/856",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/860",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/868",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/869",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/868",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/860",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/859",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/858",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/870",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/871",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/870",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/858",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/854",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/853",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/851",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/850",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/849",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/872",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/873",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/874",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/875",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/876",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/880",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/876",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/875",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/874",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/873",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Black Caves/HTOP)"
+}

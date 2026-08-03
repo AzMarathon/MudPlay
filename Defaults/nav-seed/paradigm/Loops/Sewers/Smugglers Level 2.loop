@@ -1,0 +1,137 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Smugglers Level 2",
+  "Waypoints": [
+    {
+      "Room": "9/181",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/182",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/186",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/182",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/183",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/184",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/192",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/193",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/194",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/193",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/192",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/195",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/196",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/197",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/199",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/197",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/196",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/195",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/184",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/183",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/182",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Sewers/WPRU)"
+}

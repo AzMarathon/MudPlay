@@ -1,0 +1,267 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Meadowlands, Maes Aur (party) Loop   14 7958",
+  "Waypoints": [
+    {
+      "Room": "14/7958",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7961",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7962",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7963",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7964",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7965",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7911",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7915",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7916",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7917",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7920",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7930",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7966",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7930",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7934",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7935",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7936",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7939",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7940",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7941",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7942",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7943",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7944",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7945",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7947",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7949",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7950",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7951",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7953",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7954",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7955",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7956",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7957",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Vale of Durand/MLMA)"
+}

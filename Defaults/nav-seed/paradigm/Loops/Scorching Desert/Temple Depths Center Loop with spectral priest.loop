@@ -1,0 +1,257 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Temple Depths Center Loop with spectral priest",
+  "Waypoints": [
+    {
+      "Room": "12/2475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2486",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2488",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2489",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2490",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2491",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2492",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2523",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2524",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2525",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2541",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2493",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2492",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2491",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2490",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2489",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2488",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2487",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2486",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2484",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2482",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2481",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2476",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/TDSW)"
+}

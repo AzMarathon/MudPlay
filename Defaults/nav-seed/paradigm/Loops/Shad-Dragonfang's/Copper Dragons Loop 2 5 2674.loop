@@ -1,0 +1,162 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Copper Dragons Loop 2 5 2674",
+  "Waypoints": [
+    {
+      "Room": "5/2674",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2673",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2672",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2671",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2670",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2662",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2663",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2664",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2665",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/2675",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Dragonfang\u0027s/DTE2)"
+}

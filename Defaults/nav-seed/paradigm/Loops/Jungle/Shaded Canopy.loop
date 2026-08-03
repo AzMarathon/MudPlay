@@ -1,0 +1,152 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Shaded Canopy",
+  "Waypoints": [
+    {
+      "Room": "16/3000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3022",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3029",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3028",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3027",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3026",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3013",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3025",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3024",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3001",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Jungle/SJSC)"
+}

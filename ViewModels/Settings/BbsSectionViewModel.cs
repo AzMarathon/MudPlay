@@ -60,12 +60,17 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
     public bool HasSelection => SelectedBbsName is not null;
 
+    // Max-redials / redial-pause tickers grey out while InfiniteRetries forces
+    // its own count + pause; the XAML binds their IsEnabled here.
+    public bool RedialTickersEnabled => !InfiniteRetries;
+
     // ----- Editable fields, populated from the selected BbsProfile -----
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty] private string _host = string.Empty;
     [ObservableProperty] private int _port = 23;
     [ObservableProperty] private int _maxRedials = 3;
     [ObservableProperty] private int _redialPauseSeconds = 5;
+    [ObservableProperty] private bool _infiniteRetries;
     [ObservableProperty] private int _cleanupPeriodMinutes;
     [ObservableProperty] private int _noResponseTimeoutSeconds;
     [ObservableProperty] private bool _reconnectOnFailedConnect;
@@ -619,6 +624,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         Port = profile.Port;
         MaxRedials = profile.MaxRedials;
         RedialPauseSeconds = profile.RedialPauseSeconds;
+        InfiniteRetries = profile.InfiniteRetries;
         CleanupPeriodMinutes = profile.CleanupPeriodMinutes;
         NoResponseTimeoutSeconds = profile.NoResponseTimeoutSeconds;
         ReconnectOnFailedConnect = profile.ReconnectOnFailedConnect;
@@ -752,6 +758,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         Port = defaults.Port;
         MaxRedials = defaults.MaxRedials;
         RedialPauseSeconds = defaults.RedialPauseSeconds;
+        InfiniteRetries = defaults.InfiniteRetries;
         CleanupPeriodMinutes = defaults.CleanupPeriodMinutes;
         NoResponseTimeoutSeconds = defaults.NoResponseTimeoutSeconds;
         ReconnectOnFailedConnect = defaults.ReconnectOnFailedConnect;
@@ -796,6 +803,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         profile.Port = Port;
         profile.MaxRedials = MaxRedials;
         profile.RedialPauseSeconds = RedialPauseSeconds;
+        profile.InfiniteRetries = InfiniteRetries;
         profile.CleanupPeriodMinutes = CleanupPeriodMinutes;
         profile.NoResponseTimeoutSeconds = NoResponseTimeoutSeconds;
         profile.ReconnectOnFailedConnect = ReconnectOnFailedConnect;
@@ -862,6 +870,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnPortChanged(int value)                       { PushToCache(); Dirty(); }
     partial void OnMaxRedialsChanged(int value)                 { PushToCache(); Dirty(); }
     partial void OnRedialPauseSecondsChanged(int value)         { PushToCache(); Dirty(); }
+    partial void OnInfiniteRetriesChanged(bool value)           { OnPropertyChanged(nameof(RedialTickersEnabled)); PushToCache(); Dirty(); }
     partial void OnCleanupPeriodMinutesChanged(int value)       { PushToCache(); Dirty(); }
     partial void OnNoResponseTimeoutSecondsChanged(int value)   { PushToCache(); Dirty(); }
     partial void OnReconnectOnFailedConnectChanged(bool value)  { PushToCache(); Dirty(); }

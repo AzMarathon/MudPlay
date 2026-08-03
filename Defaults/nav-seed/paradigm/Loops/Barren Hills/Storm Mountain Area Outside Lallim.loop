@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Storm Mountain Area Outside Lallim",
+  "Waypoints": [
+    {
+      "Room": "16/1001",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1001",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/999",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/997",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/999",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1000",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Barren Hills/SMOL)"
+}

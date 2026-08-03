@@ -1,0 +1,32 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Crumbling Tunnels West",
+  "Waypoints": [
+    {
+      "Room": "9/398",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/403",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/413",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "9/379",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

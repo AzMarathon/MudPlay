@@ -1,0 +1,227 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Meadowlands, Llwyn Ywen (south) Loop  14 7996",
+  "Waypoints": [
+    {
+      "Room": "14/7996",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7999",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8083",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8082",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8081",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8079",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8078",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8077",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8076",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8075",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8074",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8000",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7998",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8001",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8070",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8069",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8068",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8067",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8066",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8065",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8071",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8004",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8003",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/8002",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7992",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7990",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7989",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7990",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7991",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7993",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7994",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7995",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Vale of Durand/MDLK)"
+}

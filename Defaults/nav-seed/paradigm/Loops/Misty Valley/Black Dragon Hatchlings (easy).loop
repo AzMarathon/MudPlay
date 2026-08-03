@@ -1,0 +1,47 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Black Dragon Hatchlings (easy)",
+  "Waypoints": [
+    {
+      "Room": "6/472",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/475",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/476",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/477",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/478",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/479",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/480",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/471",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Misty Valley/MBDH)"
+}

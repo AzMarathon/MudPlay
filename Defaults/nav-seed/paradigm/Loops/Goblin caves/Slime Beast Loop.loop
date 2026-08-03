@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Slime Beast Loop",
+  "Waypoints": [
+    {
+      "Room": "1/1765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/1764",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp (Goblin caves/SLIM)"
+}

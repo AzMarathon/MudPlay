@@ -1,0 +1,342 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Brackenfen (fiend, adherent, warden) Northwest Loop",
+  "Waypoints": [
+    {
+      "Room": "14/9813",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9814",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9815",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9816",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9817",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9818",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9819",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9821",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9822",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9823",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9890",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9891",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9893",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9894",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9895",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9896",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9897",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9899",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9900",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9901",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9902",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9903",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9904",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9905",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9906",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9907",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9908",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9898",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9892",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9891",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9890",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9823",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9824",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9826",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9827",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9888",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9827",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9828",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9829",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9830",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9831",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9832",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9914",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9835",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9834",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9913",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9911",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9830",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9829",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9828",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9827",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9826",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9825",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9824",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9887",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9886",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9885",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9815",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/9814",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Lorthan Lowlands/BRNT)"
+}

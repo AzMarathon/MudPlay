@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Rakshashas (2 and 3 regens with Rajah)",
+  "Waypoints": [
+    {
+      "Room": "12/118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2247",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/132",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2367",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2350",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2349",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2351",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2352",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2363",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/134",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2366",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2365",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2364",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2363",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2352",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2351",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2349",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2350",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/2367",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/132",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/120",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Scorching Desert/SPCW)"
+}

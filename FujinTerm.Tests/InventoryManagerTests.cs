@@ -180,6 +180,38 @@ public sealed class InventoryManagerTests
     }
 
     [Fact]
+    public void BuyBeforeFullInventory_SeedsBaselineAndTracksItem()
+    {
+        // Character creation reaches the starting-gear store before any full `i`
+        // (that fires on realm entry), so the manager isn't "loaded". A zero-cost
+        // purchase must still land in the carried list — otherwise "Equip all"
+        // sees an empty pack (the reported bug). The first buy seeds the baseline.
+        using Harness h = new();
+        Assert.False(h.Inv.IsLoaded);
+
+        h.Feed("You just bought club for 0 copper farthings.");
+
+        Assert.True(h.Inv.IsLoaded);
+        Assert.Contains("club", h.Inv.Snapshot.CarriedItems);
+    }
+
+    [Fact]
+    public void MultipleBuysBeforeFullInventory_AllTracked()
+    {
+        // The starting-gear spree: several free buys back to back, none preceded
+        // by an `i`. Every one must accumulate in the carried list.
+        using Harness h = new();
+        h.Feed("You just bought club for 0 copper farthings.");
+        h.Feed("You just bought padded vest for 0 copper farthings.");
+        h.Feed("You just bought padded helm for 0 copper farthings.");
+
+        System.Collections.Generic.IReadOnlyList<string> carried = h.Inv.Snapshot.CarriedItems;
+        Assert.Contains("club", carried);
+        Assert.Contains("padded vest", carried);
+        Assert.Contains("padded helm", carried);
+    }
+
+    [Fact]
     public void CarryingNothing_StillReadsWealthAndEncumbrance()
     {
         using Harness h = new();

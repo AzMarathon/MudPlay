@@ -1,0 +1,97 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Rakshashas (6 regens small loop)",
+  "Waypoints": [
+    {
+      "Room": "12/118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/110",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/111",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/104",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "12/109",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (relaxed) from .mp (Scorching Desert/SPCW)"
+}

@@ -1,0 +1,167 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Icy Mountain Level 5 Loop",
+  "Waypoints": [
+    {
+      "Room": "13/934",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/933",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/932",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/931",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/930",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/929",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/928",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/924",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/920",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/950",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/949",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/948",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/947",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/945",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/944",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/943",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/942",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/941",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/940",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/939",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/938",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/937",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/936",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Terra Ista/IMP5)"
+}

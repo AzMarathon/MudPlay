@@ -1,0 +1,272 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Verdant Meadow Clearing (axebeak) Loop  14 7787",
+  "Waypoints": [
+    {
+      "Room": "14/7787",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7786",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7785",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7784",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7783",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7782",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7782",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7781",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7780",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7779",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7801",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7800",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7788",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7787",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7789",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7797",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7798",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7799",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7776",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7775",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7774",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7773",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7772",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7771",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7770",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7769",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7768",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7767",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7766",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7796",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7766",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7763",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7762",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7761",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7760",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7759",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7758",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7757",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7756",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7755",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7754",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7752",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7751",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7753",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7792",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/7791",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Killian (Vale of Durand/VMCL)"
+}

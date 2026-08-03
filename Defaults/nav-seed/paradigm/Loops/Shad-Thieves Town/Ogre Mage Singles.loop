@@ -1,0 +1,147 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Ogre Mage Singles",
+  "Waypoints": [
+    {
+      "Room": "5/1431",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1435",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1436",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1437",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1520",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1519",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1518",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1517",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1516",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1515",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1514",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1513",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1512",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1510",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1508",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1504",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1506",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1501",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1502",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1489",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1488",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1433",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/1432",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Thieves Town/TTWY)"
+}

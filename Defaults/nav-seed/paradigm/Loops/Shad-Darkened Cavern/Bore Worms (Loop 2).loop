@@ -1,0 +1,87 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bore Worms (Loop 2)",
+  "Waypoints": [
+    {
+      "Room": "5/3689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "5/3704",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shad-Darkened Cavern/SSTT)"
+}

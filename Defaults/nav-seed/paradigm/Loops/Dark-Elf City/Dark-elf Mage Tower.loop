@@ -1,0 +1,237 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dark-elf Mage Tower",
+  "Waypoints": [
+    {
+      "Room": "8/532",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/533",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/538",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/539",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/537",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/536",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/540",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/547",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/548",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/546",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/545",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/540",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/541",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/551",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/552",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/550",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/549",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/556",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/544",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/543",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/542",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/541",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/540",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/535",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/534",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "8/533",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dark-Elf City/DCTA)"
+}

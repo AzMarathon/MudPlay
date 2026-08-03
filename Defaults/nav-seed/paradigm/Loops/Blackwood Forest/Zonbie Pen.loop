@@ -1,0 +1,67 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Zonbie Pen",
+  "Waypoints": [
+    {
+      "Room": "17/2601",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2604",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2603",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2602",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/2600",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Blackwood Forest/BFZP)"
+}

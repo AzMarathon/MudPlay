@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Animated Defenders (W/Juggernaut SE)",
+  "Waypoints": [
+    {
+      "Room": "17/7055",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7053",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7052",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7051",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7050",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7049",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7072",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7073",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7080",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "17/7054",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported (relaxed) from .mp (Arlysia/ALAJ)"
+}

@@ -1,0 +1,287 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Jungle SW Section",
+  "Waypoints": [
+    {
+      "Room": "13/217",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/649",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/650",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/651",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/652",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/653",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/654",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/655",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/656",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/657",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/658",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/659",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/660",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/661",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/662",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/764",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/763",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/762",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/761",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/760",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/759",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/758",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/757",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/756",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/755",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/754",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/753",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/752",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/751",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/750",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/749",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/748",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/747",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/746",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/745",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/566",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/565",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/564",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/563",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/562",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/561",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/560",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/559",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/558",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/557",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/556",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/555",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/554",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/553",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/222",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/221",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/220",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/219",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "13/218",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Terra Fuego/TFLW)"
+}

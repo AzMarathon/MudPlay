@@ -1,0 +1,112 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Quicklings",
+  "Waypoints": [
+    {
+      "Room": "3/248",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/249",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/252",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/253",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/251",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/250",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/249",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/248",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/244",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/243",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/241",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/242",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/241",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/243",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/244",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/245",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/246",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/247",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/246",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/245",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/244",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Northern Forests/NFTH)"
+}

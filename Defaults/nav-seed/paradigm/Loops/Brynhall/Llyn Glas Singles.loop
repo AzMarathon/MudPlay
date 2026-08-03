@@ -1,0 +1,222 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Llyn Glas Singles",
+  "Waypoints": [
+    {
+      "Room": "14/4802",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4847",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4846",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4845",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4844",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4843",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4841",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4840",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4839",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4838",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4891",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4890",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4923",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4922",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4921",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4927",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4925",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4926",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4919",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4918",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4852",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4851",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4850",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4849",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4804",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4865",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4950",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4949",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4868",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4946",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4909",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4910",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4911",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4912",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4951",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4861",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4849",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/4848",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Brynhall/LGWF)"
+}

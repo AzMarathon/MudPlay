@@ -1,0 +1,47 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Cleared Fields",
+  "Waypoints": [
+    {
+      "Room": "1/2511",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2503",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2509",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2505",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2507",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2483",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2485",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2487",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

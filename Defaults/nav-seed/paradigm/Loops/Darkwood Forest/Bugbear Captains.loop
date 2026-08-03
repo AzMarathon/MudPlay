@@ -1,0 +1,72 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Bugbear Captains",
+  "Waypoints": [
+    {
+      "Room": "1/285",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/279",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/275",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/272",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/270",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/269",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/268",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/284",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/283",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/282",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/281",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/280",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/279",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Darkwood Forest/DFCE)"
+}

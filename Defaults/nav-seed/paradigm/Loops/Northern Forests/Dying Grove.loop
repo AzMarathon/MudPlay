@@ -1,0 +1,222 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Dying Grove",
+  "Waypoints": [
+    {
+      "Room": "1/2415",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/178",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/179",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/180",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/179",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/181",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/182",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/183",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/182",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/184",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/185",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/186",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/187",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/188",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/187",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/186",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/189",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/191",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/190",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/192",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/193",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/196",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/197",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/198",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/199",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/200",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/201",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/200",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/202",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/203",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/210",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/209",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/212",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/211",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/209",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/208",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/207",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/206",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/205",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/206",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "3/204",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Northern Forests/SRMP)"
+}

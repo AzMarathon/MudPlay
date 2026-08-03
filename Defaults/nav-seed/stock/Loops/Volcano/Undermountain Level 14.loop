@@ -1,0 +1,337 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Undermountain Level 14",
+  "Waypoints": [
+    {
+      "Room": "16/1678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1677",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1678",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1679",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1709",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1710",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1711",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1712",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1713",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1714",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1715",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1716",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1717",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1718",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1719",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1704",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1703",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1702",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1701",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1722",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1721",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1720",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1705",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1706",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1707",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1724",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1723",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1529",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1708",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1700",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1699",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1698",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1697",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1696",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1695",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1694",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1693",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1692",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1691",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1690",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1689",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1688",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1687",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1686",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1685",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1684",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1683",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1682",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1681",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1680",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1679",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Fizban the Fabulous (Volcano/VU14)"
+}

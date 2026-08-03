@@ -1,0 +1,112 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Wraith Spiders Loop 1",
+  "Waypoints": [
+    {
+      "Room": "15/10023",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10022",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10019",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10017",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10016",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10015",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10011",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10010",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10006",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10005",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10007",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10008",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10009",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10012",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10013",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10014",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10018",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10020",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10021",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/10022",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Old Mines/OMAC)"
+}

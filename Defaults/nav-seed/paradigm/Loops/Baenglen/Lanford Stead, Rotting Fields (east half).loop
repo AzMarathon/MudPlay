@@ -1,0 +1,147 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Lanford Stead, Rotting Fields (east half)",
+  "Waypoints": [
+    {
+      "Room": "14/5759",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5760",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5771",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5772",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5773",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5774",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5775",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5805",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5806",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5807",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5808",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5784",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5783",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5782",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5781",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5780",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5779",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5810",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5809",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5778",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5777",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5776",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5775",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5774",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5773",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5772",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5771",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "14/5760",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Baenglen/LSCP)"
+}

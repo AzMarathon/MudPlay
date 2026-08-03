@@ -1,0 +1,157 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Underground Cavern Entrance 1",
+  "Waypoints": [
+    {
+      "Room": "16/3092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3112",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3157",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3131",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3135",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3134",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3133",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3143",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3144",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3148",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3149",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3150",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3151",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3138",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3137",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3129",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3155",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3156",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3157",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/3093",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Ocean/UCE1)"
+}

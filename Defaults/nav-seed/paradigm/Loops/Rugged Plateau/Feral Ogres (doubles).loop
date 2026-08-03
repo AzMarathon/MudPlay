@@ -1,0 +1,407 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Feral Ogres (doubles)",
+  "Waypoints": [
+    {
+      "Room": "2/11086",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11087",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11128",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11091",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11095",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11097",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11098",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11099",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11104",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11109",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11108",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11107",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11106",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11105",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11103",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11102",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11100",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11099",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11098",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11094",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11093",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11127",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11092",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11091",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11090",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11089",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11088",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "2/11087",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Rugged Plateau/RPGP)"
+}

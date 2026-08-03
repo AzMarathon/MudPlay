@@ -1,0 +1,27 @@
+{
+  "SchemaVersion": 3,
+  "Name": "fulgore",
+  "Waypoints": [
+    {
+      "Room": "15/1101",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1097",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1096",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1097",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Lava Fields/CFIF)"
+}

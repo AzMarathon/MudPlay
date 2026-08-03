@@ -1,0 +1,307 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Fractured Moor",
+  "Waypoints": [
+    {
+      "Room": "16/10661",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10593",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10592",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10591",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10590",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10589",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10588",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10587",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10586",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10585",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10584",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10581",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10580",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10579",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10578",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10577",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10576",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10575",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10574",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10570",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10569",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10568",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10567",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10563",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10564",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10565",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10564",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10563",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10561",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10562",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10640",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10638",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10637",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10636",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10630",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10629",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10627",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10626",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10624",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10623",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10622",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10621",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10619",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10617",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10616",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10615",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10614",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10613",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10600",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10599",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10598",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10596",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10595",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10594",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/10593",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Shattered Expanse/FMCE)"
+}

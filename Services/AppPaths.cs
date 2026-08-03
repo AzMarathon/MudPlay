@@ -289,6 +289,19 @@ public static class AppPaths
     public static string GameDataSetFavoritesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "Favorites.json");
 
+    // Read-only bundled nav seed for the given realm ("stock"/"paradigm"), shipped
+    // next to the executable under Defaults/nav-seed/{realm}/ — a Loops/ tree of
+    // .loop files plus a Favorites.json. NavSeedBootstrapper copies these into a
+    // freshly-imported set of the matching realm so it arrives pre-populated with
+    // base navigation loops + GOTO favourites. Additive + once-only.
+    public static string BundledNavSeedDir(string realm) =>
+        Path.Combine(AppContext.BaseDirectory, "Defaults", "nav-seed", realm);
+
+    // Per-set sentinel written once the nav seed has been applied, so re-importing
+    // the set (or the user deleting a seeded loop/favourite) never re-adds it.
+    public static string NavSeedMarkerFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), ".nav-seeded");
+
     // Legacy per-BBS folder that held Auto-Lair setups before the Loops + Lairs
     // storage unification. Kept around as a source for the one-shot migration in
     // Game.Map.LairManager.LoadAll; once empty, the folder is removed and never

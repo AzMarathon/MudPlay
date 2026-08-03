@@ -18,6 +18,7 @@ public sealed class BbsProfileFieldsTests
 
         Assert.Equal(3, dto.MaxRedials);
         Assert.Equal(5, dto.RedialPauseSeconds);
+        Assert.False(dto.InfiniteRetries);
         Assert.Equal(0, dto.CleanupPeriodMinutes);
         Assert.Equal(0, dto.NoResponseTimeoutSeconds);
         Assert.False(dto.ReconnectOnFailedConnect);
@@ -49,6 +50,7 @@ public sealed class BbsProfileFieldsTests
             WebsiteUrl = "https://playpenbbs.com",
             MaxRedials = 5,
             RedialPauseSeconds = 10,
+            InfiniteRetries = true,
             CleanupPeriodMinutes = 60,
             NoResponseTimeoutSeconds = 90,
             ReconnectOnFailedConnect = true,
@@ -73,6 +75,7 @@ public sealed class BbsProfileFieldsTests
         Assert.Equal(original.WebsiteUrl,               round.WebsiteUrl);
         Assert.Equal(original.MaxRedials,               round.MaxRedials);
         Assert.Equal(original.RedialPauseSeconds,       round.RedialPauseSeconds);
+        Assert.Equal(original.InfiniteRetries,          round.InfiniteRetries);
         Assert.Equal(original.CleanupPeriodMinutes,     round.CleanupPeriodMinutes);
         Assert.Equal(original.NoResponseTimeoutSeconds, round.NoResponseTimeoutSeconds);
         Assert.Equal(original.ReconnectOnFailedConnect, round.ReconnectOnFailedConnect);
@@ -98,6 +101,7 @@ public sealed class BbsProfileFieldsTests
         Assert.Equal("old.example",   dto.Host);
         Assert.Equal(23,              dto.Port);
         Assert.Equal(3,               dto.MaxRedials);            // default
+        Assert.False(dto.InfiniteRetries);                       // default
         Assert.Equal(80,              dto.TerminalCols);          // default
     }
 }

@@ -1,0 +1,172 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Aged Earth Dragon Area",
+  "Waypoints": [
+    {
+      "Room": "16/1765",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1858",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1859",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1860",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1861",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1862",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1863",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1864",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1865",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1866",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1522",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1866",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1867",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1868",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1869",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1870",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1871",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1872",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1871",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1873",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1874",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1873",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1868",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1867",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1866",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1865",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1864",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1863",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1862",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1861",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1860",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1859",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "16/1858",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Fizban the Fabulous (Volcano/VAED)"
+}

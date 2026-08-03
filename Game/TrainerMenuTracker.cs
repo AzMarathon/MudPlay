@@ -57,6 +57,17 @@ public sealed class TrainerMenuTracker : IDisposable
     // "Point Cost Chart" is the full-screen menu, not chat noise.
     private const string CharacterCreationSignature = "Character Creation";
 
+    // ParaMUD abbreviates the box title to "Char. Creation" rather than the
+    // stock "Character Creation"; match both so the creation stat box is
+    // recognised on either realm.
+    private const string CharCreationAbbrevSignature = "Char. Creation";
+
+    // The framed "Point Cost Chart" panel beside the creation/train box title.
+    // Public so the screen-feed path (MainWindowViewModel) can cheaply pre-check
+    // for it before building screen text to hand to ObserveScreen. The emitted-
+    // line path matches the same text via KnownPatterns.MenuTrainerStatsMarker.
+    public const string StatBoxMarker = "Point Cost Chart";
+
     private DateTime? _expectingMenuSince;
     private bool _inMenu;
     private List<string> _rosterSnapshot = new();
@@ -173,6 +184,36 @@ public sealed class TrainerMenuTracker : IDisposable
         }
     }
 
+    // Live-screen detection for the character-creation stat box, complementing
+    // the emitted-line OnMenuMarker. The creation box is painted with cursor
+    // positioning, so its "Point Cost Chart" marker row never completes as an
+    // emitted line until the box is torn down — too late: arrow keys stay
+    // captured by history-recall for the whole creation session (the reported
+    // "arrows cycle the given/family names" bug). Scanning the live screen each
+    // feed flips character-mode input the moment the box appears. Scoped to
+    // character creation (the box carries the "Character Creation" / "Char.
+    // Creation" title): the in-game `train stats` screen has no such title and
+    // keeps arming off its outbound command, so this can't false-positive on it
+    // or on chat noise. Fed the flattened visible screen by the terminal-feed
+    // path, which pre-filters on StatBoxMarker so this runs only when a stat box
+    // is actually on screen.
+    public void ObserveScreen(string screenText)
+    {
+        if (_inputMenuActive) return;   // already armed — nothing to do
+        if (string.IsNullOrEmpty(screenText)) return;
+        if (!screenText.Contains(StatBoxMarker, StringComparison.OrdinalIgnoreCase)) return;
+
+        bool creation =
+            screenText.Contains(CharacterCreationSignature, StringComparison.OrdinalIgnoreCase)
+            || screenText.Contains(CharCreationAbbrevSignature, StringComparison.OrdinalIgnoreCase);
+        if (!creation) return;
+
+        _inputMenuActive = true;
+        _log?.Log(LogSeverity.Info, "TrainerMenu",
+            "Character-creation stat box detected on screen — armed character-mode input.");
+        InputMenuEntered?.Invoke();
+    }
+
     private void OnMenuMarker(MatchResult match)
     {
         // Two confirmation paths:
@@ -194,7 +235,8 @@ public sealed class TrainerMenuTracker : IDisposable
         }
 
         bool characterCreation =
-            match.Text.Contains(CharacterCreationSignature, StringComparison.OrdinalIgnoreCase);
+            match.Text.Contains(CharacterCreationSignature, StringComparison.OrdinalIgnoreCase)
+            || match.Text.Contains(CharCreationAbbrevSignature, StringComparison.OrdinalIgnoreCase);
 
         if (!gateArmed && !characterCreation) return;
         if (_inMenu) return;

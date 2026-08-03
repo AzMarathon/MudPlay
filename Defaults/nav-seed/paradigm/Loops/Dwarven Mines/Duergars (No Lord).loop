@@ -1,0 +1,207 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Duergars (No Lord)",
+  "Waypoints": [
+    {
+      "Room": "6/2620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2621",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2622",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2620",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2623",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2624",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2637",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2625",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2626",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2627",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2638",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2628",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2629",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2630",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2646",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2644",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2630",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2642",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2641",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2630",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2631",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2632",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2639",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2632",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2633",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2634",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2635",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2640",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2635",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2636",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "6/2623",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Dwarven Mines/DMLP)"
+}

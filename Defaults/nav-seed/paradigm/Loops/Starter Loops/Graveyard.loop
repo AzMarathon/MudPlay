@@ -1,0 +1,97 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Graveyard",
+  "Waypoints": [
+    {
+      "Room": "1/816",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/833",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/842",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/830",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/828",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3276",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3281",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3294",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3299",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2650",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2648",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2418",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2645",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/823",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/2643",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/820",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/836",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/818",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": ""
+}

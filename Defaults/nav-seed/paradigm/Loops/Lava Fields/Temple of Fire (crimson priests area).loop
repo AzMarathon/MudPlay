@@ -1,0 +1,107 @@
+{
+  "SchemaVersion": 3,
+  "Name": "Temple of Fire (crimson priests area)",
+  "Waypoints": [
+    {
+      "Room": "15/1126",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1120",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1119",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1118",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1167",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1117",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1116",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1115",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1113",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1114",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1125",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1124",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1168",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1123",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1122",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1121",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "15/1120",
+      "Command": null,
+      "DelayMs": 0
+    }
+  ],
+  "Notes": "Imported from .mp by Winterhawk (Lava Fields/TEMF)"
+}
