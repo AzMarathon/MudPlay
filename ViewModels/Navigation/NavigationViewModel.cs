@@ -1087,13 +1087,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(l);
         }
 
-        // Default collapsed (tidy rail); a filter force-expands so nested matches
-        // show. Harvest the resting overrides only when the tree we're replacing
-        // isn't itself a filtered view (see NavTreeBuilder.Sync).
+        // While filtering, build a FLAT list — no folder grouping. An expanded
+        // folder tree defeats virtualization (Avalonia realises every child of an
+        // expanded node), so a broad match renders hundreds of rows at once and
+        // the first keystroke stalls. Flat top-level rows let the tree's
+        // VirtualizingStackPanel realise only what's visible. The resting
+        // (unfiltered) view keeps the folder tree. Harvest the resting overrides
+        // only when the tree we're replacing isn't itself a filtered view.
+        Func<object, string?> folderOf = filtering ? (static _ => null) : FolderOfNavRow;
         IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.NavFolders.AllFolders;
-        NavTreeBuilder.Sync<object>(NavTree, rows, FolderOfNavRow, folders,
+        NavTreeBuilder.Sync<object>(NavTree, rows, folderOf, folders,
             defaultExpanded: false, _navExpandOverrides,
-            harvest: !_navWasFiltering, forceExpandAll: filtering);
+            harvest: !_navWasFiltering, forceExpandAll: false);
         _navWasFiltering = filtering;
         OnPropertyChanged(nameof(HasNavTree));
         OnPropertyChanged(nameof(HasNoLoopMatches));
@@ -1402,12 +1407,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         IEnumerable<FavoriteRowViewModel> rows = filtering
             ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
             : Favorites;
-        // GOTO folders default collapsed (like the loops/lairs rail); a filter
-        // force-expands so a match under a collapsed folder still shows.
+        // While filtering, build a FLAT list — no folder grouping — so the tree's
+        // VirtualizingStackPanel realises only visible rows (an expanded folder
+        // tree defeats virtualization; see RebuildNavTree). The resting view keeps
+        // the folder tree.
+        Func<FavoriteRowViewModel, string?> folderOf = filtering ? (static _ => null) : static r => r.Folder;
         IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.Favorites.AllFolders;
-        NavTreeBuilder.Sync(FavoriteTree, rows, r => r.Folder, folders,
+        NavTreeBuilder.Sync(FavoriteTree, rows, folderOf, folders,
             defaultExpanded: false, _gotoExpandOverrides,
-            harvest: !_gotoWasFiltering, forceExpandAll: filtering);
+            harvest: !_gotoWasFiltering, forceExpandAll: false);
         _gotoWasFiltering = filtering;
         OnPropertyChanged(nameof(HasFavoriteTree));
         OnPropertyChanged(nameof(HasNoFavoriteMatches));

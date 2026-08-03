@@ -2,8 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 2.20.0**
-> - Navigation filters (Go To / Loops / Auto-Lairs) no longer lag on the first keystroke with large seeded lists: filtering is debounced and the lists now virtualize
-> - Each filtered list scrolls within a bounded height (only visible rows render) instead of expanding the whole rail
+> - Navigation filters (Go To / Loops / Auto-Lairs) no longer lag with large seeded lists: filtering is debounced, and while filtering the matches show as a flat, virtualized list (only visible rows render) instead of force-expanding every folder
+> - Each filtered list scrolls within a bounded height; the unfiltered view keeps the folder tree
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
