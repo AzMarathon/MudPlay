@@ -1,10 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.23.0**
-> - Exp/Hr Estimator now handles bosses (a monster with game-limit 1 or a regen of an hour+), whether in a lair OR placed in a room: it's pulled out of the lair/fixture handling and added once as `boss exp ÷ regen-hours` — so a 15-hour crowned spider adds ~80k/hr instead of inflating every room every lap, and a placed 3-hour juggernaut adds ~433k/hr instead of its full value every pass
-> - A boss that can appear in any room of a multi-room lair (or a placed boss) is counted once for the whole loop, not per room; a new "Bosses" line in the breakdown shows each one's contribution
-> - Monster exp now reads `EXP × ExpMulti` (the boss multiplier) instead of raw `EXP`, so a ×20 boss no longer shows 1/20th its value
+> **Version 2.24.0**
+> - Right-clicking a map room with an up and/or down exit now offers "Go Up → …" / "Go Down → …" menu items that jump the map view to the room on that floor (view-only, mirroring "Use Teleport" — your character doesn't move)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

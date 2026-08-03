@@ -634,6 +634,15 @@
                         <MenuItem Header="{Binding Teleport4.Label}"
                                   Command="{Binding Teleport4.Command}"
                                   IsVisible="{Binding Teleport4, Converter={x:Static conv:ObjectConverters.IsNotNull}}"/>
+                        <!-- Up/Down exits lead to a different floor not shown on the
+                             current map — jump the map view there (view-only, like
+                             Use Teleport). Shown only when the room has that exit. -->
+                        <MenuItem Header="{Binding ContextUpLabel}"
+                                  Command="{Binding GoUpFloorCommand}"
+                                  IsVisible="{Binding ContextHasUp}"/>
+                        <MenuItem Header="{Binding ContextDownLabel}"
+                                  Command="{Binding GoDownFloorCommand}"
+                                  IsVisible="{Binding ContextHasDown}"/>
                         <Separator/>
                         <MenuItem Header="Center on Player"
                                   Command="{Binding CenterOnPlayerCommand}"/>
