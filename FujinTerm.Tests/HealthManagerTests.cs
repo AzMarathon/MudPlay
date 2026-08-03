@@ -53,6 +53,12 @@ public sealed class HealthManagerTests
         /// anywhere in the bleeding-out window down to — but not past — this.</summary>
         public int DeathFloor { get; set; } = -25;
 
+        /// <summary>Simulates a loop's "do not rest in this room" flag — when true,
+        /// HealthManager suppresses the rest hold (the loop would advance instead of
+        /// resting). Defaults false so existing tests rest normally. AppServices
+        /// wires this to the running loop's current-room DoNotRest waypoint.</summary>
+        public bool SkipRestHere { get; set; }
+
         /// <summary>The hangup-intent signal wired into the emergency-hangup
         /// path. Tests peek it (non-consuming) to assert an intentional drop was
         /// flagged, so the reactive-reconnect path stands down.</summary>
@@ -100,6 +106,7 @@ public sealed class HealthManagerTests
                 isStealthed: () => Stealthed,
                 isSolo: () => Solo,
                 onRecovered: () => ShadowRestResumeCount++);
+            Health.SetDoNotRestSelector(() => SkipRestHere);
         }
 
         /// <summary>
@@ -2491,5 +2498,53 @@ public sealed class HealthManagerTests
         Assert.NotNull(hpAssert);
         Assert.Equal(HealthManager.AsserterName, hpAssert!.Value.Asserter);
         Assert.Contains("HP", hpAssert.Value.Reason);
+    }
+
+    // ----- "do not rest in this room" (per-waypoint) -----------------
+
+    [Fact]
+    public void DoNotRestRoom_BelowThreshold_SuppressesBothRestGates()
+    {
+        // In a loop's "do not rest" room we never raise the rest hold even when
+        // HP and MA are both below "rest if below" — the loop advances instead.
+        using Harness h = new();
+        h.AutoHealRestEnabled = true;
+        h.SkipRestHere = true;
+        h.SetPrompt(hp: 30, maxHp: 100, ma: 10, maxMa: 100);   // both under default triggers
+
+        h.Health.Evaluate();
+
+        Assert.False(h.HealthGateHeld);
+        Assert.False(h.ManaGateHeld);
+    }
+
+    [Fact]
+    public void NormalRoom_BelowThreshold_StillRests_WhenSkipOff()
+    {
+        // Regression: the flag off = today's behavior; a below-threshold room rests.
+        using Harness h = new();
+        h.AutoHealRestEnabled = true;
+        h.SkipRestHere = false;
+        h.SetPrompt(hp: 30, maxHp: 100);
+
+        h.Health.Evaluate();
+
+        Assert.True(h.HealthGateHeld);
+    }
+
+    [Fact]
+    public void SteppingIntoDoNotRestRoom_ReleasesAnAlreadyHeldRestGate()
+    {
+        // Held the rest gate in a normal room; the loop then reaches a do-not-rest
+        // room → the hold is released so the loop resumes and walks out.
+        using Harness h = new();
+        h.AutoHealRestEnabled = true;
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.True(h.HealthGateHeld);
+
+        h.SkipRestHere = true;
+        h.Health.Evaluate();
+        Assert.False(h.HealthGateHeld);
     }
 }

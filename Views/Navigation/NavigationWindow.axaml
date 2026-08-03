@@ -934,14 +934,18 @@
                                                            Foreground="{StaticResource ChromeFgBrush}"
                                                            TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Center"/>
-                                                <!-- Gear marks a waypoint that carries a command. -->
-                                                <TextBlock Grid.Column="2"
-                                                           Text="⚙" FontSize="11"
-                                                           Margin="2,0"
-                                                           VerticalAlignment="Center"
-                                                           IsVisible="{Binding HasCommand}"
-                                                           Foreground="{StaticResource ChromeFgMutedBrush}"
-                                                           ToolTip.Tip="{Binding Command}"/>
+                                                <!-- Gear marks a command; ⛔ marks a "do not rest" waypoint. -->
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                                            Spacing="2" Margin="2,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="⚙" FontSize="11"
+                                                               IsVisible="{Binding HasCommand}"
+                                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                               ToolTip.Tip="{Binding Command}"/>
+                                                    <TextBlock Text="⛔" FontSize="11"
+                                                               IsVisible="{Binding HasDoNotRest}"
+                                                               Foreground="{StaticResource AccentRedBrush}"
+                                                               ToolTip.Tip="Do not rest in this room"/>
+                                                </StackPanel>
                                                 <Button Grid.Column="3"
                                                         Content="↑" FontSize="13" Padding="7,3" MinWidth="26"
                                                         Background="Transparent" BorderThickness="0"

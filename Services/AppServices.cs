@@ -2861,6 +2861,17 @@ public sealed class AppServices
             isLeaderWaited: () => PartyState.SelfIsLeader && PartyEssentials.IsPaused,
             isSelfPoisoned: () => Conditions.IsPoisoned);
 
+        // Per-waypoint "do not rest in this room": true while a loop is running
+        // and the room we're standing in is one of its waypoints flagged
+        // DoNotRest — HealthManager then suppresses the rest hold so the loop
+        // advances out. Matched by room key (per-room), so it clears the instant
+        // the loop steps into any other room. Loops only.
+        Health.SetDoNotRestSelector(() =>
+            LoopRunner.State != Game.Map.LoopState.Idle
+            && RoomTracker.State.CurrentRoom is { } here
+            && LoopRunner.CurrentLoop?.Waypoints is { } wps
+            && wps.Any(w => w.DoNotRest && w.Key.Equals(here.Key)));
+
         // Server-side resting state clears on move; drop our latch
         // too so the next threshold breach actually fires `rest`
         // again instead of skipping it on a stale _restInFlight.

@@ -29,16 +29,24 @@ public sealed class LoopWaypoint
     // on the next prompt" (same contract as v2 CommandLoopStep.DelayMs == 0).
     public int DelayMs { get; set; }
 
+    // When true, the loop must NOT rest in THIS room even if HP/MA drop below
+    // the "rest if below" gates — it advances instead (a room too dangerous to
+    // sit still in). Only this exact room is protected; the moment we step out
+    // (into a BFS path room or an unmarked waypoint) resting resumes normally.
+    // Defaults false, so older loop files without the field behave as before.
+    public bool DoNotRest { get; set; }
+
     // Parsed RoomKey from Room. Default when malformed.
     [JsonIgnore]
     public RoomKey Key => RoomKey.TryParseWire(Room, out RoomKey k) ? k : default;
 
     public LoopWaypoint() { }
 
-    public LoopWaypoint(RoomKey key, string? command = null, int delayMs = 0)
+    public LoopWaypoint(RoomKey key, string? command = null, int delayMs = 0, bool doNotRest = false)
     {
-        Room    = key.ToString();
-        Command = command;
-        DelayMs = delayMs;
+        Room      = key.ToString();
+        Command   = command;
+        DelayMs   = delayMs;
+        DoNotRest = doNotRest;
     }
 }

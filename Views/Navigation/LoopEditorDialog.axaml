@@ -85,15 +85,20 @@
                                            Text="{Binding DisplayLabel}"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Grid.Column="2"
-                                           Text="{Binding CommandSummary}"
-                                           VerticalAlignment="Center"
-                                           FontSize="10"
-                                           Foreground="{StaticResource AccentCyanBrush}"
-                                           Margin="6,0"
-                                           IsVisible="{Binding HasCommand}"
-                                           TextTrimming="CharacterEllipsis"
-                                           MaxWidth="160"/>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                            Spacing="6" Margin="6,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding CommandSummary}"
+                                               FontSize="10"
+                                               Foreground="{StaticResource AccentCyanBrush}"
+                                               IsVisible="{Binding HasCommand}"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxWidth="160"/>
+                                    <TextBlock Text="no rest"
+                                               FontSize="10"
+                                               Foreground="{StaticResource AccentRedBrush}"
+                                               ToolTip.Tip="The loop won't rest in this room — it advances instead."
+                                               IsVisible="{Binding HasDoNotRest}"/>
+                                </StackPanel>
                                 <!-- ✎ Per-row command + delay editor. Sits LEFT
                                      of the arrange-up arrow per UX direction. -->
                                 <Button Grid.Column="3"

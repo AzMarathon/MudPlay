@@ -3700,11 +3700,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         WaypointActionEditDialogViewModel vm = new(
             waypointLabel: $"{row.Index}. {row.Name}",
             command: row.Command,
-            delayMs: row.DelayMs);
+            delayMs: row.DelayMs,
+            doNotRest: row.DoNotRest);
         WaypointActionEditResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
         if (result is null) return;
-        LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs);
+        LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs, result.DoNotRest);
     }
 
     // Building Loop drag-reorder — move the row at fromOneBased to
