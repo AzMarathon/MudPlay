@@ -233,4 +233,21 @@ public sealed class LoopExpSimulatorTests
         Assert.Single(a.Lairs);                                     // the boss is not a lair row
         Assert.Equal(80_000.0, a.ExpPerHour - b.ExpPerHour, 0);     // boss adds exactly its 80k
     }
+
+    [Fact]
+    public void PlacedBoss_AmortizedOverRegen_NotEveryPass()
+    {
+        // A boss placed via the room's NPC field (not a lair) — the animated
+        // juggernaut (1.3M, GameLimit 1, 3h regen) — amortises to 1.3M ÷ 3 =
+        // 433k/hr once, not 1.3M grabbed on every lap like a normal fixture. The
+        // resolver emits the same IsBoss target for a placed boss as a lair boss.
+        ExpSimResult e = LoopExpSimulator.Simulate(
+            Route(Room(17, 7055, Boss(1211, 1_300_000, 3, "animated juggernaut"))),
+            Single(secPerStep: 1));
+
+        Assert.Equal(1_300_000.0 / 3, e.ExpPerHour, 0);
+        ExpBossStat b = Assert.Single(e.Bosses);
+        Assert.Equal("animated juggernaut", b.Name);
+        Assert.Equal(3, b.RegenHours);
+    }
 }

@@ -518,11 +518,16 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
 - For a **loop**, an instant mob still yields only once per lap (bounded by lap time); only a
   stay-in-room **rooming** setup kills it every round.
 
-**Boss lair monsters — a game-limited / long-regen singleton.** *([CONFIRMED] 2026-08-03, user + report `paradigm-20260803-035136`)*
-- A lair monster is a **boss** if its **`GameLimit` is 1** (only one exists in the game at a time) OR
-  its **`RegenTime` is ≥ 1 hour**. A boss can be killed **only as often as its regen timer** — the
-  crowned spider (`Number 929`, `GameLimit 1`, `RegenTime 15`) is killable **once per 15 hours**, and
-  it can spawn in **any** room of a multi-room lair (still just the one entity across all of them).
+**Boss monsters — a game-limited / long-regen singleton.** *([CONFIRMED] 2026-08-03, user + reports `paradigm-20260803-035136`, `-094657`)*
+- A monster is a **boss** if its **`GameLimit` is 1** (only one exists in the game at a time) OR its
+  **`RegenTime` is ≥ 1 hour** — and this holds whether it's a **lair** member OR a **placed** monster
+  (the room's `NPC` field). A boss can be killed **only as often as its regen timer** — the crowned
+  spider (`Number 929`, lair, `GameLimit 1`, `RegenTime 15`) is killable **once per 15 hours** and can
+  spawn in **any** room of a multi-room lair; the animated juggernaut (`Number 1211`, placed in
+  `17/7055`, `GameLimit 1`, `RegenTime 3`, 1,300,000 exp) is killable **once per 3 hours**.
+- **A placed boss is NOT an instant fixture.** Normal `NPC`-placed monsters regenerate on entry
+  (instant, every pass — see above), but a *boss* placed monster is still gated by its regen, so it's
+  amortised exactly like a lair boss, not grabbed every lap.
 - **A boss's `RegenTime` is in HOURS** (the Game-Data browser renders it "15 hour"), distinct from the
   lair-mob `AvgDelay`/`RegenTime` path above.
 - **True monster exp is `EXP × ExpMulti`.** The Monsters table stores a base `EXP` and a separate

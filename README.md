@@ -2,8 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 2.23.0**
-> - Exp/Hr Estimator now handles lair bosses (a monster with game-limit 1 or a regen of an hour+): it's pulled out of the lair average and added once as `boss exp ÷ regen-hours` — so a 15-hour crowned spider adds ~80k/hr instead of inflating every room every lap
-> - A boss that can spawn in any room of a multi-room lair is counted once for the whole loop, not per room; a new "Bosses" line in the breakdown shows each one's contribution
+> - Exp/Hr Estimator now handles bosses (a monster with game-limit 1 or a regen of an hour+), whether in a lair OR placed in a room: it's pulled out of the lair/fixture handling and added once as `boss exp ÷ regen-hours` — so a 15-hour crowned spider adds ~80k/hr instead of inflating every room every lap, and a placed 3-hour juggernaut adds ~433k/hr instead of its full value every pass
+> - A boss that can appear in any room of a multi-room lair (or a placed boss) is counted once for the whole loop, not per room; a new "Bosses" line in the breakdown shows each one's contribution
 > - Monster exp now reads `EXP × ExpMulti` (the boss multiplier) instead of raw `EXP`, so a ×20 boss no longer shows 1/20th its value
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

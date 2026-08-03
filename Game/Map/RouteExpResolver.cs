@@ -74,11 +74,22 @@ public sealed class RouteExpResolver : IDisposable
 
         if (room.Npc > 0)
         {
-            // NPC-placed fixture: respawns instantly on entry (RespawnSeconds 0),
-            // regardless of the monster's RegenTime — that timer governs LAIR
-            // respawn, not fixtures. See GAME_MECHANICS.md.
-            int exp = Monster(room.Npc).Exp;
-            if (exp > 0) (targets ??= new List<ExpTarget>()).Add(new ExpTarget(1, exp, 0));
+            MonsterInfo npc = Monster(room.Npc);
+            if (npc.Exp > 0)
+            {
+                if (npc.IsBoss)
+                    // A PLACED boss (GameLimit 1 / regen ≥ 1h) is killable only once
+                    // per its regen even as a fixture — amortise it like a lair boss,
+                    // not an every-pass instant fixture (e.g. animated juggernaut
+                    // 17/7055: 1.3M, 3h regen → +433k/hr, once).
+                    (targets ??= new List<ExpTarget>()).Add(new ExpTarget(
+                        1, npc.Exp, npc.RegenHours * 3600, MonsterId: room.Npc, IsBoss: true, MonsterName: npc.Name));
+                else
+                    // Normal NPC fixture: respawns instantly on entry (RespawnSeconds
+                    // 0), regardless of RegenTime — that governs LAIR respawn, not
+                    // fixtures. See GAME_MECHANICS.md.
+                    (targets ??= new List<ExpTarget>()).Add(new ExpTarget(1, npc.Exp, 0));
+            }
         }
         if (room.HasLair && ParseLair(room.RawLairTag) is (int mobs, List<int> ids))
         {
