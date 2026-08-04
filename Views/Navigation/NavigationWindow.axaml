@@ -913,8 +913,10 @@
                                 </ListBox.Styles>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:LoopBuilderRow">
+                                        <!-- Right margin reserves the overlay scrollbar's width so it
+                                             doesn't cover the ✕ remove button when the list scrolls. -->
                                         <Border Padding="6,2"
-                                                Margin="0,1"
+                                                Margin="0,1,14,1"
                                                 CornerRadius="3"
                                                 BorderThickness="1"
                                                 BorderBrush="{StaticResource AccentRedBrush}"
@@ -1587,8 +1589,10 @@
                                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:LoopBuilderRow">
+                                                    <!-- Right margin reserves the overlay scrollbar's width so it
+                                                         doesn't cover the ✕ remove button when the list scrolls. -->
                                                     <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto"
-                                                          ColumnSpacing="3" Margin="0,1">
+                                                          ColumnSpacing="3" Margin="0,1,14,1">
                                                         <TextBlock Grid.Column="0" FontSize="11" VerticalAlignment="Center"
                                                                    Foreground="{StaticResource ChromeFgSecBrush}"
                                                                    Text="{Binding Index, StringFormat='{}{0}.'}"/>
