@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.27.0
+
+- Conversation window header state persists per character: the seven channel filter checkboxes (Gossip / Say / Telepath / Gang / Broadcast / Yell / Server) and the auto-scroll toggle now survive closing and reopening the window, and reload with the character profile (saved on change, restored on profile load)
+
 ## 2.26.0
 
 - Exp/Hr Estimator now accounts for monsters that summon more monsters on death (e.g. the Zombie Pen's stitched zombies): a lair's exp folds in the whole summon tree, so its yield reflects reality instead of the base monster's face value

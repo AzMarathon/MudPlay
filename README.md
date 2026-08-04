@@ -1,10 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.26.0**
-> - Exp/Hr Estimator now accounts for monsters that summon more monsters on death (e.g. the Zombie Pen's stitched zombies): a lair's exp folds in the whole summon tree, so its yield reflects reality instead of the base monster's face value
-> - The summons cost combat time too — single-target counts every monster the spawn becomes; AoE/"rooming" adds one clear pass per summon tier — so the estimate rises but stays tempered by the extra kills. Affected lairs show a "summons" tag
-> - Respects the engine's 20-monster room cap: summons that would overflow a room aren't counted, so a big fan-out isn't scored as if every summon spawned
+> **Version 2.27.0**
+> - Conversation window header state persists per character: the seven channel filter checkboxes (Gossip / Say / Telepath / Gang / Broadcast / Yell / Server) and the auto-scroll toggle now survive closing and reopening the window, and reload with the character profile
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
