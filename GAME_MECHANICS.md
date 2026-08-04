@@ -552,13 +552,14 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
 - **It recurses, and the data terminates it.** Each summoned monster has its own `DeathSpell`, so the
   chain continues until a tier whose members have `DeathSpell 0`. Real chains are shallow (≤3 tiers);
   follow the data, don't assume a fixed tier count.
-- **A room holds at most 20 monsters at once, and summons beyond that don't spawn.** The engine caps a
-  room at **20** living monsters; when a wave of deaths would summon more than the room can hold, the
-  excess simply never appears. A tier's monsters are all alive together (they spawned as one wave), so
-  the cap applies **per tier**: e.g. 15 monsters each summoning 2 want 30, but only 20 spawn — the other
-  10 are suppressed and never fought or credited. A fan-out room is therefore worth far less than the
-  raw tree would suggest. (The Zombie Pen peaks at 15 with `Max 3` zombies, so its cap never bites; a
-  higher `Max` or a wider fan-out would.)
+- **A room holds at most 20 monsters at once, and a summon cast that would exceed it fails whole.** The
+  engine caps a room at **20** living monsters. A dying monster's `DeathSpell` fires as **one atomic
+  cast**: it lands only if *all* its summons fit under the cap — otherwise the whole cast **fails to
+  cast, is never retried, and is permanently lost** (its summons do NOT appear on a later round when
+  space frees up). So a wave fills with whole casts until the next won't fit, then drops the rest: e.g.
+  15 monsters each summoning 2 want 30, but only 20 spawn (10 whole casts) — the other 5 casts fail
+  outright. A fan-out room is therefore worth far less than the raw tree would suggest. (The Zombie Pen
+  peaks at 15 with `Max 3` zombies, so its cap never bites; a higher `Max` or a wider fan-out would.)
 - **Worked example — stitched zombie (`Number 1220`, `EXP 4000`, `DeathSpell 1032`):**
   - Spell `1032` (Abil-0/1 = 12) → **severed waist `881`** + **severed torso `888`**.
   - Waist `881` (`DeathSpell 1034`) → 2× **severed leg `889`** (3500 each).

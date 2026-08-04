@@ -61,6 +61,28 @@ public sealed class DeathSummonCascadeTests
     }
 
     [Fact]
+    public void RoomCap_FailsWholeSummonCasts_NotFractionally()
+    {
+        // A summon spell is atomic: it lands only if ALL its summons fit, else the
+        // whole cast fails (permanently — no partial, no retry). Tier 2 overflows
+        // with mixed cast sizes — the size-2 casts (id 2 → two 4s) are processed
+        // first and all fit (16 of id 4), leaving room for only ONE size-4 cast
+        // (id 3 → four 5s) → 4 of id 5. The rest fail whole. Exp reflects that whole-
+        // cast outcome (16×10 + 4×1 = 164), NOT a proportional split (~80).
+        var exp = new Dictionary<int, int> { [1] = 0, [2] = 0, [3] = 0, [4] = 10, [5] = 1 };
+        var summons = new Dictionary<int, IReadOnlyList<int>?>
+        {
+            [1] = new[] { 2, 3 },
+            [2] = new[] { 4, 4 },
+            [3] = new[] { 5, 5, 5, 5 },
+        };
+        CascadeResult r = Run(exp, summons, seed: 1, count: 8);
+
+        Assert.Equal(164, r.Exp, 3);
+        Assert.Equal(44, r.Kills, 3);   // 8 + 16 + 20
+    }
+
+    [Fact]
     public void SeedCount_ClampedToCap()
     {
         // Even the base spawn can't exceed the room cap.
