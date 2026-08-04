@@ -1,9 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.27.2**
-> - Fixed a flood of get/drop/look commands when collecting cash after combat at an encumbrance gate: instead of replaying every coin drop seen mid-fight (which double-counted each kill's drop against the room's running ground total and re-queued on every re-render), the client now re-displays the room once combat clears and collects from the actual ground contents — one pass
-> - Reconnecting mid-loop no longer leaves the walker sitting idle until you type `rm`: a drop that stranded the cash/item post-combat collect hold is now released on the first in-game prompt after reconnect, so the loop resumes on its own
+> **Version 2.28.0**
+> - Cash collection now decides once per room visit at an encumbrance gate (with collect-after-combat and/or drop-smaller-for-larger): coins are collected/traded a single time instead of re-running on every post-combat room re-display — no more flood of get/drop commands, no coin shed on redundant swaps, and the collect can no longer fire after the loop has stepped out of the room (which was stalling it or missing the pile)
+> - Cash + Items settings: the Bank/stash picker gains a "Do not auto-deposit" option — pick it to disarm auto-deposit, and it's the default when no bank/stash is set
+> - Exp Estimator: the ✕ remove button in the clicked-rooms list is no longer hidden under the scrollbar when the list scrolls (same fix applied to the Loop Builder's room list)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

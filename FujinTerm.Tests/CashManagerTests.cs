@@ -951,7 +951,7 @@ public sealed class CashManagerTests
 
         h.HasHostiles = false;                      // last hostile fell
         h.Cash.OnRoomObserved();
-        Assert.Equal("look", h.LastSent);           // re-display, don't replay the drop
+        Assert.Equal("", h.LastSent);               // bare CR re-display (honours brief mode), not a replay
 
         h.Feed("You notice 7 silver nobles here.");
         Assert.Contains("get 7 silver noble", h.AllSent);
@@ -989,11 +989,11 @@ public sealed class CashManagerTests
 
         h.HasHostiles = false;
         h.Cash.OnRoomObserved();
-        Assert.Equal("look", h.LastSent);           // one re-display, drops not replayed
+        Assert.Equal("", h.LastSent);               // one CR re-display, drops not replayed
 
         // The authoritative ground total drives ONE collect — not get 10 + get 5.
         h.Feed("You notice 15 gold crowns here.");
-        Assert.Equal(new[] { "look", "get 15 gold crown" }, h.AllSent);
+        Assert.Equal(new[] { "", "get 15 gold crown" }, h.AllSent);
     }
 
     // Room-display cash defers too (not just corpse drops) — the ground-survey
@@ -1010,7 +1010,7 @@ public sealed class CashManagerTests
 
         h.HasHostiles = false;
         h.Cash.OnRoomObserved();
-        Assert.Equal("look", h.LastSent);           // re-display first
+        Assert.Equal("", h.LastSent);               // CR re-display first
 
         h.Feed("You notice 50 gold crowns here.");
         Assert.Contains("get 50 gold crown", h.AllSent);
@@ -1076,10 +1076,74 @@ public sealed class CashManagerTests
         h.Feed("7 gold drop to the ground.");
         h.HasHostiles = false;
         h.Cash.OnRoomObserved();
-        Assert.Equal("look", h.LastSent);
+        Assert.Equal("", h.LastSent);                     // CR re-display
 
         h.Feed("You notice a rusty dagger here.");        // pile gone — no cash on the ground
-        Assert.Equal(new[] { "look" }, h.AllSent);        // no stale get fired
+        Assert.Equal(new[] { "" }, h.AllSent);            // just the CR re-display, no stale get
+    }
+
+    // ----- decide-once-per-pile latch --------------------------------
+
+    // The 143020 spam: at the gate with drop-smaller-for-larger, the room re-renders
+    // the same "You notice" several times post-combat. Each used to re-run the swap
+    // (drop copper / get silver) on a pile already taken. Now it's collected once.
+    [Fact]
+    public void CollectAfterCombat_SamePileReRendered_SwapsOnce()
+    {
+        using Harness h = new();   // no hostiles → immediate collect path (posts run inline)
+        h.Settings.SilverPolicy = CashPolicy.Collect;
+        h.Settings.CollectAfterCombatFinished = true;
+        h.Settings.SkipCollectIfMakesLight = true;      // at the gate → swap, not free pickup
+        h.Settings.DropSmallerForLarger = true;
+        h.Snapshot = Snap(500, 0, 0, 0, 0, currentWeight: 200, maxWeight: 1000);   // hold copper to swap, over Light cap
+
+        h.Feed("You notice 4 silver nobles here.");     // 1st render
+        h.Feed("You notice 4 silver nobles here.");     // re-render
+        h.Feed("You notice 4 silver nobles here.");     // re-render
+
+        Assert.Equal(1, h.AllSent.Count(s => s == "get 4 silver noble"));
+        Assert.Equal(1, h.AllSent.Count(s => s == "drop 4 copper farthing"));
+    }
+
+    // A fresh corpse-drop of a currency re-arms collection even after an earlier pile
+    // of it was taken this visit (a new mob wandered in and dropped more).
+    [Fact]
+    public void CollectAfterCombat_NewCorpseDrop_ReCollectsAfterEarlierPile()
+    {
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Settings.CollectAfterCombatFinished = true;
+
+        h.Feed("You notice 5 gold sovereigns here.");
+        Assert.Contains("get 5 gold crown", h.AllSent);
+        h.Sent.Clear();
+
+        h.Feed("You notice 5 gold sovereigns here.");   // same pile re-rendered → skipped
+        Assert.Empty(h.Sent);
+
+        h.Feed("3 gold drop to the ground.");           // new coin → re-arm → collect
+        Assert.Contains("get 3 gold crown", h.AllSent);
+    }
+
+    // Room change clears the latch so the next room's identical-looking pile collects.
+    [Fact]
+    public void CollectAfterCombat_RoomChange_ResetsCollectLatch()
+    {
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Settings.CollectAfterCombatFinished = true;
+
+        h.Feed("You notice 5 gold sovereigns here.");
+        Assert.Contains("get 5 gold crown", h.AllSent);
+        h.Sent.Clear();
+
+        h.Feed("You notice 5 gold sovereigns here.");   // re-render → skip
+        Assert.Empty(h.Sent);
+
+        h.Cash.OnRoomChanged();                          // walked into a new room
+
+        h.Feed("You notice 5 gold sovereigns here.");   // fresh room → collect again
+        Assert.Contains("get 5 gold crown", h.AllSent);
     }
 
     // ----- encumbrance gate + cascade --------------------------------

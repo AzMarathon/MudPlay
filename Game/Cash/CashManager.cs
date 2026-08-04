@@ -107,6 +107,16 @@ public sealed class CashManager : IDisposable
     // grabbed the pile first. A room change clears the flag: the coin belonged to a
     // room we've left.
     private bool _cashPendingAfterCombat;
+
+    // Currencies whose ground pile we've already collected (or considered and skipped
+    // as gated) this room visit — the "decide once" latch. A room re-renders several
+    // times after combat (the game's own re-display + our post-combat `look`), and
+    // without this each re-render re-ran the collect: with drop-smaller-for-larger it
+    // re-swapped the same pile, shedding coin on the redundant attempts (report
+    // paradigm-20260804-143020). Cleared on room change; a fresh corpse-drop of a
+    // currency removes it so post-new-combat cash is collected again.
+    private readonly HashSet<string> _collectedGround = new(StringComparer.OrdinalIgnoreCase);
+
     // Holds the walker across the post-combat `look` round-trip (server latency
     // exceeds the gate's settle window, so the settle can't cover it). Fires once to
     // release the deferred-hold if the re-displayed room turned out to hold no cash;
@@ -266,6 +276,7 @@ public sealed class CashManager : IDisposable
         _autoDepositRetryNotBefore = default;
         Array.Clear(_inFlightCoinDelta, 0, _inFlightCoinDelta.Length);
         Array.Clear(_inFlightCoinDeltaSetAt, 0, _inFlightCoinDeltaSetAt.Length);
+        _collectedGround.Clear();
         // Drop any pending post-combat collect from the prior character and release
         // the gate it was holding — the coin belonged to their session.
         _resurveyReleaseTimer?.Stop();
@@ -383,7 +394,12 @@ public sealed class CashManager : IDisposable
         CashDispatched?.Invoke(currency, count, policy);
 
         if (policy == CashPolicy.Collect)
+        {
+            // Fresh coin on the ground → re-arm collection of this currency even if
+            // we already took an earlier pile in this room (a new mob wandered in).
+            _collectedGround.Remove(currency);
             CollectOrDefer(count, currency);
+        }
     }
 
     private void OnCashPickedUp(MatchResult m)
@@ -548,10 +564,48 @@ public sealed class CashManager : IDisposable
     {
         if (!_collectAfterCombatFinished())
         {
-            CollectCoins(count, currency);
+            CollectOrDefer(count, currency);
             return;
         }
-        _post(() => CollectOrDefer(count, currency));
+        // Already waiting for this room's combat to clear, or already handled this
+        // pile this visit → ignore the re-render (a passive re-display, or a second
+        // "You notice" for cash we've taken). This is what stops drop-smaller-for-
+        // larger re-swapping the same pile on every render.
+        if (_cashPendingAfterCombat || _collectedGround.Contains(currency)) return;
+
+        // Claim the pile now (so a concurrent re-render skips) and HOLD the walker
+        // across the one-tick decision defer. The defer waits for the room-display
+        // batch (Also-here) so the hostile flag is current — but during that tick the
+        // loop could otherwise step out of the room, firing the get into the room we
+        // just left (which fails and stalls the loop, report -143321) or missing the
+        // pile entirely (report -143150). Holding pins us in place until the decision.
+        _collectedGround.Add(currency);
+        _gate?.NoteDeferredPending(1);
+        _post(() => CollectDecideHeld(count, currency));
+    }
+
+    // The deferred decision, one dispatch tick after "You notice" — the room-display
+    // batch is processed now, so the hostile flag is current. Releases the decision
+    // hold set by CollectOrDeferRoomSurvey.
+    private void CollectDecideHeld(int count, string currency)
+    {
+        if (_hasEngageableHostiles())
+        {
+            // Combat revealed after the notice line. Un-claim so the post-combat
+            // re-look re-collects from the true ground total, and defer (stay held).
+            _collectedGround.Remove(currency);
+            if (!_cashPendingAfterCombat)
+            {
+                _cashPendingAfterCombat = true;
+                _log?.Info(LogCategory, "cash on ground during combat — collecting after it clears");
+            }
+            return;
+        }
+        CollectCoins(count, currency);
+        // Decision done — clear the one-tick hold. If CollectCoins sent a get, its own
+        // NoteGetSent settle window keeps the walker held through the pickup; if it
+        // sent nothing (gated, nothing to swap), this releases the walker now.
+        _gate?.NoteDeferredCleared();
     }
 
     private void CollectOrDefer(int count, string currency)
@@ -570,6 +624,13 @@ public sealed class CashManager : IDisposable
             }
             return;
         }
+        // Decide once per pile per room visit — a re-displayed "There are N here" of a
+        // pile we've handled must not re-collect it (see _collectedGround).
+        if (!_collectedGround.Add(currency))
+        {
+            _log?.Debug(LogCategory, $"collect skipped currency={currency} — already handled this room visit");
+            return;
+        }
         CollectCoins(count, currency);
     }
 
@@ -584,8 +645,15 @@ public sealed class CashManager : IDisposable
     }
 
     // Called on actual room change. Drops a pending post-combat collect — that coin
-    // belonged to the room we just left.
-    public void OnRoomChanged() => CancelDeferredCollect("room changed");
+    // belonged to the room we just left — and resets the per-visit collect latch so
+    // the new room's piles are evaluated fresh.
+    public void OnRoomChanged()
+    {
+        if (_collectedGround.Count > 0)
+            _log?.Debug(LogCategory, $"room changed — resetting collect latch (was: {string.Join(", ", _collectedGround)})");
+        _collectedGround.Clear();
+        CancelDeferredCollect("room changed");
+    }
 
     // Drop a pending post-combat collect and release the acquisition hold WITHOUT
     // collecting — the coin belonged to a room/session we're no longer collecting
@@ -603,16 +671,19 @@ public sealed class CashManager : IDisposable
 
     // Combat's done and cash is waiting: re-display the room and collect from what's
     // actually on the ground now, rather than replaying the amounts seen mid-fight.
-    // The `look`'s "You notice" line drives one collect per currency off the true
+    // The re-display's "You notice" line drives one collect per currency off the true
     // ground total — no duplicates, no stale gets, and naturally correct if someone
-    // grabbed the pile first. Hold the walker across the look round-trip; the release
-    // timer frees it if the room turned out empty, and a real collect re-arms the
-    // gate's settle window before then.
+    // grabbed the pile first. A bare Enter (carriage return) re-renders the survey
+    // exactly like `look` would but honours the profile's brief mode — no room
+    // description / flavor text — matching AutoGetItemsManager.RequestDropReLook. Hold
+    // the walker across the round-trip; the release timer frees it if the room turned
+    // out empty, and a real collect re-arms the gate's settle window before then.
     private void FlushDeferredCollects()
     {
         _cashPendingAfterCombat = false;
+        _log?.Info(LogCategory, "combat cleared — re-displaying room to collect ground cash");
         _gate?.NoteDeferredPending(1);
-        Send("look");
+        Send("");   // bare carriage return, not `look` — respects brief mode
         ArmResurveyRelease();
     }
 
@@ -674,6 +745,7 @@ public sealed class CashManager : IDisposable
             // Unknown currency slot or unknown capacity → nothing to budget
             // against, collect the full amount (fail-open).
             _gate?.NoteGetSent();
+            _log?.Info(LogCategory, $"collect currency={currency} get={count} (ungated)");
             Send($"get {count} {WireNoun(currency)}");
             return;
         }
@@ -753,6 +825,9 @@ public sealed class CashManager : IDisposable
         }
 
         _gate?.NoteGetSent();
+        _log?.Info(LogCategory, swapDone > 0
+            ? $"collect currency={currency} get={totalPickup} (free={freePickup} + {swapDone} via drop-smaller-for-larger)"
+            : $"collect currency={currency} get={totalPickup}");
         Send($"get {totalPickup} {WireNoun(currency)}");
         _inFlightCoinDelta[slot] += totalPickup;
         _inFlightCoinDeltaSetAt[slot] = now;

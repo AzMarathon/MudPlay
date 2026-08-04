@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.28.0
+
+- Cash collection now decides once per room visit at an encumbrance gate (with collect-after-combat and/or drop-smaller-for-larger): coins are collected/traded a single time instead of re-running on every post-combat room re-display — no more flood of get/drop commands, no coin shed on redundant swaps, and the collect can no longer fire after the loop has stepped out of the room (which was failing the get and stalling the loop, or missing the pile entirely)
+- Cash + Items settings: the Bank/stash picker gains a "Do not auto-deposit" option — pick it to disarm auto-deposit, and it's the default when no bank/stash is set
+- Exp Estimator: the ✕ remove button in the clicked-rooms list is no longer hidden under the scrollbar when the list scrolls (same fix applied to the Loop Builder's room list)
+- bug reports addressed: paradigm-20260804-143020, paradigm-20260804-143150, paradigm-20260804-143321
+
 ## 2.27.2
 
 - Fixed a flood of get/drop/look commands when collecting cash after combat at an encumbrance gate: instead of replaying every coin drop seen mid-fight (which double-counted each kill's drop against the room's running ground total and re-queued on every re-render), the client now re-displays the room once combat clears and collects from the actual ground contents — one pass
