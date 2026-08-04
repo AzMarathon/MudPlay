@@ -585,12 +585,19 @@ public sealed class CashManager : IDisposable
 
     // Called on actual room change. Drops a pending post-combat collect — that coin
     // belonged to the room we just left.
-    public void OnRoomChanged()
+    public void OnRoomChanged() => CancelDeferredCollect("room changed");
+
+    // Drop a pending post-combat collect and release the acquisition hold WITHOUT
+    // collecting — the coin belonged to a room/session we're no longer collecting
+    // for. Shared by the room-change path and the reconnect resume: a disconnect
+    // mid-defer strands the hold (no self-heal, and the reconnect re-display doesn't
+    // reliably flush it), leaving the walker paused until it's dropped.
+    public void CancelDeferredCollect(string reason)
     {
         _resurveyReleaseTimer?.Stop();
         if (!_cashPendingAfterCombat) return;
         _cashPendingAfterCombat = false;
-        _log?.Debug(LogCategory, "room changed — dropping pending post-combat collect");
+        _log?.Debug(LogCategory, $"{reason} — dropping pending post-combat collect");
         _gate?.NoteDeferredCleared();
     }
 

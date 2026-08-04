@@ -1,8 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.27.1**
+> **Version 2.27.2**
 > - Fixed a flood of get/drop/look commands when collecting cash after combat at an encumbrance gate: instead of replaying every coin drop seen mid-fight (which double-counted each kill's drop against the room's running ground total and re-queued on every re-render), the client now re-displays the room once combat clears and collects from the actual ground contents — one pass
+> - Reconnecting mid-loop no longer leaves the walker sitting idle until you type `rm`: a drop that stranded the cash/item post-combat collect hold is now released on the first in-game prompt after reconnect, so the loop resumes on its own
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
