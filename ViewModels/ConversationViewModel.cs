@@ -20,6 +20,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private readonly CommandHistory _commands;
     private readonly CommandHistoryNavigator _nav;
     private readonly Action<string> _sendUserText;
+    private readonly ProfileService _profile;
     // Two brushes per channel: the accent (channel tag / speaker / toolbar
     // toggle) and the message-body text colour. Both start from the theme
     // defaults and are overlaid with the character's per-channel Talk overrides.
@@ -81,18 +82,31 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // Fired by the window's code-behind to scroll the newest row into view.
     public event Action<ConversationRowViewModel>? ScrollToRowRequested;
 
-    public ConversationViewModel(ChatHistoryStore history, CommandHistory commands, Action<string> sendUserText, Application app, TalkSettings talk)
+    public ConversationViewModel(ChatHistoryStore history, CommandHistory commands, Action<string> sendUserText, Application app, TalkSettings talk, ProfileService profile)
     {
         _history = history;
         _commands = commands;
         _nav = new CommandHistoryNavigator(commands);
         _sendUserText = sendUserText;
+        _profile = profile;
         _channelBrushes = BuildChannelBrushMap(app);
         _textBrushes = BuildTextBrushMap(app);
         ApplyColorOverrides(talk.ChannelColors);
 
         RowFontFamily = ResolveFont(app, talk.ConvoFont);
         MessageFontSize = talk.ConvoFontSize > 0 ? talk.ConvoFontSize : DefaultMessageFontSize;
+
+        // Seed the header toggles from the character's saved state. Direct field
+        // writes (not the generated setters) so no change notification fires and
+        // this restore isn't mistaken for a user edit that needs persisting.
+        _showGossip     = talk.ConvoShowGossip;
+        _showLocal      = talk.ConvoShowLocal;
+        _showTelepath   = talk.ConvoShowTelepath;
+        _showGangpath   = talk.ConvoShowGangpath;
+        _showBroadcast  = talk.ConvoShowBroadcast;
+        _showYell       = talk.ConvoShowYell;
+        _showRealmEvent = talk.ConvoShowRealmEvent;
+        _autoScroll     = talk.ConvoAutoScroll;
 
         Rebuild();
         RebuildRecentCommands();
@@ -125,14 +139,34 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         Rebuild();
     }
 
-    partial void OnShowGossipChanged(bool value)      => Rebuild();
-    partial void OnShowLocalChanged(bool value)       => Rebuild();
-    partial void OnShowTelepathChanged(bool value)    => Rebuild();
-    partial void OnShowGangpathChanged(bool value)    => Rebuild();
-    partial void OnShowBroadcastChanged(bool value)   => Rebuild();
-    partial void OnShowYellChanged(bool value)        => Rebuild();
-    partial void OnShowRealmEventChanged(bool value)  => Rebuild();
+    partial void OnShowGossipChanged(bool value)      { Rebuild(); PersistFilters(); }
+    partial void OnShowLocalChanged(bool value)       { Rebuild(); PersistFilters(); }
+    partial void OnShowTelepathChanged(bool value)    { Rebuild(); PersistFilters(); }
+    partial void OnShowGangpathChanged(bool value)    { Rebuild(); PersistFilters(); }
+    partial void OnShowBroadcastChanged(bool value)   { Rebuild(); PersistFilters(); }
+    partial void OnShowYellChanged(bool value)        { Rebuild(); PersistFilters(); }
+    partial void OnShowRealmEventChanged(bool value)  { Rebuild(); PersistFilters(); }
+    partial void OnAutoScrollChanged(bool value)      => PersistFilters();
+    // Search text is transient — it filters the live view but isn't persisted.
     partial void OnSearchTextChanged(string value)    => Rebuild();
+
+    // Write the header toggle state back to the character's "Talk" section. A
+    // read-modify-write on just these fields, so it can't clobber the other Talk
+    // settings (or a colour/font edit made in the Settings window).
+    private void PersistFilters()
+    {
+        _profile.UpdateSection<TalkSettings>("Talk", dto =>
+        {
+            dto.ConvoShowGossip     = ShowGossip;
+            dto.ConvoShowLocal      = ShowLocal;
+            dto.ConvoShowTelepath   = ShowTelepath;
+            dto.ConvoShowGangpath   = ShowGangpath;
+            dto.ConvoShowBroadcast  = ShowBroadcast;
+            dto.ConvoShowYell       = ShowYell;
+            dto.ConvoShowRealmEvent = ShowRealmEvent;
+            dto.ConvoAutoScroll     = AutoScroll;
+        });
+    }
 
     private void Rebuild()
     {

@@ -95,6 +95,20 @@ public sealed class TalkSettings
     // back to the built-in theme brushes. Lets the user recolour both the accent
     // (channel tag / speaker / toggle) and the message-body text.
     public Dictionary<string, ChannelColor>? ChannelColors { get; set; }
+
+    // Conversation window header state — the seven per-channel filter checkboxes
+    // plus the auto-scroll toggle. Persisted per character so what the user shows /
+    // hides survives closing and reopening the window and reloads with the profile.
+    // All default true (everything visible, follow the newest line). Edited only in
+    // the Conversation window; Settings → Talk round-trips them untouched.
+    public bool ConvoShowGossip { get; set; } = true;
+    public bool ConvoShowLocal { get; set; } = true;
+    public bool ConvoShowTelepath { get; set; } = true;
+    public bool ConvoShowGangpath { get; set; } = true;
+    public bool ConvoShowBroadcast { get; set; } = true;
+    public bool ConvoShowYell { get; set; } = true;
+    public bool ConvoShowRealmEvent { get; set; } = true;
+    public bool ConvoAutoScroll { get; set; } = true;
 }
 
 // A user-picked color override for one Conversation channel: the color of its

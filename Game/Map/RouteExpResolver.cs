@@ -24,13 +24,20 @@ public sealed class RouteExpResolver : IDisposable
     private readonly LairTimerStore _timers;
     private readonly GameDataCache _cache;
 
-    private Dictionary<int, MonsterInfo>? _monsters;   // monster Number -> resolved info
+    private Dictionary<int, MonsterInfo>? _monsters;        // monster Number -> resolved info
+    private Dictionary<int, List<int>>? _summonSpells;     // spell Number -> summoned monster ids
+    private Dictionary<(int Id, int Mobs), CascadeResult>? _roomCascades;   // (base monster, room spawn count) -> capped cascade
+
+    // Abil slot value 12 marks a "summon monster" ability; AbilVal holds the summoned
+    // monster Number. A monster's DeathSpell fires this spell on death.
+    private const int SummonAbility = 12;
 
     // Per-monster facts the estimator needs. Exp is the true value EXP × ExpMulti
     // (bosses store the un-multiplied EXP with a separate multiplier). A boss —
     // GameLimit 1 or a RegenTime of an hour or more — is killable only once per its
     // regen, so it's pulled out of the lair average and amortised over RegenHours.
-    private readonly record struct MonsterInfo(int Exp, bool IsBoss, int RegenHours, string Name);
+    // DeathSpell is the spell fired when it dies (0 = none) — the summon-cascade root.
+    private readonly record struct MonsterInfo(int Exp, bool IsBoss, int RegenHours, string Name, int DeathSpell);
 
     public RouteExpResolver(RoomGraphManager graph, BfsMapper bfs, LairTimerStore timers, GameDataCache cache)
     {
@@ -50,6 +57,8 @@ public sealed class RouteExpResolver : IDisposable
     private void OnSetChanged(string? _)
     {
         _monsters = null;
+        _summonSpells = null;
+        _roomCascades = null;
     }
 
     public ExpRoute Resolve(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
@@ -85,10 +94,15 @@ public sealed class RouteExpResolver : IDisposable
                     (targets ??= new List<ExpTarget>()).Add(new ExpTarget(
                         1, npc.Exp, npc.RegenHours * 3600, MonsterId: room.Npc, IsBoss: true, MonsterName: npc.Name));
                 else
+                {
                     // Normal NPC fixture: respawns instantly on entry (RespawnSeconds
                     // 0), regardless of RegenTime — that governs LAIR respawn, not
-                    // fixtures. See GAME_MECHANICS.md.
-                    (targets ??= new List<ExpTarget>()).Add(new ExpTarget(1, npc.Exp, 0));
+                    // fixtures. See GAME_MECHANICS.md. A placed summoner folds in its
+                    // death-summon tree (exp + extra kill/wave cost) just like a lair mob.
+                    CascadeResult c = RoomCascadeOf(room.Npc, 1);
+                    (targets ??= new List<ExpTarget>()).Add(new ExpTarget(
+                        1, c.Exp, 0, ClearWaves: c.Waves, KillsPerMob: c.Kills));
+                }
             }
         }
         if (room.HasLair && ParseLair(room.RawLairTag) is (int mobs, List<int> ids))
@@ -97,7 +111,9 @@ public sealed class RouteExpResolver : IDisposable
             // Split the lair: bosses (GameLimit 1 / long regen) come out of the
             // average and become their own once-per-regen target; the rest average
             // as normal lair mobs on the room's respawn.
-            long sum = 0;
+            double sumRoomExp = 0;
+            double sumRoomKills = 0;
+            int maxWaves = 1;
             int n = 0;
             foreach (int id in ids)
             {
@@ -109,11 +125,25 @@ public sealed class RouteExpResolver : IDisposable
                         1, m.Exp, m.RegenHours * 3600, MonsterId: id, IsBoss: true, MonsterName: m.Name));
                     continue;
                 }
-                sum += m.Exp;
+                // Each non-boss listed type contributes its whole death-summon cascade,
+                // simulated at the room's spawn count under the 20-monster cap: room exp
+                // into the average, room kills into the single-target count, and the
+                // deepest type's tier count drives the AoE wave count.
+                CascadeResult c = RoomCascadeOf(id, mobs);
+                sumRoomExp += c.Exp;
+                sumRoomKills += c.Kills;
+                maxWaves = Math.Max(maxWaves, c.Waves);
                 n++;
             }
             if (n > 0)
-                (targets ??= new List<ExpTarget>()).Add(new ExpTarget(mobs, (double)sum / n, respawn));
+            {
+                // Back to per-mob so MobCount × ExpPerMob reproduces the (capped) room
+                // total the simulator scales; likewise KillsPerMob × MobCount = room kills.
+                double roomExp = sumRoomExp / n;
+                double roomKills = sumRoomKills / n;
+                (targets ??= new List<ExpTarget>()).Add(new ExpTarget(
+                    mobs, roomExp / mobs, respawn, ClearWaves: maxWaves, KillsPerMob: roomKills / mobs));
+            }
         }
         return targets ?? (IReadOnlyList<ExpTarget>)Array.Empty<ExpTarget>();
     }
@@ -161,10 +191,59 @@ public sealed class RouteExpResolver : IDisposable
                 int limit = row.TryGetProperty("GameLimit", out JsonElement gl) && gl.TryGetInt32(out int lv) ? lv : 0;
                 string name = row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String
                     ? nm.GetString() ?? string.Empty : string.Empty;
+                int deathSpell = row.TryGetProperty("DeathSpell", out JsonElement ds) && ds.TryGetInt32(out int dv) ? dv : 0;
                 bool isBoss = limit == 1 || regen >= 1;   // RegenTime is in HOURS
-                map[id] = new MonsterInfo(baseExp * multi, isBoss, Math.Max(1, regen), name);
+                map[id] = new MonsterInfo(baseExp * multi, isBoss, Math.Max(1, regen), name, deathSpell);
             }
         }
         return _monsters = map;
+    }
+
+    // Spell Number -> the monster ids it summons (its Abil==12 "summon monster"
+    // slots). Only slots whose Abil is 12 count — a spell row also carries unrelated
+    // AbilVal payloads in its other slots. Built once, dropped on set change.
+    private Dictionary<int, List<int>> SummonSpells()
+    {
+        if (_summonSpells is not null) return _summonSpells;
+        var map = new Dictionary<int, List<int>>();
+        if (_cache.GetRawTable("Spells") is { } doc && doc.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                if (!row.TryGetProperty("Number", out JsonElement n) || !n.TryGetInt32(out int id)) continue;
+                List<int>? ids = null;
+                // Slots are Abil-0..Abil-N / AbilVal-0..AbilVal-N; walk while the pair exists.
+                for (int i = 0; row.TryGetProperty($"Abil-{i}", out JsonElement ab); i++)
+                {
+                    if (ab.TryGetInt32(out int abv) && abv == SummonAbility
+                        && row.TryGetProperty($"AbilVal-{i}", out JsonElement av) && av.TryGetInt32(out int mon) && mon > 0)
+                        (ids ??= new List<int>()).Add(mon);
+                }
+                if (ids is not null) map[id] = ids;
+            }
+        }
+        return _summonSpells = map;
+    }
+
+    // Room-level death-summon cascade for a base spawn of `mobs` copies of `id`,
+    // capped at 20 living monsters per tier. Memoised per (monster, spawn count) —
+    // the sim is a pure function of the data, so the same key resolves the same.
+    private CascadeResult RoomCascadeOf(int id, int mobs)
+    {
+        var cache = _roomCascades ??= new Dictionary<(int, int), CascadeResult>();
+        var key = (id, mobs);
+        if (cache.TryGetValue(key, out CascadeResult c)) return c;
+        c = DeathSummonCascade.Simulate(id, mobs, ExpOf, SummonsOf);
+        cache[key] = c;
+        return c;
+    }
+
+    private int ExpOf(int id) => Math.Max(0, Monster(id).Exp);
+
+    private IReadOnlyList<int>? SummonsOf(int id)
+    {
+        int spell = Monster(id).DeathSpell;
+        if (spell <= 0) return null;
+        return SummonSpells().TryGetValue(spell, out List<int>? s) ? s : null;
     }
 }

@@ -235,6 +235,49 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
+    public void AreaMode_SummonWaves_ScaleClearTime()
+    {
+        // A death-summon lair clears in ClearWaves AoE passes — one per summon tier
+        // — so a 3-tier lair takes ~3× the rounds of a plain 1-wave lair of the same
+        // mob count. Steps free (0s) and respawn short (1s) to isolate combat time.
+        var area = new ExpSimSettings(0, ExpCombatMode.AreaAllTargets, RoundsPerMob: 2, RealConditionsMultiplier: 1);
+        double plain  = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(2, 1000, 1))), area).AvgLapSeconds;
+        double summon = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(2, 1000, 1, ClearWaves: 3))), area).AvgLapSeconds;
+
+        Assert.Equal(plain * 3, summon, 1);
+    }
+
+    [Fact]
+    public void SingleTarget_SummonTree_ScalesKillCount()
+    {
+        // Single-target fights every monster the spawn becomes (MobCount × KillsPerMob),
+        // so a mob whose tree is 8 costs ~8× the rounds of a plain mob.
+        var single = new ExpSimSettings(0, ExpCombatMode.SingleTarget, RoundsPerMob: 1, RealConditionsMultiplier: 1);
+        double plain  = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(1, 1000, 1))), single).AvgLapSeconds;
+        double summon = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(1, 1000, 1, KillsPerMob: 8))), single).AvgLapSeconds;
+
+        Assert.Equal(plain * 8, summon, 1);
+    }
+
+    [Fact]
+    public void AreaMode_DeathSummonLair_YieldsMoreExpButTimeTempered()
+    {
+        // The Zombie Pen shape: 3 stitched zombies, base 4000 each, but the death-
+        // summon tree makes each worth 28,500 across 3 AoE tiers — the resolver folds
+        // that into ExpPerMob=28500, ClearWaves=3. Folding lifts exp/hr well above the
+        // base-only estimate, but because clearing the summons also costs rounds it is
+        // NOT the naive 7.125× the raw exp ratio alone would imply.
+        var area = new ExpSimSettings(0, ExpCombatMode.AreaAllTargets, RoundsPerMob: 2, RealConditionsMultiplier: 1);
+        ExpRoute folded = Route(Room(17, 2601, new ExpTarget(3, 28_500, 1, ClearWaves: 3)));
+        double baseOnly = LoopExpSimulator.Simulate(Route(Room(17, 2601, new ExpTarget(3, 4_000, 1))), area).ExpPerHour;
+        ExpSimResult foldedResult = LoopExpSimulator.Simulate(folded, area);
+
+        Assert.True(foldedResult.ExpPerHour > baseOnly, "death-summon fold must raise the estimate");
+        Assert.True(foldedResult.ExpPerHour < baseOnly * 7.125, "extra clear time must temper the raw exp ratio");
+        Assert.True(Assert.Single(foldedResult.Lairs).Summons);
+    }
+
+    [Fact]
     public void PlacedBoss_AmortizedOverRegen_NotEveryPass()
     {
         // A boss placed via the room's NPC field (not a lair) — the animated

@@ -169,6 +169,11 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     {
         if (_profile.Current is not { } profile) return;
 
+        // Read the current section fresh so fields this tab doesn't expose — the
+        // Conversation window's per-channel filter + auto-scroll toggles — carry
+        // through untouched even if the user changed them while this tab was open.
+        TalkSettings existing = ReadOrDefault();
+
         TalkSettings dto = new()
         {
             DisallowAllRemoteCommands        = DisallowAllRemoteCommands,
@@ -189,6 +194,14 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
             ConvoFont = SelectedConvoFont is { } cf && cf.Uri != DefaultConvoFontUri ? cf.Uri : "",
             ConvoFontSize = SelectedConvoFontSize is { } cs && cs.Value != DefaultConvoFontSize ? cs.Value : 0,
             ChannelColors = BuildChannelColors(),
+            ConvoShowGossip     = existing.ConvoShowGossip,
+            ConvoShowLocal      = existing.ConvoShowLocal,
+            ConvoShowTelepath   = existing.ConvoShowTelepath,
+            ConvoShowGangpath   = existing.ConvoShowGangpath,
+            ConvoShowBroadcast  = existing.ConvoShowBroadcast,
+            ConvoShowYell       = existing.ConvoShowYell,
+            ConvoShowRealmEvent = existing.ConvoShowRealmEvent,
+            ConvoAutoScroll     = existing.ConvoAutoScroll,
         };
 
         profile.Settings ??= new();

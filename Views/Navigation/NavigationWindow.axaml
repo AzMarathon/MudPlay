@@ -1531,6 +1531,13 @@
                                                                    TextTrimming="CharacterEllipsis"
                                                                    Text="{Binding RoomLabel}"/>
                                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                            <!-- Death-summon lair: exp/time already fold in the
+                                                                 whole summon tree; this flags why the yield is
+                                                                 higher than the base monster's face value. -->
+                                                            <TextBlock FontSize="11" Foreground="#B98BE0"
+                                                                       IsVisible="{Binding Summons}"
+                                                                       ToolTip.Tip="This monster summons more monsters on death — its exp and clear time fold in the whole tree."
+                                                                       Text="summons"/>
                                                             <TextBlock FontSize="11" Foreground="#4FD3C4"
                                                                        Text="{Binding FiresLabel}"/>
                                                             <TextBlock FontSize="11" Classes="MissCell"

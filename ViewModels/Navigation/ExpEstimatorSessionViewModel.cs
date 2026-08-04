@@ -145,7 +145,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         foreach (ExpEstimatorLairRow l in Lairs)
         {
             string miss = l.MissesPerHour == 0 ? "no misses" : $"{l.MissesPerHour}/hr early by {l.ClosestMissShortfallSeconds:N0}s";
-            lairs.Add($"{l.Room.Map}/{l.Room.Room}  {l.Name} — {l.FiresLabel}, {miss}");
+            string summons = l.Summons ? " (summons)" : "";
+            lairs.Add($"{l.Room.Map}/{l.Room.Room}  {l.Name} — {l.FiresLabel}, {miss}{summons}");
         }
 
         var bosses = new List<string>(Bosses.Count);
@@ -198,7 +199,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         {
             string name = _graph.GetRoom(stat.Room)?.DisplayName ?? stat.Room.ToString();
             Lairs.Add(new ExpEstimatorLairRow(
-                stat.Room, name, stat.FiresPerHour, stat.MissesPerHour, stat.ClosestMissShortfallSeconds));
+                stat.Room, name, stat.FiresPerHour, stat.MissesPerHour, stat.ClosestMissShortfallSeconds,
+                stat.Summons));
         }
         foreach (ExpBossStat b in r.Bosses)
             Bosses.Add(new ExpEstimatorBossRow(b.Name, b.ExpPerHour, b.RegenHours));
@@ -231,7 +233,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 // near-miss flags "nudge the loop to catch it," a big shortfall flags "too fast for
 // this lair, the lap outruns its respawn."
 public sealed record ExpEstimatorLairRow(
-    RoomKey Room, string Name, int FiresPerHour, int MissesPerHour, double ClosestMissShortfallSeconds)
+    RoomKey Room, string Name, int FiresPerHour, int MissesPerHour, double ClosestMissShortfallSeconds,
+    bool Summons = false)
 {
     public bool NearMiss => MissesPerHour > 0 && ClosestMissShortfallSeconds > 0 && ClosestMissShortfallSeconds <= 15;
 

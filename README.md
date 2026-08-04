@@ -1,9 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.25.0**
-> - Loop waypoints gain a "Do not rest in this room" checkbox (in the waypoint action editor): when a running loop is in that room and HP/MA drop below your "rest if below" gates, it advances to the next room instead of resting — for rooms too dangerous to sit still in
-> - Only that exact room is protected; the moment the loop steps out (into a path room or an unmarked waypoint), resting resumes normally. Loops only (walk-to / auto-lair are unaffected); marked waypoints show a ⛔ badge
+> **Version 2.27.0**
+> - Conversation window header state persists per character: the seven channel filter checkboxes (Gossip / Say / Telepath / Gang / Broadcast / Yell / Server) and the auto-scroll toggle now survive closing and reopening the window, and reload with the character profile
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

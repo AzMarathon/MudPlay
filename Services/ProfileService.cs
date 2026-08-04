@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FujinTerm.Models.Profile;
 
 namespace FujinTerm.Services;
@@ -323,6 +324,30 @@ public sealed class ProfileService
             File.Copy(path, path + ".bak", overwrite: true);
         }
         JsonStore.Save(path, Current);
+    }
+
+    // Read-modify-write one section of the loaded profile's Settings: deserialize
+    // Settings[key] as T (a fresh default T when absent or unparseable), hand it to
+    // the mutator, then serialize it back and persist. The single safe path when a
+    // section is written from more than one view (e.g. Settings → Talk and the
+    // Conversation window both touch "Talk") — each mutates only its own fields, so
+    // neither clobbers the other. No-op when no profile is loaded; for an unnamed
+    // draft the in-memory change stays and lands on the next named Save.
+    public void UpdateSection<T>(string key, Action<T> mutate) where T : class, new()
+    {
+        ArgumentNullException.ThrowIfNull(mutate);
+        if (Current is not { } profile) return;
+
+        T dto = new();
+        if (profile.Settings is { } settings && settings.TryGetValue(key, out JsonElement json))
+        {
+            try { dto = JsonSerializer.Deserialize<T>(json) ?? new T(); }
+            catch { dto = new T(); }
+        }
+        mutate(dto);
+        profile.Settings ??= new();
+        profile.Settings[key] = JsonSerializer.SerializeToElement(dto);
+        Save();
     }
 
     // Clear Current and fire ProfileClosed.

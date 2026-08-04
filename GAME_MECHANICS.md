@@ -539,6 +539,42 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
   how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room.
   The regular (non-boss) lair mobs still fire per-room on the room delay.
 
+### Death-summon cascades — a monster that summons more on death *([CONFIRMED] 2026-08-03, user + game-data trace, Paradigm 1.9.1)*
+
+Some monsters spawn **more monsters when they die**, and those can summon in turn — the Zombie Pen
+(`17/2601`) is the canonical case, built for AoE ("rooming") crowds.
+
+- **The mechanic is `DeathSpell` → summon slots.** A monster's **`DeathSpell`** field names a spell
+  (`0` = none). In the Spells table that spell has ten ability slots `Abil-0..Abil-9` with values in
+  `AbilVal-0..AbilVal-9`; a slot whose **`Abil` value is `12`** ("summon monster") summons the monster
+  **`Number`** in the matching `AbilVal`. Only `Abil == 12` slots summon — a spell row carries unrelated
+  payloads in its other `AbilVal` slots, so filtering on `Abil == 12` is required.
+- **It recurses, and the data terminates it.** Each summoned monster has its own `DeathSpell`, so the
+  chain continues until a tier whose members have `DeathSpell 0`. Real chains are shallow (≤3 tiers);
+  follow the data, don't assume a fixed tier count.
+- **A room holds at most 20 monsters at once, and a summon cast that would exceed it fails whole.** The
+  engine caps a room at **20** living monsters. A dying monster's `DeathSpell` fires as **one atomic
+  cast**: it lands only if *all* its summons fit under the cap — otherwise the whole cast **fails to
+  cast, is never retried, and is permanently lost** (its summons do NOT appear on a later round when
+  space frees up). So a wave fills with whole casts until the next won't fit, then drops the rest: e.g.
+  15 monsters each summoning 2 want 30, but only 20 spawn (10 whole casts) — the other 5 casts fail
+  outright. A fan-out room is therefore worth far less than the raw tree would suggest. (The Zombie Pen
+  peaks at 15 with `Max 3` zombies, so its cap never bites; a higher `Max` or a wider fan-out would.)
+- **Worked example — stitched zombie (`Number 1220`, `EXP 4000`, `DeathSpell 1032`):**
+  - Spell `1032` (Abil-0/1 = 12) → **severed waist `881`** + **severed torso `888`**.
+  - Waist `881` (`DeathSpell 1034`) → 2× **severed leg `889`** (3500 each).
+  - Torso `888` (`DeathSpell 1036`) → 2× **severed arm `890`** (3000) + **severed head `891`** (3500).
+  - Legs/arms/head have `DeathSpell 0` → terminal. **One stitched zombie = 8 monsters, 28,500 exp**
+    (not the 4,000 its own `EXP` shows). Note each part summons via a **different** spell.
+- **Exp/hr estimation of a summoner:** simulate the room tier by tier under the 20-cap and count the
+  monsters that actually spawn. Its effective yield is the **whole (capped) tree's exp** (base + every
+  descendant — `28,500`, not `4,000`, for one stitched zombie). The summons also cost combat time:
+  **single-target** fights every monster the room becomes (kill count = tree size, `8` per zombie),
+  while **AoE/rooming** clears one tier per pass (waves = tree depth, `3`). So a death-summon room yields
+  far more than its face value, but the extra kill/wave time — and the cap on huge fan-outs — keep it
+  below the naive exp-ratio multiple. Bosses are left on their base exp (their death-summon, if any, is
+  not folded — a rare edge, and boss exp is already a flat amortised approximation).
+
 ## Vitality — HP, dropping, and death
 
 **Max-HP sources** *([CONFIRMED])*
