@@ -671,17 +671,19 @@ public sealed class CashManager : IDisposable
 
     // Combat's done and cash is waiting: re-display the room and collect from what's
     // actually on the ground now, rather than replaying the amounts seen mid-fight.
-    // The `look`'s "You notice" line drives one collect per currency off the true
+    // The re-display's "You notice" line drives one collect per currency off the true
     // ground total — no duplicates, no stale gets, and naturally correct if someone
-    // grabbed the pile first. Hold the walker across the look round-trip; the release
-    // timer frees it if the room turned out empty, and a real collect re-arms the
-    // gate's settle window before then.
+    // grabbed the pile first. A bare Enter (carriage return) re-renders the survey
+    // exactly like `look` would but honours the profile's brief mode — no room
+    // description / flavor text — matching AutoGetItemsManager.RequestDropReLook. Hold
+    // the walker across the round-trip; the release timer frees it if the room turned
+    // out empty, and a real collect re-arms the gate's settle window before then.
     private void FlushDeferredCollects()
     {
         _cashPendingAfterCombat = false;
-        _log?.Info(LogCategory, "combat cleared — re-looking to collect ground cash");
+        _log?.Info(LogCategory, "combat cleared — re-displaying room to collect ground cash");
         _gate?.NoteDeferredPending(1);
-        Send("look");
+        Send("");   // bare carriage return, not `look` — respects brief mode
         ArmResurveyRelease();
     }
 

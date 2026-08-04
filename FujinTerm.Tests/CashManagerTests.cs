@@ -951,7 +951,7 @@ public sealed class CashManagerTests
 
         h.HasHostiles = false;                      // last hostile fell
         h.Cash.OnRoomObserved();
-        Assert.Equal("look", h.LastSent);           // re-display, don't replay the drop
+        Assert.Equal("", h.LastSent);               // bare CR re-display (honours brief mode), not a replay
 
         h.Feed("You notice 7 silver nobles here.");
         Assert.Contains("get 7 silver noble", h.AllSent);
@@ -989,11 +989,11 @@ public sealed class CashManagerTests
 
         h.HasHostiles = false;
         h.Cash.OnRoomObserved();
-        Assert.Equal("look", h.LastSent);           // one re-display, drops not replayed
+        Assert.Equal("", h.LastSent);               // one CR re-display, drops not replayed
 
         // The authoritative ground total drives ONE collect — not get 10 + get 5.
         h.Feed("You notice 15 gold crowns here.");
-        Assert.Equal(new[] { "look", "get 15 gold crown" }, h.AllSent);
+        Assert.Equal(new[] { "", "get 15 gold crown" }, h.AllSent);
     }
 
     // Room-display cash defers too (not just corpse drops) — the ground-survey
@@ -1010,7 +1010,7 @@ public sealed class CashManagerTests
 
         h.HasHostiles = false;
         h.Cash.OnRoomObserved();
-        Assert.Equal("look", h.LastSent);           // re-display first
+        Assert.Equal("", h.LastSent);               // CR re-display first
 
         h.Feed("You notice 50 gold crowns here.");
         Assert.Contains("get 50 gold crown", h.AllSent);
@@ -1076,10 +1076,10 @@ public sealed class CashManagerTests
         h.Feed("7 gold drop to the ground.");
         h.HasHostiles = false;
         h.Cash.OnRoomObserved();
-        Assert.Equal("look", h.LastSent);
+        Assert.Equal("", h.LastSent);                     // CR re-display
 
         h.Feed("You notice a rusty dagger here.");        // pile gone — no cash on the ground
-        Assert.Equal(new[] { "look" }, h.AllSent);        // no stale get fired
+        Assert.Equal(new[] { "" }, h.AllSent);            // just the CR re-display, no stale get
     }
 
     // ----- decide-once-per-pile latch --------------------------------
