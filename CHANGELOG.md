@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.27.2
+
+- Fixed a flood of get/drop/look commands when collecting cash after combat at an encumbrance gate: instead of replaying every coin drop seen mid-fight (which double-counted each kill's drop against the room's running ground total and re-queued on every re-render), the client now re-displays the room once combat clears and collects from the actual ground contents — one pass
+- Reconnecting mid-loop no longer leaves the walker sitting idle until you type `rm`: a drop that stranded the cash/item post-combat collect hold is now released on the first in-game prompt after reconnect, so the loop resumes on its own
+- bug reports addressed: paradigm-20260803-215518, paradigm-20260803-215605, paradigm-20260803-230756
+
 ## 2.27.0
 
 - Conversation window header state persists per character: the seven channel filter checkboxes (Gossip / Say / Telepath / Gang / Broadcast / Yell / Server) and the auto-scroll toggle now survive closing and reopening the window, and reload with the character profile (saved on change, restored on profile load)

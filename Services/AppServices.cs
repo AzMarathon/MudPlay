@@ -371,6 +371,11 @@ public sealed class AppServices
     // the party. Cleared on a deliberate leave or clean shutdown.
     public Game.Remote.PartyRejoinCoordinator PartyRejoin { get; private set; } = null!;
 
+    // Releases a stranded cash/item deferred-collect (Acquisition gate) hold on the
+    // first in-game prompt after a reconnect, so a drop mid-collect doesn't leave the
+    // loop paused until a manual `rm`. Armed from the Connected handler.
+    public Game.Map.DeferredCollectReconnectReleaser DeferredCollectResume { get; private set; } = null!;
+
     // Leader-side reconnect party reform — the mirror of PartyRejoin. Snapshots the
     // followers we're leading at disconnect and, on the first in-game room after the
     // reconnect, rebases the grace window + holds the loop so a nightly-cleanup
@@ -3581,6 +3586,20 @@ public sealed class AppServices
         // the deferred queue (CombatStateTracker's handler ran first, so
         // the hostile flag is current).
         RoomClassifier.EntitiesObserved += _ => AutoGetItems.OnRoomObserved();
+
+        // A disconnect can strand the Acquisition gate's deferred-collect hold
+        // (cash/items queued mid-fight), pausing the loop until a manual `rm`. On the
+        // first in-game prompt after a reconnect, drop those stale holds so the loop
+        // resumes from the (correct, still-confirmed) room. Armed from the Connected
+        // handler; a no-op when nothing was deferred. Both engines share the gate.
+        DeferredCollectResume = new Game.Map.DeferredCollectReconnectReleaser(
+            PromptScanner,
+            releaseDeferred: () =>
+            {
+                Cash.CancelDeferredCollect("reconnect");
+                AutoGetItems.CancelDeferredCollect("reconnect");
+            },
+            Log);
 
         // Loot-automation engines (auto-discard / auto-buy / auto-sell). All
         // three share the single AutoGetItems master toggle — the per-item

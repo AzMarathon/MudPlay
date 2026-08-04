@@ -2435,7 +2435,13 @@ public partial class MainWindowViewModel : ObservableObject
                 // connect following a prior in-session disconnect — never on
                 // the first connect of the session.
                 if (_hadDisconnectThisSession)
+                {
                     ReEnableAutoActionsOnReconnect();
+                    // A drop can strand the cash/item deferred-collect hold on the
+                    // Acquisition gate, pausing the loop until a manual `rm`. Arm the
+                    // release for the first in-game prompt after this reconnect.
+                    AppServices.Current.DeferredCollectResume.Arm();
+                }
             });
         };
         client.Disconnected += () =>

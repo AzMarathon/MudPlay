@@ -155,10 +155,16 @@ public sealed class AutoGetItemsManager : IDisposable
 
     // Called on actual room change. Discards any un-flushed deferred gets — the
     // items belonged to the room we just left.
-    public void OnRoomChanged()
+    public void OnRoomChanged() => CancelDeferredCollect("room changed");
+
+    // Drop any deferred gets and release the acquisition hold — the items belonged
+    // to a room/session we're no longer collecting for. Shared by the room-change
+    // path and the reconnect resume: a disconnect mid-defer strands the hold (no
+    // self-heal), leaving the walker paused until it's dropped.
+    public void CancelDeferredCollect(string reason)
     {
         if (_deferred.Count == 0) return;
-        _log?.Debug(LogCategory, $"room changed — dropping {_deferred.Count} deferred get(s)");
+        _log?.Debug(LogCategory, $"{reason} — dropping {_deferred.Count} deferred get(s)");
         _deferred.Clear();
         _gate?.NoteDeferredCleared();
     }
