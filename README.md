@@ -1,7 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.27.3**
+> **Version 2.28.0**
+> - Cash + Items settings: the Bank/stash picker gains a "Do not auto-deposit" option — pick it to disarm auto-deposit, and it's the default when no bank/stash is set
 > - Exp Estimator: the ✕ remove button in the clicked-rooms list is no longer hidden under the scrollbar when the list scrolls (same fix applied to the Loop Builder's room list)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

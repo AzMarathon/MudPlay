@@ -325,7 +325,14 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     // Returns an empty list when no game-data set is loaded.
     private void RebuildBankChoices()
     {
-        List<BankChoice> choices = new();
+        // Explicit no-op first, so it's the default selection when no bank is set
+        // (empty BankRoomKey matches its empty Value on load) and the user can
+        // always pick it to clear a prior choice. An empty BankRoomKey disarms the
+        // auto-deposit reroute (CashManager.CheckAutoDeposit early-returns on it).
+        List<BankChoice> choices = new()
+        {
+            new BankChoice(Value: string.Empty, Display: "Do not auto-deposit"),
+        };
         try
         {
             AppServices svc = AppServices.Current;

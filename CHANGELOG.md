@@ -2,8 +2,9 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
-## 2.27.3
+## 2.28.0
 
+- Cash + Items settings: the Bank/stash picker gains a "Do not auto-deposit" option — pick it to disarm auto-deposit, and it's the default when no bank/stash is set
 - Exp Estimator: the ✕ remove button in the clicked-rooms list is no longer hidden under the scrollbar when the list scrolls (same fix applied to the Loop Builder's room list)
 
 ## 2.27.2
