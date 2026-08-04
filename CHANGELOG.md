@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.26.0
+
+- Exp/Hr Estimator now accounts for monsters that summon more monsters on death (e.g. the Zombie Pen's stitched zombies): a lair's exp folds in the whole summon tree, so its yield reflects reality instead of the base monster's face value
+- The summons cost combat time too — single-target counts every monster the spawn becomes; AoE/"rooming" adds one clear pass per summon tier — so the estimate rises but stays tempered by the extra kills. Affected lairs show a "summons" tag
+- bug reports addressed: paradigm-20260803-164838
+
 ## 2.25.0
 
 - Loop waypoints gain a "Do not rest in this room" checkbox (in the waypoint action editor): when a running loop is in that room and HP/MA drop below your "rest if below" gates, it advances to the next room instead of resting — for rooms too dangerous to sit still in

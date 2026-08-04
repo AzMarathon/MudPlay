@@ -539,6 +539,33 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
   how many rooms it can appear in) — `1,200,000 ÷ 15 = 80,000/hr`, not `1.2M` per lap in every room.
   The regular (non-boss) lair mobs still fire per-room on the room delay.
 
+### Death-summon cascades — a monster that summons more on death *([CONFIRMED] 2026-08-03, user + game-data trace, Paradigm 1.9.1)*
+
+Some monsters spawn **more monsters when they die**, and those can summon in turn — the Zombie Pen
+(`17/2601`) is the canonical case, built for AoE ("rooming") crowds.
+
+- **The mechanic is `DeathSpell` → summon slots.** A monster's **`DeathSpell`** field names a spell
+  (`0` = none). In the Spells table that spell has ten ability slots `Abil-0..Abil-9` with values in
+  `AbilVal-0..AbilVal-9`; a slot whose **`Abil` value is `12`** ("summon monster") summons the monster
+  **`Number`** in the matching `AbilVal`. Only `Abil == 12` slots summon — a spell row carries unrelated
+  payloads in its other `AbilVal` slots, so filtering on `Abil == 12` is required.
+- **It recurses, and the data terminates it.** Each summoned monster has its own `DeathSpell`, so the
+  chain continues until a tier whose members have `DeathSpell 0`. Real chains are shallow (≤3 tiers);
+  follow the data, don't assume a fixed tier count.
+- **Worked example — stitched zombie (`Number 1220`, `EXP 4000`, `DeathSpell 1032`):**
+  - Spell `1032` (Abil-0/1 = 12) → **severed waist `881`** + **severed torso `888`**.
+  - Waist `881` (`DeathSpell 1034`) → 2× **severed leg `889`** (3500 each).
+  - Torso `888` (`DeathSpell 1036`) → 2× **severed arm `890`** (3000) + **severed head `891`** (3500).
+  - Legs/arms/head have `DeathSpell 0` → terminal. **One stitched zombie = 8 monsters, 28,500 exp**
+    (not the 4,000 its own `EXP` shows). Note each part summons via a **different** spell.
+- **Exp/hr estimation of a summoner:** its effective yield is the **whole tree's exp** (base + every
+  descendant, recursively — `28,500`, not `4,000`). The summons also cost combat time: **single-target**
+  fights every monster the spawn becomes (kill count = tree size, `8`), while **AoE/rooming** clears one
+  tier per pass (waves = tree depth, `3`). So a death-summon room yields far more than its face value,
+  but the extra kill/wave time keeps it below the naive exp-ratio multiple. Bosses are left on their
+  base exp (their death-summon, if any, is not folded — a rare edge, and boss exp is already a flat
+  amortised approximation).
+
 ## Vitality — HP, dropping, and death
 
 **Max-HP sources** *([CONFIRMED])*

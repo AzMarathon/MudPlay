@@ -28,12 +28,25 @@ public enum ExpCombatMode { SingleTarget, AreaAllTargets }
 // whole loop (deduped by MonsterId) at ExpPerMob ÷ (RespawnSeconds in hours) —
 // killable only as often as its regen, so it adds a flat exp/hr, not a per-lap
 // clear. RespawnSeconds carries the boss's regen (hours×3600) for that math.
+//
+// Death-summon cascade: a monster whose DeathSpell spawns more monsters on death
+// (e.g. the Zombie Pen's stitched zombie → waist + torso → legs/arms/head) yields
+// the whole tree's exp, so ExpPerMob already folds in every descendant's exp. The
+// summons cost combat time too: KillsPerMob is how many monsters one spawned mob
+// really becomes (its whole tree) — single-target fights each, so it scales the
+// per-mob rounds; ClearWaves is how many AoE passes clear the room (the tree's
+// depth: one wave per summon tier) — rooming re-hits each tier at once. Both are 1
+// for a monster that doesn't summon, so a normal lair is unchanged.
 public readonly record struct ExpTarget(
     int MobCount, double ExpPerMob, int RespawnSeconds,
-    bool Included = true, int MonsterId = 0, bool IsBoss = false, string MonsterName = "")
+    bool Included = true, int MonsterId = 0, bool IsBoss = false, string MonsterName = "",
+    int ClearWaves = 1, double KillsPerMob = 1.0)
 {
     public bool IsInstant => RespawnSeconds <= 0;
     public double ExpPerClear => MobCount * ExpPerMob;
+
+    // True when the target multiplies into a summon tree (folded exp + extra time).
+    public bool Summons => ClearWaves > 1 || KillsPerMob > 1.0;
 }
 
 // One room in a lap (order matters), with its exp targets (may be empty — an
@@ -59,7 +72,8 @@ public sealed record ExpSimSettings(
 // and the closest a miss came to being ready (so the user can nudge the loop to
 // catch a near-miss). Instant fixtures are omitted (they always fire).
 public readonly record struct ExpLairStat(
-    RoomKey Room, int FiresPerHour, int MissesPerHour, double ClosestMissShortfallSeconds);
+    RoomKey Room, int FiresPerHour, int MissesPerHour, double ClosestMissShortfallSeconds,
+    bool Summons = false);
 
 // A boss's flat contribution: killable once per RegenHours, so it adds
 // ExpPerHour = boss exp ÷ RegenHours regardless of how many rooms it can spawn in
@@ -114,7 +128,7 @@ public static class LoopExpSimulator
         // is a single entity across every room it can spawn in, so it's keyed by
         // monster id (deduped loop-wide) and kept OUT of the lap combat — it's a
         // flat exp/hr addition (once per its regen), added after the fixed point.
-        var lairs = new List<(RoomKey Room, double Respawn, int Mobs, double ExpPerMob, bool Instant)>();
+        var lairs = new List<(RoomKey Room, double Respawn, int Mobs, double ExpPerMob, bool Instant, int Waves, double Kills)>();
         var bosses = new Dictionary<int, (double Exp, int RegenSeconds, string Name)>();
         var seen = new HashSet<(RoomKey, int)>();
         for (int i = 0; i < lap.Count; i++)
@@ -129,7 +143,8 @@ public static class LoopExpSimulator
                     continue;
                 }
                 if (!seen.Add((lap[i].Room, j))) continue;
-                lairs.Add((lap[i].Room, tg.RespawnSeconds, tg.MobCount, tg.ExpPerMob, tg.IsInstant));
+                lairs.Add((lap[i].Room, tg.RespawnSeconds, tg.MobCount, tg.ExpPerMob, tg.IsInstant,
+                    Math.Max(1, tg.ClearWaves), Math.Max(1.0, tg.KillsPerMob)));
             }
         if (lairs.Count == 0 && bosses.Count == 0)
             return new ExpSimResult(0, 0, 0, Array.Empty<ExpLairStat>(), Array.Empty<ExpBossStat>());
@@ -175,7 +190,10 @@ public static class LoopExpSimulator
             foreach (var l in lairs)
             {
                 double frac = l.Instant ? 1.0 : Math.Min(1.0, lapSeconds / l.Respawn);
-                combat += frac * (area ? roundsPerMob : l.Mobs * roundsPerMob) * tick;
+                // AoE re-hits every summon tier (Waves passes, count-independent);
+                // single-target fights every monster the room becomes (Mobs × Kills).
+                double rounds = area ? l.Waves * roundsPerMob : l.Mobs * l.Kills * roundsPerMob;
+                combat += frac * rounds * tick;
             }
             double newLap = Math.Max(Math.Max(combat + travelWasteSeconds, walkSeconds), tick);
             if (Math.Abs(newLap - lapSeconds) < 0.05) { lapSeconds = newLap; break; }
@@ -195,7 +213,8 @@ public static class LoopExpSimulator
                     l.Room,
                     (int)Math.Round(firesPerHour),
                     (int)Math.Round((1.0 - frac) * lapsPerHour),   // laps you arrive early on
-                    Math.Max(0.0, l.Respawn - lapSeconds)));        // how early
+                    Math.Max(0.0, l.Respawn - lapSeconds),          // how early
+                    Summons: l.Waves > 1 || l.Kills > 1.0));
         }
 
         // Bosses: a flat once-per-regen contribution, independent of the lap. Each
