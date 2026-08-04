@@ -26,17 +26,11 @@ public sealed class RouteExpResolver : IDisposable
 
     private Dictionary<int, MonsterInfo>? _monsters;        // monster Number -> resolved info
     private Dictionary<int, List<int>>? _summonSpells;     // spell Number -> summoned monster ids
-    private Dictionary<int, Cascade>? _cascades;           // monster Number -> resolved death-summon cascade
+    private Dictionary<(int Id, int Mobs), CascadeResult>? _roomCascades;   // (base monster, room spawn count) -> capped cascade
 
-    // A monster whose DeathSpell summons more monsters is worth (and costs) its
-    // whole tree. Abil slot value 12 marks a "summon monster" ability; AbilVal
-    // holds the summoned monster Number.
+    // Abil slot value 12 marks a "summon monster" ability; AbilVal holds the summoned
+    // monster Number. A monster's DeathSpell fires this spell on death.
     private const int SummonAbility = 12;
-
-    // Cycle / runaway guard on the summon recursion. Real chains are ≤3 deep
-    // (Zombie Pen: zombie → torso/waist → limbs, then terminal); the cap only
-    // fires on malformed data that summons in a loop.
-    private const int MaxCascadeDepth = 8;
 
     // Per-monster facts the estimator needs. Exp is the true value EXP × ExpMulti
     // (bosses store the un-multiplied EXP with a separate multiplier). A boss —
@@ -44,12 +38,6 @@ public sealed class RouteExpResolver : IDisposable
     // regen, so it's pulled out of the lair average and amortised over RegenHours.
     // DeathSpell is the spell fired when it dies (0 = none) — the summon-cascade root.
     private readonly record struct MonsterInfo(int Exp, bool IsBoss, int RegenHours, string Name, int DeathSpell);
-
-    // Resolved death-summon tree for one monster. TotalExp folds in every descendant
-    // (base + summons, recursively); TreeSize is how many monsters one spawn becomes
-    // (single-target kill count); Depth is the summon-tier count (AoE clear waves).
-    // A non-summoning monster is (baseExp, 1, 1) — the no-op the estimator falls back to.
-    private readonly record struct Cascade(int TotalExp, double TreeSize, int Depth);
 
     public RouteExpResolver(RoomGraphManager graph, BfsMapper bfs, LairTimerStore timers, GameDataCache cache)
     {
@@ -70,7 +58,7 @@ public sealed class RouteExpResolver : IDisposable
     {
         _monsters = null;
         _summonSpells = null;
-        _cascades = null;
+        _roomCascades = null;
     }
 
     public ExpRoute Resolve(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
@@ -111,9 +99,9 @@ public sealed class RouteExpResolver : IDisposable
                     // 0), regardless of RegenTime — that governs LAIR respawn, not
                     // fixtures. See GAME_MECHANICS.md. A placed summoner folds in its
                     // death-summon tree (exp + extra kill/wave cost) just like a lair mob.
-                    Cascade c = CascadeOf(room.Npc);
+                    CascadeResult c = RoomCascadeOf(room.Npc, 1);
                     (targets ??= new List<ExpTarget>()).Add(new ExpTarget(
-                        1, c.TotalExp, 0, ClearWaves: c.Depth, KillsPerMob: c.TreeSize));
+                        1, c.Exp, 0, ClearWaves: c.Waves, KillsPerMob: c.Kills));
                 }
             }
         }
@@ -123,10 +111,10 @@ public sealed class RouteExpResolver : IDisposable
             // Split the lair: bosses (GameLimit 1 / long regen) come out of the
             // average and become their own once-per-regen target; the rest average
             // as normal lair mobs on the room's respawn.
-            long sum = 0;
-            int n = 0;
+            double sumRoomExp = 0;
+            double sumRoomKills = 0;
             int maxWaves = 1;
-            double sumTree = 0;
+            int n = 0;
             foreach (int id in ids)
             {
                 MonsterInfo m = Monster(id);
@@ -137,18 +125,25 @@ public sealed class RouteExpResolver : IDisposable
                         1, m.Exp, m.RegenHours * 3600, MonsterId: id, IsBoss: true, MonsterName: m.Name));
                     continue;
                 }
-                // Each non-boss listed type contributes its whole death-summon tree:
-                // TotalExp into the average, TreeSize into the single-target kill count,
-                // and the deepest tier drives the AoE wave count for the room.
-                Cascade c = CascadeOf(id);
-                sum += c.TotalExp;
-                sumTree += c.TreeSize;
-                maxWaves = Math.Max(maxWaves, c.Depth);
+                // Each non-boss listed type contributes its whole death-summon cascade,
+                // simulated at the room's spawn count under the 20-monster cap: room exp
+                // into the average, room kills into the single-target count, and the
+                // deepest type's tier count drives the AoE wave count.
+                CascadeResult c = RoomCascadeOf(id, mobs);
+                sumRoomExp += c.Exp;
+                sumRoomKills += c.Kills;
+                maxWaves = Math.Max(maxWaves, c.Waves);
                 n++;
             }
             if (n > 0)
+            {
+                // Back to per-mob so MobCount × ExpPerMob reproduces the (capped) room
+                // total the simulator scales; likewise KillsPerMob × MobCount = room kills.
+                double roomExp = sumRoomExp / n;
+                double roomKills = sumRoomKills / n;
                 (targets ??= new List<ExpTarget>()).Add(new ExpTarget(
-                    mobs, (double)sum / n, respawn, ClearWaves: maxWaves, KillsPerMob: sumTree / n));
+                    mobs, roomExp / mobs, respawn, ClearWaves: maxWaves, KillsPerMob: roomKills / mobs));
+            }
         }
         return targets ?? (IReadOnlyList<ExpTarget>)Array.Empty<ExpTarget>();
     }
@@ -230,43 +225,25 @@ public sealed class RouteExpResolver : IDisposable
         return _summonSpells = map;
     }
 
-    // Resolved death-summon tree for a monster, memoised (a monster's cascade is a
-    // pure function of the data, so the same id resolves the same everywhere).
-    private Cascade CascadeOf(int id)
+    // Room-level death-summon cascade for a base spawn of `mobs` copies of `id`,
+    // capped at 20 living monsters per tier. Memoised per (monster, spawn count) —
+    // the sim is a pure function of the data, so the same key resolves the same.
+    private CascadeResult RoomCascadeOf(int id, int mobs)
     {
-        var cache = _cascades ??= new Dictionary<int, Cascade>();
-        if (cache.TryGetValue(id, out Cascade c)) return c;
-        c = ComputeCascade(id, new HashSet<int>(), 0);
-        cache[id] = c;
+        var cache = _roomCascades ??= new Dictionary<(int, int), CascadeResult>();
+        var key = (id, mobs);
+        if (cache.TryGetValue(key, out CascadeResult c)) return c;
+        c = DeathSummonCascade.Simulate(id, mobs, ExpOf, SummonsOf);
+        cache[key] = c;
         return c;
     }
 
-    private Cascade ComputeCascade(int id, HashSet<int> path, int depth)
+    private int ExpOf(int id) => Math.Max(0, Monster(id).Exp);
+
+    private IReadOnlyList<int>? SummonsOf(int id)
     {
-        MonsterInfo m = Monster(id);
-        int baseExp = Math.Max(0, m.Exp);
-        // Terminal: no death-summon, depth cap reached, or a cycle back to an ancestor.
-        if (m.DeathSpell <= 0 || depth >= MaxCascadeDepth || !path.Add(id))
-            return new Cascade(baseExp, 1, 1);
-
-        List<int>? summons = SummonSpells().TryGetValue(m.DeathSpell, out List<int>? s) ? s : null;
-        if (summons is null || summons.Count == 0)
-        {
-            path.Remove(id);
-            return new Cascade(baseExp, 1, 1);
-        }
-
-        long totalExp = baseExp;
-        double treeSize = 1;
-        int childDepth = 0;
-        foreach (int cid in summons)
-        {
-            Cascade cc = ComputeCascade(cid, path, depth + 1);
-            totalExp += cc.TotalExp;
-            treeSize += cc.TreeSize;
-            childDepth = Math.Max(childDepth, cc.Depth);
-        }
-        path.Remove(id);
-        return new Cascade((int)Math.Min(int.MaxValue, totalExp), treeSize, 1 + childDepth);
+        int spell = Monster(id).DeathSpell;
+        if (spell <= 0) return null;
+        return SummonSpells().TryGetValue(spell, out List<int>? s) ? s : null;
     }
 }

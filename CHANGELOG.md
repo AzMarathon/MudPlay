@@ -6,6 +6,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Exp/Hr Estimator now accounts for monsters that summon more monsters on death (e.g. the Zombie Pen's stitched zombies): a lair's exp folds in the whole summon tree, so its yield reflects reality instead of the base monster's face value
 - The summons cost combat time too — single-target counts every monster the spawn becomes; AoE/"rooming" adds one clear pass per summon tier — so the estimate rises but stays tempered by the extra kills. Affected lairs show a "summons" tag
+- Respects the engine's 20-monster room cap: summons that would overflow a room aren't counted, so a big fan-out isn't scored as if every summon spawned
 - bug reports addressed: paradigm-20260803-164838
 
 ## 2.25.0

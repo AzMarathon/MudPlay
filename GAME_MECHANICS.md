@@ -552,19 +552,27 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
 - **It recurses, and the data terminates it.** Each summoned monster has its own `DeathSpell`, so the
   chain continues until a tier whose members have `DeathSpell 0`. Real chains are shallow (≤3 tiers);
   follow the data, don't assume a fixed tier count.
+- **A room holds at most 20 monsters at once, and summons beyond that don't spawn.** The engine caps a
+  room at **20** living monsters; when a wave of deaths would summon more than the room can hold, the
+  excess simply never appears. A tier's monsters are all alive together (they spawned as one wave), so
+  the cap applies **per tier**: e.g. 15 monsters each summoning 2 want 30, but only 20 spawn — the other
+  10 are suppressed and never fought or credited. A fan-out room is therefore worth far less than the
+  raw tree would suggest. (The Zombie Pen peaks at 15 with `Max 3` zombies, so its cap never bites; a
+  higher `Max` or a wider fan-out would.)
 - **Worked example — stitched zombie (`Number 1220`, `EXP 4000`, `DeathSpell 1032`):**
   - Spell `1032` (Abil-0/1 = 12) → **severed waist `881`** + **severed torso `888`**.
   - Waist `881` (`DeathSpell 1034`) → 2× **severed leg `889`** (3500 each).
   - Torso `888` (`DeathSpell 1036`) → 2× **severed arm `890`** (3000) + **severed head `891`** (3500).
   - Legs/arms/head have `DeathSpell 0` → terminal. **One stitched zombie = 8 monsters, 28,500 exp**
     (not the 4,000 its own `EXP` shows). Note each part summons via a **different** spell.
-- **Exp/hr estimation of a summoner:** its effective yield is the **whole tree's exp** (base + every
-  descendant, recursively — `28,500`, not `4,000`). The summons also cost combat time: **single-target**
-  fights every monster the spawn becomes (kill count = tree size, `8`), while **AoE/rooming** clears one
-  tier per pass (waves = tree depth, `3`). So a death-summon room yields far more than its face value,
-  but the extra kill/wave time keeps it below the naive exp-ratio multiple. Bosses are left on their
-  base exp (their death-summon, if any, is not folded — a rare edge, and boss exp is already a flat
-  amortised approximation).
+- **Exp/hr estimation of a summoner:** simulate the room tier by tier under the 20-cap and count the
+  monsters that actually spawn. Its effective yield is the **whole (capped) tree's exp** (base + every
+  descendant — `28,500`, not `4,000`, for one stitched zombie). The summons also cost combat time:
+  **single-target** fights every monster the room becomes (kill count = tree size, `8` per zombie),
+  while **AoE/rooming** clears one tier per pass (waves = tree depth, `3`). So a death-summon room yields
+  far more than its face value, but the extra kill/wave time — and the cap on huge fan-outs — keep it
+  below the naive exp-ratio multiple. Bosses are left on their base exp (their death-summon, if any, is
+  not folded — a rare edge, and boss exp is already a flat amortised approximation).
 
 ## Vitality — HP, dropping, and death
 
