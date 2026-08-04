@@ -1,8 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.27.0**
-> - Conversation window header state persists per character: the seven channel filter checkboxes (Gossip / Say / Telepath / Gang / Broadcast / Yell / Server) and the auto-scroll toggle now survive closing and reopening the window, and reload with the character profile
+> **Version 2.27.1**
+> - Fixed a flood of get/drop/look commands when collecting cash after combat at an encumbrance gate: instead of replaying every coin drop seen mid-fight (which double-counted each kill's drop against the room's running ground total and re-queued on every re-render), the client now re-displays the room once combat clears and collects from the actual ground contents — one pass
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

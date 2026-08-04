@@ -8,9 +8,8 @@ using FujinTerm.Services.Patterns;
 namespace FujinTerm.Game.Cash;
 
 // Per-currency cash pickup / discard engine. Subscribes to CashOnGround,
-// CashPickedUp, CashDropped, CashFromKill (corpse loot after a monster dies),
-// and CashPickedUpByOther (a third party grabbing ground cash), and dispatches
-// based on the per-currency CashPolicy in CashSettings.
+// CashPickedUp, CashDropped, and CashFromKill (corpse loot after a monster
+// dies), and dispatches based on the per-currency CashPolicy in CashSettings.
 //
 // Scope:
 //   - CashOnGround → policy dispatch. Collect → "get <count> <coin>" with the
@@ -73,7 +72,6 @@ public sealed class CashManager : IDisposable
     private readonly IDisposable _hiddenSub;
     private readonly IDisposable _noticeSub;
     private readonly IDisposable _killDropSub;
-    private readonly IDisposable _otherPickupSub;
     private Terminal.LineExtractor? _lines;
     private string? _noticeBuffer;       // multi-line continuation
     private string? _noticeRawFirst;     // raw first row that started the buffer
@@ -96,26 +94,23 @@ public sealed class CashManager : IDisposable
     private Game.Inventory.AcquisitionGate? _gate;
     private readonly Dictionary<string, long> _held = new(StringComparer.OrdinalIgnoreCase);
 
-    // Collect-after-combat defer queue. When CashSettings.CollectAfterCombatFinished
-    // is set (the shared Cash + Items timing toggle) and the room still holds
-    // engageable hostiles, ground / corpse / notice cash is queued here instead of
-    // collected mid-fight — a get landed between two kills eats the next round's
-    // pre-attack — and flushed on OnRoomObserved once the room clears. Mirrors
-    // AutoGetItemsManager's item-side defer. A room change discards the queue: the
-    // coin belonged to a room we've left.
-    private readonly List<(int Count, string Currency)> _deferredCollects = new();
-
-    // Set when a witnessed third-party pickup ("<Name> picks up some <coin>") of a
-    // denomination we've deferred invalidates our stored exact per-pile counts —
-    // the pickup is non-specific (may take part or all of a merged pile), so the
-    // remaining amount is unrecoverable from the line. The post-combat flush then
-    // discards the stale queue and re-surveys with a bare `look` instead of firing
-    // blind stale gets that the server rejects ("You don't see 7 gold crown here.").
-    private bool _resurveyBeforeFlush;
-    // Holds the walker across the re-survey `look` round-trip (server latency
-    // exceeds the gate's 400ms settle window, so the settle can't cover it). Fires
-    // once to release the deferred-hold if the surveyed pile turned out empty; a
-    // successful collect re-arms the gate's own settle window before this elapses.
+    // Collect-after-combat. When CashSettings.CollectAfterCombatFinished is set (the
+    // shared Cash + Items timing toggle) and the room still holds engageable
+    // hostiles, mid-fight cash is NOT collected — a get landed between two kills eats
+    // the next round's pre-attack. We deliberately DON'T queue the observed amounts:
+    // a kill's "N drop to the ground" delta and the room's running "You notice N"
+    // total are the same coins, and every post-kill re-render re-observes them, so
+    // replaying stored amounts double-counts into a flood of gets/drops (and cascade
+    // swaps). Instead we just note that cash is waiting; once the room clears
+    // (OnRoomObserved) we re-display it with a `look` and collect from the
+    // authoritative ground contents — one pass, and correct even if someone else
+    // grabbed the pile first. A room change clears the flag: the coin belonged to a
+    // room we've left.
+    private bool _cashPendingAfterCombat;
+    // Holds the walker across the post-combat `look` round-trip (server latency
+    // exceeds the gate's settle window, so the settle can't cover it). Fires once to
+    // release the deferred-hold if the re-displayed room turned out to hold no cash;
+    // a successful collect re-arms the gate's own settle window before this elapses.
     private DispatcherTimer? _resurveyReleaseTimer;
     // Look round-trip hold. Overridable in tests; production waits long enough for
     // the room re-display to arrive and drive the collect.
@@ -232,7 +227,6 @@ public sealed class CashManager : IDisposable
         _hiddenSub   = router.Subscribe(KnownPatterns.CashHidden,    OnCashHidden);
         _noticeSub   = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
         _killDropSub = router.Subscribe(KnownPatterns.CashFromKill,  OnCashFromKill);
-        _otherPickupSub = router.Subscribe(KnownPatterns.CashPickedUpByOther, OnCashPickedUpByOther);
     }
 
     // Bind the wire sender — typically the gate-wrapped engine pipeline from
@@ -272,13 +266,12 @@ public sealed class CashManager : IDisposable
         _autoDepositRetryNotBefore = default;
         Array.Clear(_inFlightCoinDelta, 0, _inFlightCoinDelta.Length);
         Array.Clear(_inFlightCoinDeltaSetAt, 0, _inFlightCoinDeltaSetAt.Length);
-        // Drop any deferred collects from the prior character and release the
-        // gate they were holding — the coin belonged to their session.
-        _resurveyBeforeFlush = false;
+        // Drop any pending post-combat collect from the prior character and release
+        // the gate it was holding — the coin belonged to their session.
         _resurveyReleaseTimer?.Stop();
-        if (_deferredCollects.Count > 0)
+        if (_cashPendingAfterCombat)
         {
-            _deferredCollects.Clear();
+            _cashPendingAfterCombat = false;
             _gate?.NoteDeferredCleared();
         }
     }
@@ -434,43 +427,6 @@ public sealed class CashManager : IDisposable
         CoinHidden?.Invoke(currency, count);
     }
 
-    // Another player grabbed ground cash — "<Name> picks up some <coin>". The line
-    // is non-specific (no count; may take part or all of the pile) and same-
-    // denomination ground piles merge, so if it names a denomination we've deferred
-    // for the post-combat flush, our stored exact per-pile counts are now stale and
-    // unrecoverable. Arm a re-survey: FlushDeferredCollects discards the stale queue
-    // and re-`look`s the room, collecting the freshly-observed amount instead of
-    // firing blind stale gets. A pickup of a currency we haven't deferred, or a
-    // non-cash "picks up some <item>" line, is ignored.
-    private void OnCashPickedUpByOther(MatchResult m)
-    {
-        if (!_isEnabled()) return;
-        if (_deferredCollects.Count == 0) return;   // nothing deferred → nothing to invalidate
-        if (m.Groups.Count < 2) return;
-        string coin = m.Groups[1].Trim();
-        int sp = coin.IndexOf(' ');
-        string first = sp < 0 ? coin : coin[..sp];
-        if (first.Length == 0 || !IsCashWord(first)) return;   // "some <item>" — not cash
-        string currency = first.ToLowerInvariant();
-
-        // Only the deferred denomination they touched is stale; another currency's
-        // pile is untouched, so don't force a needless re-survey for it.
-        bool affectsDeferred = false;
-        foreach ((int _, string c) in _deferredCollects)
-        {
-            if (string.Equals(c, currency, StringComparison.OrdinalIgnoreCase))
-            {
-                affectsDeferred = true;
-                break;
-            }
-        }
-        if (!affectsDeferred) return;
-
-        _resurveyBeforeFlush = true;
-        _log?.Info(LogCategory,
-            $"witnessed third-party pickup of {currency} — deferred counts stale, will re-survey before flush");
-    }
-
     // Single-line "You notice <list> here." — splits the list and dispatches
     // each recognised cash entry through the same per-currency policy path as
     // OnCashOnGround. The multi-line wrap variant joins through the LineExtractor
@@ -602,9 +558,16 @@ public sealed class CashManager : IDisposable
     {
         if (_collectAfterCombatFinished() && _hasEngageableHostiles())
         {
-            _deferredCollects.Add((count, currency));
-            _log?.Info(LogCategory, $"deferred (combat) currency={currency} count={count}");
-            _gate?.NoteDeferredPending(_deferredCollects.Count);
+            // Note that cash is waiting — but not the amount. The post-combat re-look
+            // collects from the room's true ground contents, so mid-fight amounts
+            // (which double-count kill deltas against the running total) are ignored.
+            // Arm the walker-hold once per combat.
+            if (!_cashPendingAfterCombat)
+            {
+                _cashPendingAfterCombat = true;
+                _log?.Info(LogCategory, "cash on ground during combat — collecting after it clears");
+                _gate?.NoteDeferredPending(1);
+            }
             return;
         }
         CollectCoins(count, currency);
@@ -615,58 +578,35 @@ public sealed class CashManager : IDisposable
     // engageable hostiles remain — the "combat finished for this room" signal.
     public void OnRoomObserved()
     {
-        if (_deferredCollects.Count == 0) return;
+        if (!_cashPendingAfterCombat) return;
         if (_hasEngageableHostiles()) return;   // still fighting — keep waiting
         FlushDeferredCollects();
     }
 
-    // Called on actual room change. Discards any un-flushed deferred collects —
-    // that coin belonged to the room we just left.
+    // Called on actual room change. Drops a pending post-combat collect — that coin
+    // belonged to the room we just left.
     public void OnRoomChanged()
     {
-        // A pending re-survey belonged to the room we left; drop it either way.
-        _resurveyBeforeFlush = false;
         _resurveyReleaseTimer?.Stop();
-        if (_deferredCollects.Count == 0) return;
-        _log?.Debug(LogCategory, $"room changed — dropping {_deferredCollects.Count} deferred collect(s)");
-        _deferredCollects.Clear();
+        if (!_cashPendingAfterCombat) return;
+        _cashPendingAfterCombat = false;
+        _log?.Debug(LogCategory, "room changed — dropping pending post-combat collect");
         _gate?.NoteDeferredCleared();
     }
 
+    // Combat's done and cash is waiting: re-display the room and collect from what's
+    // actually on the ground now, rather than replaying the amounts seen mid-fight.
+    // The `look`'s "You notice" line drives one collect per currency off the true
+    // ground total — no duplicates, no stale gets, and naturally correct if someone
+    // grabbed the pile first. Hold the walker across the look round-trip; the release
+    // timer frees it if the room turned out empty, and a real collect re-arms the
+    // gate's settle window before then.
     private void FlushDeferredCollects()
     {
-        if (_resurveyBeforeFlush)
-        {
-            // A third party grabbed ground cash of a deferred denomination, so our
-            // stored per-pile counts are stale (their pickup was non-specific, and
-            // same-denomination ground piles merge). Discard the queue and re-survey
-            // with a bare `look`; the room re-display's "You notice" line drives a
-            // fresh collect of the exact amount actually present. Fails safe — worst
-            // case the pile is gone and we collect nothing, never a bad get.
-            _resurveyBeforeFlush = false;
-            int discarded = _deferredCollects.Count;
-            _deferredCollects.Clear();
-            _log?.Info(LogCategory,
-                $"re-surveying room before flush (dropped {discarded} stale deferred collect(s))");
-            // Hold the walker across the look round-trip. The survey's own collect
-            // re-arms the gate settle window; the release timer frees the hold if
-            // the pile turned out empty.
-            _gate?.NoteDeferredPending(1);
-            Send("look");
-            ArmResurveyRelease();
-            return;
-        }
-
-        // Snapshot + clear before dispatching so CollectCoins's in-flight
-        // encumbrance projection works against an empty queue (no re-entrancy).
-        (int Count, string Currency)[] pending = _deferredCollects.ToArray();
-        _deferredCollects.Clear();
-        foreach ((int count, string currency) in pending)
-        {
-            _log?.Info(LogCategory, $"collect (post-combat) currency={currency} count={count}");
-            CollectCoins(count, currency);
-        }
-        _gate?.NoteDeferredCleared();
+        _cashPendingAfterCombat = false;
+        _gate?.NoteDeferredPending(1);
+        Send("look");
+        ArmResurveyRelease();
     }
 
     // Arm (or re-arm) the one-shot hold that covers the re-survey `look` round-trip.
@@ -685,10 +625,10 @@ public sealed class CashManager : IDisposable
     private void OnResurveyReleaseElapsed(object? sender, EventArgs e)
     {
         _resurveyReleaseTimer?.Stop();
-        // A fresh combat deferral may have re-armed the queue after we sent look
-        // (a new mob wandered in and dropped coin); only release the survey hold
-        // when nothing is waiting, so the new defers keep the gate for themselves.
-        if (_deferredCollects.Count == 0)
+        // A new mob may have wandered in and re-armed the pending flag after we sent
+        // look; only release the hold when nothing is waiting, so the fresh defer
+        // keeps the gate for itself.
+        if (!_cashPendingAfterCombat)
             _gate?.NoteDeferredCleared();
     }
 
@@ -1098,7 +1038,6 @@ public sealed class CashManager : IDisposable
         _hiddenSub.Dispose();
         _noticeSub.Dispose();
         _killDropSub.Dispose();
-        _otherPickupSub.Dispose();
         if (_resurveyReleaseTimer is not null)
         {
             _resurveyReleaseTimer.Stop();

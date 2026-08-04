@@ -1750,6 +1750,18 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
   something else); the other four are stable across the target realms.
 - **[CONFIRMED]** Value ladder (in copper): 1 silver = 10, 1 gold = 100, 1 platinum = 10 000,
   1 runic = 1 000 000. Wealth is consolidated in copper farthings (the game's `Wealth:` line).
+- **[CONFIRMED 2026-08-03, user]** **Ground cash: `You notice N <coin> here.` is the running room
+  TOTAL, not a per-kill delta.** A kill drops coin with a `N <coin> drop to the ground.` line (the
+  delta), and it merges into the room's single ground pile. A later room re-display's
+  `You notice N <coin> here.` reports the *whole* pile — it already includes every coin dropped by
+  kills plus anything present on entry (walk in on 5 silver / 20 copper, kill a mob dropping 1 silver
+  / 5 copper, re-display shows 6 silver / 25 copper). So the kill-drop lines and the room-total line
+  describe the **same coins**; summing both double-counts. Same-denomination piles merge, so if
+  someone else grabs from the pile first you can only get what the current display shows. **Client
+  consequence:** with collect-after-combat, re-`look` once the room clears and collect off the fresh
+  `You notice` total — one authoritative pass — never replay the mid-fight drop deltas (they
+  double-count against the total, re-queue on every re-render, and go stale). Implemented in
+  `CashManager`.
 - **[CONFIRMED]** **Toll exits gate on total wealth, not a specific coin.** A room exit tagged
   `(Toll: N)` in the map data requires the crosser to carry a **wealth value of `N × 100`**
   (copper farthings — the same consolidated `Wealth:` figure), held **on them** (carried coin, not

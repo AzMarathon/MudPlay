@@ -935,10 +935,12 @@ public sealed class CashManagerTests
         Assert.Equal(("silver", 7, CashPolicy.Collect), h.Dispatches[0]);
     }
 
-    // Once the room clears (no engageable hostiles) the deferred queue flushes on
-    // the room-entity observation — the "combat finished" signal.
+    // Once the room clears (no engageable hostiles) the pending collect fires on the
+    // room-entity observation — the "combat finished" signal. It re-displays the
+    // room with a `look` rather than replaying the mid-fight amount; the re-display's
+    // "You notice" drives the actual collect off the true ground total.
     [Fact]
-    public void CollectAfterCombat_FlushesOnRoomClear()
+    public void CollectAfterCombat_ReLooksOnRoomClear_ThenCollectsFromDisplay()
     {
         using Harness h = new() { HasHostiles = true };
         h.Settings.SilverPolicy = CashPolicy.Collect;
@@ -949,8 +951,10 @@ public sealed class CashManagerTests
 
         h.HasHostiles = false;                      // last hostile fell
         h.Cash.OnRoomObserved();
+        Assert.Equal("look", h.LastSent);           // re-display, don't replay the drop
 
-        Assert.Equal("get 7 silver noble", h.LastSent);
+        h.Feed("You notice 7 silver nobles here.");
+        Assert.Contains("get 7 silver noble", h.AllSent);
     }
 
     // Room-entity observations fire mid-fight too (a new mob wanders in); the
@@ -968,10 +972,12 @@ public sealed class CashManagerTests
         Assert.Empty(h.Sent);
     }
 
-    // Multiple corpses drop across a fight; every deferred pile is collected once
-    // the room clears, one get each (parity with the immediate per-drop path).
+    // The reported spam: several coin drops across a fight, each re-observed on every
+    // room re-render, used to flush as a flood of stacked gets (and Drop-smaller
+    // cascades). Now the flush re-displays the room and collects the running ground
+    // TOTAL once — not one get per drop.
     [Fact]
-    public void CollectAfterCombat_FlushesAllDeferredPiles()
+    public void CollectAfterCombat_ReLooksAndCollectsGroundTotalOnce()
     {
         using Harness h = new() { HasHostiles = true };
         h.Settings.GoldPolicy = CashPolicy.Collect;
@@ -983,8 +989,11 @@ public sealed class CashManagerTests
 
         h.HasHostiles = false;
         h.Cash.OnRoomObserved();
+        Assert.Equal("look", h.LastSent);           // one re-display, drops not replayed
 
-        Assert.Equal(new[] { "get 10 gold crown", "get 5 gold crown" }, h.AllSent);
+        // The authoritative ground total drives ONE collect — not get 10 + get 5.
+        h.Feed("You notice 15 gold crowns here.");
+        Assert.Equal(new[] { "look", "get 15 gold crown" }, h.AllSent);
     }
 
     // Room-display cash defers too (not just corpse drops) — the ground-survey
@@ -1001,7 +1010,10 @@ public sealed class CashManagerTests
 
         h.HasHostiles = false;
         h.Cash.OnRoomObserved();
-        Assert.Equal("get 50 gold crown", h.LastSent);
+        Assert.Equal("look", h.LastSent);           // re-display first
+
+        h.Feed("You notice 50 gold crowns here.");
+        Assert.Contains("get 50 gold crown", h.AllSent);
     }
 
     // Leaving the room before it cleared abandons the deferred coin — it belonged
@@ -1048,92 +1060,26 @@ public sealed class CashManagerTests
         Assert.Equal("get 7 silver noble", h.LastSent);
     }
 
-    // ----- witnessed third-party pickup → re-survey before flush ------
+    // ----- post-combat re-look is third-party-safe -------------------
 
-    // The bug: with deferred gold on the ground, another player grabs "some gold
-    // crowns" (non-specific) and more gold drops. The stored per-pile counts are
-    // now stale (piles merged, amount taken unknown), so the flush must NOT fire
-    // the blind stale gets ("get 3", "get 7" → "You don't see 7 gold crown here.")
-    // — it re-surveys with a bare `look` and collects the freshly-observed amount.
+    // Someone else grabbed the pile before our post-combat re-look. Because we
+    // collect from the re-display (not the amounts seen mid-fight), a vanished pile
+    // just yields no cash line → no get — never the doomed "get 7" the old
+    // stored-amount flush would have fired against a pile that's no longer there.
     [Fact]
-    public void WitnessedPickup_OfDeferredCurrency_ResurveysInsteadOfBlindGets()
+    public void CollectAfterCombat_ReLookShowsNoCash_CollectsNothing()
     {
         using Harness h = new() { HasHostiles = true };
         h.Settings.GoldPolicy = CashPolicy.Collect;
         h.Settings.CollectAfterCombatFinished = true;
 
-        h.Feed("3 gold drop to the ground.");             // deferred
-        h.Feed("Tristian picks up some gold crowns");     // arms re-survey (gold is deferred)
-        h.Feed("7 gold drop to the ground.");             // deferred (merged pile now stale)
-        Assert.Empty(h.Sent);
-
-        h.HasHostiles = false;
-        h.Cash.OnRoomObserved();                          // combat finished → flush
-
-        // A single `look`, and NONE of the blind stale gets.
-        Assert.Equal(new[] { "look" }, h.AllSent);
-
-        // The room re-display drives the exact collect (combat is over now).
-        h.Feed("You notice 10 gold crowns here.");
-        Assert.Equal("get 10 gold crown", h.LastSent);
-        Assert.DoesNotContain("get 3 gold crown", h.AllSent);
-        Assert.DoesNotContain("get 7 gold crown", h.AllSent);
-    }
-
-    // A witnessed pickup of a denomination we HAVEN'T deferred leaves our stored
-    // count intact — the normal flush fires the exact deferred get, no re-survey.
-    [Fact]
-    public void WitnessedPickup_OfUndeferredCurrency_FlushesNormally()
-    {
-        using Harness h = new() { HasHostiles = true };
-        h.Settings.GoldPolicy = CashPolicy.Collect;
-        h.Settings.CollectAfterCombatFinished = true;
-
-        h.Feed("3 gold drop to the ground.");             // deferred
-        h.Feed("Tristian picks up some silver nobles");   // silver not deferred → no re-survey
-
+        h.Feed("7 gold drop to the ground.");
         h.HasHostiles = false;
         h.Cash.OnRoomObserved();
+        Assert.Equal("look", h.LastSent);
 
-        Assert.Equal("get 3 gold crown", h.LastSent);
-        Assert.DoesNotContain("look", h.AllSent);
-    }
-
-    // "picks up some <item>" (a non-cash stackable) must not arm the re-survey —
-    // the leading word isn't a denomination.
-    [Fact]
-    public void WitnessedPickup_NonCashItem_FlushesNormally()
-    {
-        using Harness h = new() { HasHostiles = true };
-        h.Settings.GoldPolicy = CashPolicy.Collect;
-        h.Settings.CollectAfterCombatFinished = true;
-
-        h.Feed("3 gold drop to the ground.");
-        h.Feed("Tristian picks up some torn rags");       // not cash → ignored
-
-        h.HasHostiles = false;
-        h.Cash.OnRoomObserved();
-
-        Assert.Equal("get 3 gold crown", h.LastSent);
-        Assert.DoesNotContain("look", h.AllSent);
-    }
-
-    // Walking out before the room cleared drops a pending re-survey too — the coin
-    // belonged to the room we left, so a later clear-signal collects nothing.
-    [Fact]
-    public void WitnessedPickup_RoomChange_DropsPendingResurvey()
-    {
-        using Harness h = new() { HasHostiles = true };
-        h.Settings.GoldPolicy = CashPolicy.Collect;
-        h.Settings.CollectAfterCombatFinished = true;
-
-        h.Feed("3 gold drop to the ground.");
-        h.Feed("Tristian picks up some gold crowns");     // re-survey armed
-        h.Cash.OnRoomChanged();                           // walked away
-
-        h.HasHostiles = false;
-        h.Cash.OnRoomObserved();
-        Assert.Empty(h.Sent);                             // no look, no get
+        h.Feed("You notice a rusty dagger here.");        // pile gone — no cash on the ground
+        Assert.Equal(new[] { "look" }, h.AllSent);        // no stale get fired
     }
 
     // ----- encumbrance gate + cascade --------------------------------
