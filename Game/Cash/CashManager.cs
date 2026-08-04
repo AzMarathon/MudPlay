@@ -649,6 +649,8 @@ public sealed class CashManager : IDisposable
     // the new room's piles are evaluated fresh.
     public void OnRoomChanged()
     {
+        if (_collectedGround.Count > 0)
+            _log?.Debug(LogCategory, $"room changed — resetting collect latch (was: {string.Join(", ", _collectedGround)})");
         _collectedGround.Clear();
         CancelDeferredCollect("room changed");
     }
@@ -677,6 +679,7 @@ public sealed class CashManager : IDisposable
     private void FlushDeferredCollects()
     {
         _cashPendingAfterCombat = false;
+        _log?.Info(LogCategory, "combat cleared — re-looking to collect ground cash");
         _gate?.NoteDeferredPending(1);
         Send("look");
         ArmResurveyRelease();
@@ -740,6 +743,7 @@ public sealed class CashManager : IDisposable
             // Unknown currency slot or unknown capacity → nothing to budget
             // against, collect the full amount (fail-open).
             _gate?.NoteGetSent();
+            _log?.Info(LogCategory, $"collect currency={currency} get={count} (ungated)");
             Send($"get {count} {WireNoun(currency)}");
             return;
         }
@@ -819,6 +823,9 @@ public sealed class CashManager : IDisposable
         }
 
         _gate?.NoteGetSent();
+        _log?.Info(LogCategory, swapDone > 0
+            ? $"collect currency={currency} get={totalPickup} (free={freePickup} + {swapDone} via drop-smaller-for-larger)"
+            : $"collect currency={currency} get={totalPickup}");
         Send($"get {totalPickup} {WireNoun(currency)}");
         _inFlightCoinDelta[slot] += totalPickup;
         _inFlightCoinDeltaSetAt[slot] = now;
