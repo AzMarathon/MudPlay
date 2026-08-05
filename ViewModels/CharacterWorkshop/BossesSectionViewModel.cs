@@ -103,7 +103,8 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
             ? null
             : o => o is BossRowViewModel r
                    && (r.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
-                       || r.Rooms.Contains(q, StringComparison.OrdinalIgnoreCase));
+                       || r.Rooms.Contains(q, StringComparison.OrdinalIgnoreCase)
+                       || r.RespawnDisplay.Contains(q, StringComparison.OrdinalIgnoreCase));
     }
 
     private void Rebuild()
@@ -113,6 +114,7 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
         IsParadigmRealm = realm == RealmType.ParaMud;
         _allRows.Clear();
         foreach (BossDef def in _bosses.ResolveForRealm(realm)
+                     .Where(b => b.ShowInTable)
                      .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase))
         {
             int? hrs = def.RespawnType == BossRespawnType.Timed
@@ -132,14 +134,12 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
         Persist();
     }
 
-    // Persist the visible rows over the full resolved list. The visible rows fully
-    // govern the active realm; the other realm's bosses are carried through
-    // untouched. (Add / edit / remove of names, rooms + respawn overrides goes
-    // through the Manage dialog, which re-saves and triggers a rebuild; this path
-    // only carries a StopBefore toggle.)
+    // Persist the visible rows over the full resolved list. This path only carries a
+    // StopBefore toggle — add / edit / remove and the ShowInTable flag live in the
+    // Manage dialog — so every boss NOT represented by a visible row (the other realm,
+    // or one hidden via ShowInTable) is carried through untouched.
     private void Persist()
     {
-        RealmType realm = _gameData.ActiveRealm;
         var merged = new List<BossDef>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (BossRowViewModel row in _allRows)
@@ -148,10 +148,7 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
             if (seen.Add(d.Name)) merged.Add(d);
         }
         foreach (BossDef b in _bosses.Resolve())
-        {
-            bool visibleHere = realm == RealmType.ParaMud ? b.InParadigm : b.InStock;
-            if (!visibleHere && seen.Add(b.Name)) merged.Add(b);
-        }
+            if (seen.Add(b.Name)) merged.Add(b);
         _bosses.Save(merged);
     }
 

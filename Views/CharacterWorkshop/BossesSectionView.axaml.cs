@@ -57,11 +57,12 @@ public partial class BossesSectionView : UserControl
         grid.Columns[Early3].IsVisible = para;
     }
 
-    // Timer columns sort with active (counting) timers first in BOTH directions,
-    // then inactive / expired rows after — the built-in single-key sort would put
-    // the inactive sentinel first when descending. We install a custom comparer that
-    // keeps inactive last and applies the toggled direction only within the active
-    // group. Non-timer columns fall through to the DataGrid's default sort.
+    // Timer columns sort in three fixed groups regardless of direction — cleanup
+    // spawns (DEAD/ALIVE) first, then active (counting) timed respawns, then unset /
+    // expired rows — with the toggled direction ordering only within each group. The
+    // built-in single-key sort can't express that (it would float the inactive
+    // sentinel to the top when descending). Non-timer columns fall through to the
+    // DataGrid's default sort.
     private void OnSorting(object? sender, DataGridColumnEventArgs e)
     {
         Func<BossRowViewModel, long>? key = e.Column.SortMemberPath switch
@@ -86,8 +87,8 @@ public partial class BossesSectionView : UserControl
             new ActiveFirstComparer(key, _timerSortDir == ListSortDirection.Descending)));
     }
 
-    // Active timers (finite sort key) before inactive / expired (long.MaxValue), in
-    // both directions; the toggled direction orders only the active group.
+    // Three fixed groups: cleanup spawns (0), active timed respawns (1), unset /
+    // expired (2). Groups never reverse; the toggled direction orders within a group.
     private sealed class ActiveFirstComparer : IComparer
     {
         private readonly Func<BossRowViewModel, long> _key;
@@ -102,12 +103,17 @@ public partial class BossesSectionView : UserControl
         public int Compare(object? x, object? y)
         {
             if (x is not BossRowViewModel a || y is not BossRowViewModel b) return 0;
-            long ak = _key(a), bk = _key(b);
-            bool ai = ak == long.MaxValue, bi = bk == long.MaxValue;
-            if (ai != bi) return ai ? 1 : -1;          // inactive / expired always last
-            if (ai) return 0;                          // both inactive → stable
-            int c = ak.CompareTo(bk);
+            int ga = Group(a), gb = Group(b);
+            if (ga != gb) return ga.CompareTo(gb);     // cleanup, then active, then inactive
+            if (ga == 2) return 0;                     // both inactive → stable
+            int c = _key(a).CompareTo(_key(b));
             return _descending ? -c : c;
+        }
+
+        private int Group(BossRowViewModel r)
+        {
+            if (r.IsCleanup) return 0;                 // cleanup spawns always at the top
+            return _key(r) == long.MaxValue ? 2 : 1;   // active respawns, then unset / expired
         }
     }
 }

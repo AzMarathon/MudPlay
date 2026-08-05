@@ -22,6 +22,7 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
     [ObservableProperty] private bool _exactSpawn;
     [ObservableProperty] private bool _inStock;
     [ObservableProperty] private bool _inParadigm;
+    [ObservableProperty] private bool _showInTable = true;
 
     public int? MonsterNumber { get; private set; }
     private bool _stopBefore;
@@ -40,6 +41,7 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
         _stopBefore = def.StopBefore;
         InStock = def.InStock;
         InParadigm = def.InParadigm;
+        ShowInTable = def.ShowInTable;
         MonsterNumber = def.MonsterNumber;
     }
 
@@ -54,6 +56,7 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
         ExactSpawn = ExactSpawn,
         StopBefore = _stopBefore,   // edited on the main table, carried through unchanged
         RespawnHoursOverride = ResolveOverride(),
+        ShowInTable = ShowInTable,
     };
 
     // A typed hours value only becomes a stored override when it's a positive number

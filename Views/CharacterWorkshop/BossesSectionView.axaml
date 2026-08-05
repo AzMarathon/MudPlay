@@ -52,10 +52,17 @@
                                     Binding="{ReflectionBinding RespawnDisplay}"
                                     FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="100%" Width="100" IsReadOnly="True" SortMemberPath="FullSortKey"
-                                    Binding="{ReflectionBinding StatusDisplay}"
-                                    FontFamily="{StaticResource FontMono}"
-                                    Foreground="{StaticResource AccentAmberBrush}"/>
+                <!-- Live 100% countdown for timed bosses; DEAD (red) / ALIVE (green)
+                     for cleanup bosses. Template column so the text colours per row. -->
+                <DataGridTemplateColumn Header="100%" Width="100" SortMemberPath="FullSortKey">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:BossRowViewModel">
+                            <TextBlock Text="{Binding StatusDisplay}" VerticalAlignment="Center" Margin="8,0"
+                                       FontFamily="{StaticResource FontMono}"
+                                       Foreground="{Binding StatusDisplay, Converter={x:Static vm:BossStatusBrushConverter.Instance}}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <!-- Early-window columns (indices 4-6). Code-behind relabels /
                      collapses these per realm: Paradigm 5 / 10 / 20%, Stock a single
                      87.5% column. -->

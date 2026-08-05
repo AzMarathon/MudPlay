@@ -563,6 +563,22 @@ public sealed class BossTimerTests : IDisposable
         Assert.NotNull(timers.StatusFor(after, RealmType.ParaMud));   // override drives the timer
     }
 
+    [Fact]
+    public void ManageDialog_ShowInTable_Unchecked_Persists_ButBossStillResolves()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (bosses, _, cache) = NewStores();
+        var vm = new ManageBossesDialogViewModel(bosses, cache);
+
+        vm.Rows.Cast<ManageBossRowViewModel>().First(r => r.Name == "ogre king").ShowInTable = false;
+        vm.SaveCommand.Execute(null);
+
+        // Hidden from the tab, but still present in the store (tracked for @timer etc).
+        BossDef def = bosses.ResolveForRealm(RealmType.ParaMud).First(b => b.Name == "ogre king");
+        Assert.False(def.ShowInTable);
+    }
+
     // ----- cleanup bosses (DEAD / ALIVE) -------------------------------------
 
     [Fact]

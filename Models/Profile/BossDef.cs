@@ -30,6 +30,10 @@ public sealed class BossDef
     public bool ExactSpawn { get; set; }
     public bool StopBefore { get; set; }
     public int? RespawnHoursOverride { get; set; }
+    // Whether this boss appears in the Player Workshop Bosses table. Default true;
+    // unchecking it in the Manage dialog hides the row from the tab (the boss is
+    // still tracked — timers, @timer, kill detection — just not listed there).
+    public bool ShowInTable { get; set; } = true;
     public bool Removed { get; set; }
 
     // Deep-ish copy so the store can hand out editable rows without mutating the
@@ -39,7 +43,7 @@ public sealed class BossDef
         Name = Name, MonsterNumber = MonsterNumber, Rooms = new List<string>(Rooms),
         InStock = InStock, InParadigm = InParadigm, RespawnType = RespawnType,
         ExactSpawn = ExactSpawn, StopBefore = StopBefore,
-        RespawnHoursOverride = RespawnHoursOverride, Removed = Removed,
+        RespawnHoursOverride = RespawnHoursOverride, ShowInTable = ShowInTable, Removed = Removed,
     };
 
     // True when this boss carries no user edits relative to a seed entry — the
@@ -50,6 +54,6 @@ public sealed class BossDef
         && InStock == seed.InStock && InParadigm == seed.InParadigm
         && RespawnType == seed.RespawnType && ExactSpawn == seed.ExactSpawn
         && StopBefore == seed.StopBefore && RespawnHoursOverride == seed.RespawnHoursOverride
-        && !Removed
+        && ShowInTable == seed.ShowInTable && !Removed
         && Rooms.SequenceEqual(seed.Rooms, StringComparer.OrdinalIgnoreCase);
 }

@@ -45,6 +45,8 @@
                                         Binding="{ReflectionBinding InStock, Mode=TwoWay}" Width="70"/>
                 <DataGridCheckBoxColumn Header="ParaMUD"
                                         Binding="{ReflectionBinding InParadigm, Mode=TwoWay}" Width="80"/>
+                <DataGridCheckBoxColumn Header="Show in Table"
+                                        Binding="{ReflectionBinding ShowInTable, Mode=TwoWay}" Width="110"/>
             </DataGrid.Columns>
         </DataGrid>
 
