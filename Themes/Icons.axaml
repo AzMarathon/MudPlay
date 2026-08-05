@@ -103,4 +103,8 @@
     <!-- Double chevron up — level up / auto-train. -->
     <StreamGeometry x:Key="IconAutoTrain">M6 12 L12 6 L18 12 M6 18 L12 12 L18 18</StreamGeometry>
 
+    <!-- "EXP" stick-letter wordmark — the send-exp toolbar button (no drawn
+         glyph; the letters ARE the icon). -->
+    <StreamGeometry x:Key="IconExp">M3 8 V16 M3 8 H7 M3 12 H6.5 M3 16 H7 M9.5 8 L14.5 16 M14.5 8 L9.5 16 M17 8 V16 M17 8 H20.5 V12 H17</StreamGeometry>
+
 </ResourceDictionary>

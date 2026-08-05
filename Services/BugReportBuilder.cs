@@ -670,8 +670,10 @@ public static class BugReportBuilder
         if (stash is not { Count: > 0 }) sb.Append("_(none)_\n");
         else foreach (var r in stash) sb.Append("- ").Append(r.Map).Append('/').Append(r.Room).Append('\n');
 
-        var favorites = svc.Favorites.All;
-        sb.Append("\n**Favorites** (").Append(favorites.Count).Append(")\n\n");
+        // Only the starred quick-access favourites — the full GOTO list runs to
+        // hundreds of entries and bloats the report without helping diagnosis.
+        var favorites = svc.Favorites.StarredFavorites();
+        sb.Append("\n**Starred favorites** (").Append(favorites.Count).Append(")\n\n");
         if (favorites.Count == 0) sb.Append("_(none)_\n");
         else foreach (var f in favorites)
         {

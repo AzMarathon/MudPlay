@@ -50,6 +50,11 @@ public sealed class CombatManagerSpellsTests
         public bool Sneaking { get; set; }
         public HashSet<int> SeeHidden { get; } = new();
 
+        // Virtual clock for the combat heartbeat's recast floor — Tick() advances
+        // it a full round so the floor (which suppresses same-round re-casts, e.g.
+        // our own hit-echo tick) doesn't swallow the per-round heartbeat re-cast.
+        private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
         public Harness(bool wireCaster = true)
         {
             DefaultPatterns.Seed(Router);
@@ -65,6 +70,7 @@ public sealed class CombatManagerSpellsTests
                 readOwnGivenName: () => "Fujin",
                 post: a => a(),                          // synchronous in tests
                 log: Log);
+            Combat.NowProvider = () => _now;
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.SetBackstabHooks(() => Sneaking, n => SeeHidden.Contains(n));
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
@@ -113,6 +119,16 @@ public sealed class CombatManagerSpellsTests
         /// isn't under test here.)</summary>
         public void Tick()
         {
+            // A tick is a new combat round — advance the virtual clock past the
+            // heartbeat recast floor so the round's re-cast isn't suppressed.
+            TickAfter(TimeSpan.FromSeconds(6));
+        }
+
+        // Advance the virtual clock by an arbitrary gap, then tick — for exercising
+        // sub-round (our own hit-echo) vs full-round spacing against the recast floor.
+        public void TickAfter(TimeSpan gap)
+        {
+            _now += gap;
             Cast.OnCombatTick();
             Combat.OnCombatTick();
         }
@@ -368,6 +384,27 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal(3, h.AllSent.Count(s => s == "blast giant rat"));
         Assert.DoesNotContain("a giant rat", h.AllSent);
+    }
+
+    [Fact]
+    public void Heartbeat_SameRoundEchoTick_DoesNotReCast()
+    {
+        // Our own "…for N damage!" hit matches the UserHits combat pattern and
+        // fires an extra tick a fraction of a second after the cast. That echo tick
+        // resets the coordinator cooldown, so without the recast floor the heartbeat
+        // fires a second cast this same round — which lands on the corpse when the
+        // echoed hit was the kill. The floor must swallow the echo but still allow
+        // the genuine next round's re-cast.
+        using Harness h = new();
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");                 // round 1 — initial cast
+        h.TickAfter(TimeSpan.FromMilliseconds(300));      // hit-echo tick, same round
+        Assert.Equal(1, h.AllSent.Count(s => s == "blast giant rat"));   // no echo re-cast
+
+        h.TickAfter(TimeSpan.FromSeconds(6));             // genuine next round
+        Assert.Equal(2, h.AllSent.Count(s => s == "blast giant rat"));   // re-casts
     }
 
     [Fact]

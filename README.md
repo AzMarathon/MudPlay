@@ -1,16 +1,15 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.29.0**
-> - New **Bosses** tab in the Player Workshop: the per-realm boss catalog (240 bosses) with respawn timers read from live game data, so they stay correct across game versions
-> - Live per-window countdowns: a 100% guaranteed-respawn column plus the realm's earlier spawn windows — Paradigm's 5 / 10 / 20%-off points in their own columns, collapsing to Stock's single 87.5% column — each counting down and blanking once that window has passed; sortable by boss, respawn, and each timer (cleanup spawns first, then counting timers, then unset / expired — in either direction) and filterable by boss, room, or respawn
-> - Per-row **Mark** (set / back-date a kill time via a date-time dialog), **Reset** (stamp the kill at now), and **Clear** (drop the timer); timers also auto-start on a detected kill, persist across restart, and are shared per realm
-> - "Respawns @ Cleanup" bosses read a colour-coded **DEAD** (red) / **ALIVE** (green) state instead of a countdown — DEAD once marked, flipping back to ALIVE at the BBS's nightly cleanup time (new per-BBS setting in Settings → BBS + display; default 21:00 in your computer's own time zone, auto-detected, with a dropdown to override)
-> - **Manage Bosses** dialog to add / edit / remove entries — name, rooms, respawn type, realm flags, a manual respawn-hours override for bosses game data can't resolve a timer for, and a "show in table" toggle to hide an entry from the tab (still tracked), and a free-text notes field — with its own filter; **Import / Export** share a realm's table as a JSON file. "Stop before" toggles inline in the table (walk-to halts one room short of a flagged boss room)
-> - New `@timer` remote command reports the boss timers being tracked, one reply line per boss (name, time to full, next window, e.g. "full 2h14m, next -20% 1h47m"): no argument lists them all, `@timer <name>` filters by name substring, and a boss you aren't holding replies "expired"; gated by its own "Query boss timers" player permission (grant it per-player in Game Data → Players)
-> - Walk-to now honours per-boss "stop before": a walk (map click / GOTO / @goto / recovery) to a flagged boss room halts one room short instead of stepping in and triggering the spawn — loops and Auto-Lair are unaffected
-> - Gang-channel messages now use the correct `bg` speak verb instead of `gang`, so remote-command replies, level-up announces, and party `@heal` broadcasts actually reach the gang
-> - Fixed a double movement send while looping through same-named corridors: a post-combat re-look of the current room, echoing back while a step was still in flight, was mistaken for arrival at the identically-named next room — phantom-advancing the loop and firing the next step before you'd actually moved; the tracker now recognises that too-fast same-room redisplay as a re-look and waits for the real arrival
+> **Version 2.30.0**
+> - Terminal right-click menu gains a **Favorites** flyout — star up to 10 Go To destinations and walk there in one click without opening Navigation
+> - Star a favourite from the Edit favourite dialog (checkbox, max 10); starred entries show a ★ in the Go To list
+> - Bosses tab now shows the **Notes** column (from Manage Bosses) to the right of the Timer column — read-only, resize to read a long one
+> - New **Exp** toolbar button sends the in-game `exp` command (add it via Settings → Toolbar; included by default on fresh profiles)
+> - Player Workshop window now fits its width to the active tab on each tab switch (wide tabs like Bosses get the room they need, narrow tabs shrink back); height matches the Equipment tab so long lists (Quest, Bosses) scroll instead of ballooning the window — stays freely resizable afterward
+> - Fixed the walker stalling after training on Paradigm: the reused stat box lingered on screen and kept re-arming character-mode input, holding movement so it advanced only one room per manual `rm`
+> - Fixed a mage re-casting its attack spell at the monster it just killed: combat spells now cast once per round (like a weapon swing), so the spell's own damage echo can't slip a second cast onto the corpse
+> - Bug report now lists only your starred favourites instead of the entire Go To list, so it stays small
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

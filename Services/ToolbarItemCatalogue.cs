@@ -92,6 +92,11 @@ public static class ToolbarItemCatalogue
             "DepositAllCommand",
             Tooltip: "Deposit All — bank wealth to the keep-on-hand floor"),
 
+        // Sends the in-game "exp" command (experience-to-next readout).
+        new("SendExp",            "Exp",                  "IconExp",
+            "SendExpCommand",
+            Tooltip: "Exp — send the in-game \"exp\" command"),
+
         // Recovery escape hatch — drop my own conditions and the movement holds
         // / party-wait signals they drive, returning me to an idle, unafflicted
         // state (unsticks a condition that latched but never saw its wear-off).

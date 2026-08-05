@@ -98,6 +98,27 @@ public sealed partial class CombatManager
     // room-cleared.
     private CombatSpellAction? _lastCastAction;
 
+    // When the last combat spell actually went to the wire, and the minimum gap
+    // before the heartbeat may re-cast. A weapon attack never swings at a corpse
+    // because the SERVER owns the swing repeat and stops on death; a spell repeat
+    // is ours (OnCombatTick re-issues it each round), so we must give it the same
+    // one-per-round discipline. Our own "…for N damage!" spell result matches the
+    // UserHits combat pattern and fires an extra combat tick a fraction of a second
+    // later — that echo tick resets CastCoordinator's per-round cooldown, so without
+    // this floor the heartbeat fires a second cast this round: wasted mana on a live
+    // mob, and a cast at the corpse when the echoed hit was the kill (the reported
+    // "re-nukes the monster that just died"). The floor sits below a combat round
+    // (CastCoordinator.CastCommandCooldown is 5.5s) and above any plausible hit-echo
+    // round-trip, and — unlike the coordinator cooldown — a combat tick never clears
+    // it, so the echo can't slip a cast through.
+    private static readonly TimeSpan CombatSpellRecastFloor = TimeSpan.FromSeconds(2);
+    private DateTimeOffset _lastCombatSpellCastAt = DateTimeOffset.MinValue;
+
+    // Test seam for the recast-floor clock — production uses the real clock; the
+    // combat-spell tests advance it a round per Tick so the heartbeat re-cast the
+    // floor now gates is exercised at realistic round spacing.
+    internal Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.Now;
+
     // Opt into combat-spell casting. cast is the shared CastCoordinator (so the
     // per-round cooldown is shared with every other caster); readMana reports live
     // MA / max-MA for the chooser's per-cast mana gate. Until called the engine is
@@ -199,6 +220,7 @@ public sealed partial class CombatManager
                 {
                     _spellChooser.MarkCast(decision, picked.RawName);
                     _lastCastAction = decision.Action;
+                    _lastCombatSpellCastAt = NowProvider();
                     _combatOff = false;
                     // A cast is an attack for engage-verify purposes — if the
                     // server never confirms *Combat Engaged*, the spell hit a
@@ -326,10 +348,18 @@ public sealed partial class CombatManager
             return;
         }
 
+        // One combat cast per round. Our own hit-echo tick would otherwise re-cast
+        // this same round (see CombatSpellRecastFloor) — a wasted nuke on a live
+        // mob, and a cast at the corpse when the echoed hit was the kill. Stay in
+        // spell mode; the next genuine round's tick clears the floor and re-casts.
+        if (NowProvider() - _lastCombatSpellCastAt < CombatSpellRecastFloor)
+            return;
+
         if (_cast!.TryCast(decision.Spell!, target))
         {
             _spellChooser.MarkCast(decision, target);
             _lastCastAction = decision.Action;
+            _lastCombatSpellCastAt = NowProvider();
             _combatOff = false;
         }
         // Blocked (CastDirector spent this round) → stay in spell mode and

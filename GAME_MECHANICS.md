@@ -153,6 +153,14 @@ it isn't here and you're unsure, ask.
   "par". This is why every wall-clock / on-demand automated wire send must gate on the realm-
   independent "screen owns the keyboard" signal (the outbound `train stats` command), not the
   marker — which on Paradigm never confirms.
+- **The cursor-positioned box LINGERS on screen after the user exits back to the realm** *([CONFIRMED]
+  2026-08-05, captures `paradigm-20260805-095320/095546/095653`)*. It isn't cleared when the in-game
+  prompt returns — it only leaves once enough new output scrolls it off. So the "box is on screen"
+  signal stays true well after the session is over; the authoritative "user is back in the realm"
+  signal is the **in-game prompt returning**, not the box vanishing. A screen-scan detector must
+  therefore arm on the box's *rising edge* only — a level-triggered re-arm flaps held→resume→held off
+  the stale box every feed and holds the movement engine (the "walker stalls after training, moves one
+  room per manual `rm`" bug).
 
 ## Light sources
 
@@ -383,6 +391,23 @@ it isn't here and you're unsure, ask.
   an engine-issued between-round cast — in this realm a spell is cast by typing its cast-code
   (`Spells.Short`) directly (`swan`, `swan rat`), with no `c` verb precursor, so the client
   recognises a manual cast by that cast-code on the wire.
+- **[CONFIRMED]** *(2026-08-05, user)* **A spell attack command is functionally the same as a
+  physical attack command — one action per round against the target — except it costs mana and does
+  NOT auto-repeat.** A weapon swing is server-driven: you send the attack once and the server repeats
+  it each round and stops when the target dies. A spell does not repeat server-side, so the CLIENT
+  must re-issue it each round (the combat-tick heartbeat). Two consequences the client must handle:
+  - **Cast once per round.** The spell's own damage line (`Your <spell> hits <mob> for N damage!`)
+    matches the same combat-hit pattern the round tick is driven by, so it fires an *extra* tick a
+    beat after the cast. Re-casting on that echo double-fires the round — wasted mana on a live mob,
+    and a cast at the **corpse** when the echoed hit was the kill ("re-nukes the monster that just
+    died"). The client paces combat casts to one per round so the echo can't slip through, mirroring
+    the weapon's once-per-round server repeat.
+  - **Out of mana → no damage lines, keep the command.** When a single-target spell attack can't
+    afford the cast, the round produces **no output at all** (no fizzle line); the client keeps the
+    spell as the attack command and simply retries each round, casting once a mana regen tick makes it
+    affordable and the monster is still alive. **Room / multi-target** attack spells differ slightly:
+    they still *fire* at an empty room and emit a "nothing to hit here" style message (exact wording
+    unconfirmed — no test character yet).
 - **[CONFIRMED]** **Martial-arts strikes (Punch / Kick / Jumpkick) are class-innate abilities, not a
   function of the trained Martial Arts skill.** A class grants a strike by listing its ability id in
   an `Abil-0..9` slot: **Punch = 29, Kick = 30, Jumpkick = 35** (Mystic carries all three at value 1

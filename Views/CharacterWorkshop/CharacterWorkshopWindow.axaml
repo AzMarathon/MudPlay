@@ -8,13 +8,17 @@
         x:DataType="vm:CharacterWorkshopViewModel"
         Title="{Binding WindowTitle}"
         Width="960" Height="600"
+        MinWidth="760" MinHeight="520"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource ChromeBgBrush}">
 
-    <!-- Flat tab strip across the six Phase-10 tabs (mirrors MudProxy's
-         Character Status dialog). Each tab's content is the section's own
-         view; the live DeathSection sits at index 2. -->
-    <TabControl ItemsSource="{Binding Sections}"
+    <!-- Flat tab strip across the character-workshop sections. Each tab's
+         content is the section's own view. Tabs vary widely in how much room
+         they need (the Bosses grid is far wider than Character Info), so the
+         code-behind snaps the window to the active tab's content on each switch
+         (see CharacterWorkshopWindow.axaml.cs) — hence the x:Name here. -->
+    <TabControl x:Name="SectionTabs"
+                ItemsSource="{Binding Sections}"
                 SelectedItem="{Binding SelectedSection, Mode=TwoWay}"
                 Background="{StaticResource ChromeBgBrush}"
                 Padding="0">

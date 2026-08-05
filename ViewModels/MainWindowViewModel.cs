@@ -653,6 +653,12 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Profile.ProfileMutated     += _ => RebuildGameDataSetsMenu();
         AppServices.Current.Profile.ProfileLoaded      += _ => RebuildGameDataSetsMenu();
 
+        // Seed the terminal right-click Favorites flyout from the starred GOTO
+        // favourites and refresh it whenever they change (Favorites.Changed also
+        // fires on game-data set swaps, so a realm change refreshes too).
+        RebuildFavoritesMenu();
+        AppServices.Current.Favorites.Changed += RebuildFavoritesMenu;
+
         // Apply the loaded profile's persisted scrollback size now — the
         // buffer was constructed with the default; AppServices already
         // populated DisplayConfig from the profile by the time we got here.
@@ -2588,15 +2594,30 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    // Last feed's stat-box presence, tracked so the arm below is rising-edge only.
+    private bool _statBoxOnScreen;
+
     // Per-feed screen watch feeding TrainerMenuTracker's live-screen detection
     // of the character-creation stat box (see the ScreenUpdated wiring in the
-    // ctor). Early-outs once character mode is armed, and pre-filters with an
-    // allocation-free marker scan so the string build below only runs when a
-    // stat box is actually on screen.
+    // ctor). Arms character-mode input only on the RISING edge of the box
+    // appearing — not every feed it's visible.
+    //
+    // Paradigm reuses the "Char. Creation" stat box for in-game `train stats`,
+    // and the box lingers on screen after the user is already back at the in-game
+    // prompt. A level-triggered arm re-armed off that stale box every feed, so the
+    // tracker flapped held→resume→held (the in-game prompt fired InputMenuExited,
+    // then the still-visible box re-armed) — which held the movement engine and
+    // stalled the walker after training (it advanced one room per manual `rm`).
+    // Presence is tracked unconditionally (even while armed) so the falling edge is
+    // seen; the box must actually leave and reappear before it can re-arm.
     private void OnScreenUpdatedForTrainerMenu()
     {
-        if (AppServices.Current.TrainerMenu.IsInputMenuActive) return;
-        if (!ScreenShowsStatBoxMarker()) return;
+        bool onScreen = ScreenShowsStatBoxMarker();
+        bool rising = onScreen && !_statBoxOnScreen;
+        _statBoxOnScreen = onScreen;
+
+        if (!rising) return;
+        if (AppServices.Current.TrainerMenu.IsInputMenuActive) return;   // already armed (e.g. via the `train stats` command)
         AppServices.Current.TrainerMenu.ObserveScreen(BuildVisibleScreenText());
     }
 
@@ -2735,6 +2756,12 @@ public partial class MainWindowViewModel : ObservableObject
         byte[] bytes = System.Text.Encoding.Latin1.GetBytes(text + "\r\n");
         SendUserInput(bytes);
     }
+
+    // Toolbar "EXP" button — send the in-game "exp" command exactly as if the
+    // player typed it (alias expansion + wire send). No-ops harmlessly when
+    // disconnected (SendUserInput drops it with no socket).
+    [RelayCommand]
+    private void SendExp() => SendOneUserLine("exp");
 
     // Heuristic: does line start with a verb that usually moves HP or MA
     // upward? Conservative — false positives just waste a few seconds of
@@ -3524,6 +3551,66 @@ public partial class MainWindowViewModel : ObservableObject
                 isActive: string.Equals(set, active, StringComparison.OrdinalIgnoreCase),
                 switchCommand: new RelayCommand(() => SwitchActiveGameDataSet(set))));
         }
+    }
+
+    // The terminal right-click Favorites flyout — always MaxStarred numbered
+    // slots when any favourite is starred: filled slots first, then "(empty)"
+    // placeholders so the fixed 10-slot layout is always visible.
+    public ObservableCollection<FavoriteMenuItem> Favorites { get; } = new();
+
+    private bool _hasFavorites;
+
+    // Drives the flyout's visibility — the whole submenu hides when nothing is
+    // starred (rather than showing ten empty rows to someone not using it).
+    public bool HasFavorites => _hasFavorites;
+
+    // Rebuild the flyout from the store's starred favourites: resolve each label
+    // (custom label, else the room's graph name), sort by label, then lay them out
+    // as numbered slots 1..MaxStarred — filled slots ("N) name") walk on click, the
+    // remaining slots show "N) (empty)" and render disabled.
+    private void RebuildFavoritesMenu()
+    {
+        var rows = new List<(string label, Game.Map.RoomKey key)>();
+        foreach (FavoriteRoom f in AppServices.Current.Favorites.StarredFavorites())
+        {
+            Game.Map.RoomKey key = new(f.Map, f.Room);
+            string label = !string.IsNullOrWhiteSpace(f.Label)
+                ? f.Label!
+                : AppServices.Current.RoomGraph.GetRoom(key) is { } r ? r.Name : key.ToString();
+            rows.Add((label, key));
+        }
+        rows.Sort((a, b) => string.Compare(a.label, b.label, StringComparison.OrdinalIgnoreCase));
+
+        Favorites.Clear();
+        _hasFavorites = rows.Count > 0;
+        if (_hasFavorites)
+        {
+            for (int slot = 0; slot < FavoritesStore.MaxStarred; slot++)
+            {
+                int number = slot + 1;
+                if (slot < rows.Count)
+                {
+                    Game.Map.RoomKey target = rows[slot].key;
+                    Favorites.Add(new FavoriteMenuItem(
+                        $"{number}) {rows[slot].label}",
+                        new AsyncRelayCommand(() => WalkToFavoriteRoomAsync(target))));
+                }
+                else
+                {
+                    Favorites.Add(new FavoriteMenuItem($"{number}) (empty)", walk: null));
+                }
+            }
+        }
+        OnPropertyChanged(nameof(HasFavorites));
+    }
+
+    // Walk to a starred favourite from the right-click flyout — stop any running
+    // movement engine first, then hand off to the shared route picker (the same
+    // entry point the Navigation manager's Walk buttons use).
+    private async Task WalkToFavoriteRoomAsync(Game.Map.RoomKey key)
+    {
+        MovementStop();
+        await FujinTerm.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, key);
     }
 
     // Flip the active set and persist the user's choice. Active set is a

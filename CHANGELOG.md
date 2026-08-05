@@ -2,6 +2,18 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.30.0
+
+- Terminal right-click menu gains a **Favorites** flyout — star up to 10 Go To destinations and walk there in one click without opening Navigation
+- Star a favourite from the Edit favourite dialog (checkbox, max 10); starred entries show a ★ in the Go To list
+- Bosses tab now shows the **Notes** column (from Manage Bosses) to the right of the Timer column — read-only, resize to read a long one
+- New **Exp** toolbar button sends the in-game `exp` command (add it via Settings → Toolbar; included by default on fresh profiles)
+- Player Workshop window now fits its width to the active tab on each tab switch (wide tabs like Bosses get the room they need, narrow tabs shrink back); height matches the Equipment tab so long lists (Quest, Bosses) scroll instead of ballooning the window — stays freely resizable afterward
+- Fixed the walker stalling after training on Paradigm: the reused "Char. Creation" stat box lingered on screen and kept re-arming character-mode input, holding movement so it advanced only one room per manual `rm`. Character-mode input now arms only when the box first appears, not while it lingers
+- Fixed a mage re-casting its attack spell at the monster it just killed: the spell's own damage line fired an extra combat round-tick that slipped a second cast through, landing on the corpse. Combat spells now cast once per round (like a weapon swing), so the echo can't re-fire
+- Bug report now lists only your starred favourites instead of the entire Go To list, so it stays small
+- bug reports addressed: paradigm-20260805-095320, paradigm-20260805-095546, paradigm-20260805-095653
+
 ## 2.29.0
 
 - New **Bosses** tab in the Player Workshop: the per-realm boss catalog (240 bosses) with respawn timers read from live game data, so they stay correct across game versions

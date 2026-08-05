@@ -47,6 +47,16 @@
                        TextTrimming="CharacterEllipsis"
                        Margin="60,0,0,0"/>
 
+            <CheckBox Content="★  Show in the right-click Favorites menu"
+                      IsChecked="{Binding Starred, Mode=TwoWay}"
+                      IsEnabled="{Binding CanToggleStar}"
+                      Margin="0,6,0,0"/>
+            <TextBlock Text="{Binding StarNote}"
+                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                       FontSize="10"
+                       TextWrapping="Wrap"
+                       Margin="0,-2,0,0"/>
+
             <StackPanel Orientation="Horizontal" Spacing="8"
                         HorizontalAlignment="Center" Margin="0,10,0,0">
                 <Button Content="Save" Width="100"

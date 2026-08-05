@@ -1381,7 +1381,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 : _services.RoomGraph.GetRoom(key) is { } r
                     ? r.Name
                     : key.ToString();
-            entries.Add(new FavoriteRowViewModel(key, label, _services.Favorites.FolderOf(key)));
+            entries.Add(new FavoriteRowViewModel(key, label, _services.Favorites.FolderOf(key), f.Starred));
         }
         entries.Sort((a, b) => string.Compare(a.Label, b.Label, StringComparison.OrdinalIgnoreCase));
         foreach (FavoriteRowViewModel e in entries) Favorites.Add(e);
@@ -1450,13 +1450,19 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private async Task RenameFavoriteAsync(FavoriteRowViewModel? row)
     {
         if (row is null) return;
+        bool alreadyStarred = _services.Favorites.IsStarred(row.Key);
         FavoriteEditDialogViewModel vm = new(
             row.Label, row.Key.Map, row.Key.Room,
-            (m, r) => _services.RoomGraph.GetRoom(new RoomKey(m, r))?.Name);
+            (m, r) => _services.RoomGraph.GetRoom(new RoomKey(m, r))?.Name,
+            starred: alreadyStarred,
+            canStarWhenUnset: _services.Favorites.StarredCount - (alreadyStarred ? 1 : 0) < FavoritesStore.MaxStarred);
         FavoriteEditResult? res = await _services.Dialogs
             .OpenWindowAsync<FavoriteEditDialogViewModel, FavoriteEditResult?>(vm);
         if (res is null) return;  // cancelled
-        _services.Favorites.Edit(row.Key, new RoomKey(res.Map, res.Room), res.Label);
+        RoomKey newKey = new(res.Map, res.Room);
+        // Edit re-keys via Remove+Add (dropping the star), so apply the star after.
+        _services.Favorites.Edit(row.Key, newKey, res.Label);
+        _services.Favorites.SetStarred(newKey, res.Starred);
     }
 
     [RelayCommand]

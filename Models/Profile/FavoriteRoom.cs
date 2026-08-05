@@ -16,6 +16,11 @@ public sealed class FavoriteRoom
     // nodes.
     public string? Folder { get; set; }
 
+    // Marked as a quick-access "favorite" (★) — promoted to the terminal
+    // right-click Favorites flyout. Capped at FavoritesStore.MaxStarred selected
+    // at once; a false default means existing bookmarks stay off the flyout.
+    public bool Starred { get; set; }
+
     public FavoriteRoom() { }
 
     public FavoriteRoom(int map, int room, string? label = null, string? folder = null)
