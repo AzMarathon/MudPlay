@@ -97,6 +97,14 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
+                <!-- Free-text notes from the Manage dialog, shown read-only here.
+                     Trimmed to the column width (resize / widen to read a long
+                     one, or edit it in Manage). Appended after Timer so the
+                     early-window column indices (4-6) the code-behind relabels
+                     stay put. -->
+                <DataGridTextColumn Header="Notes" Width="240" IsReadOnly="True" CanUserSort="False"
+                                    Binding="{ReflectionBinding Notes}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
             </DataGrid.Columns>
         </DataGrid>
 

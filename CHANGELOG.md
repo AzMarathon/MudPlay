@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.30.0
+
+- Bosses tab now shows the **Notes** column (from Manage Bosses) to the right of the Timer column — read-only, resize to read a long one
+- New **Exp** toolbar button sends the in-game `exp` command (add it via Settings → Toolbar; included by default on fresh profiles)
+- Player Workshop window now snaps its width and height to the active tab's content on each tab switch (wide tabs like Bosses get the room they need, narrow tabs shrink back), and stays freely resizable afterward
+
 ## 2.29.0
 
 - New **Bosses** tab in the Player Workshop: the per-realm boss catalog (240 bosses) with respawn timers read from live game data, so they stay correct across game versions

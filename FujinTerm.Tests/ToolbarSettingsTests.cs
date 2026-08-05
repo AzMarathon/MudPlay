@@ -29,6 +29,7 @@ public sealed class ToolbarSettingsTests
         null,
         "OpenParty",
         "OpenBackscroll",
+        "SendExp",
         null,
         "ToggleAllAutoOff",
         "ToggleAutoCombat",

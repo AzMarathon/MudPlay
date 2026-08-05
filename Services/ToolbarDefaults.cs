@@ -27,6 +27,7 @@ public static class ToolbarDefaults
         null,
         "OpenParty",
         "OpenBackscroll",
+        "SendExp",
         null,
         "ToggleAllAutoOff",
         "ToggleAutoCombat",

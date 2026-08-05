@@ -36,6 +36,7 @@ public sealed partial class BossRowViewModel : ObservableObject
     // and tooltip; the rest of the def is edited only in the Manage dialog.
     [ObservableProperty] private string _name = string.Empty;
     public string Rooms { get; set; } = string.Empty;   // "map/room; map/room" — held for the filter
+    public string Notes { get; set; } = string.Empty;   // free-text nuance, edited in the Manage dialog; shown read-only on the tab
 
     [ObservableProperty] private bool _stopBefore;
 
@@ -76,6 +77,7 @@ public sealed partial class BossRowViewModel : ObservableObject
         _suppress = true;
         Name = def.Name;
         Rooms = BossRoomText.Format(def.Rooms);
+        Notes = def.Notes;
         StopBefore = def.StopBefore;
         RespawnType = def.RespawnType;
         RefreshDisplay(realm, respawnHours);

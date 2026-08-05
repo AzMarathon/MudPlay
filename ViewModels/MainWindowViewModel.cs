@@ -2736,6 +2736,12 @@ public partial class MainWindowViewModel : ObservableObject
         SendUserInput(bytes);
     }
 
+    // Toolbar "EXP" button — send the in-game "exp" command exactly as if the
+    // player typed it (alias expansion + wire send). No-ops harmlessly when
+    // disconnected (SendUserInput drops it with no socket).
+    [RelayCommand]
+    private void SendExp() => SendOneUserLine("exp");
+
     // Heuristic: does line start with a verb that usually moves HP or MA
     // upward? Conservative — false positives just waste a few seconds of
     // regen samples; false negatives let a heal pollute the running
