@@ -675,7 +675,9 @@ public static class BugReportBuilder
         if (favorites.Count == 0) sb.Append("_(none)_\n");
         else foreach (var f in favorites)
         {
-            sb.Append("- ").Append(f.Map).Append('/').Append(f.Room);
+            sb.Append("- ");
+            if (f.Starred) sb.Append("★ ");   // quick-access (right-click Favorites flyout)
+            sb.Append(f.Map).Append('/').Append(f.Room);
             if (!string.IsNullOrWhiteSpace(f.Label)) sb.Append(" — ").Append(f.Label);
             if (!string.IsNullOrWhiteSpace(f.Folder)) sb.Append("  (folder: ").Append(f.Folder).Append(')');
             sb.Append('\n');

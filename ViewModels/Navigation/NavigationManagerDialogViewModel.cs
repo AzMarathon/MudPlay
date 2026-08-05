@@ -306,7 +306,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
                 string label = !string.IsNullOrWhiteSpace(f.Label)
                     ? f.Label!
                     : _graph.GetRoom(key) is { } r ? r.Name : key.ToString();
-                entries.Add(new FavoriteRowViewModel(key, label, _favorites.FolderOf(key)));
+                entries.Add(new FavoriteRowViewModel(key, label, _favorites.FolderOf(key), f.Starred));
             }
             entries.Sort((a, b) => string.Compare(a.Label, b.Label, StringComparison.OrdinalIgnoreCase));
             foreach (FavoriteRowViewModel e in entries) Favorites.Add(e);
@@ -400,13 +400,22 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private async Task EditFavoriteAsync(FavoriteRowViewModel? row)
     {
         if (row is null || _favorites is null) return;
+        bool alreadyStarred = _favorites.IsStarred(row.Key);
         FavoriteEditDialogViewModel vm = new(
             row.Label, row.Key.Map, row.Key.Room,
-            (m, r) => _graph.GetRoom(new RoomKey(m, r))?.Name);
+            (m, r) => _graph.GetRoom(new RoomKey(m, r))?.Name,
+            starred: alreadyStarred,
+            // The cap is "other" starred favourites — exclude this one so a starred
+            // 10th can still toggle freely.
+            canStarWhenUnset: _favorites.StarredCount - (alreadyStarred ? 1 : 0) < FavoritesStore.MaxStarred);
         FavoriteEditResult? res = await _dialogs
             .OpenWindowAsync<FavoriteEditDialogViewModel, FavoriteEditResult?>(vm);
         if (res is null) return;
-        _favorites.Edit(row.Key, new RoomKey(res.Map, res.Room), res.Label);
+        RoomKey newKey = new(res.Map, res.Room);
+        // Edit re-keys via Remove+Add (dropping the star), so apply the star to the
+        // final key after the edit lands.
+        _favorites.Edit(row.Key, newKey, res.Label);
+        _favorites.SetStarred(newKey, res.Starred);
     }
 
     [RelayCommand]

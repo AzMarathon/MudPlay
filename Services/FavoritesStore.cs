@@ -21,6 +21,10 @@ namespace FujinTerm.Services;
 // room's graph display name (so the GOTO row still reads sensibly).
 public sealed class FavoritesStore
 {
+    // How many favourites may be starred (shown in the terminal right-click
+    // Favorites flyout) at once. Enforced on the write side by SetStarred.
+    public const int MaxStarred = 10;
+
     private readonly GameDataCache _cache;
     private readonly LogService? _log;
     private readonly Dictionary<RoomKey, FavoriteRoom> _favorites = new();
@@ -48,6 +52,37 @@ public sealed class FavoritesStore
 
     // True when key is currently bookmarked.
     public bool IsFavorite(RoomKey key) => _favorites.ContainsKey(key);
+
+    // True when key is a starred quick-access favourite.
+    public bool IsStarred(RoomKey key) => _favorites.TryGetValue(key, out FavoriteRoom? f) && f.Starred;
+
+    // How many favourites are starred right now.
+    public int StarredCount => _favorites.Values.Count(f => f.Starred);
+
+    // The starred favourites (uncapped; the flyout caps the display at MaxStarred
+    // as a safety net for a hand-edited Favorites.json). Order is unspecified —
+    // the flyout resolves display names and sorts.
+    public IReadOnlyList<FavoriteRoom> StarredFavorites() =>
+        _favorites.Values.Where(f => f.Starred).ToList();
+
+    // Toggle key's quick-access star. Persists + fires Changed on a real change.
+    // Returns false without changing anything when turning the star ON would push
+    // past MaxStarred (the write-side cap), when the key isn't bookmarked, or when
+    // no set is active. Turning OFF and no-op re-sets (already in the wanted state)
+    // return true.
+    public bool SetStarred(RoomKey key, bool starred)
+    {
+        if (_setName is null) return false;
+        if (!_favorites.TryGetValue(key, out FavoriteRoom? entry)) return false;
+        if (entry.Starred == starred) return true;
+        if (starred && StarredCount >= MaxStarred) return false;
+
+        entry.Starred = starred;
+        Persist();
+        _log?.Info("Favorites", $"{(starred ? "starred" : "unstarred")} {key}");
+        Changed?.Invoke();
+        return true;
+    }
 
     // Normalised folder path of key, or string.Empty (root / not a favourite).
     public string FolderOf(RoomKey key) =>

@@ -4,6 +4,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 2.30.0
 
+- Terminal right-click menu gains a **Favorites** flyout — star up to 10 Go To destinations and walk there in one click without opening Navigation
+- Star a favourite from the Edit favourite dialog (checkbox, max 10); starred entries show a ★ in the Go To list
 - Bosses tab now shows the **Notes** column (from Manage Bosses) to the right of the Timer column — read-only, resize to read a long one
 - New **Exp** toolbar button sends the in-game `exp` command (add it via Settings → Toolbar; included by default on fresh profiles)
 - Player Workshop window now fits its width to the active tab on each tab switch (wide tabs like Bosses get the room they need, narrow tabs shrink back); height matches the Equipment tab so long lists (Quest, Bosses) scroll instead of ballooning the window — stays freely resizable afterward

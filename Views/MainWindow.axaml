@@ -514,6 +514,23 @@
                                  VerticalAlignment="Center">
                 <ctl:TerminalControl.ContextMenu>
                     <ContextMenu>
+                        <!-- Quick-access GOTO favourites — the ones starred in the
+                             Go To list. Each item walks there on click. The whole
+                             submenu (and its trailing separator) hides when nothing
+                             is starred. Items are self-contained (each carries its
+                             own Walk command), so ItemsSource binding works without
+                             reaching the parent VM; ReflectionBinding sidesteps the
+                             compiled-binding DataType on the generated child items. -->
+                        <MenuItem Header="Favorites" IsVisible="{Binding HasFavorites}"
+                                  ItemsSource="{Binding Favorites}">
+                            <MenuItem.ItemContainerTheme>
+                                <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                    <Setter Property="Header"  Value="{ReflectionBinding Label}"/>
+                                    <Setter Property="Command" Value="{ReflectionBinding Walk}"/>
+                                </ControlTheme>
+                            </MenuItem.ItemContainerTheme>
+                        </MenuItem>
+                        <Separator IsVisible="{Binding HasFavorites}"/>
                         <!-- Panel quick-opens — the windows most useful to reach
                              from a right-click on the canvas. -->
                         <MenuItem Header="Open Backscroll"      InputGesture="{Binding BackscrollGesture}"   Command="{Binding OpenBackscrollCommand}"/>

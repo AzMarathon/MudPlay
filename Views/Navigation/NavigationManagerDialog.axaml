@@ -538,24 +538,30 @@
                                             <!-- Favourite leaf — Walk / Edit / delete. -->
                                             <DataTemplate DataType="vm:FavoriteRowViewModel">
                                                 <Border Classes="ManagerRow" Background="Transparent" Tag="{Binding}">
-                                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6" MinWidth="0">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6" MinWidth="0">
                                                         <TextBlock Grid.Column="0"
+                                                                   Text="★"
+                                                                   VerticalAlignment="Center"
+                                                                   IsVisible="{Binding IsStarred}"
+                                                                   Foreground="{StaticResource AccentAmberBrush}"
+                                                                   ToolTip.Tip="In the right-click Favorites menu"/>
+                                                        <TextBlock Grid.Column="1"
                                                                    Text="{Binding Label}"
                                                                    VerticalAlignment="Center"
                                                                    Foreground="{StaticResource ChromeFgBrush}"
                                                                    TextTrimming="CharacterEllipsis"/>
-                                                        <Button Grid.Column="1"
+                                                        <Button Grid.Column="2"
                                                                 Content="Walk" FontSize="10" Padding="8,2"
                                                                 Foreground="{StaticResource AccentGreenBrush}"
                                                                 ToolTip.Tip="Walk to this favourite now (closes this window)"
                                                                 Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).WalkToFavoriteCommand}"
                                                                 CommandParameter="{Binding}"/>
-                                                        <Button Grid.Column="2"
+                                                        <Button Grid.Column="3"
                                                                 Content="Edit" FontSize="10" Padding="8,2"
                                                                 ToolTip.Tip="Edit favourite (name / map / room)"
                                                                 Command="{Binding $parent[TreeView].((vm:NavigationManagerDialogViewModel)DataContext).EditFavoriteCommand}"
                                                                 CommandParameter="{Binding}"/>
-                                                        <Button Grid.Column="3"
+                                                        <Button Grid.Column="4"
                                                                 Content="✕" FontSize="10" Padding="6,2"
                                                                 Foreground="{StaticResource AccentRedBrush}"
                                                                 ToolTip.Tip="Delete favourite"

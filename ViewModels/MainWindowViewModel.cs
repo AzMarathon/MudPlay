@@ -653,6 +653,12 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Profile.ProfileMutated     += _ => RebuildGameDataSetsMenu();
         AppServices.Current.Profile.ProfileLoaded      += _ => RebuildGameDataSetsMenu();
 
+        // Seed the terminal right-click Favorites flyout from the starred GOTO
+        // favourites and refresh it whenever they change (Favorites.Changed also
+        // fires on game-data set swaps, so a realm change refreshes too).
+        RebuildFavoritesMenu();
+        AppServices.Current.Favorites.Changed += RebuildFavoritesMenu;
+
         // Apply the loaded profile's persisted scrollback size now — the
         // buffer was constructed with the default; AppServices already
         // populated DisplayConfig from the profile by the time we got here.
@@ -3530,6 +3536,49 @@ public partial class MainWindowViewModel : ObservableObject
                 isActive: string.Equals(set, active, StringComparison.OrdinalIgnoreCase),
                 switchCommand: new RelayCommand(() => SwitchActiveGameDataSet(set))));
         }
+    }
+
+    // Starred GOTO favourites shown in the terminal right-click Favorites flyout.
+    public ObservableCollection<FavoriteMenuItem> Favorites { get; } = new();
+
+    // Drives the flyout's visibility — an empty submenu is hidden entirely.
+    public bool HasFavorites => Favorites.Count > 0;
+
+    // Rebuild the flyout from the store's starred favourites: resolve each label
+    // (custom label, else the room's graph name), sort by label, and cap the
+    // display at MaxStarred (a safety net — SetStarred already caps the write side).
+    private void RebuildFavoritesMenu()
+    {
+        var rows = new List<(string label, Game.Map.RoomKey key)>();
+        foreach (FavoriteRoom f in AppServices.Current.Favorites.StarredFavorites())
+        {
+            Game.Map.RoomKey key = new(f.Map, f.Room);
+            string label = !string.IsNullOrWhiteSpace(f.Label)
+                ? f.Label!
+                : AppServices.Current.RoomGraph.GetRoom(key) is { } r ? r.Name : key.ToString();
+            rows.Add((label, key));
+        }
+        rows.Sort((a, b) => string.Compare(a.label, b.label, StringComparison.OrdinalIgnoreCase));
+
+        Favorites.Clear();
+        int shown = 0;
+        foreach ((string label, Game.Map.RoomKey key) in rows)
+        {
+            if (shown++ >= FavoritesStore.MaxStarred) break;
+            Game.Map.RoomKey target = key;
+            Favorites.Add(new FavoriteMenuItem(
+                label, new AsyncRelayCommand(() => WalkToFavoriteRoomAsync(target))));
+        }
+        OnPropertyChanged(nameof(HasFavorites));
+    }
+
+    // Walk to a starred favourite from the right-click flyout — stop any running
+    // movement engine first, then hand off to the shared route picker (the same
+    // entry point the Navigation manager's Walk buttons use).
+    private async Task WalkToFavoriteRoomAsync(Game.Map.RoomKey key)
+    {
+        MovementStop();
+        await FujinTerm.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, key);
     }
 
     // Flip the active set and persist the user's choice. Active set is a
