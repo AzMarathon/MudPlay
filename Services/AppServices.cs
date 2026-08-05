@@ -3930,6 +3930,22 @@ public sealed class AppServices
             RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0)?.MandatoryItems
                 ?? Array.Empty<int>());
 
+        // Boss "stop before" rooms — the walker halts one room short of any boss
+        // room flagged StopBefore on the active realm. Resolved live so realm swaps
+        // + tab edits take effect without re-wiring; only the point-to-point walker
+        // consults it (loops / auto-lair route through boss rooms untouched).
+        Walker.SetBossStopRooms(() =>
+        {
+            var set = new HashSet<Game.Map.RoomKey>();
+            foreach (Models.Profile.BossDef b in Bosses.ResolveForRealm(GameData.ActiveRealm))
+            {
+                if (!b.StopBefore) continue;
+                foreach (string wire in b.Rooms)
+                    if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k)) set.Add(k);
+            }
+            return set;
+        });
+
         // If an in-flight move carried us out of a room where combat had just
         // engaged an actionable hostile (the move confirms + wipes the room
         // before the kill lands), halt the walk so it doesn't keep going deeper

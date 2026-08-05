@@ -1620,4 +1620,61 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains("a required item you're missing (gate key)", failed.Detail);
         Assert.DoesNotContain("a level requirement", failed.Detail);
     }
+
+    // ----- boss "stop before" ---------------------------------------
+
+    [Fact]
+    public void WalkTo_StopBeforeBossRoom_HaltsOneRoomShort()
+    {
+        // 1/1 → 1/2 → 1/3, with 1/3 flagged "stop before". A walk to 1/3 must be
+        // re-pointed to 1/2 and finish there without ever stepping into 1/3.
+        Harness h = NewHarness();
+        h.Walker.SetBossStopRooms(() => new HashSet<RoomKey> { new(1, 3) });
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));   // first hop toward 1/2
+
+        // Arrive at 1/2 — the walk finishes here; no second N into 1/3.
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Single(h.Sent);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+    }
+
+    [Fact]
+    public void WalkTo_StopBeforeBossRoom_Adjacent_FinishesWithoutStepping()
+    {
+        // Standing next to the boss room (1/2, boss at 1/3): "one room short" is
+        // the source itself, so the walk finishes immediately with nothing sent.
+        Harness h = NewHarness();
+        h.Walker.SetBossStopRooms(() => new HashSet<RoomKey> { new(1, 3) });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void WalkTo_NonFlaggedRoom_UnaffectedByStopBefore()
+    {
+        // A different room is flagged; the walk to 1/3 runs the full two hops.
+        Harness h = NewHarness();
+        h.Walker.SetBossStopRooms(() => new HashSet<RoomKey> { new(1, 1) });
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Equal(2, h.Sent.Count);   // stepped into 1/2 and on toward 1/3
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("C",
+            new HashSet<Direction> { Direction.S }));
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+    }
 }
