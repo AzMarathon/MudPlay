@@ -1,0 +1,60 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="820" d:DesignHeight="560"
+        x:Class="FujinTerm.Views.CharacterWorkshop.ManageBossesDialog"
+        x:DataType="vm:ManageBossesDialogViewModel"
+        Title="Manage bosses"
+        Width="820" Height="560"
+        MinWidth="560" MinHeight="360"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="18">
+        <TextBlock Grid.Row="0" Text="{Binding HeaderText}"
+                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <TextBlock Grid.Row="1"
+                   Text="Add, edit, or remove bosses for this realm. Rooms are 'map/room' pairs, separated by ';'. Changes save to this realm's set and are shared across your characters."
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+        <DataGrid Grid.Row="2"
+                  ItemsSource="{Binding Rows}"
+                  SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                  Background="{StaticResource ChromeBgSunkenBrush}"
+                  BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"
+                  IsReadOnly="False"
+                  AutoGenerateColumns="False"
+                  CanUserSortColumns="True"
+                  CanUserResizeColumns="True"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Boss"
+                                    Binding="{ReflectionBinding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="200"/>
+                <DataGridTextColumn Header="Rooms (map/room; …)"
+                                    Binding="{ReflectionBinding Rooms, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="200" FontFamily="{StaticResource FontMono}"/>
+                <DataGridCheckBoxColumn Header="Cleanup"
+                                        Binding="{ReflectionBinding IsCleanup, Mode=TwoWay}" Width="80"/>
+                <DataGridCheckBoxColumn Header="Exact"
+                                        Binding="{ReflectionBinding ExactSpawn, Mode=TwoWay}" Width="70"/>
+                <DataGridCheckBoxColumn Header="Stop before"
+                                        Binding="{ReflectionBinding StopBefore, Mode=TwoWay}" Width="90"/>
+                <DataGridCheckBoxColumn Header="Stock"
+                                        Binding="{ReflectionBinding InStock, Mode=TwoWay}" Width="70"/>
+                <DataGridCheckBoxColumn Header="ParaMUD"
+                                        Binding="{ReflectionBinding InParadigm, Mode=TwoWay}" Width="80"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,12,0,0">
+            <Button Grid.Column="0" Content="Add boss" Command="{Binding AddRowCommand}" Margin="0,0,8,0"/>
+            <Button Grid.Column="1" Content="Remove selected" Command="{Binding RemoveRowCommand}"/>
+            <Button Grid.Column="3" Content="Cancel" Command="{Binding CancelCommand}" MinWidth="80" Margin="0,0,8,0"/>
+            <Button Grid.Column="4" Content="Save" Command="{Binding SaveCommand}" MinWidth="80" IsDefault="True"/>
+        </Grid>
+    </Grid>
+</Window>

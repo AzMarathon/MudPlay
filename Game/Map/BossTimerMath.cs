@@ -27,6 +27,26 @@ public static class BossTimerMath
             : new[] { 0.875, 1.0 };
     }
 
+    // The early spawn fractions (excluding the guaranteed 100%) in the tab's
+    // left-to-right column order, matching the spreadsheet: Paradigm 5% / 10% / 20%
+    // off (fractions 0.95, 0.90, 0.80); Stock the single 87.5% point. Exact-spawn
+    // bosses have none. Each column counts down to its fraction and blanks once
+    // that moment passes.
+    public static IReadOnlyList<double> EarlyFractionsInDisplayOrder(RealmType realm, bool exactSpawn)
+    {
+        if (exactSpawn) return Array.Empty<double>();
+        return realm == RealmType.ParaMud
+            ? new[] { 0.95, 0.90, 0.80 }
+            : new[] { 0.875 };
+    }
+
+    // Column header labels paired with EarlyFractionsInDisplayOrder — "5%" / "10%" /
+    // "20%" for Paradigm, "87.5%" for Stock.
+    public static IReadOnlyList<string> EarlyColumnLabels(RealmType realm)
+        => realm == RealmType.ParaMud
+            ? new[] { "5%", "10%", "20%" }
+            : new[] { "87.5%" };
+
     // Label for a spawn fraction, matching how the realm expresses it: Paradigm
     // names the early points by discount off the full timer ("-20%", "-10%",
     // "-5%"), Stock names its single watch point by elapsed fraction ("87.5%").

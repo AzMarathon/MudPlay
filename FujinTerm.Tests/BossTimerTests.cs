@@ -12,6 +12,7 @@ using FujinTerm.Models.GameData;
 using FujinTerm.Models.Profile;
 using FujinTerm.Services;
 using FujinTerm.Services.Patterns;
+using FujinTerm.ViewModels.CharacterWorkshop;
 using Xunit;
 
 namespace FujinTerm.Tests;
@@ -358,5 +359,185 @@ public sealed class BossTimerTests : IDisposable
         var (engine, _) = SetupHandler(RealmType.ParaMud, ("crimson mist", 10, 12));
         engine.DispatchForTests(Telepath("@timer crimson"));
         Assert.Equal("expired", Reply(engine));
+    }
+
+    // ----- mark-time + display-order helpers ---------------------------------
+
+    [Fact]
+    public void MarkKilled_WithExplicitTime_StoresThatInstant()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        var when = new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
+        timers.MarkKilled("ogre king", when);
+        Assert.Equal(when, timers.KilledAt("ogre king"));
+    }
+
+    [Fact]
+    public void EarlyFractionsAndLabels_AreRealmSpecific()
+    {
+        Assert.Equal(new[] { 0.95, 0.90, 0.80 }, BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.ParaMud, false));
+        Assert.Equal(new[] { 0.875 }, BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.Stock, false));
+        Assert.Empty(BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.ParaMud, exactSpawn: true));
+        Assert.Equal(new[] { "5%", "10%", "20%" }, BossTimerMath.EarlyColumnLabels(RealmType.ParaMud));
+        Assert.Equal(new[] { "87.5%" }, BossTimerMath.EarlyColumnLabels(RealmType.Stock));
+    }
+
+    // ----- row VM live columns (blank-when-expired) --------------------------
+
+    private BossRowViewModel Row(BossTimerStore timers, RealmType realm, int hours, bool exact = false)
+    {
+        var def = Boss("ogre king", number: 50, exact: exact, rooms: "3/300");
+        return new BossRowViewModel(def, realm, hours, timers, () => { }, _ => { });
+    }
+
+    [Fact]
+    public void Row_EarlyWindow_BlanksOncePassed_WhileFullStillCounts()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+        BossRowViewModel row = Row(timers, RealmType.ParaMud, 24);
+
+        // Killed 20h ago on a 24h timer: 20% window (19.2h) has passed; 10% (21.6h)
+        // and 5% (22.8h) are still counting, as is 100% (24h).
+        timers.MarkKilled("ogre king", DateTimeOffset.UtcNow - TimeSpan.FromHours(20));
+        row.RefreshStatus();
+
+        Assert.True(row.IsActive);
+        Assert.NotEqual(string.Empty, row.StatusDisplay);
+        Assert.NotEqual(string.Empty, row.Early1Display);   // 5% — pending
+        Assert.NotEqual(string.Empty, row.Early2Display);   // 10% — pending
+        Assert.Equal(string.Empty, row.Early3Display);      // 20% — passed
+    }
+
+    [Fact]
+    public void Row_NearFull_AllEarlyWindowsBlank_FullStillCounts()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+        BossRowViewModel row = Row(timers, RealmType.ParaMud, 24);
+
+        // 23h elapsed: every early window (19.2 / 21.6 / 22.8h) has passed; only the
+        // 100% guaranteed spawn is still counting.
+        timers.MarkKilled("ogre king", DateTimeOffset.UtcNow - TimeSpan.FromHours(23));
+        row.RefreshStatus();
+
+        Assert.True(row.IsActive);
+        Assert.NotEqual(string.Empty, row.StatusDisplay);
+        Assert.Equal(string.Empty, row.Early1Display);
+        Assert.Equal(string.Empty, row.Early2Display);
+        Assert.Equal(string.Empty, row.Early3Display);
+    }
+
+    [Fact]
+    public void Row_PastFullTimer_IsInactive_AllBlank()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+        BossRowViewModel row = Row(timers, RealmType.ParaMud, 24);
+
+        timers.MarkKilled("ogre king", DateTimeOffset.UtcNow - TimeSpan.FromHours(25));
+        row.RefreshStatus();
+
+        Assert.False(row.IsActive);
+        Assert.Equal(string.Empty, row.StatusDisplay);
+        Assert.Equal(long.MaxValue, row.FullSortKey);
+    }
+
+    // ----- Mark + Manage dialogs (VM logic) ----------------------------------
+
+    [Fact]
+    public void MarkDialog_Ok_ReturnsCombinedDateAndTime()
+    {
+        var vm = new MarkTimerDialogViewModel("ogre king", new DateTimeOffset(2026, 8, 1, 10, 30, 0, TimeSpan.Zero));
+        DateTimeOffset? got = null;
+        bool fired = false;
+        vm.CloseRequested += r => { got = r; fired = true; };
+
+        vm.OkCommand.Execute(null);
+
+        Assert.True(fired);
+        Assert.NotNull(got);
+        Assert.Equal(2026, got!.Value.Year);
+        Assert.Equal(10, got.Value.Hour);
+        Assert.Equal(30, got.Value.Minute);
+    }
+
+    [Fact]
+    public void MarkDialog_Cancel_ReturnsNull()
+    {
+        var vm = new MarkTimerDialogViewModel("ogre king", DateTimeOffset.Now);
+        bool fired = false;
+        DateTimeOffset? got = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        vm.CloseRequested += r => { got = r; fired = true; };
+
+        vm.CancelCommand.Execute(null);
+
+        Assert.True(fired);
+        Assert.Null(got);
+    }
+
+    [Fact]
+    public void ManageDialog_Add_Save_PersistsNewBoss()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (bosses, _, cache) = NewStores();
+        var vm = new ManageBossesDialogViewModel(bosses, cache);
+
+        Assert.Single(vm.Rows);   // ogre king loaded for the realm
+        vm.AddRowCommand.Execute(null);
+        ManageBossRowViewModel added = vm.Rows.Last();
+        added.Name = "new boss";
+        added.Rooms = "1/100";
+        added.InParadigm = true;
+
+        bool? closed = null;
+        vm.CloseRequested += r => closed = r;
+        vm.SaveCommand.Execute(null);
+
+        Assert.True(closed);
+        Assert.Contains(bosses.Resolve(), b => b.Name == "new boss");
+    }
+
+    [Fact]
+    public void ManageDialog_Remove_Save_DropsBoss()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1), ("chimera", 60, 12, 1));
+        SeedBosses(
+            Boss("ogre king", number: 50, rooms: "3/300"),
+            Boss("chimera", number: 60, rooms: "3/583"));
+        var (bosses, _, cache) = NewStores();
+        var vm = new ManageBossesDialogViewModel(bosses, cache);
+
+        ManageBossRowViewModel drop = vm.Rows.First(r => r.Name == "chimera");
+        vm.RemoveRowCommand.Execute(drop);
+        vm.SaveCommand.Execute(null);
+
+        Assert.DoesNotContain(bosses.Resolve(), b => b.Name == "chimera");
+        Assert.Contains(bosses.Resolve(), b => b.Name == "ogre king");
+    }
+
+    [Fact]
+    public void ManageDialog_Cancel_ReturnsFalse_NoWrite()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (bosses, _, cache) = NewStores();
+        var vm = new ManageBossesDialogViewModel(bosses, cache);
+
+        vm.AddRowCommand.Execute(null);
+        vm.Rows.Last().Name = "should not persist";
+        bool? closed = null;
+        vm.CloseRequested += r => closed = r;
+        vm.CancelCommand.Execute(null);
+
+        Assert.False(closed);
+        Assert.DoesNotContain(bosses.Resolve(), b => b.Name == "should not persist");
     }
 }

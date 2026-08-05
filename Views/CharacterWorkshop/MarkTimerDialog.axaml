@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="220"
+        x:Class="FujinTerm.Views.CharacterWorkshop.MarkTimerDialog"
+        x:DataType="vm:MarkTimerDialogViewModel"
+        Title="Mark boss timer"
+        Width="400" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="20">
+        <TextBlock Grid.Row="0"
+                   Text="{Binding HeaderText}"
+                   FontSize="13" FontWeight="SemiBold"
+                   Margin="0,0,0,6" TextWrapping="Wrap"/>
+
+        <TextBlock Grid.Row="1"
+                   Text="Defaults to now — adjust the date and time to back-date the kill."
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   FontSize="11" Margin="0,0,0,16" TextWrapping="Wrap"/>
+
+        <Grid Grid.Row="2" ColumnDefinitions="60,*" RowDefinitions="Auto,Auto"
+              RowSpacing="10" ColumnSpacing="10" Margin="0,0,0,20">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Date" VerticalAlignment="Center"/>
+            <DatePicker Grid.Row="0" Grid.Column="1" HorizontalAlignment="Left"
+                        SelectedDate="{Binding SelectedDate, Mode=TwoWay}"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Time" VerticalAlignment="Center"/>
+            <TimePicker Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left"
+                        ClockIdentifier="24HourClock"
+                        SelectedTime="{Binding SelectedTime, Mode=TwoWay}"/>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Cancel" Command="{Binding CancelCommand}" MinWidth="80"/>
+            <Button Content="OK" Command="{Binding OkCommand}" MinWidth="80" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

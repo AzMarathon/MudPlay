@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,12 +16,9 @@ using FujinTerm.Views.CharacterWorkshop;
 namespace FujinTerm.ViewModels.CharacterWorkshop;
 
 // BOSSES section — the per-realm boss list from BossStore, with respawn timers
-// resolved from game data (BossCatalog.ResolveRegenHours). Realm-filtered (Stock
-// hides Paradigm-only bosses) and realm-modeled (Stock shows the 87.5% early
-// window; Paradigm shows −5/−10/−20%). The user can edit rooms + the StopBefore /
-// ExactSpawn flags, add a custom boss, or remove one; every edit auto-saves to the
-// set overlay (CP-tab convention). Live respawn timers + kill detection follow in a
-// later phase; this tab is the editable catalog.
+// resolved from game data. The table is read-mostly: StopBefore toggles inline and
+// per-row Mark / Reset drive the timer; adding / editing / removing bosses happens
+// in the Manage Bosses dialog. Live countdowns refresh on the heartbeat.
 public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
 {
     private readonly BossStore _bosses;
@@ -40,10 +38,6 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
     [ObservableProperty] private bool _isParadigmRealm;
     [ObservableProperty] private bool _hasBosses;
     [ObservableProperty] private string _activeSummary = string.Empty;
-
-    // "Add boss" inputs.
-    [ObservableProperty] private string _newBossName = string.Empty;
-    [ObservableProperty] private string _newBossRooms = string.Empty;
 
     public BossesSectionViewModel(GameDataCache gameData, BossStore bosses, BossTimerStore timers, TickEngine tick)
     {
@@ -70,9 +64,6 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
 
     private void OnActiveSetChanged(string? _) => Rebuild();
 
-    // A kill (auto or remote @-command) or reset changed the tracked set — refresh
-    // every row's live status. Changed fires off the line-emitting thread, so hop
-    // to the UI thread before touching observable state.
     private void OnTimersChanged()
     {
         if (Dispatcher.UIThread.CheckAccess()) RefreshStatuses();
@@ -105,32 +96,25 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
             int? hrs = def.RespawnType == BossRespawnType.Timed
                 ? BossCatalog.ResolveRegenHours(_gameData, def.Name)
                 : null;
-            Rows.Add(new BossRowViewModel(def, realm, hrs, _timers, OnRowEdited));
+            Rows.Add(new BossRowViewModel(def, realm, hrs, _timers, OnRowEdited, OnMarkRequested));
         }
         HasBosses = Rows.Count > 0;
         _suppress = false;
         UpdateSummary();
     }
 
-    // Any row edit persists the whole list as an overlay delta, then refreshes the
-    // computed columns (a name/rooms edit can change the resolved timer).
+    // StopBefore toggled inline → persist the whole list as an overlay delta.
     private void OnRowEdited()
     {
         if (_suppress) return;
         Persist();
-        RealmType realm = _gameData.ActiveRealm;
-        foreach (BossRowViewModel row in Rows)
-            row.RefreshDisplay(realm, row.RespawnType == BossRespawnType.Timed
-                ? BossCatalog.ResolveRegenHours(_gameData, row.Name)
-                : null);
     }
 
-    // Persist the whole boss list. The visible rows FULLY govern the active realm
-    // (so a removal on this realm actually drops the boss), while bosses belonging
-    // only to the OTHER realm are carried through untouched — saving from a Stock
-    // session must not delete Paradigm-only bosses, and vice-versa. A boss shared by
-    // both realms is governed by the visible rows (edits + removals apply globally,
-    // matching the shared, realm-wide store).
+    // Persist the visible rows over the full resolved list. The visible rows fully
+    // govern the active realm; the other realm's bosses are carried through
+    // untouched. (Add / edit / remove of names + rooms goes through the Manage
+    // dialog, which re-saves and triggers a rebuild; this path only carries a
+    // StopBefore toggle.)
     private void Persist()
     {
         RealmType realm = _gameData.ActiveRealm;
@@ -149,37 +133,32 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
         _bosses.Save(merged);
     }
 
-    [RelayCommand]
-    private void AddBoss()
+    // Row's Mark button — open the modeless mark-time dialog (defaults to now,
+    // user-editable) and stamp the chosen time on commit.
+    private async void OnMarkRequested(BossRowViewModel row)
     {
-        string name = NewBossName.Trim().ToLowerInvariant();
-        if (name.Length == 0) return;
-        RealmType realm = _gameData.ActiveRealm;
-        var def = new BossDef
+        DateTimeOffset? at = await AppServices.Current.Dialogs
+            .OpenWindowAsync<MarkTimerDialogViewModel, DateTimeOffset?>(
+                new MarkTimerDialogViewModel(row.Name, DateTimeOffset.Now));
+        if (at is { } when)
         {
-            Name = name,
-            MonsterNumber = null,
-            Rooms = new List<string>(),
-            InStock = realm != RealmType.ParaMud,
-            InParadigm = realm == RealmType.ParaMud,
-            RespawnType = BossRespawnType.Timed,
-        };
-        var row = new BossRowViewModel(def, realm, BossCatalog.ResolveRegenHours(_gameData, name), _timers, OnRowEdited)
-        { Rooms = NewBossRooms };
-        Rows.Add(row);
-        HasBosses = true;
-        NewBossName = string.Empty;
-        NewBossRooms = string.Empty;
-        OnRowEdited();
+            _timers.MarkKilled(row.Name.Trim().ToLowerInvariant(), when);
+            RefreshStatuses();
+        }
     }
 
     [RelayCommand]
-    private void RemoveRow(BossRowViewModel? row)
+    private async Task ManageBosses()
     {
-        row ??= SelectedRow;
-        if (row is null) return;
-        Rows.Remove(row);
-        HasBosses = Rows.Count > 0;
-        OnRowEdited();
+        bool saved = await AppServices.Current.Dialogs
+            .OpenWindowAsync<ManageBossesDialogViewModel, bool>(
+                new ManageBossesDialogViewModel(_bosses, _gameData));
+        if (saved) Rebuild();
+    }
+
+    [RelayCommand]
+    private void ResetSelected()
+    {
+        if (SelectedRow is { } row) { _timers.Reset(row.Name.Trim().ToLowerInvariant()); RefreshStatuses(); }
     }
 }

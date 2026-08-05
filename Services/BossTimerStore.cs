@@ -65,14 +65,17 @@ public sealed class BossTimerStore
     public DateTimeOffset? KilledAt(string name)
         => _killed.TryGetValue(name, out DateTimeOffset at) ? at : null;
 
-    // Stamp a kill at now (UTC) and persist. Used by auto-detection and the tab's
-    // manual "mark killed" button.
-    public void MarkKilled(string name)
+    // Stamp a kill at now (UTC) and persist. Used by auto-detection.
+    public void MarkKilled(string name) => MarkKilled(name, DateTimeOffset.UtcNow);
+
+    // Stamp a kill at a specific time and persist. Used by the tab's manual "Mark"
+    // dialog, where the user can back-date the kill.
+    public void MarkKilled(string name, DateTimeOffset at)
     {
         if (string.IsNullOrWhiteSpace(name)) return;
-        _killed[name] = DateTimeOffset.UtcNow;
+        _killed[name] = at.ToUniversalTime();
         Persist();
-        _log?.Info("Bosses", $"timer started for '{name}'");
+        _log?.Info("Bosses", $"timer set for '{name}' at {at.ToUniversalTime():u}");
         Changed?.Invoke();
     }
 

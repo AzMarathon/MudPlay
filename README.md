@@ -3,9 +3,9 @@
 <!-- current-version:start -->
 > **Version 2.29.0**
 > - New **Bosses** tab in the Player Workshop: the per-realm boss catalog (241 bosses) with respawn timers read from live game data, so they stay correct across game versions
-> - Respawn column shows the game-data timer; the early-window column reflects the active realm — Stock's 87.5% watch point, Paradigm's −5 / −10 / −20% points (exact-spawn bosses like Lord of the Hunt / Crimson Mist show no early window)
-> - Editable: add or remove a boss, edit its room list, and toggle per-boss "stop before" (walk-to halts one room short) and "exact spawn"; edits auto-save per realm and are shared across your characters
-> - Live respawn countdown per boss — auto-started when a tracked boss is killed in one of its rooms, with manual "killed" / "reset" buttons; timers persist across restart and are shared per realm
+> - Live per-window countdowns: a 100% guaranteed-respawn column plus the realm's earlier spawn windows — Paradigm's 5 / 10 / 20%-off points in their own columns, collapsing to Stock's single 87.5% column — each counting down and blanking once that window has passed; sortable by boss, respawn, and each timer
+> - Per-row **Mark** sets or back-dates a kill time via a date-time dialog, **Reset** clears it; timers also auto-start on a detected kill, persist across restart, and are shared per realm
+> - **Manage Bosses** dialog to add / edit / remove entries (name, rooms, respawn type, exact-spawn, realm flags); "stop before" toggles inline in the table (walk-to halts one room short of a flagged boss room)
 > - New `@timer` remote command reports the boss timers being tracked: no argument lists them all (name, time to full, next window), `@timer <name>` filters by name substring, and a boss you aren't holding replies "expired"
 > - Walk-to now honours per-boss "stop before": a walk (map click / GOTO / @goto / recovery) to a flagged boss room halts one room short instead of stepping in and triggering the spawn — loops and Auto-Lair are unaffected
 >
