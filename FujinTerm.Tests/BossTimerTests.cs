@@ -1,0 +1,335 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using FujinTerm.Game;
+using FujinTerm.Game.Combat;
+using FujinTerm.Game.Map;
+using FujinTerm.Game.Remote;
+using FujinTerm.Models.GameData;
+using FujinTerm.Models.Profile;
+using FujinTerm.Services;
+using FujinTerm.Services.Patterns;
+using Xunit;
+
+namespace FujinTerm.Tests;
+
+// Boss respawn-timer math (per realm, expiry, exact-spawn), the persisted
+// BossTimerStore (mark / reset / kill-detection / active list), and the @timer
+// remote report (format / substring filter / "expired").
+public sealed class BossTimerTests : IDisposable
+{
+    private readonly string _set = "boss-timer-test-" + Path.GetRandomFileName();
+    private readonly string _seedPath =
+        Path.Combine(Path.GetTempPath(), "bts-" + Path.GetRandomFileName() + ".json");
+
+    public void Dispose()
+    {
+        try { string d = AppPaths.GameDataSetDir(_set); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
+        try { if (File.Exists(_seedPath)) File.Delete(_seedPath); } catch { }
+    }
+
+    // ----- BossTimerMath (pure) ---------------------------------------------
+
+    [Theory]
+    [InlineData(0.80, "-20%")]
+    [InlineData(0.90, "-10%")]
+    [InlineData(0.95, "-5%")]
+    [InlineData(1.00, "full")]
+    public void WindowLabel_Paradigm_UsesDiscount(double f, string expected)
+        => Assert.Equal(expected, BossTimerMath.WindowLabel(RealmType.ParaMud, f));
+
+    [Theory]
+    [InlineData(0.875, "87.5%")]
+    [InlineData(1.00, "full")]
+    public void WindowLabel_Stock_UsesElapsedFraction(double f, string expected)
+        => Assert.Equal(expected, BossTimerMath.WindowLabel(RealmType.Stock, f));
+
+    [Fact]
+    public void Describe_Paradigm_WalksThresholdsInOrder()
+    {
+        // full = 24h. Early points at 19.2 / 21.6 / 22.8h, then 24h.
+        Assert.Equal("-20%", BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(0)).NextLabel);
+        Assert.Equal("-10%", BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(20)).NextLabel);
+        Assert.Equal("-5%", BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(22)).NextLabel);
+        Assert.Equal("full", BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(23)).NextLabel);
+    }
+
+    [Fact]
+    public void Describe_Stock_HasSingleEarlyPoint()
+    {
+        Assert.Equal("87.5%", BossTimerMath.Describe(RealmType.Stock, false, 24, TimeSpan.FromHours(0)).NextLabel);
+        Assert.Equal("full", BossTimerMath.Describe(RealmType.Stock, false, 24, TimeSpan.FromHours(22)).NextLabel);
+    }
+
+    [Fact]
+    public void Describe_ExactSpawn_HasNoEarlyWindow()
+    {
+        BossWindowState s = BossTimerMath.Describe(RealmType.Stock, exactSpawn: true, 10, TimeSpan.FromHours(1));
+        Assert.Equal("full", s.NextLabel);
+        Assert.False(s.Expired);
+        Assert.Equal(9, Math.Round(s.NextRemaining.TotalHours));
+    }
+
+    [Fact]
+    public void Describe_PastFullTimer_IsExpired()
+    {
+        Assert.True(BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(24)).Expired);
+        Assert.True(BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(30)).Expired);
+        Assert.False(BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(23.9)).Expired);
+    }
+
+    [Fact]
+    public void Describe_FullRemaining_CountsDownToGuaranteedSpawn()
+    {
+        BossWindowState s = BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(6));
+        Assert.Equal(18, Math.Round(s.FullRemaining.TotalHours));
+    }
+
+    // ----- BossTimerStore ----------------------------------------------------
+
+    private void SeedGameData(RealmType realm, params (string Name, int Number, int Regen, int GameLimit)[] monsters)
+    {
+        string dir = AppPaths.GameDataSetDir(_set);
+        Directory.CreateDirectory(dir);
+        var rows = monsters.Select(m => new
+        {
+            m.Name,
+            m.Number,
+            RegenTime = m.Regen,
+            GameLimit = m.GameLimit,
+        });
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), JsonSerializer.Serialize(rows));
+        File.WriteAllText(Path.Combine(dir, "Info.json"),
+            JsonSerializer.Serialize(new[] { new { Legit = realm == RealmType.ParaMud ? 2 : 0 } }));
+    }
+
+    private void SeedBosses(params BossDef[] defs) => JsonStore.Save(_seedPath, defs.ToList());
+
+    private static BossDef Boss(string name, int? number = 1, BossRespawnType type = BossRespawnType.Timed,
+        bool stock = true, bool para = true, bool exact = false, params string[] rooms) => new()
+    {
+        Name = name, MonsterNumber = number, Rooms = rooms.ToList(),
+        InStock = stock, InParadigm = para, RespawnType = type, ExactSpawn = exact,
+    };
+
+    private (BossStore bosses, BossTimerStore timers, GameDataCache cache) NewStores()
+    {
+        GameDataCache cache = new();
+        cache.SwitchSet(_set);
+        BossStore bosses = new(seedPath: _seedPath);
+        bosses.OnActiveSetChanged(_set);
+        BossTimerStore timers = new(bosses, cache);
+        timers.OnActiveSetChanged(_set);
+        return (bosses, timers, cache);
+    }
+
+    [Fact]
+    public void MarkKilled_StartsActiveTimer_AndPersistsAcrossReload()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        timers.MarkKilled("ogre king");
+        Assert.NotNull(timers.StatusFor(Boss("ogre king", number: 50, rooms: "3/300"), RealmType.ParaMud));
+
+        // A fresh store for the same set reloads the persisted kill time.
+        BossStore bosses2 = new(seedPath: _seedPath); bosses2.OnActiveSetChanged(_set);
+        GameDataCache cache2 = new(); cache2.SwitchSet(_set);
+        BossTimerStore reloaded = new(bosses2, cache2);
+        reloaded.OnActiveSetChanged(_set);
+        Assert.NotNull(reloaded.KilledAt("ogre king"));
+    }
+
+    [Fact]
+    public void Reset_ClearsTimer()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        timers.MarkKilled("ogre king");
+        timers.Reset("ogre king");
+        Assert.Null(timers.KilledAt("ogre king"));
+        Assert.Null(timers.StatusFor(Boss("ogre king", number: 50, rooms: "3/300"), RealmType.ParaMud));
+    }
+
+    [Fact]
+    public void StatusFor_Null_ForCleanupBoss()
+    {
+        SeedGameData(RealmType.ParaMud, ("lord feyr", 60, 24, 1));
+        SeedBosses(Boss("lord feyr", number: 60, type: BossRespawnType.Cleanup, rooms: "17/2718"));
+        var (_, timers, _) = NewStores();
+
+        timers.MarkKilled("lord feyr");
+        Assert.Null(timers.StatusFor(
+            Boss("lord feyr", number: 60, type: BossRespawnType.Cleanup, rooms: "17/2718"), RealmType.ParaMud));
+    }
+
+    [Fact]
+    public void StatusFor_Null_WhenGameDataHasNoTimer()
+    {
+        SeedGameData(RealmType.ParaMud, ("some mob", 1, 0, 0));   // not a boss (no regen, no limit)
+        SeedBosses(Boss("ghost king", number: 999, rooms: "1/1"));
+        var (_, timers, _) = NewStores();
+
+        timers.MarkKilled("ghost king");
+        Assert.Null(timers.StatusFor(Boss("ghost king", number: 999, rooms: "1/1"), RealmType.ParaMud));
+    }
+
+    private static MonsterDeathEvent Death(bool fallback, params (int? Number, string Name)[] candidates) => new(
+        candidates.Select(c => new MonsterDeathIdentity(c.Number, c.Name)).ToList(),
+        ExperienceGained: 100, At: DateTimeOffset.UtcNow, IsFallback: fallback);
+
+    [Fact]
+    public void OnMonsterDied_NameMatchInBossRoom_StartsTimer()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(false, (null, "ogre king")), new RoomKey(3, 300));
+        Assert.NotNull(timers.KilledAt("ogre king"));
+    }
+
+    [Fact]
+    public void OnMonsterDied_NumberMatchInBossRoom_StartsTimer()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(false, (50, "The Ogre King")), new RoomKey(3, 300));
+        Assert.NotNull(timers.KilledAt("ogre king"));
+    }
+
+    [Fact]
+    public void OnMonsterDied_FallbackDeath_Ignored()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(true), new RoomKey(3, 300));
+        Assert.Null(timers.KilledAt("ogre king"));
+    }
+
+    [Fact]
+    public void OnMonsterDied_WrongRoom_Ignored()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(false, (50, "ogre king")), new RoomKey(9, 999));
+        Assert.Null(timers.KilledAt("ogre king"));
+    }
+
+    [Fact]
+    public void ActiveTimers_FiltersByRealm_AndOrdersBySoonestFull()
+    {
+        SeedGameData(RealmType.ParaMud,
+            ("short boss", 1, 2, 1),
+            ("long boss", 2, 48, 1),
+            ("para only", 3, 10, 1));
+        SeedBosses(
+            Boss("short boss", number: 1, rooms: "1/1"),
+            Boss("long boss", number: 2, rooms: "1/2"),
+            Boss("para only", number: 3, stock: false, para: true, rooms: "1/3"));
+        var (_, timers, _) = NewStores();
+
+        timers.MarkKilled("short boss");
+        timers.MarkKilled("long boss");
+        timers.MarkKilled("para only");
+
+        var para = timers.ActiveTimers(RealmType.ParaMud);
+        Assert.Equal(new[] { "short boss", "para only", "long boss" },
+            para.Select(a => a.Def.Name).ToArray());   // ordered by soonest full (2h < 10h < 48h)
+
+        // Stock hides the paradigm-only boss.
+        var stock = timers.ActiveTimers(RealmType.Stock);
+        Assert.DoesNotContain(stock, a => a.Def.Name == "para only");
+    }
+
+    // ----- @timer handler ----------------------------------------------------
+
+    private static readonly DateTime Now = new(2026, 8, 4, 0, 0, 0, DateTimeKind.Utc);
+
+    private (RemoteCommandManager engine, BossTimerStore timers) SetupHandler(
+        RealmType realm, params (string Name, int Number, int Regen)[] bosses)
+    {
+        SeedGameData(realm, bosses.Select(b => (b.Name, b.Number, b.Regen, 1)).ToArray());
+        SeedBosses(bosses.Select(b => Boss(b.Name, number: b.Number, rooms: "1/1")).ToArray());
+        var (store, timers, cache) = NewStores();
+
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        ChatRouter chat = new(router);
+        PartyState party = new();
+        PlayerDatabase players = new();
+        RemoteCommandManager engine = new(chat, party, players);
+        players.RecordObservation("Bob", null, null, null, null, null, null, Now);
+        players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryLocation));
+        _ = new BossTimerQueryHandler(engine, store, timers, cache);
+        return (engine, timers);
+    }
+
+    private static ChatLogEntry Telepath(string msg) =>
+        new(Now, ChatChannel.TelepathIncoming, "Bob", msg, $"Bob telepaths: {msg}");
+
+    private static string Reply(RemoteCommandManager engine) =>
+        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).Select(StripWire).Single();
+
+    private static string StripWire(string wire)
+    {
+        string s = wire.TrimEnd('\r');
+        int open = s.IndexOf('{');
+        int close = s.LastIndexOf('}');
+        return open >= 0 && close > open ? s[(open + 1)..close] : s;
+    }
+
+    [Fact]
+    public void Timer_NoneActive_ReportsEmptySet()
+    {
+        var (engine, _) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        engine.DispatchForTests(Telepath("@timer"));
+        Assert.Equal("no boss timers active", Reply(engine));
+    }
+
+    [Fact]
+    public void Timer_NoArg_ListsActiveBossWithFullAndNext()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+        engine.DispatchForTests(Telepath("@timer"));
+
+        string reply = Reply(engine);
+        Assert.Contains("ogre king", reply);
+        Assert.Contains("full", reply);
+        Assert.Contains("-20%", reply);   // freshly killed → earliest paradigm window
+    }
+
+    [Fact]
+    public void Timer_SubstringFilter_MatchesByName()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("crimson mist", 10, 12), ("ogre king", 50, 24));
+        timers.MarkKilled("crimson mist");
+        timers.MarkKilled("ogre king");
+
+        engine.DispatchForTests(Telepath("@timer crimson"));
+        string reply = Reply(engine);
+        Assert.Contains("crimson mist", reply);
+        Assert.DoesNotContain("ogre king", reply);
+    }
+
+    [Fact]
+    public void Timer_QueryWeDoNotHold_ReportsExpired()
+    {
+        var (engine, _) = SetupHandler(RealmType.ParaMud, ("crimson mist", 10, 12));
+        engine.DispatchForTests(Telepath("@timer crimson"));
+        Assert.Equal("expired", Reply(engine));
+    }
+}

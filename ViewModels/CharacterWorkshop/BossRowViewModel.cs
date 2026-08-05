@@ -2,19 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using FujinTerm.Game;
 using FujinTerm.Game.Map;
 using FujinTerm.Models.Profile;
+using FujinTerm.Services;
 
 namespace FujinTerm.ViewModels.CharacterWorkshop;
 
 // One boss row in the Bosses tab. Name + Rooms + StopBefore + ExactSpawn are
 // user-editable and fire the section's onEdit (persist). RespawnDisplay /
-// WindowsDisplay are computed from the game-data timer + active realm and set by
-// the section on (re)build — the tab shows the realm's spawn-window model.
+// WindowsDisplay are computed from the game-data timer + active realm; StatusDisplay
+// is the live countdown from BossTimerStore, refreshed on the heartbeat. Mark-killed
+// / reset drive the timer manually (the auto-start is server-kill detection).
 public sealed partial class BossRowViewModel : ObservableObject
 {
+    private readonly BossTimerStore _timers;
     private readonly Action _onEdit;
+    private RealmType _realm;
     private bool _suppress;
 
     [ObservableProperty] private string _name = string.Empty;
@@ -25,15 +30,22 @@ public sealed partial class BossRowViewModel : ObservableObject
     // Computed (read-only) display, refreshed by the section.
     [ObservableProperty] private string _respawnDisplay = string.Empty;
     [ObservableProperty] private string _windowsDisplay = string.Empty;
+    [ObservableProperty] private string _statusDisplay = string.Empty;
     [ObservableProperty] private bool _isCleanup;
+    [ObservableProperty] private bool _isActive;
 
     public BossRespawnType RespawnType { get; }
+    public bool IsTimed => RespawnType == BossRespawnType.Timed;
     public bool InStock { get; }
     public bool InParadigm { get; }
     public int? MonsterNumber { get; }
 
-    public BossRowViewModel(BossDef def, RealmType realm, int? respawnHours, Action onEdit)
+    public BossRowViewModel(BossDef def, RealmType realm, int? respawnHours, BossTimerStore timers, Action onEdit)
     {
+        ArgumentNullException.ThrowIfNull(def);
+        ArgumentNullException.ThrowIfNull(timers);
+        ArgumentNullException.ThrowIfNull(onEdit);
+        _timers = timers;
         _onEdit = onEdit;
         _suppress = true;
         Name = def.Name;
@@ -52,17 +64,32 @@ public sealed partial class BossRowViewModel : ObservableObject
     // game-data timer (null when the set has no such boss monster).
     public void RefreshDisplay(RealmType realm, int? respawnHours)
     {
+        _realm = realm;
         IsCleanup = RespawnType == BossRespawnType.Cleanup;
-        if (IsCleanup) { RespawnDisplay = "Cleanup"; WindowsDisplay = "—"; return; }
-        if (respawnHours is not { } full || full <= 0) { RespawnDisplay = "?"; WindowsDisplay = "(no game-data timer)"; return; }
+        if (IsCleanup) { RespawnDisplay = "Cleanup"; WindowsDisplay = "—"; RefreshStatus(); return; }
+        if (respawnHours is not { } full || full <= 0) { RespawnDisplay = "?"; WindowsDisplay = "(no game-data timer)"; RefreshStatus(); return; }
 
         RespawnDisplay = $"{full}h";
         // Early spawn points only (drop the trailing "full" — it's the Respawn column).
         var parts = BossTimerMath.SpawnFractions(realm, ExactSpawn)
             .Where(f => f < 1.0)
-            .Select(f => $"{BossTimerMath.FractionLabel(f)} {BossTimerMath.FormatHours(full * f)}")
+            .Select(f => $"{BossTimerMath.WindowLabel(realm, f)} {BossTimerMath.FormatHours(full * f)}")
             .ToList();
         WindowsDisplay = parts.Count > 0 ? string.Join("  ·  ", parts) : "exact (no early window)";
+        RefreshStatus();
+    }
+
+    // Recompute the live countdown from the timer store. Blank when no timer is
+    // running (never killed / expired / Cleanup). Called on the heartbeat.
+    public void RefreshStatus()
+    {
+        BossWindowState? state = _timers.StatusFor(
+            new BossDef { Name = Name, RespawnType = RespawnType, ExactSpawn = ExactSpawn }, _realm);
+        if (state is not { } s) { IsActive = false; StatusDisplay = string.Empty; return; }
+        IsActive = true;
+        StatusDisplay = s.NextLabel == "full"
+            ? $"full in {BossTimerMath.FormatDuration(s.FullRemaining)}"
+            : $"{s.NextLabel} in {BossTimerMath.FormatDuration(s.NextRemaining)}  (full {BossTimerMath.FormatDuration(s.FullRemaining)})";
     }
 
     // Parse the Rooms text back to "map/room" tokens (accepts / or , separators, ; between).
@@ -88,6 +115,12 @@ public sealed partial class BossRowViewModel : ObservableObject
         ExactSpawn = ExactSpawn,
         StopBefore = StopBefore,
     };
+
+    [RelayCommand]
+    private void MarkKilled() { _timers.MarkKilled(Name.Trim().ToLowerInvariant()); RefreshStatus(); }
+
+    [RelayCommand]
+    private void ResetTimer() { _timers.Reset(Name.Trim().ToLowerInvariant()); RefreshStatus(); }
 
     partial void OnNameChanged(string value) => Edit();
     partial void OnRoomsChanged(string value) => Edit();

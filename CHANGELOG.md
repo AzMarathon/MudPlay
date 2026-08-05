@@ -7,7 +7,9 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - New **Bosses** tab in the Player Workshop: the per-realm boss catalog (241 bosses) with respawn timers read from live game data, so they stay correct across game versions
 - Respawn column shows the game-data timer; the early-window column reflects the active realm — Stock's 87.5% watch point, Paradigm's −5 / −10 / −20% points (exact-spawn bosses like Lord of the Hunt / Crimson Mist show no early window)
 - Editable: add or remove a boss, edit its room list, and toggle per-boss "stop before" (walk-to halts one room short) and "exact spawn"; edits auto-save per realm and are shared across your characters
-- Live respawn timers, the `@timer` command, and walk-to "stop before a boss room" land in follow-ups on this feature
+- Live respawn countdown per boss — auto-started when a tracked boss is killed in one of its rooms, with manual "killed" / "reset" buttons; timers persist across restart and are shared per realm
+- New `@timer` remote command reports the boss timers being tracked: no argument lists them all (name, time to full, next window), `@timer <name>` filters by name substring, and a boss you aren't holding replies "expired"
+- Walk-to "stop before a boss room" lands in a follow-up on this feature
 
 ## 2.28.0
 

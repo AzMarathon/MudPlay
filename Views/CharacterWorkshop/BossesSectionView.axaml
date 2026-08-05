@@ -26,6 +26,8 @@
             <TextBlock Text="Stock window (87.5%)" VerticalAlignment="Center" Margin="0,0,0,6"
                        IsVisible="{Binding !IsParadigmRealm}"
                        Foreground="{StaticResource ChromeFgSecBrush}"/>
+            <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="18,0,0,6"
+                       Foreground="{StaticResource AccentAmberBrush}"/>
         </WrapPanel>
 
         <TextBlock Grid.Row="1" Margin="0,0,0,8" TextWrapping="Wrap"
@@ -64,6 +66,26 @@
                                         Width="90"/>
                 <DataGridCheckBoxColumn Header="Exact" Binding="{ReflectionBinding ExactSpawn, Mode=TwoWay}"
                                         Width="70"/>
+                <!-- Live timer status from BossTimerStore, refreshed on the heartbeat. -->
+                <DataGridTextColumn Header="Status" Binding="{ReflectionBinding StatusDisplay}" IsReadOnly="True"
+                                    Width="260" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource AccentAmberBrush}"/>
+                <!-- Manual timer control. The cell DataContext is the row VM, so these
+                     bind to the row's own commands (compiled, x:DataType-annotated). -->
+                <DataGridTemplateColumn Header="Timer" Width="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:BossRowViewModel">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
+                                <Button Content="Killed" Padding="6,2" Margin="0,0,4,0"
+                                        Command="{Binding MarkKilledCommand}" IsVisible="{Binding IsTimed}"
+                                        ToolTip.Tip="Start this boss's respawn timer now (manual override)."/>
+                                <Button Content="Reset" Padding="6,2"
+                                        Command="{Binding ResetTimerCommand}" IsVisible="{Binding IsActive}"
+                                        ToolTip.Tip="Clear this boss's running timer."/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
 

@@ -80,6 +80,7 @@ public static class RemoteCommandCatalog
             ["@where"]        = PlayerRemoteControls.QueryLocation,
             ["@path"]         = PlayerRemoteControls.QueryLocation,
             ["@who"]          = PlayerRemoteControls.QueryLocation,
+            ["@timer"]        = PlayerRemoteControls.QueryLocation,   // boss respawn timers being tracked
             ["@help"]         = PlayerRemoteControls.QueryVersion,
             ["@what"]         = PlayerRemoteControls.QueryInventory,
             ["@wealth"]       = PlayerRemoteControls.QueryInventory,

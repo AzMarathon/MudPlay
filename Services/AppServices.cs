@@ -668,6 +668,13 @@ public sealed class AppServices
     // game data. Feeds the Player Workshop Bosses tab and the boss-timer feature.
     public BossStore Bosses { get; }
 
+    // Persisted per-set boss kill-times driving the live respawn countdowns +
+    // @timer. Auto-started on a detected boss kill; manual override on the tab.
+    public BossTimerStore BossTimers { get; }
+
+    // @timer read-only query handler. App-lifetime, like the other query handlers.
+    public Game.Remote.BossTimerQueryHandler BossTimerQuery { get; private set; } = null!;
+
     // Runtime keystroke → macro → wire-send bridge. Constructed up-
     // front; MacroDispatcher.SetSender gets bound from
     // MainWindowViewModel after the telnet client is
@@ -2252,6 +2259,14 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             Bosses.OnActiveSetChanged(GameData.ActiveSet);
 
+        // Persisted boss kill-times — realm-wide like the catalog. Kill detection is
+        // wired later (needs MonsterDeath + RoomTracker); here we just load the
+        // active set's saved timers so a restart resumes mid-countdown.
+        BossTimers = new BossTimerStore(Bosses, GameData, Log);
+        GameData.ActiveSetChanged += BossTimers.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null)
+            BossTimers.OnActiveSetChanged(GameData.ActiveSet);
+
         // ItemNameStore — int→name index for the active Items.json so
         // the keyed-door FSM can resolve KeyItemId → in-game name and
         // send `use <name> <dir>`.
@@ -3320,6 +3335,12 @@ public sealed class AppServices
         // experience from the gain line. Reset on the same session boundary.
         SessionActivity = new Game.Combat.SessionActivityTracker();
         MonsterDeath.MonsterDied += _ => SessionActivity.NoteKill();
+
+        // Boss-timer auto-start: a positively-identified boss death in one of that
+        // boss's rooms stamps the respawn timer. Room comes from the live tracker
+        // (the death event carries none); fallback deaths are left to the manual
+        // override on the Bosses tab.
+        MonsterDeath.MonsterDied += evt => BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key);
         Router.Subscribe(Services.Patterns.KnownPatterns.UserGainExperience, m =>
         {
             if (m.Groups.Count > 0 && int.TryParse(m.Groups[0], out int exp))
@@ -3387,6 +3408,10 @@ public sealed class AppServices
         // InventoryManager snapshot; @what reports the GroundItems survey. No
         // wire output either.
         InventoryQuery = new Game.Remote.InventoryQueryHandler(RemoteCommands, Inventory, GroundItems, Currency);
+
+        // @timer — read-only report of the boss respawn timers being tracked. Reads
+        // the boss catalog + persisted kill-times; no wire output beyond its reply.
+        BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData);
 
         // Write-side inventory / cash actions — @get-all / @drop-all /
         // @deposit-all / @share emit get / drop / dep / with / give on the wire.

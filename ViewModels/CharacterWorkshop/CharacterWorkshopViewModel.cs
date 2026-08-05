@@ -74,7 +74,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
 
         Sections.Add(new CalculatorsSectionViewModel(playerStats, gameData, inventory, questBonuses, profile, leaderboards));
 
-        Sections.Add(new BossesSectionViewModel(gameData, AppServices.Current.Bosses));
+        Sections.Add(new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick));
 
         SelectedSection = initialSectionId is not null
             ? Sections.FirstOrDefault(s => string.Equals(s.Id, initialSectionId, StringComparison.OrdinalIgnoreCase))

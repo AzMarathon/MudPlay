@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FujinTerm.Game;
@@ -23,7 +24,9 @@ namespace FujinTerm.ViewModels.CharacterWorkshop;
 public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
 {
     private readonly BossStore _bosses;
+    private readonly BossTimerStore _timers;
     private readonly GameDataCache _gameData;
+    private readonly TickEngine _tick;
     private Control? _view;
     private bool _suppress;
 
@@ -36,24 +39,59 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
     [ObservableProperty] private BossRowViewModel? _selectedRow;
     [ObservableProperty] private bool _isParadigmRealm;
     [ObservableProperty] private bool _hasBosses;
+    [ObservableProperty] private string _activeSummary = string.Empty;
 
     // "Add boss" inputs.
     [ObservableProperty] private string _newBossName = string.Empty;
     [ObservableProperty] private string _newBossRooms = string.Empty;
 
-    public BossesSectionViewModel(GameDataCache gameData, BossStore bosses)
+    public BossesSectionViewModel(GameDataCache gameData, BossStore bosses, BossTimerStore timers, TickEngine tick)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(bosses);
+        ArgumentNullException.ThrowIfNull(timers);
+        ArgumentNullException.ThrowIfNull(tick);
         _gameData = gameData;
         _bosses = bosses;
+        _timers = timers;
+        _tick = tick;
         _gameData.ActiveSetChanged += OnActiveSetChanged;
+        _timers.Changed += OnTimersChanged;
+        _tick.HeartbeatElapsed += OnHeartbeat;
         Rebuild();
     }
 
-    public override void Dispose() => _gameData.ActiveSetChanged -= OnActiveSetChanged;
+    public override void Dispose()
+    {
+        _gameData.ActiveSetChanged -= OnActiveSetChanged;
+        _timers.Changed -= OnTimersChanged;
+        _tick.HeartbeatElapsed -= OnHeartbeat;
+    }
 
     private void OnActiveSetChanged(string? _) => Rebuild();
+
+    // A kill (auto or remote @-command) or reset changed the tracked set — refresh
+    // every row's live status. Changed fires off the line-emitting thread, so hop
+    // to the UI thread before touching observable state.
+    private void OnTimersChanged()
+    {
+        if (Dispatcher.UIThread.CheckAccess()) RefreshStatuses();
+        else Dispatcher.UIThread.Post(RefreshStatuses);
+    }
+
+    private void OnHeartbeat() => RefreshStatuses();
+
+    private void RefreshStatuses()
+    {
+        foreach (BossRowViewModel row in Rows) row.RefreshStatus();
+        UpdateSummary();
+    }
+
+    private void UpdateSummary()
+    {
+        int active = _timers.ActiveTimers(_gameData.ActiveRealm).Count;
+        ActiveSummary = active == 0 ? "No boss timers active" : $"{active} boss timer{(active == 1 ? "" : "s")} active";
+    }
 
     private void Rebuild()
     {
@@ -67,10 +105,11 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
             int? hrs = def.RespawnType == BossRespawnType.Timed
                 ? BossCatalog.ResolveRegenHours(_gameData, def.Name)
                 : null;
-            Rows.Add(new BossRowViewModel(def, realm, hrs, OnRowEdited));
+            Rows.Add(new BossRowViewModel(def, realm, hrs, _timers, OnRowEdited));
         }
         HasBosses = Rows.Count > 0;
         _suppress = false;
+        UpdateSummary();
     }
 
     // Any row edit persists the whole list as an overlay delta, then refreshes the
@@ -125,7 +164,7 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
             InParadigm = realm == RealmType.ParaMud,
             RespawnType = BossRespawnType.Timed,
         };
-        var row = new BossRowViewModel(def, realm, BossCatalog.ResolveRegenHours(_gameData, name), OnRowEdited)
+        var row = new BossRowViewModel(def, realm, BossCatalog.ResolveRegenHours(_gameData, name), _timers, OnRowEdited)
         { Rooms = NewBossRooms };
         Rows.Add(row);
         HasBosses = true;
