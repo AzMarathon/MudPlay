@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using FujinTerm.Game.GameData;
 using FujinTerm.Game.Map;
 using FujinTerm.Models.GameData;
@@ -11,20 +9,20 @@ using FujinTerm.Services;
 namespace FujinTerm.Game.Remote;
 
 // Read-only handler for @timer — reports the boss respawn timers currently being
-// tracked (BossTimerStore), gated by QueryLocation like @where / @path.
+// tracked (BossTimerStore), gated by the QueryBossTimers permission.
 //   @timer          — every active (non-expired) timer on the active realm.
 //   @timer <name>   — active timers whose boss name contains <name> (substring);
 //                     "expired" when the query matches no active timer (we don't
 //                     currently hold one).
-// Each timer reports: "<name> - full <H:MM>, next <label> <H:MM>", where "next" is
+// One reply line per boss: "<name> - full 2h14m, next -20% 1h47m", where "next" is
 // the earliest un-passed spawn window for the realm (Paradigm -20/-10/-5/full,
-// Stock 87.5%/full, exact-spawn full only). ASCII only — the reply rides the BBS
-// wire, where a Unicode minus degrades to '?'.
+// Stock 87.5%/full). Cleanup bosses read "<name> - dead, cleanup in <t>". ASCII
+// only — the reply rides the BBS wire, where a Unicode minus degrades to '?'.
 public sealed class BossTimerQueryHandler : IDisposable
 {
-    // Per-reply char budget before the engine wraps the payload; overflow is
-    // summarised as "(+N more)" like InventoryQueryHandler's pack list.
-    private const int ReplyBudget = 180;
+    // Cap on reply lines so a bare @timer with many active timers can't flood the
+    // channel; the overflow is summarised as a final "(+N more)" line.
+    private const int MaxLines = 12;
 
     private readonly RemoteCommandManager _engine;
     private readonly BossStore _bosses;
@@ -76,7 +74,12 @@ public sealed class BossTimerQueryHandler : IDisposable
             return;
         }
 
-        ctx.Reply(JoinCapped(active.Select(Format), ReplyBudget));
+        // One reply line per boss, so a multi-match (@timer dragon → two dragons)
+        // lands as separate lines on the reply channel. Cap the count so a bare
+        // @timer with many active timers can't flood the channel.
+        foreach (var t in active.Take(MaxLines)) ctx.Reply(Format(t));
+        int extra = active.Count - MaxLines;
+        if (extra > 0) ctx.Reply($"(+{extra} more - narrow with @timer <name>)");
     }
 
     private static string Format((BossDef Def, BossWindowState State) t)
@@ -92,24 +95,5 @@ public sealed class BossTimerQueryHandler : IDisposable
             return $"{t.Def.Name} - full {full}";
         string next = BossTimerMath.FormatHours(t.State.NextRemaining.TotalHours);
         return $"{t.Def.Name} - full {full}, next {t.State.NextLabel} {next}";
-    }
-
-    // Semicolon-join timer lines within budget; the first always goes in, and any
-    // that don't fit are summarised as "(+N more)".
-    private static string JoinCapped(IEnumerable<string> lines, int budget)
-    {
-        var list = lines.ToList();
-        StringBuilder sb = new();
-        int shown = 0;
-        foreach (string line in list)
-        {
-            if (sb.Length > 0 && sb.Length + 2 + line.Length > budget) break;
-            if (sb.Length > 0) sb.Append("; ");
-            sb.Append(line);
-            shown++;
-        }
-        int remaining = list.Count - shown;
-        if (remaining > 0) sb.Append($" (+{remaining} more)");
-        return sb.ToString();
     }
 }

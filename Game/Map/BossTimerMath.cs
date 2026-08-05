@@ -76,15 +76,14 @@ public static class BossTimerMath
         return new BossWindowState(false, fullRem, "full", fullRem);
     }
 
-    // Hours (decimal) -> "H:MM", clamped at zero. Used for the tab's early-window
-    // column (offsets from kill) and the @timer remaining values.
+    // Hours (decimal) -> "2h14m" (or "45m" under an hour), clamped at zero. The
+    // report format for @timer replies and the bug-report boss-timer capture.
     public static string FormatHours(double hours)
     {
         if (hours < 0) hours = 0;
-        int h = (int)hours;
-        int m = (int)Math.Round((hours - h) * 60.0);
-        if (m >= 60) { h++; m -= 60; }
-        return $"{h}:{m:D2}";
+        int totalMinutes = (int)Math.Round(hours * 60.0);
+        int h = totalMinutes / 60, m = totalMinutes % 60;
+        return h > 0 ? $"{h}h{m:D2}m" : $"{m}m";
     }
 
     // A remaining span -> "H:MM:SS" for the live status column (ticks every second).

@@ -302,6 +302,9 @@ public sealed class BossTimerTests : IDisposable
     private static string Reply(RemoteCommandManager engine) =>
         engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).Select(StripWire).Single();
 
+    private static List<string> Replies(RemoteCommandManager engine) =>
+        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).Select(StripWire).ToList();
+
     private static string StripWire(string wire)
     {
         string s = wire.TrimEnd('\r');
@@ -350,6 +353,32 @@ public sealed class BossTimerTests : IDisposable
         var (engine, _) = SetupHandler(RealmType.ParaMud, ("crimson mist", 10, 12));
         engine.DispatchForTests(Telepath("@timer crimson"));
         Assert.Equal("expired", Reply(engine));
+    }
+
+    [Fact]
+    public void Timer_MultiMatch_RepliesOnePerLine()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud,
+            ("great green dragon", 10, 12), ("huge black dragon", 20, 24), ("ogre king", 50, 24));
+        timers.MarkKilled("great green dragon");
+        timers.MarkKilled("huge black dragon");
+        timers.MarkKilled("ogre king");
+
+        engine.DispatchForTests(Telepath("@timer dragon"));
+
+        List<string> replies = Replies(engine);
+        Assert.Equal(2, replies.Count);   // two dragons, two lines — ogre king excluded
+        Assert.Contains(replies, r => r.Contains("great green dragon"));
+        Assert.Contains(replies, r => r.Contains("huge black dragon"));
+        Assert.DoesNotContain(replies, r => r.Contains("ogre king"));
+    }
+
+    [Fact]
+    public void FormatHours_UsesHoursMinutesStyle()
+    {
+        Assert.Equal("2h14m", BossTimerMath.FormatHours(2 + 14 / 60.0));
+        Assert.Equal("45m", BossTimerMath.FormatHours(0.75));
+        Assert.Equal("0m", BossTimerMath.FormatHours(0));
     }
 
     // ----- mark-time + display-order helpers ---------------------------------
