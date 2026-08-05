@@ -581,6 +581,7 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory,
                 $"target died — clearing _currentTarget='{current}' (raw-name match)");
             _currentTarget = null;
+            _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
             ClearBackstabResolution();
             return;
         }
@@ -602,6 +603,7 @@ public sealed partial class CombatManager : IDisposable
                 _log?.Combat(LogCategory,
                     $"target died — clearing _currentTarget='{current}' (resolved-name match)");
                 _currentTarget = null;
+                _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
                 ClearBackstabResolution();
                 return;
             }
@@ -1800,6 +1802,7 @@ public sealed partial class CombatManager : IDisposable
         // Clear the target BEFORE the removal re-fires EntitiesObserved (mirrors
         // the specific-death ordering) so the re-pick sees a clean slate.
         _currentTarget = null;
+        _castingSpellTarget = null;   // end spell mode on the kill too — no corpse re-cast
         ClearBackstabResolution();
         if (_classifier.RemoveDeadEntity(presumedDead))
         {
@@ -1935,6 +1938,24 @@ public sealed partial class CombatManager : IDisposable
                         "deferring re-engage to the death→re-observe path");
                 else
                     TryResumeEngage(live, bypassAttackGuard: true);
+            }
+
+            // Spell analogue of the weapon resume above. A spell attack auto-repeats
+            // server-side, but a between-round cast (a survival heal) drops *Combat
+            // Off* and stops that repeat, so re-announce our spell. A kill already
+            // cleared _castingSpellTarget, so this fires only on a true interrupt (not
+            // a kill's Off); it re-decides through the chooser (DispatchRoundAction),
+            // so a lapsed spell condition switches cleanly, and it forces a fresh
+            // announce because the server dropped the repeat.
+            if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
+                && _castingSpellTarget is { } spellTarget
+                && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
+                && _classifier.Current is { } liveSpell
+                && TargetPresent(liveSpell, spellTarget)
+                && TryBuildCandidate(liveSpell, spellTarget) is { } spellCand)
+            {
+                _announcedSpellCode = null;
+                DispatchRoundAction(_readSettings(), spellCand, CountEngageable(liveSpell), liveSpell);
             }
 
             // Guard-redirect recovery. When a guarded monster is our priority, each

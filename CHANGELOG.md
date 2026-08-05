@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.30.3
+
+- Spell combat now mirrors physical combat: an attack spell is announced once and the server auto-repeats it each round, so the client no longer re-casts every round. Fixes the "double cast" and the cast at the monster that just died ("You don't see X here!")
+- Attack spells now engage a fresh monster instantly instead of waiting for it to swing at you first
+- Combat switches action correctly when it must: MaxCasts elapsed (per-target for single-target spells, per-room for AoE), out of mana or immune (cascade to the alternate spell / weapon), or a room thinned below the AoE minimum-enemies threshold
+- bug reports addressed: paradigm-20260805-105305, paradigm-20260805-105735, paradigm-20260805-105800
+
 ## 2.30.0
 
 - Terminal right-click menu gains a **Favorites** flyout — star up to 10 Go To destinations and walk there in one click without opening Navigation

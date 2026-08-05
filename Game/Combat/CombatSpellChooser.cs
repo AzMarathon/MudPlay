@@ -69,6 +69,18 @@ public sealed class CombatSpellChooser
         _singleDebuffedTargets.Clear();
     }
 
+    // Reset the per-TARGET single-target cast counters. The single-target slots
+    // (normal / alternate attack spell, single-target debuff) count MaxCasts PER
+    // TARGET, so their tallies reset when the combat target changes within a room.
+    // The AoE slots (multi-attack, area debuff) count PER ROOM and are untouched
+    // here — they survive a target change and only reset at room-clear.
+    public void ResetForNewTarget()
+    {
+        _singleDebuffCasts = 0;
+        _normalAttackCasts = 0;
+        _alternateAttackCasts = 0;
+    }
+
     // Pick the round's combat action. Pure — does not mutate counters; the caller
     // commits the choice via MarkCast only when the cast actually reaches the
     // wire. The backstab opener fires first when eligible; otherwise

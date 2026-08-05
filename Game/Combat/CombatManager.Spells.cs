@@ -12,15 +12,23 @@ namespace FujinTerm.Game.Combat;
 //
 // Wiring is optional: until SetCombatSpellCaster runs, the engine is pure
 // weapon-attack and every existing path is unchanged. Once wired,
-// OnEntitiesObserved consults the chooser before the backstab / weapon path, and
-// the per-round heartbeat (OnCombatTick) re-issues the chosen cast each round —
-// casts do NOT auto-repeat server-side the way weapon swings do, so the tick
-// boundary is the only thing that keeps a multi-round spell going.
+// OnEntitiesObserved consults the chooser before the backstab / weapon path.
 //
-// Casts route through the shared CastCoordinator.TryCast so the one-cast-per-
-// round cooldown is honoured across every casting engine (a survival heal from
-// CastingDirector earlier in the same tick blocks our offensive cast — survival
-// beats offense, by design of the AppServices tick-subscription order).
+// CONFIRMED game mechanic: an announced spell attack AUTO-REPEATS server-side every
+// round — it fires next tick while the target is present and mana suffices, and does
+// NOT need re-announcing, exactly like a weapon swing. So this engine mirrors the
+// weapon engine: it ANNOUNCES the chosen attack once (DispatchRoundAction) and the
+// per-round heartbeat (OnCombatTick) re-announces ONLY when the chooser's decision
+// must change (target died, MaxCasts elapsed, mana below the slot floor, immunity,
+// room thinned below MinEnemies). Re-announcing a spell the server is already
+// repeating was the double-cast / corpse-cast bug — hence _announcedSpellCode, the
+// spell analogue of "we already sent `attack X`; the server owns the repeat."
+//
+// Casts route through the shared CastCoordinator.TryCast so the one-cast-per-round
+// cooldown is honoured across every casting engine (a survival heal from
+// CastingDirector blocks our offensive cast — survival beats offense). The INITIAL
+// engage / a decision switch bypasses that round cooldown (TryCast bypassRoundCooldown)
+// so a fresh mob is announced-at instantly, mirroring the weapon's cooldown-free send.
 public sealed partial class CombatManager
 {
     private readonly CombatSpellChooser _spellChooser = new();
@@ -98,26 +106,17 @@ public sealed partial class CombatManager
     // room-cleared.
     private CombatSpellAction? _lastCastAction;
 
-    // When the last combat spell actually went to the wire, and the minimum gap
-    // before the heartbeat may re-cast. A weapon attack never swings at a corpse
-    // because the SERVER owns the swing repeat and stops on death; a spell repeat
-    // is ours (OnCombatTick re-issues it each round), so we must give it the same
-    // one-per-round discipline. Our own "…for N damage!" spell result matches the
-    // UserHits combat pattern and fires an extra combat tick a fraction of a second
-    // later — that echo tick resets CastCoordinator's per-round cooldown, so without
-    // this floor the heartbeat fires a second cast this round: wasted mana on a live
-    // mob, and a cast at the corpse when the echoed hit was the kill (the reported
-    // "re-nukes the monster that just died"). The floor sits below a combat round
-    // (CastCoordinator.CastCommandCooldown is 5.5s) and above any plausible hit-echo
-    // round-trip, and — unlike the coordinator cooldown — a combat tick never clears
-    // it, so the echo can't slip a cast through.
-    private static readonly TimeSpan CombatSpellRecastFloor = TimeSpan.FromSeconds(2);
-    private DateTimeOffset _lastCombatSpellCastAt = DateTimeOffset.MinValue;
-
-    // Test seam for the recast-floor clock — production uses the real clock; the
-    // combat-spell tests advance it a round per Tick so the heartbeat re-cast the
-    // floor now gates is exercised at realistic round spacing.
-    internal Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.Now;
+    // The attack-spell cast-code the server is currently auto-repeating for us (with
+    // _castingSpellTarget as its target). CONFIRMED game mechanic: an announced spell
+    // attack auto-repeats server-side every round — it fires next tick while the
+    // target is present and mana suffices, and does NOT need re-announcing, exactly
+    // like a weapon swing. So we announce ONCE and re-announce ONLY when the chooser's
+    // decision changes (target died / MaxCasts elapsed / mana below the slot floor /
+    // immunity / room thinned below MinEnemies). Null ⇒ no spell announced (weapon or
+    // idle mode). This is the spell analogue of "we already sent `attack X`; the
+    // server owns the repeat." Re-announcing a spell the server is already repeating
+    // is the double-cast / corpse-cast bug this rework removes.
+    private string? _announcedSpellCode;
 
     // Opt into combat-spell casting. cast is the shared CastCoordinator (so the
     // per-round cooldown is shared with every other caster); readMana reports live
@@ -167,6 +166,12 @@ public sealed partial class CombatManager
         CombatSettings settings, EngageableCandidate picked, int enemyCount,
         RoomEntitiesObservation obs)
     {
+        // A change of combat target resets the per-target single-target cast caps —
+        // MaxCasts is per-target for those slots (the AoE slots stay per-room). A
+        // same-target re-announce (a mid-fight decision switch) doesn't reset.
+        if (!string.Equals(_currentTarget, picked.RawName, StringComparison.OrdinalIgnoreCase))
+            _spellChooser.ResetForNewTarget();
+
         CombatSpellContext ctx = CombatSpellsWired
             ? BuildContext(settings, obs, picked.RawName, enemyCount, picked.MonsterNumber)
             : BuildWeaponContext(settings, obs, picked.RawName, enemyCount, picked.MonsterNumber);
@@ -182,6 +187,12 @@ public sealed partial class CombatManager
                 $"per-monster pre-attack override {preOverride} (#{picked.MonsterNumber})");
 
         CombatSpellDecision decision = _spellChooser.Choose(settings, ctx);
+
+        // A fresh dispatch supersedes any previously announced spell — clear it so a
+        // weapon/backstab decision, or a spell whose announce is blocked, is never
+        // mistaken by the heartbeat for "the server is still repeating it". A
+        // successful spell announce sets it again in the default case below.
+        _announcedSpellCode = null;
 
         switch (decision.Action)
         {
@@ -210,17 +221,19 @@ public sealed partial class CombatManager
                 break;
 
             default:
-                // A combat spell owns this round (a spell IS the round's
-                // action — it does not stack with a swing). Enter spell mode
-                // so the tick heartbeat re-issues each round. Set the bridge
-                // even when the coordinator is on cooldown — we stay in spell
-                // mode and retry next tick rather than swinging the weapon.
+                // A combat spell owns the round. Announce it ONCE and instantly: the
+                // engage bypasses the shared 5.5s round cooldown (mirroring a weapon's
+                // cooldown-free SendAttack), so a fresh mob is cast at immediately
+                // rather than after it swings. The server then auto-repeats the spell
+                // each round; the heartbeat re-announces only if the chooser's decision
+                // later changes. Set the bridge even when the cast is blocked so we
+                // stay in spell mode and retry next tick rather than swinging.
                 _castingSpellTarget = picked.RawName;
-                if (_cast!.TryCast(decision.Spell!, picked.RawName))
+                if (_cast!.TryCast(decision.Spell!, picked.RawName, bypassRoundCooldown: true))
                 {
                     _spellChooser.MarkCast(decision, picked.RawName);
                     _lastCastAction = decision.Action;
-                    _lastCombatSpellCastAt = NowProvider();
+                    _announcedSpellCode = decision.Spell;
                     _combatOff = false;
                     // A cast is an attack for engage-verify purposes — if the
                     // server never confirms *Combat Engaged*, the spell hit a
@@ -333,37 +346,31 @@ public sealed partial class CombatManager
         CombatSettings settings = _readSettings();
         CombatSpellContext ctx = BuildContext(
             settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
-
         CombatSpellDecision decision = _spellChooser.Choose(settings, ctx);
-        if (decision.Action is CombatSpellAction.WeaponAttack or CombatSpellAction.Backstab)
+
+        // The server auto-repeats the announced spell every round (CONFIRMED mechanic),
+        // so re-announce ONLY when the chooser's decision CHANGES. While it stays the
+        // same attack spell at the same target, count this round toward the slot's
+        // MaxCasts and send NOTHING — re-sending a spell the server is already
+        // repeating is exactly the double-cast / corpse-cast bug this rework removes.
+        bool sameSpell = _announcedSpellCode is { } announced
+            && decision.Action == _lastCastAction
+            && string.Equals(announced, decision.Spell, StringComparison.OrdinalIgnoreCase);
+        if (sameSpell)
         {
-            // Spell conditions lapsed mid-room — fall to the weapon command
-            // once. SendWeaponAttack clears the bridge (via SendAttack), so
-            // the heartbeat goes quiet and the server's auto-repeat takes over.
-            // (Backstab can't occur mid-combat — sneak is already broken — but
-            // we treat it as the weapon fallback defensively.)
-            bool useAlt = ShouldUseAlternateWeapon(
-                settings, ResolveSpeciesFromCurrentTarget(), ResolveMonsterNumber(obs, target));
-            SendWeaponAttack(settings, target, useAlt);
+            _spellChooser.MarkCast(decision, target);   // tally the round against MaxCasts
             return;
         }
 
-        // One combat cast per round. Our own hit-echo tick would otherwise re-cast
-        // this same round (see CombatSpellRecastFloor) — a wasted nuke on a live
-        // mob, and a cast at the corpse when the echoed hit was the kill. Stay in
-        // spell mode; the next genuine round's tick clears the floor and re-casts.
-        if (NowProvider() - _lastCombatSpellCastAt < CombatSpellRecastFloor)
-            return;
-
-        if (_cast!.TryCast(decision.Spell!, target))
-        {
-            _spellChooser.MarkCast(decision, target);
-            _lastCastAction = decision.Action;
-            _lastCombatSpellCastAt = NowProvider();
-            _combatOff = false;
-        }
-        // Blocked (CastDirector spent this round) → stay in spell mode and
-        // retry next tick. No weapon fallback — the round's action is taken.
+        // Decision changed (MaxCasts elapsed, mana crossed the slot floor, immunity, or
+        // room thinned below MinEnemies) — re-announce the new action. Route through
+        // DispatchRoundAction so the switch gets the full weapon-selection / cast /
+        // bookkeeping the initial engage does (a weapon/backstab decision leaves spell
+        // mode; a different spell is announced, bypassing the round cooldown).
+        if (TryBuildCandidate(obs, target) is { } cand)
+            DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
+        else
+            _castingSpellTarget = null;   // can't rebuild the target — drop; next observe re-picks
     }
 
     // Answer the CastingDirector's "is there a debuff to fire this in-between
