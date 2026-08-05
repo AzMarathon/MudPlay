@@ -3,38 +3,34 @@
              xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="860" d:DesignHeight="560"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
              x:Class="FujinTerm.Views.CharacterWorkshop.BossesSectionView"
              x:DataType="vm:BossesSectionViewModel">
 
-    <Grid Margin="22" RowDefinitions="Auto,Auto,*">
+    <Grid Margin="22" RowDefinitions="Auto,*">
 
-        <!-- Toolbar: manage the list + realm/summary context. Editing the boss
-             list (add / edit / remove) lives in the Manage Bosses dialog; the
-             table itself is read-mostly (Stop before toggles inline, Mark / Reset
-             drive the timer). -->
-        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
-            <Button Content="Manage Bosses…" Margin="0,0,18,6" Command="{Binding ManageBossesCommand}"
+        <!-- Toolbar: manage / import / export the list, filter, and the active-timer
+             summary. Editing the boss list lives in the Manage Bosses dialog; the
+             table itself is read-mostly (Stop before toggles inline; Mark / Reset /
+             Clear drive the timer). -->
+        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Center">
+            <Button Content="Manage Bosses…" Margin="0,0,6,6" Command="{Binding ManageBossesCommand}"
                     ToolTip.Tip="Add, edit, or remove bosses in this realm's list."/>
-            <TextBlock Text="Paradigm windows (5 / 10 / 20% off)" VerticalAlignment="Center" Margin="0,0,0,6"
-                       IsVisible="{Binding IsParadigmRealm}"
-                       Foreground="{StaticResource ChromeFgSecBrush}"/>
-            <TextBlock Text="Stock window (87.5%)" VerticalAlignment="Center" Margin="0,0,0,6"
-                       IsVisible="{Binding !IsParadigmRealm}"
-                       Foreground="{StaticResource ChromeFgSecBrush}"/>
-            <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="18,0,0,6"
+            <Button Content="Import…" Margin="0,0,6,6" Command="{Binding ImportCommand}"
+                    ToolTip.Tip="Load a shared boss table (JSON). Imported entries overlay yours; anything not in the file is kept."/>
+            <Button Content="Export…" Margin="0,0,18,6" Command="{Binding ExportCommand}"
+                    ToolTip.Tip="Save this realm's boss table to a JSON file to share."/>
+            <TextBox Width="200" Margin="0,0,18,6" PlaceholderText="Filter by boss or room…"
+                     Text="{Binding FilterText, Mode=TwoWay}"/>
+            <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="0,0,0,6"
                        Foreground="{StaticResource AccentAmberBrush}"/>
         </WrapPanel>
-
-        <TextBlock Grid.Row="1" Margin="0,0,0,8" TextWrapping="Wrap"
-                   Foreground="{StaticResource ChromeFgMutedBrush}"
-                   Text="100% is the guaranteed respawn countdown; the early columns count down to each earlier spawn window and blank once that window has passed. Stop before halts a walk-to one room short of the boss room (loops are unaffected)."/>
 
         <!-- Boss grid. Sortable by boss, respawn, and each timer (numeric sort keys
              so remaining time orders correctly; blank / expired rows sort last).
              ReflectionBinding on every column — DataGrid columns aren't in the
              visual tree, so compiled bindings can't resolve BossRowViewModel here. -->
-        <DataGrid Grid.Row="2" x:Name="BossGrid"
+        <DataGrid Grid.Row="1" x:Name="BossGrid"
                   ItemsSource="{Binding Rows}"
                   SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                   IsVisible="{Binding HasBosses}"
@@ -74,16 +70,20 @@
                                     Binding="{ReflectionBinding Early3Display}"
                                     FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <!-- Manual timer control. Cell DataContext is the row VM. -->
-                <DataGridTemplateColumn Header="Timer" Width="140" CanUserSort="False">
+                <!-- Manual timer control. Cell DataContext is the row VM. Mark sets a
+                     custom / back-dated time; Reset stamps now; Clear removes it. -->
+                <DataGridTemplateColumn Header="Timer" Width="185" CanUserSort="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate x:DataType="vm:BossRowViewModel">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
                                 <Button Content="Mark" Padding="8,2" Margin="0,0,4,0"
                                         Command="{Binding MarkCommand}" IsVisible="{Binding IsTimed}"
                                         ToolTip.Tip="Set this boss's kill time (defaults to now; editable)."/>
-                                <Button Content="Reset" Padding="6,2"
-                                        Command="{Binding ResetTimerCommand}" IsVisible="{Binding IsActive}"
+                                <Button Content="Reset" Padding="7,2" Margin="0,0,4,0"
+                                        Command="{Binding ResetTimerCommand}" IsVisible="{Binding IsTimed}"
+                                        ToolTip.Tip="Stamp the kill at the current time."/>
+                                <Button Content="Clear" Padding="7,2"
+                                        Command="{Binding ClearTimerCommand}" IsVisible="{Binding IsActive}"
                                         ToolTip.Tip="Clear this boss's running timer."/>
                             </StackPanel>
                         </DataTemplate>
@@ -93,7 +93,7 @@
         </DataGrid>
 
         <!-- Empty-state. -->
-        <TextBlock Grid.Row="2"
+        <TextBlock Grid.Row="1"
                    IsVisible="{Binding !HasBosses}"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"

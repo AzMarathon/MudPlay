@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using FujinTerm.Models.Profile;
 using FujinTerm.Services;
 
 namespace FujinTerm.Game.GameData;
@@ -49,6 +50,15 @@ public static class BossCatalog
             if (IsBoss(GetInt(el, "GameLimit"), regen)) return Math.Max(0, regen);
         }
         return null;
+    }
+
+    // Effective respawn hours for a boss def: the user's manual override when set,
+    // otherwise the game-data timer. Centralizes the "override wins" rule so the
+    // tab, the timer store, and @timer all agree.
+    public static int? EffectiveRegenHours(GameDataCache gameData, BossDef def)
+    {
+        ArgumentNullException.ThrowIfNull(def);
+        return def.RespawnHoursOverride ?? ResolveRegenHours(gameData, def.Name);
     }
 
     private static int GetInt(JsonElement el, string prop)

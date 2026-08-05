@@ -16,7 +16,9 @@ public enum BossRespawnType { Timed, Cleanup }
 // StopBefore is a user flag: walk-to halts one room short of this boss's rooms.
 // ExactSpawn means no early window (100% timer only — e.g. Lord of the Hunt,
 // Crimson Mist on Stock). Removed is overlay-only: it hides a seed boss the user
-// deleted.
+// deleted. RespawnHoursOverride is a user fallback for bosses game data can't
+// resolve a timer for — null means "use game data" (the normal case); a value
+// forces that respawn length regardless of the loaded set.
 public sealed class BossDef
 {
     public string Name { get; set; } = string.Empty;
@@ -27,6 +29,7 @@ public sealed class BossDef
     public BossRespawnType RespawnType { get; set; } = BossRespawnType.Timed;
     public bool ExactSpawn { get; set; }
     public bool StopBefore { get; set; }
+    public int? RespawnHoursOverride { get; set; }
     public bool Removed { get; set; }
 
     // Deep-ish copy so the store can hand out editable rows without mutating the
@@ -35,7 +38,8 @@ public sealed class BossDef
     {
         Name = Name, MonsterNumber = MonsterNumber, Rooms = new List<string>(Rooms),
         InStock = InStock, InParadigm = InParadigm, RespawnType = RespawnType,
-        ExactSpawn = ExactSpawn, StopBefore = StopBefore, Removed = Removed,
+        ExactSpawn = ExactSpawn, StopBefore = StopBefore,
+        RespawnHoursOverride = RespawnHoursOverride, Removed = Removed,
     };
 
     // True when this boss carries no user edits relative to a seed entry — the
@@ -45,6 +49,7 @@ public sealed class BossDef
         && MonsterNumber == seed.MonsterNumber
         && InStock == seed.InStock && InParadigm == seed.InParadigm
         && RespawnType == seed.RespawnType && ExactSpawn == seed.ExactSpawn
-        && StopBefore == seed.StopBefore && !Removed
+        && StopBefore == seed.StopBefore && RespawnHoursOverride == seed.RespawnHoursOverride
+        && !Removed
         && Rooms.SequenceEqual(seed.Rooms, StringComparer.OrdinalIgnoreCase);
 }

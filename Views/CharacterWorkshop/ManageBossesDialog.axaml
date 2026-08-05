@@ -11,15 +11,12 @@
         MinWidth="560" MinHeight="360"
         WindowStartupLocation="CenterOwner">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="18">
-        <TextBlock Grid.Row="0" Text="{Binding HeaderText}"
-                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,4"/>
-        <TextBlock Grid.Row="1"
-                   Text="Add, edit, or remove bosses for this realm. Rooms are 'map/room' pairs, separated by ';'. Changes save to this realm's set and are shared across your characters."
-                   Foreground="{StaticResource ChromeFgMutedBrush}"
-                   FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+    <Grid RowDefinitions="Auto,*,Auto" Margin="18">
+        <TextBox Grid.Row="0" Width="240" HorizontalAlignment="Left" Margin="0,0,0,10"
+                 PlaceholderText="Filter by boss or room…"
+                 Text="{Binding FilterText, Mode=TwoWay}"/>
 
-        <DataGrid Grid.Row="2"
+        <DataGrid Grid.Row="1"
                   ItemsSource="{Binding Rows}"
                   SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                   Background="{StaticResource ChromeBgSunkenBrush}"
@@ -33,16 +30,17 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Boss"
                                     Binding="{ReflectionBinding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                    Width="200"/>
+                                    Width="190"/>
                 <DataGridTextColumn Header="Rooms (map/room; …)"
                                     Binding="{ReflectionBinding Rooms, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                    Width="200" FontFamily="{StaticResource FontMono}"/>
-                <DataGridCheckBoxColumn Header="Cleanup"
-                                        Binding="{ReflectionBinding IsCleanup, Mode=TwoWay}" Width="80"/>
+                                    Width="190" FontFamily="{StaticResource FontMono}"/>
+                <DataGridTextColumn Header="Respawn (h)"
+                                    Binding="{ReflectionBinding RespawnHoursText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="95" FontFamily="{StaticResource FontMono}"/>
+                <DataGridCheckBoxColumn Header="Respawns @ Cleanup"
+                                        Binding="{ReflectionBinding IsCleanup, Mode=TwoWay}" Width="140"/>
                 <DataGridCheckBoxColumn Header="Exact"
                                         Binding="{ReflectionBinding ExactSpawn, Mode=TwoWay}" Width="70"/>
-                <DataGridCheckBoxColumn Header="Stop before"
-                                        Binding="{ReflectionBinding StopBefore, Mode=TwoWay}" Width="90"/>
                 <DataGridCheckBoxColumn Header="Stock"
                                         Binding="{ReflectionBinding InStock, Mode=TwoWay}" Width="70"/>
                 <DataGridCheckBoxColumn Header="ParaMUD"
@@ -50,7 +48,7 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,12,0,0">
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,12,0,0">
             <Button Grid.Column="0" Content="Add boss" Command="{Binding AddRowCommand}" Margin="0,0,8,0"/>
             <Button Grid.Column="1" Content="Remove selected" Command="{Binding RemoveRowCommand}"/>
             <Button Grid.Column="3" Content="Cancel" Command="{Binding CancelCommand}" MinWidth="80" Margin="0,0,8,0"/>

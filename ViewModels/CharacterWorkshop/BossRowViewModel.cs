@@ -155,11 +155,16 @@ public sealed partial class BossRowViewModel : ObservableObject
         StopBefore = StopBefore,
     };
 
+    // Mark opens the date-time dialog (set / back-date). Reset stamps the kill at
+    // the current time (quick "it just died"). Clear removes the running timer.
     [RelayCommand]
     private void Mark() => _onMarkRequested(this);
 
     [RelayCommand]
-    private void ResetTimer() { _timers.Reset(Name.Trim().ToLowerInvariant()); RefreshStatus(); }
+    private void ResetTimer() { _timers.MarkKilled(Name.Trim().ToLowerInvariant(), DateTimeOffset.Now); RefreshStatus(); }
+
+    [RelayCommand]
+    private void ClearTimer() { _timers.Reset(Name.Trim().ToLowerInvariant()); RefreshStatus(); }
 
     partial void OnStopBeforeChanged(bool value) { if (!_suppress) _onEdit(); }
 }

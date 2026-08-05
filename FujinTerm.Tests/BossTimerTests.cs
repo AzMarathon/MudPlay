@@ -492,7 +492,7 @@ public sealed class BossTimerTests : IDisposable
 
         Assert.Single(vm.Rows);   // ogre king loaded for the realm
         vm.AddRowCommand.Execute(null);
-        ManageBossRowViewModel added = vm.Rows.Last();
+        ManageBossRowViewModel added = vm.Rows.Cast<ManageBossRowViewModel>().Last();
         added.Name = "new boss";
         added.Rooms = "1/100";
         added.InParadigm = true;
@@ -515,7 +515,7 @@ public sealed class BossTimerTests : IDisposable
         var (bosses, _, cache) = NewStores();
         var vm = new ManageBossesDialogViewModel(bosses, cache);
 
-        ManageBossRowViewModel drop = vm.Rows.First(r => r.Name == "chimera");
+        ManageBossRowViewModel drop = vm.Rows.Cast<ManageBossRowViewModel>().First(r => r.Name == "chimera");
         vm.RemoveRowCommand.Execute(drop);
         vm.SaveCommand.Execute(null);
 
@@ -532,12 +532,34 @@ public sealed class BossTimerTests : IDisposable
         var vm = new ManageBossesDialogViewModel(bosses, cache);
 
         vm.AddRowCommand.Execute(null);
-        vm.Rows.Last().Name = "should not persist";
+        vm.Rows.Cast<ManageBossRowViewModel>().Last().Name = "should not persist";
         bool? closed = null;
         vm.CloseRequested += r => closed = r;
         vm.CancelCommand.Execute(null);
 
         Assert.False(closed);
         Assert.DoesNotContain(bosses.Resolve(), b => b.Name == "should not persist");
+    }
+
+    [Fact]
+    public void ManageDialog_RespawnOverride_FillsInWhenGameDataHasNoTimer()
+    {
+        // "ghost king" has no game-data monster, so the tab shows "?" and StatusFor
+        // can't resolve a timer — until a manual respawn override is entered.
+        SeedGameData(RealmType.ParaMud, ("some mob", 1, 0, 0));
+        SeedBosses(Boss("ghost king", number: 999, rooms: "1/1"));
+        var (bosses, timers, cache) = NewStores();
+        timers.MarkKilled("ghost king");
+
+        BossDef before = bosses.ResolveForRealm(RealmType.ParaMud).First(b => b.Name == "ghost king");
+        Assert.Null(timers.StatusFor(before, RealmType.ParaMud));   // no timer resolvable
+
+        var vm = new ManageBossesDialogViewModel(bosses, cache);
+        vm.Rows.Cast<ManageBossRowViewModel>().First(r => r.Name == "ghost king").RespawnHoursText = "10";
+        vm.SaveCommand.Execute(null);
+
+        BossDef after = bosses.ResolveForRealm(RealmType.ParaMud).First(b => b.Name == "ghost king");
+        Assert.Equal(10, after.RespawnHoursOverride);
+        Assert.NotNull(timers.StatusFor(after, RealmType.ParaMud));   // override drives the timer
     }
 }

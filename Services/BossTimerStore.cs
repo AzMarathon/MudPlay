@@ -97,7 +97,7 @@ public sealed class BossTimerStore
         ArgumentNullException.ThrowIfNull(def);
         if (def.RespawnType != BossRespawnType.Timed) return null;
         if (KilledAt(def.Name) is not { } killed) return null;
-        if (BossCatalog.ResolveRegenHours(_gameData, def.Name) is not { } hours || hours <= 0) return null;
+        if (BossCatalog.EffectiveRegenHours(_gameData, def) is not { } hours || hours <= 0) return null;
         BossWindowState state = BossTimerMath.Describe(realm, def.ExactSpawn, hours, DateTimeOffset.UtcNow - killed);
         return state.Expired ? null : state;
     }
