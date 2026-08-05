@@ -1,0 +1,111 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
+             x:Class="FujinTerm.Views.CharacterWorkshop.BossesSectionView"
+             x:DataType="vm:BossesSectionViewModel">
+
+    <Grid Margin="22" RowDefinitions="Auto,*">
+
+        <!-- Toolbar: manage / import / export the list, filter, and the active-timer
+             summary. Editing the boss list lives in the Manage Bosses dialog; the
+             table itself is read-mostly (Stop before toggles inline; Mark / Reset /
+             Clear drive the timer). -->
+        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Center">
+            <Button Content="Manage Bosses…" Margin="0,0,6,6" Command="{Binding ManageBossesCommand}"
+                    ToolTip.Tip="Add, edit, or remove bosses in this realm's list."/>
+            <Button Content="Import…" Margin="0,0,6,6" Command="{Binding ImportCommand}"
+                    ToolTip.Tip="Load a shared boss table (JSON). Imported entries overlay yours; anything not in the file is kept."/>
+            <Button Content="Export…" Margin="0,0,18,6" Command="{Binding ExportCommand}"
+                    ToolTip.Tip="Save this realm's boss table to a JSON file to share."/>
+            <TextBox Width="200" Margin="0,0,18,6" PlaceholderText="Filter by boss or room…"
+                     Text="{Binding FilterText, Mode=TwoWay}"/>
+            <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="0,0,0,6"
+                       Foreground="{StaticResource AccentAmberBrush}"/>
+        </WrapPanel>
+
+        <!-- Boss grid. Sortable by boss, respawn, and each timer (numeric sort keys
+             so remaining time orders correctly; blank / expired rows sort last).
+             ReflectionBinding on every column — DataGrid columns aren't in the
+             visual tree, so compiled bindings can't resolve BossRowViewModel here. -->
+        <DataGrid Grid.Row="1" x:Name="BossGrid"
+                  ItemsSource="{Binding Rows}"
+                  SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                  Sorting="OnSorting"
+                  IsVisible="{Binding HasBosses}"
+                  Background="{StaticResource ChromeBgSunkenBrush}"
+                  BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"
+                  IsReadOnly="False"
+                  AutoGenerateColumns="False"
+                  CanUserSortColumns="True"
+                  CanUserResizeColumns="True"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+            <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header="Stop before" Width="100" CanUserSort="False"
+                                        Binding="{ReflectionBinding StopBefore, Mode=TwoWay}"/>
+                <DataGridTextColumn Header="Boss" Width="190" IsReadOnly="True" SortMemberPath="Name"
+                                    Binding="{ReflectionBinding Name}"/>
+                <DataGridTextColumn Header="Respawn" Width="90" IsReadOnly="True" SortMemberPath="RespawnSortKey"
+                                    Binding="{ReflectionBinding RespawnDisplay}"
+                                    FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <!-- Live 100% countdown for timed bosses; DEAD (red) / ALIVE (green)
+                     for cleanup bosses. Template column so the text colours per row. -->
+                <DataGridTemplateColumn Header="100%" Width="100" SortMemberPath="FullSortKey">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:BossRowViewModel">
+                            <TextBlock Text="{Binding StatusDisplay}" VerticalAlignment="Center" Margin="8,0"
+                                       FontFamily="{StaticResource FontMono}"
+                                       Foreground="{Binding StatusDisplay, Converter={x:Static vm:BossStatusBrushConverter.Instance}}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <!-- Early-window columns (indices 4-6). Code-behind relabels /
+                     collapses these per realm: Paradigm 5 / 10 / 20%, Stock a single
+                     87.5% column. -->
+                <DataGridTextColumn Header="5%" Width="100" IsReadOnly="True" SortMemberPath="Early1SortKey"
+                                    Binding="{ReflectionBinding Early1Display}"
+                                    FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="10%" Width="100" IsReadOnly="True" SortMemberPath="Early2SortKey"
+                                    Binding="{ReflectionBinding Early2Display}"
+                                    FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="20%" Width="100" IsReadOnly="True" SortMemberPath="Early3SortKey"
+                                    Binding="{ReflectionBinding Early3Display}"
+                                    FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <!-- Manual timer control. Cell DataContext is the row VM. Mark sets a
+                     custom / back-dated time; Reset stamps now; Clear removes it. -->
+                <DataGridTemplateColumn Header="Timer" Width="185" CanUserSort="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:BossRowViewModel">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
+                                <Button Content="Mark" Padding="8,2" Margin="0,0,4,0"
+                                        Command="{Binding MarkCommand}"
+                                        ToolTip.Tip="Set this boss's kill time (defaults to now; editable)."/>
+                                <Button Content="Now" Padding="7,2" Margin="0,0,4,0"
+                                        Command="{Binding ResetTimerCommand}"
+                                        ToolTip.Tip="Stamp the kill at the current time."/>
+                                <Button Content="Clear" Padding="7,2"
+                                        Command="{Binding ClearTimerCommand}" IsVisible="{Binding IsActive}"
+                                        ToolTip.Tip="Clear this boss's running timer."/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Empty-state. -->
+        <TextBlock Grid.Row="1"
+                   IsVisible="{Binding !HasBosses}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   Text="Load a game-data set to populate the boss list, or use Manage Bosses to add one."/>
+    </Grid>
+</UserControl>

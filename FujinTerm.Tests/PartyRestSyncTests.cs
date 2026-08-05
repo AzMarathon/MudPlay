@@ -161,7 +161,7 @@ public sealed class PartyRestSyncTests
         party.IsInParty = true;
         party.LeaderName = "Leader";
         sync.RequestHeal();
-        Assert.Equal("gang @heal\r", LastWire(wire));
+        Assert.Equal("bg @heal\r", LastWire(wire));
     }
 
     [Fact]

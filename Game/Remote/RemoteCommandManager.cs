@@ -702,7 +702,7 @@ public sealed class RemoteCommandManager : IDisposable
         string wire = channel switch
         {
             RemoteChannel.Telepath => $"/{given} {payload}",
-            RemoteChannel.Gangpath => $"gang {payload}",
+            RemoteChannel.Gangpath => $"bg {payload}",   // gang-channel speak verb is `bg`, not `gang`
             RemoteChannel.Local    => $".{payload}",
             _                      => payload,
         };

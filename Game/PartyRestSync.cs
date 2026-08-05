@@ -89,7 +89,7 @@ public sealed class PartyRestSync : IDisposable
         if (!_party.IsInParty) return;
         if (_party.SelfIsLeader) return;
         if (_wireSender is null) return;
-        _wireSender(Encoding.Latin1.GetBytes("gang @heal\r"));
+        _wireSender(Encoding.Latin1.GetBytes("bg @heal\r"));   // gang speak verb is `bg`
     }
 
     public void Dispose()

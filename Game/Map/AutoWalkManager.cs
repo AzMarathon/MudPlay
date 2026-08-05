@@ -57,6 +57,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<IReadOnlyList<RoomKey>>? _routeAnnouncer;
     private Func<RoomKey, IReadOnlyList<int>>? _hazardItemResolver;
     private Func<int, string?>? _itemNameResolver;
+    // Boss rooms flagged "stop before" on the Bosses tab. A walk-to whose
+    // destination is one of these halts one room short (loop / auto-lair engines
+    // are unaffected — they never route through here). Resolved live so realm /
+    // edit changes take effect without re-wiring.
+    private Func<IReadOnlySet<RoomKey>>? _bossStopRooms;
     private IMazeSolver? _mazeSolver;
     private IPyramidSolver? _pyramidSolver;
     private BoatRoutePlanner? _boatPlanner;
@@ -617,6 +622,58 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _itemNameResolver = resolver;
     }
 
+    // Boss "stop before" room set. Bound to BossStore in MainWindowVM / AppServices;
+    // a walk-to targeting one of these rooms is re-pointed to the room one hop short
+    // on the planned route. Resolved live (realm-filtered, honours edits). When
+    // unset every walk targets its literal destination.
+    public void SetBossStopRooms(Func<IReadOnlySet<RoomKey>> resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        _bossStopRooms = resolver;
+    }
+
+    // Re-point a walk that targets a "stop before" boss room to the room one hop
+    // short on the shortest route (the same roomSeq[^2] idiom Auto-Lair uses to pick
+    // a wait-room). Returns the destination unchanged when it isn't a flagged room,
+    // when we're already inside it, or when no route can be planned — the normal walk
+    // then handles or fails it. When the boss room is a single hop away the room one
+    // short is the source itself, so the caller's already-at-destination check ends
+    // the walk without a step.
+    private RoomKey ApplyStopBefore(RoomKey source, RoomKey destination)
+    {
+        IReadOnlySet<RoomKey>? stopRooms = _bossStopRooms?.Invoke();
+        if (stopRooms is null || !stopRooms.Contains(destination)) return destination;
+        if (source.Equals(destination)) return destination;
+
+        IReadOnlyList<Direction>? path = _bfs.FindPath(source, destination, _filter);
+        if (path is null || path.Count == 0) return destination;
+
+        IReadOnlyList<RoomKey> roomSeq = ReplayRooms(source, path);
+        if (roomSeq.Count == 0) return destination;
+
+        RoomKey before = roomSeq.Count == 1 ? source : roomSeq[^2];
+        if (!before.Equals(destination))
+            _log?.Info("Walk",
+                $"stop-before boss room {destination.Map}/{destination.Room}: halting at {before.Map}/{before.Room}");
+        return before;
+    }
+
+    // Replay directions from source through the graph, returning the rooms touched
+    // (source excluded). Stops early if a step lands outside the graph.
+    private IReadOnlyList<RoomKey> ReplayRooms(RoomKey source, IReadOnlyList<Direction> dirs)
+    {
+        List<RoomKey> rooms = new(dirs.Count);
+        RoomKey cur = source;
+        foreach (Direction d in dirs)
+        {
+            if (_graph.GetRoom(cur) is not Room room) break;
+            if (!room.Exits.TryGetValue(d, out RoomExit exit)) break;
+            cur = exit.Target;
+            rooms.Add(cur);
+        }
+        return rooms;
+    }
+
     // Planned-route room announcer. Invoked once at walk-start with the
     // ordered RoomKey sequence of the freshly-planned path (source first,
     // then each hop's target). Bound to the auto-light provisioner, which
@@ -767,6 +824,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
             Raise(new WalkEvent(WalkEventKind.Failed, "destination not in active graph", destination));
             return false;
         }
+
+        // Boss "stop before": re-point a walk targeting a flagged boss room to the
+        // room one hop short, so the walker halts adjacent instead of stepping in
+        // and tripping the spawn. Applied here so every WalkTo caller (map click,
+        // GOTO, @goto, events, recovery) honours it; loop / auto-lair are untouched.
+        destination = ApplyStopBefore(source.Key, destination);
 
         if (source.Key.Equals(destination))
         {

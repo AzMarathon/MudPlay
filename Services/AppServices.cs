@@ -664,6 +664,17 @@ public sealed class AppServices
     // overlay on GameDataCache.ActiveSetChanged.
     public QuestStore Quests { get; }
 
+    // Realm-wide boss catalog (seed + per-set overlay); timer values resolve from
+    // game data. Feeds the Player Workshop Bosses tab and the boss-timer feature.
+    public BossStore Bosses { get; }
+
+    // Persisted per-set boss kill-times driving the live respawn countdowns +
+    // @timer. Auto-started on a detected boss kill; manual override on the tab.
+    public BossTimerStore BossTimers { get; }
+
+    // @timer read-only query handler. App-lifetime, like the other query handlers.
+    public Game.Remote.BossTimerQueryHandler BossTimerQuery { get; private set; } = null!;
+
     // Runtime keystroke → macro → wire-send bridge. Constructed up-
     // front; MacroDispatcher.SetSender gets bound from
     // MainWindowViewModel after the telnet client is
@@ -2241,6 +2252,23 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             Quests.OnActiveSetChanged(GameData.ActiveSet);
 
+        // Boss catalog — realm-wide list (seed + per-set overlay); timer values are
+        // looked up from game data at runtime. Reloads its overlay on set change.
+        Bosses = new BossStore(Log);
+        GameData.ActiveSetChanged += Bosses.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null)
+            Bosses.OnActiveSetChanged(GameData.ActiveSet);
+
+        // Persisted boss kill-times — realm-wide like the catalog. Kill detection is
+        // wired later (needs MonsterDeath + RoomTracker); here we just load the
+        // active set's saved timers so a restart resumes mid-countdown.
+        BossTimers = new BossTimerStore(Bosses, GameData, Log);
+        GameData.ActiveSetChanged += BossTimers.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null)
+            BossTimers.OnActiveSetChanged(GameData.ActiveSet);
+        // Cleanup-boss DEAD/ALIVE state reads the active BBS's nightly-cleanup time.
+        BossTimers.SetCleanupConfig(ResolveBossCleanupConfig);
+
         // ItemNameStore — int→name index for the active Items.json so
         // the keyed-door FSM can resolve KeyItemId → in-game name and
         // send `use <name> <dir>`.
@@ -2623,6 +2651,15 @@ public sealed class AppServices
         // room re-display correct any cross-variant ambiguity.
         MonsterDeath = new Game.Combat.MonsterDeathWatcher(
             Router, MonsterMessages, Log);
+        // Boss-timer auto-start. MUST be the FIRST MonsterDied subscriber: it reads
+        // the engaged target name (CombatManager.CurrentTarget) live, and a later
+        // subscriber (the roster-resync below) clears it via NoteMonsterDied /
+        // NoteUnattributedDeath. The in-game signal is "engaged a named monster, it
+        // died (awarded exp)"; the room comes from the live tracker (the event
+        // carries neither). Fallback deaths (no candidate identity) are attributed
+        // through the engaged name, so they're covered too.
+        MonsterDeath.MonsterDied += evt =>
+            BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key, Combat.CurrentTarget);
         // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
         // resync handler below: on a kill whose DeathSpell summons, it asserts a
         // hold + sends a CR to re-scan the room, and that hold has to be in place
@@ -3377,6 +3414,10 @@ public sealed class AppServices
         // wire output either.
         InventoryQuery = new Game.Remote.InventoryQueryHandler(RemoteCommands, Inventory, GroundItems, Currency);
 
+        // @timer — read-only report of the boss respawn timers being tracked. Reads
+        // the boss catalog + persisted kill-times; no wire output beyond its reply.
+        BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData);
+
         // Write-side inventory / cash actions — @get-all / @drop-all /
         // @deposit-all / @share emit get / drop / dep / with / give on the wire.
         // Keep-on-hand floors come from the per-character Cash settings;
@@ -3893,6 +3934,22 @@ public sealed class AppServices
         Walker.SetHazardItemResolver(key =>
             RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0)?.MandatoryItems
                 ?? Array.Empty<int>());
+
+        // Boss "stop before" rooms — the walker halts one room short of any boss
+        // room flagged StopBefore on the active realm. Resolved live so realm swaps
+        // + tab edits take effect without re-wiring; only the point-to-point walker
+        // consults it (loops / auto-lair route through boss rooms untouched).
+        Walker.SetBossStopRooms(() =>
+        {
+            var set = new HashSet<Game.Map.RoomKey>();
+            foreach (Models.Profile.BossDef b in Bosses.ResolveForRealm(GameData.ActiveRealm))
+            {
+                if (!b.StopBefore) continue;
+                foreach (string wire in b.Rooms)
+                    if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k)) set.Add(k);
+            }
+            return set;
+        });
 
         // If an in-flight move carried us out of a room where combat had just
         // engaged an actionable hostile (the move confirms + wipes the room
@@ -5866,6 +5923,21 @@ public sealed class AppServices
             .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
         return first is null ? null : Bbs.Get(first);
+    }
+
+    // Parse the active BBS's nightly-cleanup time + zone into a config for the
+    // cleanup-boss DEAD/ALIVE state. Null when no BBS, a blank time, or an
+    // unparseable time (a bad zone id falls back to the local zone).
+    private BossCleanupConfig? ResolveBossCleanupConfig()
+    {
+        if (ResolveActiveBbs() is not { } bbs) return null;
+        if (string.IsNullOrWhiteSpace(bbs.CleanupTimeOfDay)) return null;
+        if (!TimeSpan.TryParse(bbs.CleanupTimeOfDay.Trim(), out TimeSpan tod)
+            || tod < TimeSpan.Zero || tod >= TimeSpan.FromDays(1)) return null;
+        TimeZoneInfo tz;
+        try { tz = TimeZoneInfo.FindSystemTimeZoneById(bbs.CleanupTimeZoneId); }
+        catch { tz = TimeZoneInfo.Local; }
+        return new BossCleanupConfig(tod, tz);
     }
 
     // Recompute the active game-data set from the BBS-pin chain and

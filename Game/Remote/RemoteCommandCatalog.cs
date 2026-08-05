@@ -34,6 +34,8 @@ namespace FujinTerm.Game.Remote;
 //   - SysopCommands ("Elevated Commands" in the Players-tab UI) — high-trust
 //     commands beyond ordinary control: irreversible character actions
 //     (@suicide). Wider than just sysop powers.
+//   - QueryBossTimers — @timer (boss respawn timers being tracked). Its own
+//     category so a user can grant boss-timer queries independently of @where.
 //
 // Party-coordination commands (@wait / @ok / @comeback / @forget / @share) map
 // to PlayerRemoteControls.None — they're gated by the engine's party-whitelist
@@ -80,6 +82,7 @@ public static class RemoteCommandCatalog
             ["@where"]        = PlayerRemoteControls.QueryLocation,
             ["@path"]         = PlayerRemoteControls.QueryLocation,
             ["@who"]          = PlayerRemoteControls.QueryLocation,
+            ["@timer"]        = PlayerRemoteControls.QueryBossTimers,   // own permission — grant boss-timer queries separately
             ["@help"]         = PlayerRemoteControls.QueryVersion,
             ["@what"]         = PlayerRemoteControls.QueryInventory,
             ["@wealth"]       = PlayerRemoteControls.QueryInventory,

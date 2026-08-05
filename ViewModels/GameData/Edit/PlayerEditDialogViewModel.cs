@@ -43,12 +43,14 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcAlterSettings;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcDivertConversations;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcSysopCommands;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryBossTimers;
 
     // True when every remote-control checkbox is checked — drives the master toggle's IsChecked.
     public bool AllowsAll =>
         RcQueryVersion && RcQueryExperience && RcQueryHealthStatus && RcQueryLocation &&
         RcQueryInventory && RcRequestInvite && RcMovePlayer && RcExecuteCommands &&
-        RcHangupDisconnect && RcAlterSettings && RcDivertConversations && RcSysopCommands;
+        RcHangupDisconnect && RcAlterSettings && RcDivertConversations && RcSysopCommands &&
+        RcQueryBossTimers;
 
     // ----- Tooltips per checkbox ----------------------------------------
     // Precomputed once from RemoteCommandCatalog so the checkbox tooltip
@@ -69,6 +71,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     public string RcAlterSettingsTip       { get; } = BuildTip(PlayerRemoteControls.AlterSettings);
     public string RcDivertConversationsTip { get; } = BuildTip(PlayerRemoteControls.DivertConversations);
     public string RcSysopCommandsTip       { get; } = BuildTip(PlayerRemoteControls.SysopCommands);
+    public string RcQueryBossTimersTip     { get; } = BuildTip(PlayerRemoteControls.QueryBossTimers);
 
     // Build the per-category tooltip text. Lists every @-command the catalog maps to
     // category, sorted, with a clear "ticked → grants / unticked → denies" framing so the
@@ -184,6 +187,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         RcAlterSettings       = rc.HasFlag(PlayerRemoteControls.AlterSettings);
         RcDivertConversations = rc.HasFlag(PlayerRemoteControls.DivertConversations);
         RcSysopCommands       = rc.HasFlag(PlayerRemoteControls.SysopCommands);
+        RcQueryBossTimers     = rc.HasFlag(PlayerRemoteControls.QueryBossTimers);
     }
 
     // Toggle every remote-control checkbox in one shot (the "All" button).
@@ -193,7 +197,8 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         bool target = !AllowsAll;
         RcQueryVersion = RcQueryExperience = RcQueryHealthStatus = RcQueryLocation =
         RcQueryInventory = RcRequestInvite = RcMovePlayer = RcExecuteCommands =
-        RcHangupDisconnect = RcAlterSettings = RcDivertConversations = RcSysopCommands = target;
+        RcHangupDisconnect = RcAlterSettings = RcDivertConversations = RcSysopCommands =
+        RcQueryBossTimers = target;
     }
 
     [RelayCommand]
@@ -212,6 +217,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         if (RcAlterSettings)       rc |= PlayerRemoteControls.AlterSettings;
         if (RcDivertConversations) rc |= PlayerRemoteControls.DivertConversations;
         if (RcSysopCommands)       rc |= PlayerRemoteControls.SysopCommands;
+        if (RcQueryBossTimers)     rc |= PlayerRemoteControls.QueryBossTimers;
 
         PlayerRecord updated = _original with
         {

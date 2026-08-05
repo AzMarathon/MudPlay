@@ -102,6 +102,26 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // value. Default on.
     [ObservableProperty] private bool _autoRefineDeathFloor = true;
 
+    // Nightly boss-cleanup wall-clock time ("HH:mm" in CleanupTimeZone) + its zone.
+    // Drives the DEAD/ALIVE state of "Respawns @ Cleanup" bosses on the Bosses tab.
+    // Default 21:00 in the computer's own zone (auto-detected); the zone is a
+    // dropdown the user can override.
+    [ObservableProperty] private string _cleanupTimeOfDay = "21:00";
+    [ObservableProperty] private string _cleanupTimeZoneId = TimeZoneInfo.Local.Id;
+
+    // Every system time-zone id (auto-detected local zone included), sorted — the
+    // options for the cleanup-zone dropdown.
+    public IReadOnlyList<string> TimeZoneIds { get; } = BuildTimeZoneIds();
+
+    private static IReadOnlyList<string> BuildTimeZoneIds()
+    {
+        var ids = TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).ToList();
+        if (!ids.Contains(TimeZoneInfo.Local.Id, StringComparer.OrdinalIgnoreCase))
+            ids.Add(TimeZoneInfo.Local.Id);
+        ids.Sort(StringComparer.OrdinalIgnoreCase);
+        return ids;
+    }
+
     // Board-specific player-disconnect line (see BbsProfile.DisconnectPattern).
     // Optional literal pattern — {name} captures the disconnecting player, *
     // swallows a varying run. Empty = only the built-in "just disconnected" /
@@ -639,6 +659,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         GameExitCommand = profile.GameExitCommand;
         PlayerDiesAtHp = profile.PlayerDiesAtHp;
         AutoRefineDeathFloor = profile.AutoRefineDeathFloor;
+        CleanupTimeOfDay = profile.CleanupTimeOfDay;
+        CleanupTimeZoneId = profile.CleanupTimeZoneId;
         DisconnectPattern = profile.DisconnectPattern;
         RunicCurrencyName = profile.RunicCurrencyName;
     }
@@ -773,6 +795,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         GameExitCommand = defaults.GameExitCommand;
         PlayerDiesAtHp = defaults.PlayerDiesAtHp;
         AutoRefineDeathFloor = defaults.AutoRefineDeathFloor;
+        CleanupTimeOfDay = defaults.CleanupTimeOfDay;
+        CleanupTimeZoneId = defaults.CleanupTimeZoneId;
         DisconnectPattern = defaults.DisconnectPattern;
         RunicCurrencyName = defaults.RunicCurrencyName;
     }
@@ -822,6 +846,9 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // (0 HP already means dropped), so clamp to <= 0 at the point of storage.
         profile.PlayerDiesAtHp = Math.Min(0, PlayerDiesAtHp);
         profile.AutoRefineDeathFloor = AutoRefineDeathFloor;
+        profile.CleanupTimeOfDay = CleanupTimeOfDay?.Trim() ?? string.Empty;
+        profile.CleanupTimeZoneId = string.IsNullOrWhiteSpace(CleanupTimeZoneId)
+            ? new BbsProfile().CleanupTimeZoneId : CleanupTimeZoneId.Trim();
         profile.DisconnectPattern = string.IsNullOrWhiteSpace(DisconnectPattern)
             ? null : DisconnectPattern.Trim();
         profile.RunicCurrencyName = string.IsNullOrWhiteSpace(RunicCurrencyName)
@@ -887,6 +914,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnGameExitCommandChanged(string value)         { PushToCache(); Dirty(); }
     partial void OnPlayerDiesAtHpChanged(int value)             { PushToCache(); Dirty(); }
     partial void OnAutoRefineDeathFloorChanged(bool value)      { PushToCache(); Dirty(); }
+    partial void OnCleanupTimeOfDayChanged(string value)        { PushToCache(); Dirty(); }
+    partial void OnCleanupTimeZoneIdChanged(string value)       { PushToCache(); Dirty(); }
     partial void OnDisconnectPatternChanged(string? value)      { PushToCache(); Dirty(); }
     partial void OnRunicCurrencyNameChanged(string value)       { PushToCache(); Dirty(); }
 

@@ -235,6 +235,7 @@ public sealed class RemoteCommandCatalogTests
     [InlineData(PlayerRemoteControls.HangupDisconnect,  "@hangup")]
     [InlineData(PlayerRemoteControls.HangupDisconnect,  "@relog")]
     [InlineData(PlayerRemoteControls.SysopCommands,     "@suicide")]
+    [InlineData(PlayerRemoteControls.QueryBossTimers,   "@timer")]
     public void Tooltip_ForCategory_ListsExpectedCommand(PlayerRemoteControls category, string command)
     {
         ViewModels.GameData.Edit.PlayerEditDialogViewModel vm = new(
@@ -254,6 +255,7 @@ public sealed class RemoteCommandCatalogTests
             PlayerRemoteControls.AlterSettings       => vm.RcAlterSettingsTip,
             PlayerRemoteControls.DivertConversations => vm.RcDivertConversationsTip,
             PlayerRemoteControls.SysopCommands       => vm.RcSysopCommandsTip,
+            PlayerRemoteControls.QueryBossTimers     => vm.RcQueryBossTimersTip,
             _ => throw new InvalidOperationException($"Untested category {category}"),
         };
         Assert.Contains(command, tip);

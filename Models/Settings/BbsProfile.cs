@@ -129,6 +129,18 @@ public sealed class BbsProfile
     // start from a guess and let real deaths correct it.
     public bool AutoRefineDeathFloor { get; set; } = true;
 
+    // The BBS's nightly cleanup wall-clock time. Some bosses ("Respawns @ Cleanup"
+    // in the boss table) reset only at this daily cleanup, not on a kill countdown —
+    // a marked one reads DEAD until the next cleanup, then ALIVE. Format "HH:mm" in
+    // CleanupTimeZoneId's zone. Stored per-BBS because cleanup timing is a board
+    // property. Blank disables cleanup-boss timers.
+    public string CleanupTimeOfDay { get; set; } = "21:00";
+
+    // Time-zone id CleanupTimeOfDay is expressed in. Defaults to the computer's own
+    // zone (auto-detected); the settings dropdown lets the user override it. Invalid
+    // / empty falls back to the local zone.
+    public string CleanupTimeZoneId { get; set; } = TimeZoneInfo.Local.Id;
+
     // Board-specific player-disconnect line, matched IN ADDITION to the
     // built-in "X just disconnected!!!" / "X just hung up!!!" forms. Some
     // boards (Playpen) don't emit those and instead print a custom BBS-level

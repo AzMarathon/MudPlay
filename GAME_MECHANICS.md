@@ -487,6 +487,15 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback
   death on it, a beat before the current mob actually dies.
 
+**Attributing a kill to a specific monster** *([CONFIRMED] 2026-08-04, user)*
+- **Monster numbers are never observable in-game** — the client only ever sees monster *names* on
+  the wire. So the reliable way to attribute a death to a specific monster (e.g. "was that the
+  boss?") is: the monster **name we were engaged with** (`CombatManager.CurrentTarget`, read live at
+  the death) **plus** the death event. This works for the common fallback death too — the fallback
+  `exp + *Combat Off*` carries no identity of its own, but it is by definition the death of whatever
+  we were fighting, so the engaged name attributes it. Never key kill-attribution on a monster
+  number the player can't have seen. (This is what boss-timer kill detection uses.)
+
 ## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
 
 Two distinct spawn mechanisms, and they respawn on completely different rules. This matters
@@ -574,6 +583,13 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
   far more than its face value, but the extra kill/wave time — and the cap on huge fan-outs — keep it
   below the naive exp-ratio multiple. Bosses are left on their base exp (their death-summon, if any, is
   not folded — a rare edge, and boss exp is already a flat amortised approximation).
+
+**Cleanup-only boss respawns** *([CONFIRMED] 2026-08-04, user)*
+- A subset of bosses (in the boss-timer seed: Lord Feyr, Iceforge, Huge Sandstone Sphinx, Mammoth
+  Stone Scorpion, Bogwood Box) do **not** respawn on a kill-based countdown. They reset **only at the
+  BBS's nightly server cleanup**, a fixed daily wall-clock time (per board — e.g. **2100 Pacific**).
+- So once killed they stay dead until the next cleanup instant, then return. The client models this as
+  a DEAD / ALIVE state keyed to the per-BBS cleanup time, not a duration timer.
 
 ## Vitality — HP, dropping, and death
 
@@ -1937,6 +1953,11 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 
 - **[CONFIRMED]** Talk modes (say / talk-fast / slow) differ **per realm** — that's game
   configuration, not a client bug. The keyboard period is a say-precursor and stays unbindable.
+- **[CONFIRMED] 2026-08-04, user** — the **gang-channel speak verb is `bg`** (broadcast-gang), with
+  `gb` and the `broadg…`/`broadgang` long forms as equivalents. **`gang` is NOT a speak command** —
+  sending `gang <msg>` does not reach the gang. Anything we emit on the gangpath channel (remote
+  `@`-command replies, level-up announces, party `bg @heal`) must use `bg`. The alias-collision
+  table in `AliasEngine` already reserves `bg`/`gb`/`broadg…` as the gangpath forms.
 - **[CONFIRMED] 2026-07-20, user** — when another player `look`s at us the wire prints
   **`<name> is looking at you.`** (`name` a single first-name token). The reactive-look-back
   feature (Settings → Talk) keys on this exact phrase; if a realm's wording differs it's a

@@ -88,6 +88,14 @@ public partial class App : Application
                 FujinTerm.ViewModels.GameData.Edit.AliasEditDialogViewModel,
                 FujinTerm.Views.GameData.Edit.AliasEditDialog>();
 
+            // Bosses tab dialogs — the mark-timer picker and the boss-list editor.
+            AppServices.Current.Dialogs.RegisterWindow<
+                FujinTerm.ViewModels.CharacterWorkshop.MarkTimerDialogViewModel,
+                FujinTerm.Views.CharacterWorkshop.MarkTimerDialog>();
+            AppServices.Current.Dialogs.RegisterWindow<
+                FujinTerm.ViewModels.CharacterWorkshop.ManageBossesDialogViewModel,
+                FujinTerm.Views.CharacterWorkshop.ManageBossesDialog>();
+
             // Per-action keybind rebind dialog — opened from any
             // toolbar button or menu item that owns a BuiltInAction.
             AppServices.Current.Dialogs.RegisterWindow<

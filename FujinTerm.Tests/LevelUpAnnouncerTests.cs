@@ -87,7 +87,7 @@ public sealed class LevelUpAnnouncerTests
 
         h.Gain(1);
 
-        Assert.Equal(new[] { "gang I can now train to level: 6" }, h.Sent);
+        Assert.Equal(new[] { "bg I can now train to level: 6" }, h.Sent);
     }
 
     [Fact]
@@ -101,9 +101,9 @@ public sealed class LevelUpAnnouncerTests
         Assert.Equal(
             new[]
             {
-                "gang I can now train to level: 6",
-                "gang I can now train to level: 7",
-                "gang I can now train to level: 8",
+                "bg I can now train to level: 6",
+                "bg I can now train to level: 7",
+                "bg I can now train to level: 8",
             },
             h.Sent);
     }
@@ -129,7 +129,7 @@ public sealed class LevelUpAnnouncerTests
         // Cross the level-9 threshold — only 9 is new; 6..8 stay silent.
         h.Gain(Threshold(9) - Threshold(8));
 
-        Assert.Equal(new[] { "gang I can now train to level: 9" }, h.Sent);
+        Assert.Equal(new[] { "bg I can now train to level: 9" }, h.Sent);
     }
 
     [Fact]
@@ -150,14 +150,14 @@ public sealed class LevelUpAnnouncerTests
         h.Gain(1);                                   // reach 6 → announce
         h.Gain(Threshold(7) - Threshold(6) - 1);     // still short of 7 → nothing new
 
-        Assert.Equal(new[] { "gang I can now train to level: 6" }, h.Sent);
+        Assert.Equal(new[] { "bg I can now train to level: 6" }, h.Sent);
     }
 
     // gangpath / gossip are word-verbs (trailing space before the message);
     // yell / say are punctuation-prefixed channels in MajorMUD ('"' yells, '.'
     // says to the room) with no separating space.
     [Theory]
-    [InlineData(AnnounceChannel.Gangpath, "gang ")]
+    [InlineData(AnnounceChannel.Gangpath, "bg ")]
     [InlineData(AnnounceChannel.Gossip, "gos ")]
     [InlineData(AnnounceChannel.Yell, "\"")]
     [InlineData(AnnounceChannel.Say, ".")]
@@ -189,6 +189,6 @@ public sealed class LevelUpAnnouncerTests
         Assert.Empty(h.Sent);
 
         h.Gain(Threshold(9) - Threshold(8));   // now a genuine crossing
-        Assert.Equal(new[] { "gang I can now train to level: 9" }, h.Sent);
+        Assert.Equal(new[] { "bg I can now train to level: 9" }, h.Sent);
     }
 }

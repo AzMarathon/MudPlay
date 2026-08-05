@@ -80,6 +80,8 @@
                                           ToolTip.Tip="{Binding RcQueryLocationTip}"/>
                                 <CheckBox Content="Query inventory"      IsChecked="{Binding RcQueryInventory, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcQueryInventoryTip}"/>
+                                <CheckBox Content="Query boss timers"    IsChecked="{Binding RcQueryBossTimers, Mode=TwoWay}"
+                                          ToolTip.Tip="{Binding RcQueryBossTimersTip}"/>
                                 <CheckBox Content="Request invite"       IsChecked="{Binding RcRequestInvite, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcRequestInviteTip}"/>
                                 <CheckBox Content="Move player"          IsChecked="{Binding RcMovePlayer, Mode=TwoWay}"

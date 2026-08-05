@@ -481,6 +481,16 @@ public static class BugReportBuilder
             sb.Append(string.Join(", ", history.Take(10).Select(k => $"{k.Map}/{k.Room}")));
             sb.Append('\n');
         }
+
+        // Active boss timers at capture — a "boss timer / @timer looks wrong"
+        // report needs the tracked set (name + time-to-full + next window).
+        var bossTimers = svc.BossTimers.ActiveTimers(svc.GameData.ActiveRealm);
+        Kv(sb, "Active boss timers", bossTimers.Count.ToString());
+        foreach (var (def, state) in bossTimers.Take(15))
+            Kv(sb, $"  {def.Name}",
+                $"full {Game.Map.BossTimerMath.FormatHours(state.FullRemaining.TotalHours)}, "
+                + $"next {state.NextLabel} {Game.Map.BossTimerMath.FormatHours(state.NextRemaining.TotalHours)}");
+
         return sb.ToString();
     }
 

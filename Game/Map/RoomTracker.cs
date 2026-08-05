@@ -73,6 +73,18 @@ public sealed class RoomTracker
     private DateTimeOffset? _suppressObservationUntil;
     private const int LookSuppressWindowMs = 3000;
 
+    // Floor on a plausible move round-trip. In a corridor of identically-named
+    // rooms ("Cleared Fields"), a passive re-look redisplay of the SOURCE room also
+    // satisfies the predicted-TARGET match (same name + compatible exits), so it can
+    // be mistaken for arrival. The tell is timing: a real move's confirming display
+    // takes a full server round-trip (observed 1.3-2.7s on the reference BBS), while
+    // a re-look redisplay — the echo of a post-combat CR sent while the move was
+    // still in flight — lands in tens of milliseconds. A predicted-target match that
+    // ALSO matches the source and arrives faster than this floor is that stale
+    // re-look, not the arrival; confirming it phantom-advanced the loop and fired the
+    // next move while still at the source (the reported "double move" while looping).
+    private static readonly TimeSpan AmbiguousRedisplayFloor = TimeSpan.FromMilliseconds(400);
+
     // Wall-clock time the most recent move command was enqueued, or null before
     // the first move this session. Lets observers tell a post-move room display
     // ("the room we just walked into") apart from a pre-move stale observation —
@@ -835,6 +847,28 @@ public sealed class RoomTracker
             // Strategy 1 — predicted neighbour matches.
             if (expected is not null && MatchesPredicted(expected, observation))
             {
+                // Ambiguity guard: in an identically-named corridor the predicted
+                // target and the source room match the SAME observation, so a passive
+                // re-look redisplay of the source (a post-combat CR echo that landed
+                // while this move was still in flight) satisfies this match too. It's
+                // distinguishable only by timing — it arrives far faster than a real
+                // move round-trip. When the observation matches the source AND lands
+                // under the plausible-hop floor, it's that stale re-look, not the
+                // arrival: fall through to the Strategy-1b passive-redisplay path
+                // (stay Pending) so the move's real outcome a round-trip later still
+                // confirms here. Confirming it instead phantom-advanced the loop and
+                // fired the next step from the source room (the "double move").
+                if (MatchesPredicted(source, observation)
+                    && when - head.SentAt < AmbiguousRedisplayFloor)
+                {
+                    _log?.Log(LogSeverity.Debug, "RoomTracker",
+                        $"Fast redisplay ({(when - head.SentAt).TotalMilliseconds:F0}ms < " +
+                        $"{AmbiguousRedisplayFloor.TotalMilliseconds:F0}ms) matches source '{source.Name}' AND " +
+                        $"predicted {moveLabel} target; treating as passive re-look, staying Pending.");
+                    State.LastUpdatedAt = when;
+                    return;
+                }
+
                 _pending.TryDequeue(out _);
                 State.SuspectStrikes = 0;
                 // Predicted-neighbour is a deduction — only strict (i.e.
