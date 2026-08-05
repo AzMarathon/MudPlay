@@ -1181,8 +1181,15 @@
                                             </TreeDataTemplate>
                                             <!-- Favourite leaf. -->
                                             <DataTemplate DataType="vm:FavoriteRowViewModel">
-                                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Background="Transparent">
-                                                    <Button Grid.Column="0"
+                                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="4" Background="Transparent">
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="★"
+                                                               FontSize="11"
+                                                               VerticalAlignment="Center"
+                                                               IsVisible="{Binding IsStarred}"
+                                                               Foreground="{StaticResource AccentAmberBrush}"
+                                                               ToolTip.Tip="In the right-click Favorites menu"/>
+                                                    <Button Grid.Column="1"
                                                             Content="{Binding Label}"
                                                             HorizontalAlignment="Stretch"
                                                             HorizontalContentAlignment="Left"
@@ -1192,14 +1199,14 @@
                                                             BorderThickness="0"
                                                             Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).GoToFavoriteCommand}"
                                                             CommandParameter="{Binding}"/>
-                                                    <Button Grid.Column="1"
+                                                    <Button Grid.Column="2"
                                                             Content="✎"
                                                             FontSize="10"
                                                             Padding="6,2"
                                                             ToolTip.Tip="Edit favourite (name / map / room)"
                                                             Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).RenameFavoriteCommand}"
                                                             CommandParameter="{Binding}"/>
-                                                    <Button Grid.Column="2"
+                                                    <Button Grid.Column="3"
                                                             Content="✕"
                                                             FontSize="10"
                                                             Padding="6,2"
