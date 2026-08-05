@@ -365,11 +365,11 @@
                                  Text="{Binding CleanupTimeOfDay, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                  PlaceholderText="21:00"
                                  ToolTip.Tip="Daily server-cleanup time as HH:mm (24-hour) in the time zone at right. Cleanup-only bosses flip from DEAD back to ALIVE at this time. Blank disables cleanup-boss timers."/>
-                        <TextBox Grid.Column="2" Width="200" HorizontalAlignment="Left"
-                                 FontFamily="{StaticResource FontMono}"
-                                 Text="{Binding CleanupTimeZoneId, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                 PlaceholderText="America/Los_Angeles"
-                                 ToolTip.Tip="IANA time-zone id the cleanup time is in (e.g. America/Los_Angeles for Pacific). Invalid / blank falls back to your local zone."/>
+                        <ComboBox Grid.Column="2" Width="240" HorizontalAlignment="Left"
+                                  FontFamily="{StaticResource FontMono}"
+                                  ItemsSource="{Binding TimeZoneIds}"
+                                  SelectedItem="{Binding CleanupTimeZoneId, Mode=TwoWay}"
+                                  ToolTip.Tip="Time zone the cleanup time is in. Defaults to your computer's own zone; change it to override (e.g. if the board's cleanup runs on a different zone)."/>
                     </Grid>
 
                     <!-- ===== Board disconnect line (per-BBS) =====

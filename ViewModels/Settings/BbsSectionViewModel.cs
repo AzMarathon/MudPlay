@@ -102,11 +102,25 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // value. Default on.
     [ObservableProperty] private bool _autoRefineDeathFloor = true;
 
-    // Nightly boss-cleanup wall-clock time ("HH:mm" in CleanupTimeZone) + its IANA
-    // zone. Drives the DEAD/ALIVE state of "Respawns @ Cleanup" bosses on the Bosses
-    // tab. Default 21:00 US Pacific.
+    // Nightly boss-cleanup wall-clock time ("HH:mm" in CleanupTimeZone) + its zone.
+    // Drives the DEAD/ALIVE state of "Respawns @ Cleanup" bosses on the Bosses tab.
+    // Default 21:00 in the computer's own zone (auto-detected); the zone is a
+    // dropdown the user can override.
     [ObservableProperty] private string _cleanupTimeOfDay = "21:00";
-    [ObservableProperty] private string _cleanupTimeZoneId = "America/Los_Angeles";
+    [ObservableProperty] private string _cleanupTimeZoneId = TimeZoneInfo.Local.Id;
+
+    // Every system time-zone id (auto-detected local zone included), sorted — the
+    // options for the cleanup-zone dropdown.
+    public IReadOnlyList<string> TimeZoneIds { get; } = BuildTimeZoneIds();
+
+    private static IReadOnlyList<string> BuildTimeZoneIds()
+    {
+        var ids = TimeZoneInfo.GetSystemTimeZones().Select(z => z.Id).ToList();
+        if (!ids.Contains(TimeZoneInfo.Local.Id, StringComparer.OrdinalIgnoreCase))
+            ids.Add(TimeZoneInfo.Local.Id);
+        ids.Sort(StringComparer.OrdinalIgnoreCase);
+        return ids;
+    }
 
     // Board-specific player-disconnect line (see BbsProfile.DisconnectPattern).
     // Optional literal pattern — {name} captures the disconnecting player, *

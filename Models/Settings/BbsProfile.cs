@@ -136,9 +136,10 @@ public sealed class BbsProfile
     // property. Blank disables cleanup-boss timers.
     public string CleanupTimeOfDay { get; set; } = "21:00";
 
-    // IANA time-zone id CleanupTimeOfDay is expressed in — default US Pacific, where
-    // most boards run cleanup. Invalid / empty falls back to the local zone.
-    public string CleanupTimeZoneId { get; set; } = "America/Los_Angeles";
+    // Time-zone id CleanupTimeOfDay is expressed in. Defaults to the computer's own
+    // zone (auto-detected); the settings dropdown lets the user override it. Invalid
+    // / empty falls back to the local zone.
+    public string CleanupTimeZoneId { get; set; } = TimeZoneInfo.Local.Id;
 
     // Board-specific player-disconnect line, matched IN ADDITION to the
     // built-in "X just disconnected!!!" / "X just hung up!!!" forms. Some
