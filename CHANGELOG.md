@@ -12,7 +12,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - New `@timer` remote command reports the boss timers being tracked, one reply line per boss (name, time to full, next window, e.g. "full 2h14m, next -20% 1h47m"): no argument lists them all, `@timer <name>` filters by name substring, and a boss you aren't holding replies "expired"; gated by its own "Query boss timers" player permission (grant it per-player in Game Data → Players)
 - Walk-to now honours per-boss "stop before": a walk (map click / GOTO / @goto / recovery) to a flagged boss room halts one room short instead of stepping in and triggering the spawn — loops and Auto-Lair are unaffected
 - Gang-channel messages now use the correct `bg` speak verb instead of `gang`, so remote-command replies, level-up announces, and party `@heal` broadcasts actually reach the gang
-- bug reports addressed: paradigm-20260804-200154
+- Fixed a double movement send while looping through same-named corridors: a post-combat re-look of the current room, echoing back while a step was still in flight, was mistaken for arrival at the identically-named next room — phantom-advancing the loop and firing the next step before you'd actually moved; the tracker now recognises that too-fast same-room redisplay as a re-look and waits for the real arrival
+- bug reports addressed: paradigm-20260804-200154, paradigm-20260804-211645, paradigm-20260804-221124, paradigm-20260804-221137, paradigm-20260804-221148, paradigm-20260804-225836, paradigm-20260804-225939
 
 ## 2.28.0
 

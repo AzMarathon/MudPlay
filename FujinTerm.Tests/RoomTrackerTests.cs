@@ -38,6 +38,9 @@ public sealed class RoomTrackerTests : IDisposable
     /// 3/1 "Darkwood Forest, Main Road" has a hidden `go path` text exit
     /// (S → 3/2) plus visible {SE, W}; 3/2 + 3/3 are an ambiguous
     /// "Darkwood Forest" {SW} pair that only the go-path edge disambiguates.
+    /// 4/1–4/3 are an identically-named-and-exited "Cleared Fields" {N, S}
+    /// corridor (a 3-cycle) — the ambiguous case where a source re-look
+    /// display also matches the predicted move target.
     /// </summary>
     private const string GraphJson = """
         [
@@ -84,7 +87,19 @@ public sealed class RoomTrackerTests : IDisposable
           { "Map Number": 3, "Room Number": 3, "Name": "Darkwood Forest",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
             "N": "0", "S": "0", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "3/12", "U": "0", "D": "0" }
+            "NE": "0", "NW": "0", "SE": "0", "SW": "3/12", "U": "0", "D": "0" },
+          { "Map Number": 4, "Room Number": 1, "Name": "Cleared Fields",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "4/2", "S": "4/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 4, "Room Number": 2, "Name": "Cleared Fields",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "4/3", "S": "4/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 4, "Room Number": 3, "Name": "Cleared Fields",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "4/1", "S": "4/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
         ]
         """;
 
@@ -268,6 +283,58 @@ public sealed class RoomTrackerTests : IDisposable
 
         // The move's real outcome (North Square / 1/3) now confirms cleanly.
         tracker.NoteRoomObserved(Obs("North Square", Direction.S));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 3), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void Pending_AmbiguousCorridor_FastSourceRedisplay_StaysPending_ThenRealArrivalConfirms()
+    {
+        // The double-move bug: in an identically-named corridor the source
+        // room and the predicted move target share name AND exits, so a
+        // passive re-look redisplay of the source (a post-combat CR echo that
+        // landed while the move was still in flight) satisfies the predicted-
+        // target match too. Timing is the only tell — the echo lands far
+        // faster than a real move round-trip. A fast redisplay must stay
+        // Pending (not phantom-confirm and fire the next loop step from the
+        // source); the move's real outcome a round-trip later still confirms.
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.SetLocated(new RoomKey(4, 1), t0);          // Cleared Fields, {N, S}
+        tracker.NoteMoveSent(Direction.N, t0);               // predicted target 4/2 (same name + exits)
+
+        // Source re-look echoes back 100ms later — under the plausible-hop floor.
+        tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S),
+            t0.AddMilliseconds(100));
+
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(4, 1), tracker.State.CurrentRoom!.Key);
+
+        // The real arrival a full round-trip later confirms the move to 4/2.
+        tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S),
+            t0.AddMilliseconds(1500));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(4, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void Pending_FastArrival_DifferentName_ConfirmsRegardlessOfTiming()
+    {
+        // The timing gate is scoped to the ambiguous case only: it fires
+        // solely when the observation ALSO matches the source room. A fast
+        // arrival at a differently-named predicted target is a genuine hop
+        // and must confirm immediately — otherwise the guard would stall
+        // every quick move, not just the corridor re-look.
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.SetLocated(new RoomKey(1, 1), t0);          // Town Gates {N, E}
+        tracker.NoteMoveSent(Direction.N, t0);               // predicted target 1/3 North Square {S}
+
+        // Arrival lands 50ms later — under the floor, but names differ, so
+        // it is unambiguous and must confirm.
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S), t0.AddMilliseconds(50));
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 3), tracker.State.CurrentRoom!.Key);
