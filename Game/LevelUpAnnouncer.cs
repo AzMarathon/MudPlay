@@ -152,7 +152,7 @@ public sealed class LevelUpAnnouncer : IDisposable
             AnnounceChannel.Gossip => $"gos {msg}",
             AnnounceChannel.Yell   => $"\"{msg}",
             AnnounceChannel.Say    => $".{msg}",
-            _                      => $"gang {msg}",   // Gangpath (default)
+            _                      => $"bg {msg}",   // Gangpath (default) — gang speak verb is `bg`
         };
         _wire.Send(wire);
         _log?.Info("LevelUp", $"Announced trainable level {level} on {channel}.");

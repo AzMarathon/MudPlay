@@ -39,10 +39,17 @@ public partial class BossesSectionView : UserControl
     // them to a single 87.5% column.
     private void ApplyRealmColumns()
     {
-        if (BossGrid.Columns.Count <= Early3) return;
+        // The x:Name field is null when this runs off DataContextChanged: the view
+        // is freshly built and not yet attached, so the generated field isn't
+        // assigned (the control IS in the name scope). Reach it through the name
+        // scope instead of dereferencing the raw field — same idiom as
+        // CalculatorsSectionView. Dereferencing the null field here threw out of the
+        // View getter and left the whole tab blank.
+        DataGrid? grid = BossGrid ?? this.FindControl<DataGrid>("BossGrid");
+        if (grid is null || grid.Columns.Count <= Early3) return;
         bool para = _vm?.IsParadigmRealm ?? true;
-        BossGrid.Columns[Early1].Header = para ? "5%" : "87.5%";
-        BossGrid.Columns[Early2].IsVisible = para;
-        BossGrid.Columns[Early3].IsVisible = para;
+        grid.Columns[Early1].Header = para ? "5%" : "87.5%";
+        grid.Columns[Early2].IsVisible = para;
+        grid.Columns[Early3].IsVisible = para;
     }
 }

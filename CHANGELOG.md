@@ -8,8 +8,10 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Live per-window countdowns: a 100% guaranteed-respawn column plus the realm's earlier spawn windows — Paradigm's 5 / 10 / 20%-off points in their own columns, collapsing to Stock's single 87.5% column — each counting down and blanking once that window has passed; sortable by boss, respawn, and each timer
 - Per-row **Mark** sets or back-dates a kill time via a date-time dialog, **Reset** clears it; timers also auto-start on a detected kill, persist across restart, and are shared per realm
 - **Manage Bosses** dialog to add / edit / remove entries (name, rooms, respawn type, exact-spawn, realm flags); "stop before" toggles inline in the table (walk-to halts one room short of a flagged boss room)
-- New `@timer` remote command reports the boss timers being tracked: no argument lists them all (name, time to full, next window), `@timer <name>` filters by name substring, and a boss you aren't holding replies "expired"
+- New `@timer` remote command reports the boss timers being tracked: no argument lists them all (name, time to full, next window), `@timer <name>` filters by name substring, and a boss you aren't holding replies "expired"; gated by its own "Query boss timers" player permission (grant it per-player in Game Data → Players)
 - Walk-to now honours per-boss "stop before": a walk (map click / GOTO / @goto / recovery) to a flagged boss room halts one room short instead of stepping in and triggering the spawn — loops and Auto-Lair are unaffected
+- Gang-channel messages now use the correct `bg` speak verb instead of `gang`, so remote-command replies, level-up announces, and party `@heal` broadcasts actually reach the gang
+- bug reports addressed: paradigm-20260804-200154
 
 ## 2.28.0
 

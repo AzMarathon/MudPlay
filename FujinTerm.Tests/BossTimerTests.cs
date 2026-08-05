@@ -300,7 +300,7 @@ public sealed class BossTimerTests : IDisposable
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
         players.RecordObservation("Bob", null, null, null, null, null, null, Now);
-        players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryLocation));
+        players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryBossTimers));
         _ = new BossTimerQueryHandler(engine, store, timers, cache);
         return (engine, timers);
     }

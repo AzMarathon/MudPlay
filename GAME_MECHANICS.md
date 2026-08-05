@@ -1946,6 +1946,11 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 
 - **[CONFIRMED]** Talk modes (say / talk-fast / slow) differ **per realm** — that's game
   configuration, not a client bug. The keyboard period is a say-precursor and stays unbindable.
+- **[CONFIRMED] 2026-08-04, user** — the **gang-channel speak verb is `bg`** (broadcast-gang), with
+  `gb` and the `broadg…`/`broadgang` long forms as equivalents. **`gang` is NOT a speak command** —
+  sending `gang <msg>` does not reach the gang. Anything we emit on the gangpath channel (remote
+  `@`-command replies, level-up announces, party `bg @heal`) must use `bg`. The alias-collision
+  table in `AliasEngine` already reserves `bg`/`gb`/`broadg…` as the gangpath forms.
 - **[CONFIRMED] 2026-07-20, user** — when another player `look`s at us the wire prints
   **`<name> is looking at you.`** (`name` a single first-name token). The reactive-look-back
   feature (Settings → Talk) keys on this exact phrase; if a realm's wording differs it's a

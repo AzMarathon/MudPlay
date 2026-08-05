@@ -751,7 +751,7 @@ public sealed class RemoteCommandManagerTests
 
         Assert.Equal(3, engine.LastSentForTests.Count);
         Assert.Equal("/Friend {plain}\r", Encoding.Latin1.GetString(engine.LastSentForTests[0]));
-        Assert.Equal("gang {plain}\r",    Encoding.Latin1.GetString(engine.LastSentForTests[1]));
+        Assert.Equal("bg {plain}\r",      Encoding.Latin1.GetString(engine.LastSentForTests[1]));
         Assert.Equal(".{plain}\r",        Encoding.Latin1.GetString(engine.LastSentForTests[2]));
     }
 
@@ -774,7 +774,7 @@ public sealed class RemoteCommandManagerTests
     }
 
     [Fact]
-    public void Reply_GangpathRoutesViaGangCommand()
+    public void Reply_GangpathRoutesViaBgCommand()
     {
         var (engine, _, players) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
@@ -784,7 +784,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Gangpath("Friend", "@health"));
 
         string wire = Encoding.Latin1.GetString(engine.LastSentForTests[0]);
-        Assert.Equal("gang {hi}\r", wire);
+        Assert.Equal("bg {hi}\r", wire);
     }
 
     [Fact]

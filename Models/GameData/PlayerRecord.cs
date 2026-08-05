@@ -239,10 +239,14 @@ public enum PlayerRemoteControls
     // Admin / wizard commands (sysop-only on most realms).
     SysopCommands       = 1 << 11,
 
+    // Boss respawn timers being tracked — @timer.
+    QueryBossTimers     = 1 << 12,
+
     // Convenience — every category above flipped on.
     All = QueryVersion | QueryExperience | QueryHealthStatus | QueryLocation
         | QueryInventory | RequestInvite | MovePlayer | ExecuteCommands
-        | HangupDisconnect | AlterSettings | DivertConversations | SysopCommands,
+        | HangupDisconnect | AlterSettings | DivertConversations | SysopCommands
+        | QueryBossTimers,
 }
 
 // One equipment slot's contents from a look <player> response. SlotLabel
