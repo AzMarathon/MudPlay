@@ -3538,15 +3538,21 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Starred GOTO favourites shown in the terminal right-click Favorites flyout.
+    // The terminal right-click Favorites flyout — always MaxStarred numbered
+    // slots when any favourite is starred: filled slots first, then "(empty)"
+    // placeholders so the fixed 10-slot layout is always visible.
     public ObservableCollection<FavoriteMenuItem> Favorites { get; } = new();
 
-    // Drives the flyout's visibility — an empty submenu is hidden entirely.
-    public bool HasFavorites => Favorites.Count > 0;
+    private bool _hasFavorites;
+
+    // Drives the flyout's visibility — the whole submenu hides when nothing is
+    // starred (rather than showing ten empty rows to someone not using it).
+    public bool HasFavorites => _hasFavorites;
 
     // Rebuild the flyout from the store's starred favourites: resolve each label
-    // (custom label, else the room's graph name), sort by label, and cap the
-    // display at MaxStarred (a safety net — SetStarred already caps the write side).
+    // (custom label, else the room's graph name), sort by label, then lay them out
+    // as numbered slots 1..MaxStarred — filled slots ("N) name") walk on click, the
+    // remaining slots show "N) (empty)" and render disabled.
     private void RebuildFavoritesMenu()
     {
         var rows = new List<(string label, Game.Map.RoomKey key)>();
@@ -3561,13 +3567,24 @@ public partial class MainWindowViewModel : ObservableObject
         rows.Sort((a, b) => string.Compare(a.label, b.label, StringComparison.OrdinalIgnoreCase));
 
         Favorites.Clear();
-        int shown = 0;
-        foreach ((string label, Game.Map.RoomKey key) in rows)
+        _hasFavorites = rows.Count > 0;
+        if (_hasFavorites)
         {
-            if (shown++ >= FavoritesStore.MaxStarred) break;
-            Game.Map.RoomKey target = key;
-            Favorites.Add(new FavoriteMenuItem(
-                label, new AsyncRelayCommand(() => WalkToFavoriteRoomAsync(target))));
+            for (int slot = 0; slot < FavoritesStore.MaxStarred; slot++)
+            {
+                int number = slot + 1;
+                if (slot < rows.Count)
+                {
+                    Game.Map.RoomKey target = rows[slot].key;
+                    Favorites.Add(new FavoriteMenuItem(
+                        $"{number}) {rows[slot].label}",
+                        new AsyncRelayCommand(() => WalkToFavoriteRoomAsync(target))));
+                }
+                else
+                {
+                    Favorites.Add(new FavoriteMenuItem($"{number}) (empty)", walk: null));
+                }
+            }
         }
         OnPropertyChanged(nameof(HasFavorites));
     }

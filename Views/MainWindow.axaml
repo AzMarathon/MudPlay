@@ -525,8 +525,9 @@
                                   ItemsSource="{Binding Favorites}">
                             <MenuItem.ItemContainerTheme>
                                 <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
-                                    <Setter Property="Header"  Value="{ReflectionBinding Label}"/>
-                                    <Setter Property="Command" Value="{ReflectionBinding Walk}"/>
+                                    <Setter Property="Header"    Value="{ReflectionBinding Label}"/>
+                                    <Setter Property="Command"   Value="{ReflectionBinding Walk}"/>
+                                    <Setter Property="IsEnabled" Value="{ReflectionBinding IsEnabled}"/>
                                 </ControlTheme>
                             </MenuItem.ItemContainerTheme>
                         </MenuItem>
