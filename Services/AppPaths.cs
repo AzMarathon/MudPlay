@@ -223,6 +223,29 @@ public static class AppPaths
     public static string BundledQuestDefsSeedFile { get; } =
         Path.Combine(AppContext.BaseDirectory, "Defaults", "QuestDefs.seed.json");
 
+    // Per-set boss-catalog overlay scoped inside the game-data set's folder — the
+    // user-owned boss layer (added/removed bosses, edited rooms, stop-before flags),
+    // a delta over DefaultBossDefsSeedFile. The boss list is realm-wide, so it lives
+    // with the set, not the profile.
+    public static string BossesFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), "bosses.json");
+
+    // Per-set tracked boss kill-times ({name: killed-at UTC}). Persisted so a
+    // long respawn timer survives an app restart; realm-wide like BossesFile.
+    public static string BossTimersFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), "boss-timers.json");
+
+    // User-writable boss-catalog seed JSON in Data/Global/ — the curated default
+    // boss list (name, rooms, realm flags, respawn type); timer values are looked up
+    // from game data at runtime. BossStore falls back to this when the active set has
+    // no per-set overlay. Bootstrapped from BundledBossDefsSeedFile on first launch.
+    public static string DefaultBossDefsSeedFile =>
+        Path.Combine(DataRoot, "Global", "BossDefs.seed.json");
+
+    // Read-only bundled copy shipped next to the executable — the bootstrap source.
+    public static string BundledBossDefsSeedFile { get; } =
+        Path.Combine(AppContext.BaseDirectory, "Defaults", "BossDefs.seed.json");
+
     // Bootstrap missing seed files in Data/Global/ by copying from the bundled
     // Defaults/ next to the executable. Called once during app startup.
     // Pre-existing user-edited Global seeds are never overwritten — to reset a
@@ -235,6 +258,7 @@ public static class AppPaths
         TryCopySeed(BundledMonsterMessagesSeedFile, DefaultMonsterMessagesSeedFile);
         TryCopySeed(BundledTriggersSeedFile,        DefaultTriggersSeedFile);
         TryCopySeed(BundledQuestDefsSeedFile,       DefaultQuestDefsSeedFile);
+        TryCopySeed(BundledBossDefsSeedFile,        DefaultBossDefsSeedFile);
 
         // MonsterOverlay + ItemOverlay seeds are realm-flavored —
         // one file per realm family. The active set picks which to

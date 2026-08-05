@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.29.0
+
+- Boss-timer feature groundwork: a per-realm boss catalog (241 bosses) seeded from a curated list, with respawn timers read from live game data (so they stay correct across game versions); the list is editable and stored per realm. The Bosses tab, live respawn timers, the `@timer` command, and walk-to "stop before a boss room" land in follow-ups.
+
 ## 2.28.0
 
 - Cash collection now decides once per room visit at an encumbrance gate (with collect-after-combat and/or drop-smaller-for-larger): coins are collected/traded a single time instead of re-running on every post-combat room re-display — no more flood of get/drop commands, no coin shed on redundant swaps, and the collect can no longer fire after the loop has stepped out of the room (which was failing the get and stalling the loop, or missing the pile entirely)

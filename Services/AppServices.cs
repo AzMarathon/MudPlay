@@ -664,6 +664,10 @@ public sealed class AppServices
     // overlay on GameDataCache.ActiveSetChanged.
     public QuestStore Quests { get; }
 
+    // Realm-wide boss catalog (seed + per-set overlay); timer values resolve from
+    // game data. Feeds the Player Workshop Bosses tab and the boss-timer feature.
+    public BossStore Bosses { get; }
+
     // Runtime keystroke → macro → wire-send bridge. Constructed up-
     // front; MacroDispatcher.SetSender gets bound from
     // MainWindowViewModel after the telnet client is
@@ -2240,6 +2244,13 @@ public sealed class AppServices
         GameData.ActiveSetChanged += Quests.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
             Quests.OnActiveSetChanged(GameData.ActiveSet);
+
+        // Boss catalog — realm-wide list (seed + per-set overlay); timer values are
+        // looked up from game data at runtime. Reloads its overlay on set change.
+        Bosses = new BossStore(Log);
+        GameData.ActiveSetChanged += Bosses.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null)
+            Bosses.OnActiveSetChanged(GameData.ActiveSet);
 
         // ItemNameStore — int→name index for the active Items.json so
         // the keyed-door FSM can resolve KeyItemId → in-game name and

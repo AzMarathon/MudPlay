@@ -1,0 +1,2980 @@
+[
+  {
+    "Name": "lord feyr",
+    "MonsterNumber": null,
+    "Rooms": [
+      "17/2718"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Cleanup",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "iceforge",
+    "MonsterNumber": null,
+    "Rooms": [
+      "3/632"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Cleanup",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "huge sandstone sphinx",
+    "MonsterNumber": null,
+    "Rooms": [
+      "12/2442"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Cleanup",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mammoth stone scorpion",
+    "MonsterNumber": null,
+    "Rooms": [
+      "12/2444"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Cleanup",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "bogwood box",
+    "MonsterNumber": null,
+    "Rooms": [
+      "14/10415"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Cleanup",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ancient willow",
+    "MonsterNumber": 278,
+    "Rooms": [
+      "3/213"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "unholy idol",
+    "MonsterNumber": 318,
+    "Rooms": [
+      "3/608"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "champion of blood",
+    "MonsterNumber": 180,
+    "Rooms": [
+      "7/1285"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "quickling lord",
+    "MonsterNumber": 281,
+    "Rooms": [
+      "3/254"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "prismatic dragon",
+    "MonsterNumber": 315,
+    "Rooms": [
+      "3/595"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "crimson mist",
+    "MonsterNumber": 309,
+    "Rooms": [
+      "3/560",
+      "3/577",
+      "3/586",
+      "3/588",
+      "3/591",
+      "3/601",
+      "3/605",
+      "3/611",
+      "3/612",
+      "3/622",
+      "3/626",
+      "3/629",
+      "3/643",
+      "3/654",
+      "3/658",
+      "3/663"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": true
+  },
+  {
+    "Name": "huge basilisk",
+    "MonsterNumber": 312,
+    "Rooms": [
+      "3/574"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "goru-nezar",
+    "MonsterNumber": 311,
+    "Rooms": [
+      "3/668"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "cyclops",
+    "MonsterNumber": 131,
+    "Rooms": [
+      "7/730"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "high druid",
+    "MonsterNumber": 122,
+    "Rooms": [
+      "7/142"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "master assassin",
+    "MonsterNumber": 178,
+    "Rooms": [
+      "7/1283"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark bishop",
+    "MonsterNumber": 174,
+    "Rooms": [
+      "7/1227"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark wizard",
+    "MonsterNumber": 176,
+    "Rooms": [
+      "7/1258"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "chimera",
+    "MonsterNumber": 313,
+    "Rooms": [
+      "3/583"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "lady of the dark",
+    "MonsterNumber": 751,
+    "Rooms": [
+      "15/290"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mermex queen",
+    "MonsterNumber": 240,
+    "Rooms": [
+      "2/2366"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "orc warlord",
+    "MonsterNumber": 724,
+    "Rooms": [
+      "15/183"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "nomadic chieftan",
+    "MonsterNumber": 210,
+    "Rooms": [
+      "10/109"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "guardian golem",
+    "MonsterNumber": 68,
+    "Rooms": [
+      "1/1797"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "giant spider",
+    "MonsterNumber": 52,
+    "Rooms": [
+      "1/1678"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "troll",
+    "MonsterNumber": 82,
+    "Rooms": [
+      "1/2678"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "necromancer",
+    "MonsterNumber": 494,
+    "Rooms": [
+      "9/1431"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "spectral mage",
+    "MonsterNumber": 959,
+    "Rooms": [
+      "1/382"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "thrag",
+    "MonsterNumber": 59,
+    "Rooms": [
+      "1/1810"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "minotaur champion",
+    "MonsterNumber": 60,
+    "Rooms": [
+      "1/2124"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "leo the quick",
+    "MonsterNumber": 486,
+    "Rooms": [
+      "9/870"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark-elf high priestess",
+    "MonsterNumber": 341,
+    "Rooms": [
+      "8/490"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "captain of the guard",
+    "MonsterNumber": 346,
+    "Rooms": [
+      "8/530"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "flesh golem",
+    "MonsterNumber": 491,
+    "Rooms": [
+      "9/1007"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "gigantic black ooze",
+    "MonsterNumber": 63,
+    "Rooms": [
+      "1/1832",
+      "1/1885",
+      "1/1913",
+      "1/1919",
+      "1/1939",
+      "1/1974",
+      "1/1986",
+      "1/2007",
+      "1/2025",
+      "1/2045",
+      "1/2073",
+      "1/2085",
+      "1/2104",
+      "1/2116",
+      "1/2119"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "werewolf",
+    "MonsterNumber": 127,
+    "Rooms": [
+      "7/19"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "slave-master",
+    "MonsterNumber": 126,
+    "Rooms": [
+      "7/11"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "harpy queen",
+    "MonsterNumber": 1120,
+    "Rooms": [
+      "2/2438"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "banshee",
+    "MonsterNumber": 113,
+    "Rooms": [
+      "1/1952"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "minotaur chieftain",
+    "MonsterNumber": 114,
+    "Rooms": [
+      "1/1865"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "gnoll chieftain",
+    "MonsterNumber": 237,
+    "Rooms": [
+      "2/1122"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "minotaur champion",
+    "MonsterNumber": 60,
+    "Rooms": [
+      "1/2123"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mad wizard",
+    "MonsterNumber": 129,
+    "Rooms": [
+      "1/2323"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "vile willow",
+    "MonsterNumber": 2840,
+    "Rooms": [
+      "5/5127"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "lucentus",
+    "MonsterNumber": 2841,
+    "Rooms": [
+      "16/13162"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark smuggler",
+    "MonsterNumber": 2830,
+    "Rooms": [
+      "14/10621"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "warden",
+    "MonsterNumber": 1166,
+    "Rooms": [
+      "5/1351"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "yekrath the blind",
+    "MonsterNumber": 2861,
+    "Rooms": [
+      "5/5135"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "monkey spirit",
+    "MonsterNumber": 707,
+    "Rooms": [
+      "16/2188"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ancient sand dragon",
+    "MonsterNumber": 434,
+    "Rooms": [
+      "6/1524"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "nahr",
+    "MonsterNumber": 1004,
+    "Rooms": [
+      "17/3087"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ancient fire drake",
+    "MonsterNumber": 2248,
+    "Rooms": [
+      "5/4649"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "zanthus the lich",
+    "MonsterNumber": 215,
+    "Rooms": [
+      "17/1773"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "luursa",
+    "MonsterNumber": 1151,
+    "Rooms": [
+      "5/780"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "jotun",
+    "MonsterNumber": 1263,
+    "Rooms": [
+      "16/10607"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "volodar",
+    "MonsterNumber": 2807,
+    "Rooms": [
+      "17/10353"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "darken beast lord",
+    "MonsterNumber": 930,
+    "Rooms": [
+      "17/2812",
+      "17/2813",
+      "17/2814",
+      "17/2815"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "corpsemass",
+    "MonsterNumber": 2799,
+    "Rooms": [
+      "17/3517"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "spiked overlord",
+    "MonsterNumber": 1283,
+    "Rooms": [
+      "17/10081"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "huge alabaster dragon",
+    "MonsterNumber": 2397,
+    "Rooms": [
+      "17/9776"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "harbinger of the void",
+    "MonsterNumber": 1225,
+    "Rooms": [
+      "16/10249"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "empyrean dragon",
+    "MonsterNumber": 1245,
+    "Rooms": [
+      "16/10863"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ancient bloodwood tree",
+    "MonsterNumber": 2100,
+    "Rooms": [
+      "17/2830"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "tsunami squid",
+    "MonsterNumber": 873,
+    "Rooms": [
+      "17/3356"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "xelrym-dhar",
+    "MonsterNumber": 2794,
+    "Rooms": [
+      "16/12440"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark revenant",
+    "MonsterNumber": 2396,
+    "Rooms": [
+      "16/10635"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "bloody executioner",
+    "MonsterNumber": 811,
+    "Rooms": [
+      "17/591",
+      "17/592",
+      "17/593",
+      "17/594"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "kraken",
+    "MonsterNumber": 2155,
+    "Rooms": [
+      "16/4947"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "majestic dragon",
+    "MonsterNumber": 1013,
+    "Rooms": [
+      "17/2881"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "nahr",
+    "MonsterNumber": 1004,
+    "Rooms": [
+      "12/2378"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "enormous blue dragon",
+    "MonsterNumber": 1025,
+    "Rooms": [
+      "12/2338"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "great hydra",
+    "MonsterNumber": 1016,
+    "Rooms": [
+      "17/2980"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "demon lord",
+    "MonsterNumber": 1015,
+    "Rooms": [
+      "17/2978"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "golden phoenix",
+    "MonsterNumber": 1014,
+    "Rooms": [
+      "17/2936"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "eldrezeth",
+    "MonsterNumber": 2398,
+    "Rooms": [
+      "16/11076"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dreadlord of blood",
+    "MonsterNumber": 906,
+    "Rooms": [
+      "17/979"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mother ungol",
+    "MonsterNumber": 1234,
+    "Rooms": [
+      "15/10024"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "shadowborn relicmaster",
+    "MonsterNumber": 2197,
+    "Rooms": [
+      "5/411",
+      "5/412",
+      "5/413",
+      "5/414",
+      "5/415",
+      "5/427",
+      "5/428",
+      "5/429"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mayor of arlysia",
+    "MonsterNumber": 854,
+    "Rooms": [
+      "17/2269",
+      "17/2271",
+      "17/2277",
+      "17/2292",
+      "17/2500"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "colossal midnight dragon",
+    "MonsterNumber": 851,
+    "Rooms": [
+      "17/1772"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "templar grukthog",
+    "MonsterNumber": 2819,
+    "Rooms": [
+      "5/460"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "hydra",
+    "MonsterNumber": 589,
+    "Rooms": [
+      "12/1799"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "shadowborn loremaster",
+    "MonsterNumber": 2198,
+    "Rooms": [
+      "5/417",
+      "5/418",
+      "5/419",
+      "5/420",
+      "5/421",
+      "5/422",
+      "5/423",
+      "5/424",
+      "5/425"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "devil fiend malivek",
+    "MonsterNumber": 372,
+    "Rooms": [
+      "15/1934"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "shadow master",
+    "MonsterNumber": 852,
+    "Rooms": [
+      "17/581",
+      "17/1774",
+      "17/1788",
+      "17/2393"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "rotting beholder",
+    "MonsterNumber": 813,
+    "Rooms": [
+      "17/2019"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "shadowy figure",
+    "MonsterNumber": 1284,
+    "Rooms": [
+      "17/3026"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "game ender",
+    "MonsterNumber": 1287,
+    "Rooms": [
+      "17/3033"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "crazed magus",
+    "MonsterNumber": 1285,
+    "Rooms": [
+      "17/3233"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "hanging tree",
+    "MonsterNumber": 818,
+    "Rooms": [
+      "17/728"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "night hag",
+    "MonsterNumber": 269,
+    "Rooms": [
+      "3/37"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "fallen angel",
+    "MonsterNumber": 369,
+    "Rooms": [
+      "8/1040"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "huge black dragon",
+    "MonsterNumber": 394,
+    "Rooms": [
+      "6/426"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "great green dragon",
+    "MonsterNumber": 1038,
+    "Rooms": [
+      "1/3111"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "gnaj the creator",
+    "MonsterNumber": 949,
+    "Rooms": [
+      "1/2696"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mind flayer magus",
+    "MonsterNumber": 937,
+    "Rooms": [
+      "3/787"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "wraithlord",
+    "MonsterNumber": 317,
+    "Rooms": [
+      "3/650"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "beholder",
+    "MonsterNumber": 314,
+    "Rooms": [
+      "3/641"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "storm giant commander",
+    "MonsterNumber": 639,
+    "Rooms": [
+      "16/1185"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "storm giant king",
+    "MonsterNumber": 637,
+    "Rooms": [
+      "16/1184"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "yeshuz",
+    "MonsterNumber": 1269,
+    "Rooms": [
+      "3/816"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "deathgaze",
+    "MonsterNumber": 2781,
+    "Rooms": [
+      "14/10450"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark engineer",
+    "MonsterNumber": 2776,
+    "Rooms": [
+      "14/10308",
+      "14/10320",
+      "14/10329",
+      "14/10378"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "xoth",
+    "MonsterNumber": 2734,
+    "Rooms": [
+      "14/8723"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "gorlok",
+    "MonsterNumber": 2732,
+    "Rooms": [
+      "14/5843",
+      "14/5886",
+      "14/6149",
+      "14/6178"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "kraun the unholy",
+    "MonsterNumber": 2731,
+    "Rooms": [
+      "14/8394",
+      "14/8436",
+      "14/8535",
+      "14/8602"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "deadeye",
+    "MonsterNumber": 2733,
+    "Rooms": [
+      "14/10034",
+      "14/10086",
+      "14/10158",
+      "14/10167"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "shadow lord",
+    "MonsterNumber": 2730,
+    "Rooms": [
+      "14/5879",
+      "14/6192",
+      "14/8390",
+      "14/8543",
+      "14/8674",
+      "14/8737",
+      "14/10027",
+      "14/10097",
+      "14/10142",
+      "14/10163"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "rattleskull",
+    "MonsterNumber": 1286,
+    "Rooms": [
+      "14/6017",
+      "14/6235",
+      "14/6252",
+      "14/6261"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "lady malyse",
+    "MonsterNumber": 1300,
+    "Rooms": [
+      "14/6276",
+      "14/6277",
+      "14/6278"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "lord chisholm",
+    "MonsterNumber": 1297,
+    "Rooms": [
+      "14/5829",
+      "14/5883",
+      "14/6216"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "shadowborn prophet",
+    "MonsterNumber": 1299,
+    "Rooms": [
+      "14/6245",
+      "14/6246",
+      "14/6247"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "aghatan",
+    "MonsterNumber": 1291,
+    "Rooms": [
+      "14/5822",
+      "14/5887",
+      "14/6119",
+      "14/6131",
+      "14/6144",
+      "14/6152"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "lord skorne",
+    "MonsterNumber": 2738,
+    "Rooms": [
+      "14/8745",
+      "14/8748"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "putrescent hulk",
+    "MonsterNumber": 2770,
+    "Rooms": [
+      "14/10140"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "lord stryfe",
+    "MonsterNumber": 2769,
+    "Rooms": [
+      "14/10193"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "tasloi shaman",
+    "MonsterNumber": 619,
+    "Rooms": [
+      "16/38"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "fallen king",
+    "MonsterNumber": 2661,
+    "Rooms": [
+      "13/8015"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "enigma lord",
+    "MonsterNumber": 755,
+    "Rooms": [
+      "17/2586"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "manscorpion king",
+    "MonsterNumber": 588,
+    "Rooms": [
+      "12/1766"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "lord of the hunt",
+    "MonsterNumber": 329,
+    "Rooms": [
+      "3/671",
+      "3/678",
+      "3/683",
+      "3/703",
+      "3/709",
+      "3/716",
+      "3/719",
+      "3/722",
+      "3/736",
+      "3/743",
+      "3/746",
+      "3/753",
+      "3/765",
+      "3/773"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": true
+  },
+  {
+    "Name": "shadowcat",
+    "MonsterNumber": 1156,
+    "Rooms": [
+      "5/770"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "crystal spider",
+    "MonsterNumber": 1152,
+    "Rooms": [
+      "5/774"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "crystal golem",
+    "MonsterNumber": 1158,
+    "Rooms": [
+      "5/764"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "frost giant chieftan",
+    "MonsterNumber": 2549,
+    "Rooms": [
+      "13/882"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "flesh shaper",
+    "MonsterNumber": 1296,
+    "Rooms": [
+      "14/6138"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "massive bore worm",
+    "MonsterNumber": 2212,
+    "Rooms": [
+      "5/3710"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "grand master",
+    "MonsterNumber": 2353,
+    "Rooms": [
+      "14/10448"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "adult red dragon",
+    "MonsterNumber": 185,
+    "Rooms": [
+      "7/1358"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ancient spore dragon",
+    "MonsterNumber": 1277,
+    "Rooms": [
+      "2/12033"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mammoth rot worm",
+    "MonsterNumber": 912,
+    "Rooms": [
+      "17/377"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "animated juggernaut",
+    "MonsterNumber": 1211,
+    "Rooms": [
+      "17/7055"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "stone giant chieftain",
+    "MonsterNumber": 642,
+    "Rooms": [
+      "16/1095"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "large red demonling",
+    "MonsterNumber": 721,
+    "Rooms": [
+      "16/2118"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "fire giant chieftan",
+    "MonsterNumber": 2249,
+    "Rooms": [
+      "5/4638"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark-elf queen",
+    "MonsterNumber": 343,
+    "Rooms": [
+      "8/705"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "giant toad-beast",
+    "MonsterNumber": 1157,
+    "Rooms": [
+      "5/2160"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ozrinom the vampire lord",
+    "MonsterNumber": 836,
+    "Rooms": [
+      "17/2243"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "froghemoth",
+    "MonsterNumber": 2221,
+    "Rooms": [
+      "5/4117"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "midnight unicorn",
+    "MonsterNumber": 816,
+    "Rooms": [
+      "17/959",
+      "17/960",
+      "17/961",
+      "17/962",
+      "17/963",
+      "17/964",
+      "17/965",
+      "17/967",
+      "17/968",
+      "17/969",
+      "17/970"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "fair maiden",
+    "MonsterNumber": 2678,
+    "Rooms": [
+      "13/12819"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark naga",
+    "MonsterNumber": 2129,
+    "Rooms": [
+      "13/3016"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark phoenix",
+    "MonsterNumber": 700,
+    "Rooms": [
+      "16/2160"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mamba",
+    "MonsterNumber": 701,
+    "Rooms": [
+      "16/1243",
+      "16/1255",
+      "16/1302",
+      "16/1321"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "demoness irikani",
+    "MonsterNumber": 216,
+    "Rooms": [
+      "15/1127",
+      "15/1128",
+      "15/1129",
+      "15/1130",
+      "15/1131",
+      "15/1132",
+      "15/1133",
+      "15/1134",
+      "15/1135"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dire grizzly matriarch",
+    "MonsterNumber": 2351,
+    "Rooms": [
+      "2/10935"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "rakshasha rajah",
+    "MonsterNumber": 567,
+    "Rooms": [
+      "12/134"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dread wraith",
+    "MonsterNumber": 2114,
+    "Rooms": [
+      "13/3629"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "saracen high priest",
+    "MonsterNumber": 578,
+    "Rooms": [
+      "12/2193"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "gedric",
+    "MonsterNumber": 2788,
+    "Rooms": [
+      "14/10185"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "miscreation",
+    "MonsterNumber": 2737,
+    "Rooms": [
+      "14/8736"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "fallen champion",
+    "MonsterNumber": 1209,
+    "Rooms": [
+      "16/2167",
+      "16/2169",
+      "16/2170",
+      "16/2174",
+      "16/2177",
+      "16/2183",
+      "16/2187",
+      "16/2189",
+      "16/2193",
+      "16/2197",
+      "16/2200",
+      "16/2203",
+      "16/2208",
+      "16/2211",
+      "16/2216",
+      "16/2222",
+      "16/2226",
+      "16/2231",
+      "16/2232",
+      "16/2233",
+      "16/2241",
+      "16/2245",
+      "16/2247",
+      "16/2248",
+      "16/2257",
+      "16/2260",
+      "16/2261",
+      "16/2270",
+      "16/2275",
+      "16/2277",
+      "16/2284",
+      "16/2297",
+      "16/2301",
+      "16/2313",
+      "16/2319",
+      "16/2326",
+      "16/2332",
+      "16/2333",
+      "16/2336",
+      "16/2338",
+      "16/2344",
+      "16/2349",
+      "16/2351",
+      "16/2356",
+      "16/2360",
+      "16/2374",
+      "16/2381",
+      "16/2392",
+      "16/2408",
+      "16/2416",
+      "16/2437",
+      "16/2447",
+      "16/2453"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "pharaoh rastep",
+    "MonsterNumber": 594,
+    "Rooms": [
+      "12/2250"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "aged earth dragon",
+    "MonsterNumber": 649,
+    "Rooms": [
+      "16/1865",
+      "16/1871",
+      "16/1873"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "aderem",
+    "MonsterNumber": 1023,
+    "Rooms": [
+      "5/513"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "vashti",
+    "MonsterNumber": 540,
+    "Rooms": [
+      "16/2892"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ancient hellhound",
+    "MonsterNumber": 1251,
+    "Rooms": [
+      "16/10241"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "massive black worm",
+    "MonsterNumber": 943,
+    "Rooms": [
+      "7/1524"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "massive white dragon",
+    "MonsterNumber": 747,
+    "Rooms": [
+      "15/794"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "handsome man",
+    "MonsterNumber": 1028,
+    "Rooms": [
+      "17/2879"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "beautiful woman",
+    "MonsterNumber": 1027,
+    "Rooms": [
+      "17/2874"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "tasloi animal master",
+    "MonsterNumber": 617,
+    "Rooms": [
+      "16/12"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "tasloi chief",
+    "MonsterNumber": 616,
+    "Rooms": [
+      "16/24"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "hill giant chieftan",
+    "MonsterNumber": 647,
+    "Rooms": [
+      "16/801"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark-elf archmage",
+    "MonsterNumber": 345,
+    "Rooms": [
+      "8/558"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dread captain",
+    "MonsterNumber": 876,
+    "Rooms": [
+      "17/981",
+      "17/984",
+      "17/987",
+      "17/988",
+      "17/992"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "crimson high priest",
+    "MonsterNumber": 371,
+    "Rooms": [
+      "15/1112"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "spectral priest",
+    "MonsterNumber": 1242,
+    "Rooms": [
+      "12/2544"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "giant two-headed troll",
+    "MonsterNumber": 393,
+    "Rooms": [
+      "6/539"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "crowned spider",
+    "MonsterNumber": 929,
+    "Rooms": [
+      "17/2674",
+      "17/2675",
+      "17/2676",
+      "17/2677",
+      "17/2678",
+      "17/2679",
+      "17/2680",
+      "17/2681",
+      "17/2682",
+      "17/2683",
+      "17/2684",
+      "17/2685",
+      "17/2686",
+      "17/2687",
+      "17/2688",
+      "17/2689",
+      "17/2690",
+      "17/2691",
+      "17/2692",
+      "17/2693",
+      "17/2694",
+      "17/2695",
+      "17/2696",
+      "17/2697",
+      "17/2698",
+      "17/2699",
+      "17/2700",
+      "17/2701",
+      "17/2702",
+      "17/2703"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "giant roc",
+    "MonsterNumber": 571,
+    "Rooms": [
+      "10/159"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "kai master",
+    "MonsterNumber": 447,
+    "Rooms": [
+      "6/1566"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "aquilas",
+    "MonsterNumber": 1279,
+    "Rooms": [
+      "14/4641"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "fachan tyrant",
+    "MonsterNumber": 1280,
+    "Rooms": [
+      "14/4430"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "bloodwing",
+    "MonsterNumber": 1281,
+    "Rooms": [
+      "14/4597"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "will-o-the-wisp",
+    "MonsterNumber": 1199,
+    "Rooms": [
+      "14/646"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "death minion",
+    "MonsterNumber": 877,
+    "Rooms": [
+      "17/347"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "daeron darksong",
+    "MonsterNumber": 2307,
+    "Rooms": [
+      "2/10134"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "lumbering geist",
+    "MonsterNumber": 2666,
+    "Rooms": [
+      "14/5089",
+      "14/5090"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "scarab swarm",
+    "MonsterNumber": 805,
+    "Rooms": [
+      "12/2385"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "banished one",
+    "MonsterNumber": 817,
+    "Rooms": [
+      "17/632",
+      "17/633",
+      "17/634",
+      "17/635",
+      "17/636",
+      "17/637",
+      "17/638",
+      "17/639",
+      "17/640"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ancient guardian",
+    "MonsterNumber": 2779,
+    "Rooms": [
+      "14/10438"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ancient gremlin shaman",
+    "MonsterNumber": 933,
+    "Rooms": [
+      "17/2807",
+      "17/2808",
+      "17/2809"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "crazed inquisitor",
+    "MonsterNumber": 530,
+    "Rooms": [
+      "15/1099"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "remik of the ebon blade",
+    "MonsterNumber": 366,
+    "Rooms": [
+      "8/1852"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "hideous abomination",
+    "MonsterNumber": 580,
+    "Rooms": [
+      "12/1171"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "woodelf lord",
+    "MonsterNumber": 292,
+    "Rooms": [
+      "3/543"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "choira pyromancer",
+    "MonsterNumber": 606,
+    "Rooms": [
+      "15/1165"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "darem tidegrasp",
+    "MonsterNumber": 2680,
+    "Rooms": [
+      "14/6280"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "massive stone worm",
+    "MonsterNumber": 2699,
+    "Rooms": [
+      "14/7092"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "giant river turtle",
+    "MonsterNumber": 692,
+    "Rooms": [
+      "16/663"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "jura szerak",
+    "MonsterNumber": 2784,
+    "Rooms": [
+      "14/9605"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "depraved murderer",
+    "MonsterNumber": 777,
+    "Rooms": [
+      "1/685"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "sheriff lionheart",
+    "MonsterNumber": 40,
+    "Rooms": [
+      "1/102",
+      "1/224",
+      "1/301",
+      "1/313",
+      "1/324",
+      "1/538",
+      "1/539",
+      "1/540",
+      "1/848",
+      "1/853",
+      "1/1352",
+      "1/1355",
+      "1/2442"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "captain flintlock",
+    "MonsterNumber": 2414,
+    "Rooms": [
+      "13/824",
+      "13/827",
+      "13/828"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "orc warleader",
+    "MonsterNumber": 218,
+    "Rooms": [
+      "2/40"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "serpentkin chieftain",
+    "MonsterNumber": 168,
+    "Rooms": [
+      "7/1040"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "serpentkin witchdoctor",
+    "MonsterNumber": 169,
+    "Rooms": [
+      "7/1041"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "alchemist",
+    "MonsterNumber": 175,
+    "Rooms": [
+      "7/1245"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "master assassin",
+    "MonsterNumber": 178,
+    "Rooms": [
+      "15/416"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark-elf emissary",
+    "MonsterNumber": 357,
+    "Rooms": [
+      "8/880"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "slave lord",
+    "MonsterNumber": 356,
+    "Rooms": [
+      "8/879"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "elyssra",
+    "MonsterNumber": 2831,
+    "Rooms": [
+      "16/12834"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "chrono lord",
+    "MonsterNumber": 2854,
+    "Rooms": [
+      "17/10685"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "skyth rahzkis",
+    "MonsterNumber": 2862,
+    "Rooms": [
+      "5/2101"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "grakh bonegrinder",
+    "MonsterNumber": 2863,
+    "Rooms": [
+      "5/2391"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "huge obsidian golem",
+    "MonsterNumber": 452,
+    "Rooms": [
+      "6/1889"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "duergar lord",
+    "MonsterNumber": 456,
+    "Rooms": [
+      "6/2649"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "gorilla spirit",
+    "MonsterNumber": 706,
+    "Rooms": [
+      "16/2224"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "crane spirit",
+    "MonsterNumber": 704,
+    "Rooms": [
+      "16/2221"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "troglodyte chieftan",
+    "MonsterNumber": 2821,
+    "Rooms": [
+      "6/5020",
+      "6/5027"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "rakshasha sage",
+    "MonsterNumber": 566,
+    "Rooms": [
+      "12/2247"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "wandering cleric",
+    "MonsterNumber": 383,
+    "Rooms": [
+      "6/113",
+      "6/140",
+      "6/149",
+      "6/167",
+      "6/182",
+      "6/198",
+      "6/219",
+      "6/231"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "black orc boss",
+    "MonsterNumber": 482,
+    "Rooms": [
+      "9/497"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "orc warleader",
+    "MonsterNumber": 218,
+    "Rooms": [
+      "2/40"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "kobold king",
+    "MonsterNumber": 406,
+    "Rooms": [
+      "6/834"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mercenary captain",
+    "MonsterNumber": 1121,
+    "Rooms": [
+      "2/26"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "cave troll",
+    "MonsterNumber": 2160,
+    "Rooms": [
+      "1/2216"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "catoblepas",
+    "MonsterNumber": 388,
+    "Rooms": [
+      "6/254",
+      "6/262",
+      "6/272",
+      "6/288",
+      "6/301",
+      "6/316",
+      "6/337",
+      "6/352",
+      "6/364",
+      "6/372",
+      "6/494",
+      "6/502",
+      "6/505",
+      "6/520",
+      "6/531"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "justicar halford",
+    "MonsterNumber": 2370,
+    "Rooms": [
+      "14/1105",
+      "14/1150",
+      "14/1159",
+      "14/1168",
+      "14/1179",
+      "14/1206",
+      "14/1320"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dao lord",
+    "MonsterNumber": 597,
+    "Rooms": [
+      "12/2251"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "argak the grey",
+    "MonsterNumber": 605,
+    "Rooms": [
+      "15/1000"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "lallim whitemane",
+    "MonsterNumber": 607,
+    "Rooms": [
+      "16/2672"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "sharh'kur",
+    "MonsterNumber": 608,
+    "Rooms": [
+      "15/1001"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "aurumvorax",
+    "MonsterNumber": 375,
+    "Rooms": [
+      "6/108"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "dark mage",
+    "MonsterNumber": 850,
+    "Rooms": [
+      "7/1116",
+      "7/1118",
+      "7/1121",
+      "7/1123",
+      "7/1125",
+      "7/1130",
+      "7/1134",
+      "7/1140",
+      "7/1143",
+      "7/1147",
+      "7/1150",
+      "7/1152",
+      "7/1160",
+      "7/1162",
+      "7/1167",
+      "7/1176",
+      "7/1182",
+      "7/1186",
+      "7/1190",
+      "7/1205",
+      "7/1224",
+      "7/1229",
+      "7/1234",
+      "7/1247",
+      "7/1258",
+      "7/1282",
+      "17/1773"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "efreeti",
+    "MonsterNumber": 416,
+    "Rooms": [
+      "6/1243"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "gnoll warleader",
+    "MonsterNumber": 2206,
+    "Rooms": [
+      "5/3477"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "ice troll chieftan",
+    "MonsterNumber": 2548,
+    "Rooms": [
+      "13/2506"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "king crab",
+    "MonsterNumber": 691,
+    "Rooms": [
+      "16/287"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "magma lord",
+    "MonsterNumber": 2823,
+    "Rooms": [
+      "15/10236"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "massive fanged spider",
+    "MonsterNumber": 622,
+    "Rooms": [
+      "16/53",
+      "16/56",
+      "16/59",
+      "16/62",
+      "16/64",
+      "16/67",
+      "16/72",
+      "16/74",
+      "16/77",
+      "16/79",
+      "16/83",
+      "16/87",
+      "16/88",
+      "16/90",
+      "16/95",
+      "16/97",
+      "16/98",
+      "16/100"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "metallic monstrosity",
+    "MonsterNumber": 374,
+    "Rooms": [
+      "6/76"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "sahuagin aquamancer",
+    "MonsterNumber": 2824,
+    "Rooms": [
+      "16/4454",
+      "16/4749",
+      "16/4793",
+      "16/4855"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mayor godfrey",
+    "MonsterNumber": 784,
+    "Rooms": [
+      "1/101",
+      "1/224",
+      "1/297"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "mayor delanon",
+    "MonsterNumber": 2099,
+    "Rooms": [
+      "5/224"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "giant pulsating cocoon",
+    "MonsterNumber": 241,
+    "Rooms": [
+      "2/2367"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "cocoon",
+    "MonsterNumber": 1132,
+    "Rooms": [
+      "2/2335",
+      "2/2349",
+      "2/2352",
+      "2/2357",
+      "2/2362",
+      "2/2367"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "hanging cocoon",
+    "MonsterNumber": 624,
+    "Rooms": [
+      "16/110",
+      "16/2143",
+      "16/2144"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "massive cocoon",
+    "MonsterNumber": 658,
+    "Rooms": [
+      "16/110",
+      "16/2143",
+      "16/2144"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  },
+  {
+    "Name": "cocoon",
+    "MonsterNumber": 1132,
+    "Rooms": [
+      "15/10031",
+      "15/10033",
+      "15/10037",
+      "15/10040"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "ExactSpawn": false
+  }
+]

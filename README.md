@@ -1,10 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.28.0**
-> - Cash collection now decides once per room visit at an encumbrance gate (with collect-after-combat and/or drop-smaller-for-larger): coins are collected/traded a single time instead of re-running on every post-combat room re-display — no more flood of get/drop commands, no coin shed on redundant swaps, and the collect can no longer fire after the loop has stepped out of the room (which was stalling it or missing the pile)
-> - Cash + Items settings: the Bank/stash picker gains a "Do not auto-deposit" option — pick it to disarm auto-deposit, and it's the default when no bank/stash is set
-> - Exp Estimator: the ✕ remove button in the clicked-rooms list is no longer hidden under the scrollbar when the list scrolls (same fix applied to the Loop Builder's room list)
+> **Version 2.29.0**
+> - Boss-timer feature groundwork: a per-realm boss catalog (241 bosses) seeded from a curated list, with respawn timers read from live game data (so they stay correct across game versions); the list is editable and stored per realm. The Bosses tab, live respawn timers, the `@timer` command, and walk-to "stop before a boss room" land in follow-ups.
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
