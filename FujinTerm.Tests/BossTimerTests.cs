@@ -185,35 +185,62 @@ public sealed class BossTimerTests : IDisposable
         ExperienceGained: 100, At: DateTimeOffset.UtcNow, IsFallback: fallback);
 
     [Fact]
-    public void OnMonsterDied_NameMatchInBossRoom_StartsTimer()
+    public void OnMonsterDied_EngagedNameInBossRoom_StartsTimer()
     {
+        // The canonical signal: engaged the boss by name, then a (fallback, no
+        // candidate) death fires in its room.
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(false, (null, "ogre king")), new RoomKey(3, 300));
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: "ogre king");
         Assert.NotNull(timers.KilledAt("ogre king"));
     }
 
     [Fact]
-    public void OnMonsterDied_NumberMatchInBossRoom_StartsTimer()
+    public void OnMonsterDied_EngagedNameWithArticle_Matches()
     {
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(false, (50, "The Ogre King")), new RoomKey(3, 300));
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: "The Ogre King");
         Assert.NotNull(timers.KilledAt("ogre king"));
     }
 
     [Fact]
-    public void OnMonsterDied_FallbackDeath_Ignored()
+    public void OnMonsterDied_SpecificCandidateName_StartsTimer()
+    {
+        // Secondary path: a specific death line names the boss even without a live
+        // engaged-target name.
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(false, (null, "ogre king")), new RoomKey(3, 300), engagedName: null);
+        Assert.NotNull(timers.KilledAt("ogre king"));
+    }
+
+    [Fact]
+    public void OnMonsterDied_NoEngagedNameNoCandidate_Ignored()
+    {
+        // A fallback death with nothing to attribute it to — left to manual override.
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: null);
+        Assert.Null(timers.KilledAt("ogre king"));
+    }
+
+    [Fact]
+    public void OnMonsterDied_EngagedNameNotABoss_Ignored()
     {
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(true), new RoomKey(3, 300));
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: "giant rat");
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
@@ -224,7 +251,7 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(false, (50, "ogre king")), new RoomKey(9, 999));
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(9, 999), engagedName: "ogre king");
         Assert.Null(timers.KilledAt("ogre king"));
     }
 

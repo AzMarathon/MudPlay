@@ -2649,6 +2649,15 @@ public sealed class AppServices
         // room re-display correct any cross-variant ambiguity.
         MonsterDeath = new Game.Combat.MonsterDeathWatcher(
             Router, MonsterMessages, Log);
+        // Boss-timer auto-start. MUST be the FIRST MonsterDied subscriber: it reads
+        // the engaged target name (CombatManager.CurrentTarget) live, and a later
+        // subscriber (the roster-resync below) clears it via NoteMonsterDied /
+        // NoteUnattributedDeath. The in-game signal is "engaged a named monster, it
+        // died (awarded exp)"; the room comes from the live tracker (the event
+        // carries neither). Fallback deaths (no candidate identity) are attributed
+        // through the engaged name, so they're covered too.
+        MonsterDeath.MonsterDied += evt =>
+            BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key, Combat.CurrentTarget);
         // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
         // resync handler below: on a kill whose DeathSpell summons, it asserts a
         // hold + sends a CR to re-scan the room, and that hold has to be in place
@@ -3335,12 +3344,6 @@ public sealed class AppServices
         // experience from the gain line. Reset on the same session boundary.
         SessionActivity = new Game.Combat.SessionActivityTracker();
         MonsterDeath.MonsterDied += _ => SessionActivity.NoteKill();
-
-        // Boss-timer auto-start: a positively-identified boss death in one of that
-        // boss's rooms stamps the respawn timer. Room comes from the live tracker
-        // (the death event carries none); fallback deaths are left to the manual
-        // override on the Bosses tab.
-        MonsterDeath.MonsterDied += evt => BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key);
         Router.Subscribe(Services.Patterns.KnownPatterns.UserGainExperience, m =>
         {
             if (m.Groups.Count > 0 && int.TryParse(m.Groups[0], out int exp))

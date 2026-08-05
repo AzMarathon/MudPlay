@@ -17,11 +17,14 @@ namespace FujinTerm.Services;
 // early-window model comes from BossTimerMath. Realm-wide like BossStore: keyed to
 // the active set, shared across the user's characters.
 //
-// Kill detection is deliberately conservative: only a positively-identified death
-// (name or MonsterNumber match) in a boss room auto-starts a timer. A fallback
-// death (exp + *Combat Off* with no identity) can't be attributed to a specific
-// boss, so it's left to the tab's manual "mark killed" override rather than risk a
-// false timer on trash killed in a boss room.
+// Kill detection matches the in-game signal: we were ENGAGED with a monster by
+// name, then it died (awarded exp). Monster numbers aren't observable in-game, so
+// attribution is by NAME — the engaged target name (CombatManager.CurrentTarget,
+// read live at death) matched against the boss list, confirmed by the current room
+// being one of the boss's rooms. This covers the common "exp + *Combat Off*"
+// fallback death, which carries no candidate identity of its own; a specific
+// death-line candidate name is accepted as a secondary match. Deaths we can't
+// attribute (no engaged name, no candidate) fall to the tab's manual override.
 public sealed class BossTimerStore
 {
     private readonly BossStore _bosses;
@@ -106,27 +109,25 @@ public sealed class BossTimerStore
         return active.OrderBy(a => a.Item2.FullRemaining).ToList();
     }
 
-    // Auto-start on a positively-identified boss death in one of the boss's rooms.
-    // key is the live RoomTracker.State.CurrentRoom.Key read at kill time (the death
-    // event itself carries no location).
-    public void OnMonsterDied(MonsterDeathEvent evt, RoomKey? key)
+    // Auto-start on a boss death. Attribution is by NAME: the monster we were
+    // engaged with (engagedName = CombatManager.CurrentTarget, read live — this is
+    // what a fallback exp+Off death is, a death of whatever we were fighting), or a
+    // specific death-line candidate name, matched against a boss whose rooms include
+    // the current room. key/engagedName are read live at the death (the event itself
+    // carries neither location nor the engaged name).
+    public void OnMonsterDied(MonsterDeathEvent evt, RoomKey? key, string? engagedName)
     {
-        if (evt.IsFallback || evt.Candidates.Count == 0) return;   // no identity to attribute
-        if (key is not { } here) return;                           // can't confirm placement
+        if (key is not { } here) return;   // can't confirm placement
 
         foreach (BossDef def in _bosses.Resolve())
         {
             if (def.RespawnType != BossRespawnType.Timed) continue;
             if (!RoomsContain(def, here)) continue;
-            foreach (MonsterDeathIdentity id in evt.Candidates)
+            if (NameMatches(def.Name, engagedName)
+                || evt.Candidates.Any(c => NameMatches(def.Name, c.Name)))
             {
-                bool numberMatch = def.MonsterNumber is { } n && id.Number == n;
-                bool nameMatch = string.Equals(def.Name, id.Name, StringComparison.OrdinalIgnoreCase);
-                if (numberMatch || nameMatch)
-                {
-                    MarkKilled(def.Name);
-                    return;
-                }
+                MarkKilled(def.Name);
+                return;
             }
         }
     }
@@ -136,6 +137,25 @@ public sealed class BossTimerStore
         foreach (string wire in def.Rooms)
             if (RoomKey.TryParseWire(wire, out RoomKey k) && k == key) return true;
         return false;
+    }
+
+    // Case-insensitive name match tolerant of a leading article ("the ogre king"
+    // matches boss "ogre king"). The observed name (engaged target / death line)
+    // must contain the canonical boss name.
+    private static bool NameMatches(string bossName, string? observed)
+    {
+        if (string.IsNullOrWhiteSpace(observed)) return false;
+        string boss = StripArticle(bossName);
+        return boss.Length > 0 && StripArticle(observed).Contains(boss, StringComparison.Ordinal);
+    }
+
+    private static string StripArticle(string s)
+    {
+        s = s.Trim().ToLowerInvariant();
+        if (s.StartsWith("the ", StringComparison.Ordinal)) return s[4..];
+        if (s.StartsWith("an ", StringComparison.Ordinal)) return s[3..];
+        if (s.StartsWith("a ", StringComparison.Ordinal)) return s[2..];
+        return s;
     }
 
     private void Persist()

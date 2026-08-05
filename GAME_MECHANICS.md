@@ -487,6 +487,15 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback
   death on it, a beat before the current mob actually dies.
 
+**Attributing a kill to a specific monster** *([CONFIRMED] 2026-08-04, user)*
+- **Monster numbers are never observable in-game** — the client only ever sees monster *names* on
+  the wire. So the reliable way to attribute a death to a specific monster (e.g. "was that the
+  boss?") is: the monster **name we were engaged with** (`CombatManager.CurrentTarget`, read live at
+  the death) **plus** the death event. This works for the common fallback death too — the fallback
+  `exp + *Combat Off*` carries no identity of its own, but it is by definition the death of whatever
+  we were fighting, so the engaged name attributes it. Never key kill-attribution on a monster
+  number the player can't have seen. (This is what boss-timer kill detection uses.)
+
 ## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
 
 Two distinct spawn mechanisms, and they respawn on completely different rules. This matters
