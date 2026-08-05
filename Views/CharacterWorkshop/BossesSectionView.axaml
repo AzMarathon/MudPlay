@@ -1,0 +1,78 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="820" d:DesignHeight="560"
+             x:Class="FujinTerm.Views.CharacterWorkshop.BossesSectionView"
+             x:DataType="vm:BossesSectionViewModel">
+
+    <Grid Margin="22" RowDefinitions="Auto,Auto,*">
+
+        <!-- Add-boss row + realm model note. Respawn timers come from live game
+             data, so they stay correct across game versions; the early-window
+             column reflects the active realm (Stock 87.5%, Paradigm −5/−10/−20). -->
+        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
+            <TextBox Width="180" Margin="0,0,6,6" PlaceholderText="Boss name"
+                     Text="{Binding NewBossName, Mode=TwoWay}"/>
+            <TextBox Width="150" Margin="0,0,6,6" PlaceholderText="Rooms (map/room; …)"
+                     Text="{Binding NewBossRooms, Mode=TwoWay}"/>
+            <Button Content="Add boss" Margin="0,0,18,6" Command="{Binding AddBossCommand}"/>
+            <Button Content="Remove selected" Margin="0,0,18,6" Command="{Binding RemoveRowCommand}"
+                    ToolTip.Tip="Remove the selected boss from the list."/>
+            <TextBlock Text="Paradigm windows (−5 / −10 / −20%)" VerticalAlignment="Center" Margin="0,0,0,6"
+                       IsVisible="{Binding IsParadigmRealm}"
+                       Foreground="{StaticResource ChromeFgSecBrush}"/>
+            <TextBlock Text="Stock window (87.5%)" VerticalAlignment="Center" Margin="0,0,0,6"
+                       IsVisible="{Binding !IsParadigmRealm}"
+                       Foreground="{StaticResource ChromeFgSecBrush}"/>
+        </WrapPanel>
+
+        <TextBlock Grid.Row="1" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   Text="Respawn timers are read from live game data. Stop before halts a walk-to one room short of the boss room (loops are unaffected). Exact spawn bosses have no early window."/>
+
+        <!-- Editable boss grid. Name + Rooms are editable text; Stop / Exact are
+             toggles; Respawn + Early windows are computed read-only columns. -->
+        <DataGrid Grid.Row="2"
+                  ItemsSource="{Binding Rows}"
+                  SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                  IsVisible="{Binding HasBosses}"
+                  Background="{StaticResource ChromeBgSunkenBrush}"
+                  BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"
+                  IsReadOnly="False"
+                  AutoGenerateColumns="False"
+                  CanUserSortColumns="False"
+                  CanUserResizeColumns="True"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+            <!-- ReflectionBinding on every column — DataGrid columns aren't in the
+                 visual tree, so compiled bindings can't resolve BossRowViewModel
+                 members here. Same idiom as CpAllocationSectionView. -->
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Boss" Binding="{ReflectionBinding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="190"/>
+                <DataGridTextColumn Header="Rooms" Binding="{ReflectionBinding Rooms, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="150" FontFamily="{StaticResource FontMono}"/>
+                <DataGridTextColumn Header="Respawn" Binding="{ReflectionBinding RespawnDisplay}" IsReadOnly="True"
+                                    Width="90" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="Early windows" Binding="{ReflectionBinding WindowsDisplay}" IsReadOnly="True"
+                                    Width="240" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridCheckBoxColumn Header="Stop before" Binding="{ReflectionBinding StopBefore, Mode=TwoWay}"
+                                        Width="90"/>
+                <DataGridCheckBoxColumn Header="Exact" Binding="{ReflectionBinding ExactSpawn, Mode=TwoWay}"
+                                        Width="70"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Empty-state. -->
+        <TextBlock Grid.Row="2"
+                   IsVisible="{Binding !HasBosses}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   Text="Load a game-data set to populate the boss list, or use Add boss to track a custom one."/>
+    </Grid>
+</UserControl>

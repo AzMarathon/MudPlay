@@ -10,7 +10,7 @@ namespace FujinTerm.ViewModels.CharacterWorkshop;
 
 // Shell view-model for the Character Workshop window: a flat tab strip of
 // sections — Character Info / Death Recovery / Level Projection / CP Allocation /
-// Quest Status / Equipment Manager.
+// Quest Status / Equipment Manager / Calculators / Bosses.
 public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisposable
 {
     private readonly ProfileService _profile;
@@ -73,6 +73,8 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         Sections.Add(new EquipmentSectionViewModel(profile, inventory, gameData, equipment, playerStats, players, questBonuses));
 
         Sections.Add(new CalculatorsSectionViewModel(playerStats, gameData, inventory, questBonuses, profile, leaderboards));
+
+        Sections.Add(new BossesSectionViewModel(gameData, AppServices.Current.Bosses));
 
         SelectedSection = initialSectionId is not null
             ? Sections.FirstOrDefault(s => string.Equals(s.Id, initialSectionId, StringComparison.OrdinalIgnoreCase))
