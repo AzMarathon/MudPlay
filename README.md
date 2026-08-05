@@ -1,10 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.30.3**
-> - Spell combat now mirrors physical combat: an attack spell is announced once and the server auto-repeats it each round, so the client no longer re-casts every round. Fixes the "double cast" and the cast at the monster that just died ("You don't see X here!")
-> - Attack spells now engage a fresh monster instantly instead of waiting for it to swing at you first
-> - Combat switches action correctly when it must: MaxCasts elapsed (per-target for single-target spells, per-room for AoE), out of mana or immune (cascade to the alternate spell / weapon), or a room thinned below the AoE minimum-enemies threshold
+> **Version 2.31.0**
+> - Combat spell "Min mana per cast" now shows its live equivalent beside each slot — the mana amount in Percentage mode, the % in Value mode (mirrors the Health tab)
+> - Percentage mode now caps at 100%: Combat Min-mana-per-cast and the Health tab's HP / MA thresholds can no longer be set above 100% (existing over-100 values snap down when you switch to Percentage)
+> - Settings tickers are whole numbers only — spell max-casts, min-enemies, min-mana, room monster counts, and Health thresholds no longer show trailing decimals
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

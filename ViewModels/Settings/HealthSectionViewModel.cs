@@ -177,6 +177,11 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // Live MaxMa from Game.PlayerState.
     public int LiveMaxMa => _state?.MaxMa ?? 0;
 
+    // NumericUpDown Maximum for the threshold fields: 100 in Percentage mode (a % can't
+    // exceed 100), the absolute ceiling in Value mode.
+    public decimal HpThresholdMax => HpModePercentage ? 100 : 100_000;
+    public decimal MaThresholdMax => MaModePercentage ? 100 : 100_000;
+
     private void OnStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(Game.PlayerState.MaxHp))
@@ -374,6 +379,8 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     partial void OnHpModePercentageChanged(bool value)
     {
         if (value) HpModeAbsolute = false;
+        OnPropertyChanged(nameof(HpThresholdMax));
+        if (value) ClampHpToPercent();      // a % can't exceed 100
         RefreshAllHpConverted();
         RefreshHangBounds();
         MarkDirty();
@@ -381,6 +388,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     partial void OnHpModeAbsoluteChanged(bool value)
     {
         if (value) HpModePercentage = false;
+        OnPropertyChanged(nameof(HpThresholdMax));
         RefreshAllHpConverted();
         RefreshHangBounds();
         MarkDirty();
@@ -408,14 +416,39 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     partial void OnMaModePercentageChanged(bool value)
     {
         if (value) MaModeAbsolute = false;
+        OnPropertyChanged(nameof(MaThresholdMax));
+        if (value) ClampMaToPercent();      // a % can't exceed 100
         RefreshAllMaConverted();
         MarkDirty();
     }
     partial void OnMaModeAbsoluteChanged(bool value)
     {
         if (value) MaModePercentage = false;
+        OnPropertyChanged(nameof(MaThresholdMax));
         RefreshAllMaConverted();
         MarkDirty();
+    }
+
+    // In Percentage mode a threshold can't exceed 100% — snap any Value-mode leftover
+    // above 100 back down when the user flips to Percentage.
+    private void ClampHpToPercent()
+    {
+        if (RestMaxHp > 100) RestMaxHp = 100;
+        if (RestIfBelowHp > 100) RestIfBelowHp = 100;
+        if (HealRestTrigger > 100) HealRestTrigger = 100;
+        if (MinorHealCombatTrigger > 100) MinorHealCombatTrigger = 100;
+        if (MajorHealCombatTrigger > 100) MajorHealCombatTrigger = 100;
+        if (RunIfBelowHp > 100) RunIfBelowHp = 100;
+        if (HangIfBelowHp > 100) HangIfBelowHp = 100;
+    }
+    private void ClampMaToPercent()
+    {
+        if (RestMaxMa > 100) RestMaxMa = 100;
+        if (RestIfBelowMa > 100) RestIfBelowMa = 100;
+        if (HealIfAboveMaResting > 100) HealIfAboveMaResting = 100;
+        if (HealIfAboveMaCombat > 100) HealIfAboveMaCombat = 100;
+        if (RunIfBelowMa > 100) RunIfBelowMa = 100;
+        if (BlessIfAboveMa > 100) BlessIfAboveMa = 100;
     }
     partial void OnRestMaxMaChanged(int value)                { OnPropertyChanged(nameof(RestMaxMaConverted));            MarkDirty(); }
     partial void OnRestIfBelowMaChanged(int value)            { OnPropertyChanged(nameof(RestIfBelowMaConverted));        MarkDirty(); }

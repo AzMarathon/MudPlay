@@ -21,6 +21,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     private readonly ProfileService _profile;
     private readonly Game.Spells.SpellbookState _spellbook;
+    private readonly Game.PlayerState? _state;
     private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
@@ -206,6 +207,67 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int? _alternateAttackSpellMaxCastsPerRoom;
     [ObservableProperty] private int _alternateAttackSpellMinManaPerCast;
 
+    // ----- Min-mana-per-cast conversion (mirrors the Health tab) -----
+
+    // Live MaxMa for the % ↔ value conversion labels; 0 until a prompt gives us one.
+    public int LiveMaxMa => _state?.MaxMa ?? 0;
+
+    // NumericUpDown Maximum for the Min-mana fields: 100 in Percentage mode (a % can't
+    // exceed 100), the absolute ceiling in Value mode.
+    public decimal SpellManaMax => SpellManaModePercentage ? 100 : 100_000;
+
+    public string MultiAttackMinManaPerCastConverted         => FormatMana(MultiAttackMinManaPerCast);
+    public string AreaDebuffMinManaPerCastConverted          => FormatMana(AreaDebuffMinManaPerCast);
+    public string SingleTargetDebuffMinManaPerCastConverted  => FormatMana(SingleTargetDebuffMinManaPerCast);
+    public string NormalAttackSpellMinManaPerCastConverted   => FormatMana(NormalAttackSpellMinManaPerCast);
+    public string AlternateAttackSpellMinManaPerCastConverted => FormatMana(AlternateAttackSpellMinManaPerCast);
+
+    // Percentage mode shows the absolute mana equivalent ("54/66"); Value mode shows
+    // the percentage ("82%"). Empty until a prompt gives us a live MaxMa.
+    private string FormatMana(int value)
+    {
+        int max = LiveMaxMa;
+        if (max <= 0) return string.Empty;
+        return SpellManaModePercentage
+            ? $"{(int)System.Math.Round(max * value / 100.0)}/{max}"
+            : $"{(int)System.Math.Round(value * 100.0 / max)}%";
+    }
+
+    private void RefreshAllManaConverted()
+    {
+        OnPropertyChanged(nameof(MultiAttackMinManaPerCastConverted));
+        OnPropertyChanged(nameof(AreaDebuffMinManaPerCastConverted));
+        OnPropertyChanged(nameof(SingleTargetDebuffMinManaPerCastConverted));
+        OnPropertyChanged(nameof(NormalAttackSpellMinManaPerCastConverted));
+        OnPropertyChanged(nameof(AlternateAttackSpellMinManaPerCastConverted));
+    }
+
+    // In Percentage mode a Min-mana-per-cast can't exceed 100% — snap any Value-mode
+    // leftover above 100 back down when the user flips to Percentage.
+    private void ClampManaToPercent()
+    {
+        if (MultiAttackMinManaPerCast > 100) MultiAttackMinManaPerCast = 100;
+        if (AreaDebuffMinManaPerCast > 100) AreaDebuffMinManaPerCast = 100;
+        if (SingleTargetDebuffMinManaPerCast > 100) SingleTargetDebuffMinManaPerCast = 100;
+        if (NormalAttackSpellMinManaPerCast > 100) NormalAttackSpellMinManaPerCast = 100;
+        if (AlternateAttackSpellMinManaPerCast > 100) AlternateAttackSpellMinManaPerCast = 100;
+    }
+
+    private static Game.PlayerState? TryGetPlayerState()
+    {
+        try { return AppServices.Current.PlayerState; }
+        catch { return null; }
+    }
+
+    private void OnPlayerStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(Game.PlayerState.MaxMa))
+        {
+            OnPropertyChanged(nameof(LiveMaxMa));
+            RefreshAllManaConverted();
+        }
+    }
+
     // ----- Display --------------------------------------------------
 
     [ObservableProperty] private bool _showCombatRoundTotals;
@@ -218,14 +280,17 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         ArgumentNullException.ThrowIfNull(profile);
         _profile = profile;
         _spellbook = AppServices.Current.Spellbook;
+        _state = TryGetPlayerState();
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
         _spellbook.Changed += OnSpellbookChanged;
+        if (_state is not null) _state.PropertyChanged += OnPlayerStateChanged;
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
             _spellbook.Changed -= OnSpellbookChanged;
+            if (_state is not null) _state.PropertyChanged -= OnPlayerStateChanged;
         });
         _suppressDirty = true;
         LoadFromProfile();
@@ -493,11 +558,16 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnSpellManaModePercentageChanged(bool value)
     {
         if (value) SpellManaModeAbsolute = false;
+        OnPropertyChanged(nameof(SpellManaMax));
+        if (value) ClampManaToPercent();      // a % can't exceed 100
+        RefreshAllManaConverted();            // the % ↔ value labels flip with the mode
         MarkDirty();
     }
     partial void OnSpellManaModeAbsoluteChanged(bool value)
     {
         if (value) SpellManaModePercentage = false;
+        OnPropertyChanged(nameof(SpellManaMax));
+        RefreshAllManaConverted();
         MarkDirty();
     }
 
@@ -505,28 +575,28 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnMultiAttackSpellNameChanged(string? value)        => MarkDirty();
     partial void OnMultiAttackMinEnemiesChanged(int value)           => MarkDirty();
     partial void OnMultiAttackMaxCastsPerRoomChanged(int? value)     => MarkDirty();
-    partial void OnMultiAttackMinManaPerCastChanged(int value)       => MarkDirty();
+    partial void OnMultiAttackMinManaPerCastChanged(int value)       { OnPropertyChanged(nameof(MultiAttackMinManaPerCastConverted)); MarkDirty(); }
 
     // Spell slot — AOE debuff
     partial void OnAreaDebuffSpellNameChanged(string? value)         => MarkDirty();
     partial void OnAreaDebuffMinEnemiesChanged(int value)            => MarkDirty();
     partial void OnAreaDebuffMaxCastsPerRoomChanged(int? value)      => MarkDirty();
-    partial void OnAreaDebuffMinManaPerCastChanged(int value)        => MarkDirty();
+    partial void OnAreaDebuffMinManaPerCastChanged(int value)        { OnPropertyChanged(nameof(AreaDebuffMinManaPerCastConverted)); MarkDirty(); }
 
     // Spell slot — single-target debuff
     partial void OnSingleTargetDebuffSpellNameChanged(string? value)        => MarkDirty();
     partial void OnSingleTargetDebuffMaxCastsPerRoomChanged(int? value)     => MarkDirty();
-    partial void OnSingleTargetDebuffMinManaPerCastChanged(int value)       => MarkDirty();
+    partial void OnSingleTargetDebuffMinManaPerCastChanged(int value)       { OnPropertyChanged(nameof(SingleTargetDebuffMinManaPerCastConverted)); MarkDirty(); }
 
     // Spell slot — normal attack spell
     partial void OnNormalAttackSpellNameChanged(string? value)          => MarkDirty();
     partial void OnNormalAttackSpellMaxCastsPerRoomChanged(int? value)  => MarkDirty();
-    partial void OnNormalAttackSpellMinManaPerCastChanged(int value)    => MarkDirty();
+    partial void OnNormalAttackSpellMinManaPerCastChanged(int value)    { OnPropertyChanged(nameof(NormalAttackSpellMinManaPerCastConverted)); MarkDirty(); }
 
     // Spell slot — alternate attack spell
     partial void OnAlternateAttackSpellNameChanged(string? value)          => MarkDirty();
     partial void OnAlternateAttackSpellMaxCastsPerRoomChanged(int? value)  => MarkDirty();
-    partial void OnAlternateAttackSpellMinManaPerCastChanged(int value)    => MarkDirty();
+    partial void OnAlternateAttackSpellMinManaPerCastChanged(int value)    { OnPropertyChanged(nameof(AlternateAttackSpellMinManaPerCastConverted)); MarkDirty(); }
 
     // Display
     partial void OnShowCombatRoundTotalsChanged(bool value)      => MarkDirty();

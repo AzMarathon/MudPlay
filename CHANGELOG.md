@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.31.0
+
+- Combat spell "Min mana per cast" now shows its live equivalent beside each slot — the mana amount in Percentage mode, the % in Value mode (mirrors the Health tab)
+- Percentage mode now caps at 100%: Combat Min-mana-per-cast and the Health tab's HP / MA thresholds can no longer be set above 100% (existing over-100 values snap down when you switch to Percentage)
+- Settings tickers are whole numbers only — spell max-casts, min-enemies, min-mana, room monster counts, and Health thresholds no longer show trailing decimals
+
 ## 2.30.3
 
 - Spell combat now mirrors physical combat: an attack spell is announced once and the server auto-repeats it each round, so the client no longer re-casts every round. Fixes the "double cast" and the cast at the monster that just died ("You don't see X here!")

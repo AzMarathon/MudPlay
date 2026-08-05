@@ -185,19 +185,19 @@
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Min. monsters"/>
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
                                    Value="{Binding MinMonstersInRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="20" Width="120" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
                                    ToolTip.Tip="Skip the room if fewer than this many hostiles are present. Range 0–20."/>
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Max. monsters"/>
                     <NumericUpDown Grid.Row="1" Grid.Column="1"
                                    Value="{Binding MaxMonstersInRoom, Mode=TwoWay}"
-                                   Minimum="1" Maximum="20" Width="120" HorizontalAlignment="Left"
+                                   Minimum="1" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
                                    ToolTip.Tip="Skip the room if more than this many hostiles are present. Range 1–20."/>
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Run distance"/>
                     <NumericUpDown Grid.Row="2" Grid.Column="1"
                                    Value="{Binding RunDistance, Mode=TwoWay}"
-                                   Minimum="1" Maximum="100" Width="120" HorizontalAlignment="Left"
+                                   Minimum="1" Maximum="100" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
                                    ToolTip.Tip="Rooms to flee before re-evaluating. Range 1–100."/>
                 </Grid>
 
@@ -225,16 +225,17 @@
                 </StackPanel>
 
                 <!-- Spell-row column headers. -->
-                <Grid ColumnDefinitions="160,260,110,110,140" Margin="0,4,0,0">
+                <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,4,0,0">
                     <TextBlock Grid.Column="0"/>
                     <TextBlock Grid.Column="1" Classes="ColumnHeader" Text="Spell"/>
                     <TextBlock Grid.Column="2" Classes="ColumnHeader" Text="Min enemies"/>
                     <TextBlock Grid.Column="3" Classes="ColumnHeader" Text="Max casts"/>
                     <TextBlock Grid.Column="4" Classes="ColumnHeader" Text="Min mana per cast"/>
+                    <TextBlock Grid.Column="5" Classes="ColumnHeader" Text="= mana / %"/>
                 </Grid>
 
                 <!-- Multi-attack (room spell). -->
-                <Grid ColumnDefinitions="160,260,110,110,140" Margin="0,2,0,0">
+                <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Multi-attack"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding MultiAttackSpellName, Mode=TwoWay}"
@@ -247,20 +248,22 @@
                                      ToolTip.Tip="Multi-target room spell to fire. Suggestions come from this class's known spells."/>
                     <NumericUpDown Grid.Column="2"
                                    Value="{Binding MultiAttackMinEnemies, Mode=TwoWay}"
-                                   Minimum="0" Maximum="20" Width="100" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
                                    ToolTip.Tip="Only cast when at least this many hostiles are present."/>
                     <NumericUpDown Grid.Column="3"
                                    Value="{Binding MultiAttackMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" Width="100" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
                     <NumericUpDown Grid.Column="4"
                                    Value="{Binding MultiAttackMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100000" Width="130" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
                                    ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
+                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding MultiAttackMinManaPerCastConverted}"/>
                 </Grid>
 
                 <!-- Debuff (AOE). -->
-                <Grid ColumnDefinitions="160,260,110,110,140" Margin="0,2,0,0">
+                <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (AOE)"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding AreaDebuffSpellName, Mode=TwoWay}"
@@ -273,20 +276,22 @@
                                      ToolTip.Tip="Area-effect debuff (e.g. blind-room, curse-room). Suggestions come from this class's known spells."/>
                     <NumericUpDown Grid.Column="2"
                                    Value="{Binding AreaDebuffMinEnemies, Mode=TwoWay}"
-                                   Minimum="0" Maximum="20" Width="100" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
                                    ToolTip.Tip="Only cast when at least this many hostiles are present."/>
                     <NumericUpDown Grid.Column="3"
                                    Value="{Binding AreaDebuffMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" Width="100" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
                     <NumericUpDown Grid.Column="4"
                                    Value="{Binding AreaDebuffMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100000" Width="130" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
                                    ToolTip.Tip="Minimum mana required to cast."/>
+                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding AreaDebuffMinManaPerCastConverted}"/>
                 </Grid>
 
                 <!-- Debuff (single target — no Min enemies). -->
-                <Grid ColumnDefinitions="160,260,110,110,140" Margin="0,2,0,0">
+                <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (single target)"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding SingleTargetDebuffSpellName, Mode=TwoWay}"
@@ -302,16 +307,18 @@
                                ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
                     <NumericUpDown Grid.Column="3"
                                    Value="{Binding SingleTargetDebuffMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" Width="100" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
                     <NumericUpDown Grid.Column="4"
                                    Value="{Binding SingleTargetDebuffMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100000" Width="130" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
                                    ToolTip.Tip="Minimum mana required to cast."/>
+                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding SingleTargetDebuffMinManaPerCastConverted}"/>
                 </Grid>
 
                 <!-- Normal attack spell (single-target — no Min enemies). -->
-                <Grid ColumnDefinitions="160,260,110,110,140" Margin="0,2,0,0">
+                <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Normal attack spell"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding NormalAttackSpellName, Mode=TwoWay}"
@@ -327,16 +334,18 @@
                                ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
                     <NumericUpDown Grid.Column="3"
                                    Value="{Binding NormalAttackSpellMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" Width="100" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
                     <NumericUpDown Grid.Column="4"
                                    Value="{Binding NormalAttackSpellMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100000" Width="130" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
                                    ToolTip.Tip="Minimum mana required to cast."/>
+                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding NormalAttackSpellMinManaPerCastConverted}"/>
                 </Grid>
 
                 <!-- Alternate attack spell (single-target — no Min enemies). -->
-                <Grid ColumnDefinitions="160,260,110,110,140" Margin="0,2,0,0">
+                <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Alternate attack spell"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding AlternateAttackSpellName, Mode=TwoWay}"
@@ -352,12 +361,14 @@
                                ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
                     <NumericUpDown Grid.Column="3"
                                    Value="{Binding AlternateAttackSpellMaxCastsPerRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100" Width="100" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
                     <NumericUpDown Grid.Column="4"
                                    Value="{Binding AlternateAttackSpellMinManaPerCast, Mode=TwoWay}"
-                                   Minimum="0" Maximum="100000" Width="130" HorizontalAlignment="Left"
+                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
                                    ToolTip.Tip="Minimum mana required to cast."/>
+                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
                 </Grid>
 
                 <!-- ============ Display ============ -->
