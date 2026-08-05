@@ -2266,6 +2266,8 @@ public sealed class AppServices
         GameData.ActiveSetChanged += BossTimers.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
             BossTimers.OnActiveSetChanged(GameData.ActiveSet);
+        // Cleanup-boss DEAD/ALIVE state reads the active BBS's nightly-cleanup time.
+        BossTimers.SetCleanupConfig(ResolveBossCleanupConfig);
 
         // ItemNameStore — int→name index for the active Items.json so
         // the keyed-door FSM can resolve KeyItemId → in-game name and
@@ -5921,6 +5923,21 @@ public sealed class AppServices
             .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
         return first is null ? null : Bbs.Get(first);
+    }
+
+    // Parse the active BBS's nightly-cleanup time + zone into a config for the
+    // cleanup-boss DEAD/ALIVE state. Null when no BBS, a blank time, or an
+    // unparseable time (a bad zone id falls back to the local zone).
+    private BossCleanupConfig? ResolveBossCleanupConfig()
+    {
+        if (ResolveActiveBbs() is not { } bbs) return null;
+        if (string.IsNullOrWhiteSpace(bbs.CleanupTimeOfDay)) return null;
+        if (!TimeSpan.TryParse(bbs.CleanupTimeOfDay.Trim(), out TimeSpan tod)
+            || tod < TimeSpan.Zero || tod >= TimeSpan.FromDays(1)) return null;
+        TimeZoneInfo tz;
+        try { tz = TimeZoneInfo.FindSystemTimeZoneById(bbs.CleanupTimeZoneId); }
+        catch { tz = TimeZoneInfo.Local; }
+        return new BossCleanupConfig(tod, tz);
     }
 
     // Recompute the active game-data set from the BBS-pin chain and

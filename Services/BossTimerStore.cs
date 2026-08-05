@@ -35,7 +35,18 @@ public sealed class BossTimerStore
     private Dictionary<string, DateTimeOffset> _killed =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Active BBS's nightly-cleanup config (time-of-day + zone) for "Respawns @
+    // Cleanup" bosses. Resolved live so a BBS / setting change takes effect without
+    // re-wiring; null when unset or unparseable → cleanup bosses can't auto-flip.
+    private Func<BossCleanupConfig?>? _cleanupConfig;
+
     public string? ActiveSet { get; private set; }
+
+    public void SetCleanupConfig(Func<BossCleanupConfig?> resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        _cleanupConfig = resolver;
+    }
 
     // Fires after any change to the tracked set (kill stamped, reset, reload) so a
     // view can refresh its live status column off the store rather than polling.
@@ -91,15 +102,45 @@ public sealed class BossTimerStore
     }
 
     // Live window state for a boss, or null when it has no active timer (never
-    // killed, already expired, a Cleanup boss, or no game-data respawn timer).
+    // killed, already expired / respawned, or no game-data respawn timer). A Cleanup
+    // boss is "active" while it reads DEAD — its state carries the "cleanup" label
+    // and the time until the next cleanup flips it back to ALIVE.
     public BossWindowState? StatusFor(BossDef def, RealmType realm)
     {
         ArgumentNullException.ThrowIfNull(def);
-        if (def.RespawnType != BossRespawnType.Timed) return null;
         if (KilledAt(def.Name) is not { } killed) return null;
+
+        if (def.RespawnType == BossRespawnType.Cleanup)
+        {
+            if (CleanupRemainingFrom(killed) is not { } rem) return null;   // alive → not tracked
+            return new BossWindowState(false, rem, "cleanup", rem);
+        }
+
         if (BossCatalog.EffectiveRegenHours(_gameData, def) is not { } hours || hours <= 0) return null;
         BossWindowState state = BossTimerMath.Describe(realm, def.ExactSpawn, hours, DateTimeOffset.UtcNow - killed);
         return state.Expired ? null : state;
+    }
+
+    // A Cleanup boss reads DEAD once marked, until the next cleanup. True only when
+    // marked and the cleanup that clears it hasn't arrived (or can't be computed —
+    // no cleanup time set keeps it DEAD until manually cleared).
+    public bool IsCleanupDead(string name)
+    {
+        if (KilledAt(name) is not { } killed) return false;
+        if (_cleanupConfig?.Invoke() is not { } cfg) return true;   // marked, no cleanup time → stays dead
+        return DateTimeOffset.UtcNow < BossTimerMath.NextCleanup(killed, cfg.TimeOfDay, cfg.Tz);
+    }
+
+    // Time until a marked Cleanup boss flips back to ALIVE, or null when it isn't
+    // marked, the cleanup has already passed, or no cleanup time is configured.
+    public TimeSpan? CleanupRemaining(string name)
+        => KilledAt(name) is { } killed ? CleanupRemainingFrom(killed) : null;
+
+    private TimeSpan? CleanupRemainingFrom(DateTimeOffset killed)
+    {
+        if (_cleanupConfig?.Invoke() is not { } cfg) return null;
+        TimeSpan rem = BossTimerMath.NextCleanup(killed, cfg.TimeOfDay, cfg.Tz) - DateTimeOffset.UtcNow;
+        return rem > TimeSpan.Zero ? rem : null;
     }
 
     // Every boss on the given realm with a running timer, paired with its state,
@@ -167,3 +208,8 @@ public sealed class BossTimerStore
         JsonStore.Save(AppPaths.BossTimersFile(ActiveSet), _killed);
     }
 }
+
+// Resolved nightly-cleanup config for the active BBS — the daily wall-clock time
+// and the zone it's in. Built by AppServices from the BBS profile's
+// CleanupTimeOfDay + CleanupTimeZoneId.
+public sealed record BossCleanupConfig(TimeSpan TimeOfDay, TimeZoneInfo Tz);

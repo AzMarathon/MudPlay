@@ -103,6 +103,23 @@ public static class BossTimerMath
         return $"{total / 3600}:{(total / 60) % 60:D2}:{total % 60:D2}";
     }
 
+    // The first daily cleanup instant strictly after killedAt, given the cleanup
+    // wall-clock time-of-day in tz. A cleanup-only boss killed before this fires
+    // reads DEAD until it, then ALIVE. DST-safe (offset resolved at the candidate
+    // local time).
+    public static DateTimeOffset NextCleanup(DateTimeOffset killedAt, TimeSpan timeOfDay, TimeZoneInfo tz)
+    {
+        DateTimeOffset killInTz = TimeZoneInfo.ConvertTime(killedAt, tz);
+        DateTime candidateLocal = killInTz.Date + timeOfDay;               // same day at cleanup time
+        DateTimeOffset candidate = new(candidateLocal, tz.GetUtcOffset(candidateLocal));
+        if (candidate <= killedAt)
+        {
+            candidateLocal = candidateLocal.AddDays(1);
+            candidate = new DateTimeOffset(candidateLocal, tz.GetUtcOffset(candidateLocal));
+        }
+        return candidate;
+    }
+
     // Whole number without a trailing ".0"; one decimal otherwise (so 20 -> "20",
     // 87.5 -> "87.5").
     private static string Trim(double pct) =>

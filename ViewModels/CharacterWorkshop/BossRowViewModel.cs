@@ -103,8 +103,21 @@ public sealed partial class BossRowViewModel : ObservableObject
     // blank when no timer is running (never killed / expired / Cleanup / no timer).
     public void RefreshStatus()
     {
+        // Cleanup bosses read a DEAD / ALIVE state, not a countdown: DEAD once marked
+        // until the next BBS cleanup flips them back to ALIVE. No early windows.
+        if (IsCleanup)
+        {
+            bool dead = _timers.IsCleanupDead(Name);
+            IsActive = dead;
+            StatusDisplay = dead ? "DEAD" : "ALIVE";
+            FullSortKey = dead ? (long)(_timers.CleanupRemaining(Name)?.TotalSeconds ?? 0) : InactiveSort;
+            Early1Display = Early2Display = Early3Display = string.Empty;
+            Early1SortKey = Early2SortKey = Early3SortKey = InactiveSort;
+            return;
+        }
+
         DateTimeOffset? killed = _timers.KilledAt(Name);
-        if (IsCleanup || killed is not { } k || _respawnHours is not { } full || full <= 0)
+        if (killed is not { } k || _respawnHours is not { } full || full <= 0)
         {
             ClearLive();
             return;

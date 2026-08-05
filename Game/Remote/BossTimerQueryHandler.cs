@@ -82,6 +82,10 @@ public sealed class BossTimerQueryHandler : IDisposable
     private static string Format((BossDef Def, BossWindowState State) t)
     {
         string full = BossTimerMath.FormatHours(t.State.FullRemaining.TotalHours);
+        // Cleanup bosses report a DEAD state + time to the next cleanup, not a
+        // percentage window.
+        if (t.State.NextLabel == "cleanup")
+            return $"{t.Def.Name} - dead, cleanup in {full}";
         // When the next window IS the guaranteed spawn, the two values coincide —
         // report just the full timer.
         if (t.State.NextLabel == "full")

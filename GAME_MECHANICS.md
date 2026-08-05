@@ -584,6 +584,13 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
   below the naive exp-ratio multiple. Bosses are left on their base exp (their death-summon, if any, is
   not folded — a rare edge, and boss exp is already a flat amortised approximation).
 
+**Cleanup-only boss respawns** *([CONFIRMED] 2026-08-04, user)*
+- A subset of bosses (in the boss-timer seed: Lord Feyr, Iceforge, Huge Sandstone Sphinx, Mammoth
+  Stone Scorpion, Bogwood Box) do **not** respawn on a kill-based countdown. They reset **only at the
+  BBS's nightly server cleanup**, a fixed daily wall-clock time (per board — e.g. **2100 Pacific**).
+- So once killed they stay dead until the next cleanup instant, then return. The client models this as
+  a DEAD / ALIVE state keyed to the per-BBS cleanup time, not a duration timer.
+
 ## Vitality — HP, dropping, and death
 
 **Max-HP sources** *([CONFIRMED])*

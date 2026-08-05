@@ -562,4 +562,71 @@ public sealed class BossTimerTests : IDisposable
         Assert.Equal(10, after.RespawnHoursOverride);
         Assert.NotNull(timers.StatusFor(after, RealmType.ParaMud));   // override drives the timer
     }
+
+    // ----- cleanup bosses (DEAD / ALIVE) -------------------------------------
+
+    [Fact]
+    public void NextCleanup_IsFirstCleanupAfterKill()
+    {
+        var tz = TimeZoneInfo.Utc;
+        var cleanup = TimeSpan.FromHours(21);
+
+        // Killed at 20:00 → today's 21:00.
+        Assert.Equal(new DateTimeOffset(2026, 8, 5, 21, 0, 0, TimeSpan.Zero),
+            BossTimerMath.NextCleanup(new DateTimeOffset(2026, 8, 5, 20, 0, 0, TimeSpan.Zero), cleanup, tz));
+        // Killed at 22:00 (after cleanup) → tomorrow's 21:00.
+        Assert.Equal(new DateTimeOffset(2026, 8, 6, 21, 0, 0, TimeSpan.Zero),
+            BossTimerMath.NextCleanup(new DateTimeOffset(2026, 8, 5, 22, 0, 0, TimeSpan.Zero), cleanup, tz));
+    }
+
+    private (BossStore bosses, BossTimerStore timers) CleanupStores()
+    {
+        SeedGameData(RealmType.ParaMud, ("lord feyr", 60, 24, 1));
+        SeedBosses(Boss("lord feyr", number: 60, type: BossRespawnType.Cleanup, rooms: "17/2718"));
+        var (bosses, timers, _) = NewStores();
+        timers.SetCleanupConfig(() => new BossCleanupConfig(TimeSpan.FromHours(21), TimeZoneInfo.Utc));
+        return (bosses, timers);
+    }
+
+    [Fact]
+    public void Cleanup_MarkedNow_IsDead_MarkedLongAgo_IsAlive()
+    {
+        var (_, timers) = CleanupStores();
+
+        // Just marked: the next cleanup is always in the future → DEAD.
+        timers.MarkKilled("lord feyr", DateTimeOffset.UtcNow);
+        Assert.True(timers.IsCleanupDead("lord feyr"));
+
+        // Marked over a day ago: the cleanup that clears it has passed → ALIVE.
+        timers.MarkKilled("lord feyr", DateTimeOffset.UtcNow - TimeSpan.FromHours(25));
+        Assert.False(timers.IsCleanupDead("lord feyr"));
+    }
+
+    [Fact]
+    public void Cleanup_NoConfig_StaysDeadUntilCleared()
+    {
+        SeedGameData(RealmType.ParaMud, ("lord feyr", 60, 24, 1));
+        SeedBosses(Boss("lord feyr", number: 60, type: BossRespawnType.Cleanup, rooms: "17/2718"));
+        var (_, timers, _) = NewStores();   // no cleanup config set
+
+        timers.MarkKilled("lord feyr", DateTimeOffset.UtcNow - TimeSpan.FromDays(3));
+        Assert.True(timers.IsCleanupDead("lord feyr"));   // can't compute a flip → stays dead
+    }
+
+    [Fact]
+    public void Row_Cleanup_ShowsAliveThenDead()
+    {
+        var (_, timers) = CleanupStores();
+        var def = Boss("lord feyr", number: 60, type: BossRespawnType.Cleanup, rooms: "17/2718");
+        var row = new BossRowViewModel(def, RealmType.ParaMud, null, timers, () => { }, _ => { });
+
+        row.RefreshStatus();                            // unmarked
+        Assert.Equal("ALIVE", row.StatusDisplay);
+        Assert.False(row.IsActive);
+
+        timers.MarkKilled("lord feyr", DateTimeOffset.UtcNow);
+        row.RefreshStatus();
+        Assert.Equal("DEAD", row.StatusDisplay);
+        Assert.True(row.IsActive);                      // Clear button shows while dead
+    }
 }

@@ -33,6 +33,7 @@
         <DataGrid Grid.Row="1" x:Name="BossGrid"
                   ItemsSource="{Binding Rows}"
                   SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                  Sorting="OnSorting"
                   IsVisible="{Binding HasBosses}"
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"
@@ -77,10 +78,10 @@
                         <DataTemplate x:DataType="vm:BossRowViewModel">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
                                 <Button Content="Mark" Padding="8,2" Margin="0,0,4,0"
-                                        Command="{Binding MarkCommand}" IsVisible="{Binding IsTimed}"
+                                        Command="{Binding MarkCommand}"
                                         ToolTip.Tip="Set this boss's kill time (defaults to now; editable)."/>
                                 <Button Content="Reset" Padding="7,2" Margin="0,0,4,0"
-                                        Command="{Binding ResetTimerCommand}" IsVisible="{Binding IsTimed}"
+                                        Command="{Binding ResetTimerCommand}"
                                         ToolTip.Tip="Stamp the kill at the current time."/>
                                 <Button Content="Clear" Padding="7,2"
                                         Command="{Binding ClearTimerCommand}" IsVisible="{Binding IsActive}"

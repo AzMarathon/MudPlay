@@ -355,6 +355,23 @@
                               Content="Auto-refine the floor from slow deaths"
                               ToolTip.Tip="Learn the realm's true death floor from deaths where you bled out gradually (which land right at the floor). A single big overkill hit blows past the floor and is ignored. Turn off to keep the value you set above."/>
 
+                    <!-- Nightly boss cleanup: "Respawns @ Cleanup" bosses on the
+                         Bosses tab read DEAD once marked and flip back to ALIVE at
+                         this daily wall-clock time (in the chosen zone). -->
+                    <Grid ColumnDefinitions="180,Auto,Auto,*" Margin="0,12,0,0" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Boss cleanup time:"/>
+                        <TextBox Grid.Column="1" Width="90" HorizontalAlignment="Left"
+                                 FontFamily="{StaticResource FontMono}"
+                                 Text="{Binding CleanupTimeOfDay, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 PlaceholderText="21:00"
+                                 ToolTip.Tip="Daily server-cleanup time as HH:mm (24-hour) in the time zone at right. Cleanup-only bosses flip from DEAD back to ALIVE at this time. Blank disables cleanup-boss timers."/>
+                        <TextBox Grid.Column="2" Width="200" HorizontalAlignment="Left"
+                                 FontFamily="{StaticResource FontMono}"
+                                 Text="{Binding CleanupTimeZoneId, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 PlaceholderText="America/Los_Angeles"
+                                 ToolTip.Tip="IANA time-zone id the cleanup time is in (e.g. America/Los_Angeles for Pacific). Invalid / blank falls back to your local zone."/>
+                    </Grid>
+
                     <!-- ===== Board disconnect line (per-BBS) =====
                          Additive to the built-in "X just disconnected!!!" /
                          "X just hung up!!!" forms. Some boards (Playpen) emit a
