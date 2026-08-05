@@ -6,7 +6,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Bosses tab now shows the **Notes** column (from Manage Bosses) to the right of the Timer column — read-only, resize to read a long one
 - New **Exp** toolbar button sends the in-game `exp` command (add it via Settings → Toolbar; included by default on fresh profiles)
-- Player Workshop window now snaps its width and height to the active tab's content on each tab switch (wide tabs like Bosses get the room they need, narrow tabs shrink back), and stays freely resizable afterward
+- Player Workshop window now fits its width to the active tab on each tab switch (wide tabs like Bosses get the room they need, narrow tabs shrink back); height matches the Equipment tab so long lists (Quest, Bosses) scroll instead of ballooning the window — stays freely resizable afterward
 
 ## 2.29.0
 

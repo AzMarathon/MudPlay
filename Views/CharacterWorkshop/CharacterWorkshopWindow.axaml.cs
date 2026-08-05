@@ -1,23 +1,29 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using FujinTerm.ViewModels.CharacterWorkshop;
 
 namespace FujinTerm.Views.CharacterWorkshop;
 
 public partial class CharacterWorkshopWindow : Window
 {
+    // Every tab auto-sizes its WIDTH to its own content, but takes its HEIGHT
+    // from the Equipment tab — the Quest and Bosses lists would otherwise balloon
+    // the window far taller than the form-style tabs. Seeded with a comfortable
+    // fallback until the Equipment tab is shown once and we learn its real height.
+    private const double FallbackReferenceHeight = 640;
+    private double _referenceHeight = FallbackReferenceHeight;
+
     public CharacterWorkshopWindow()
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
         FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "workshop");
 
-        // Tabs differ a lot in how much room they want — the Bosses grid needs
-        // far more width (and height) than a form-style tab like Character Info.
-        // Snap the window to the freshly-selected tab's content on every switch,
-        // then hand sizing back to Manual so the user can still drag-resize until
-        // the next switch. MinWidth/MinHeight (set in XAML) keep narrow tabs
-        // comfortable; the window's own screen clamp caps how far a big tab grows.
+        // Tabs differ a lot in how much width they want — the Bosses grid needs
+        // far more than a form-style tab like Character Info. Snap the window to
+        // the freshly-selected tab on every switch, then hand sizing back to
+        // Manual so the user can still drag-resize until the next switch.
         if (this.FindControl<TabControl>("SectionTabs") is { } tabs)
             tabs.SelectionChanged += OnSectionChanged;
     }
@@ -26,12 +32,30 @@ public partial class CharacterWorkshopWindow : Window
 
     private void OnSectionChanged(object? sender, SelectionChangedEventArgs e) => FitToActiveTab();
 
-    // Momentarily size-to-content so the window fits the active tab, then revert
-    // to Manual (after the auto-size layout pass) to re-enable manual resize
-    // without snapping back.
+    // Fit the window to the active tab, then revert to Manual (after the layout
+    // pass) so manual resize works without snapping back. Width fits the tab's
+    // content; height is the Equipment tab's height — the Equipment tab sizes
+    // both dimensions to itself and its rendered height becomes the reference
+    // every other tab uses, so long lists (Quest, Bosses) scroll instead of
+    // growing the window taller than Equipment.
     private void FitToActiveTab()
     {
-        SizeToContent = SizeToContent.WidthAndHeight;
-        Dispatcher.UIThread.Post(() => SizeToContent = SizeToContent.Manual, DispatcherPriority.Loaded);
+        bool isEquipment = (DataContext as CharacterWorkshopViewModel)?.SelectedSection?.Id == "equipment";
+        if (isEquipment)
+        {
+            SizeToContent = SizeToContent.WidthAndHeight;
+        }
+        else
+        {
+            SizeToContent = SizeToContent.Width;
+            Height = _referenceHeight;
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            // Learn the Equipment tab's real (styled, laid-out) height so the
+            // other tabs match it.
+            if (isEquipment && Bounds.Height > 0) _referenceHeight = Bounds.Height;
+            SizeToContent = SizeToContent.Manual;
+        }, DispatcherPriority.Loaded);
     }
 }
