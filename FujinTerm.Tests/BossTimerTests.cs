@@ -374,6 +374,22 @@ public sealed class BossTimerTests : IDisposable
     }
 
     [Fact]
+    public void Timer_MoreThanFiveMatches_CapsWithKeywordOverflow()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud,
+            ("red dragon", 1, 12), ("blue dragon", 2, 12), ("green dragon", 3, 12),
+            ("black dragon", 4, 12), ("white dragon", 5, 12), ("gold dragon", 6, 12));
+        foreach (string n in new[] { "red dragon", "blue dragon", "green dragon", "black dragon", "white dragon", "gold dragon" })
+            timers.MarkKilled(n);
+
+        engine.DispatchForTests(Telepath("@timer dragon"));
+
+        List<string> replies = Replies(engine);
+        Assert.Equal(6, replies.Count);   // 5 timer lines + 1 overflow line
+        Assert.Contains("1 more timers matching 'dragon'", replies.Last());
+    }
+
+    [Fact]
     public void FormatHours_UsesHoursMinutesStyle()
     {
         Assert.Equal("2h14m", BossTimerMath.FormatHours(2 + 14 / 60.0));

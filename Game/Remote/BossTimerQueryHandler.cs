@@ -20,9 +20,9 @@ namespace FujinTerm.Game.Remote;
 // only — the reply rides the BBS wire, where a Unicode minus degrades to '?'.
 public sealed class BossTimerQueryHandler : IDisposable
 {
-    // Cap on reply lines so a bare @timer with many active timers can't flood the
-    // channel; the overflow is summarised as a final "(+N more)" line.
-    private const int MaxLines = 12;
+    // Cap on reply lines so a @timer with many active timers can't flood the
+    // channel; the overflow is summarised as a final "N more…" line.
+    private const int MaxLines = 5;
 
     private readonly RemoteCommandManager _engine;
     private readonly BossStore _bosses;
@@ -75,11 +75,15 @@ public sealed class BossTimerQueryHandler : IDisposable
         }
 
         // One reply line per boss, so a multi-match (@timer dragon → two dragons)
-        // lands as separate lines on the reply channel. Cap the count so a bare
-        // @timer with many active timers can't flood the channel.
+        // lands as separate lines on the reply channel. Cap the count so a @timer
+        // with many active timers can't flood the channel; the last line summarises
+        // the overflow (naming the keyword when one was given).
         foreach (var t in active.Take(MaxLines)) ctx.Reply(Format(t));
         int extra = active.Count - MaxLines;
-        if (extra > 0) ctx.Reply($"(+{extra} more - narrow with @timer <name>)");
+        if (extra > 0)
+            ctx.Reply(query.Length > 0
+                ? $"{extra} more timers matching '{query}' - refine your search"
+                : $"{extra} more active timers - add a keyword to filter");
     }
 
     private static string Format((BossDef Def, BossWindowState State) t)
