@@ -7,8 +7,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Cleanup",
-    "ExactSpawn": false
+    "RespawnType": "Cleanup"
   },
   {
     "Name": "iceforge",
@@ -18,8 +17,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Cleanup",
-    "ExactSpawn": false
+    "RespawnType": "Cleanup"
   },
   {
     "Name": "huge sandstone sphinx",
@@ -29,8 +27,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Cleanup",
-    "ExactSpawn": false
+    "RespawnType": "Cleanup"
   },
   {
     "Name": "mammoth stone scorpion",
@@ -40,8 +37,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Cleanup",
-    "ExactSpawn": false
+    "RespawnType": "Cleanup"
   },
   {
     "Name": "bogwood box",
@@ -51,8 +47,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Cleanup",
-    "ExactSpawn": false
+    "RespawnType": "Cleanup"
   },
   {
     "Name": "ancient willow",
@@ -62,8 +57,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "unholy idol",
@@ -73,8 +67,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "champion of blood",
@@ -84,8 +77,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "quickling lord",
@@ -95,8 +87,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "prismatic dragon",
@@ -106,8 +97,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "crimson mist",
@@ -132,8 +122,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": true
+    "RespawnType": "Timed"
   },
   {
     "Name": "huge basilisk",
@@ -143,8 +132,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "goru-nezar",
@@ -154,8 +142,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "cyclops",
@@ -165,8 +152,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "high druid",
@@ -176,8 +162,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "master assassin",
@@ -187,8 +172,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark bishop",
@@ -198,8 +182,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark wizard",
@@ -209,8 +192,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "chimera",
@@ -220,8 +202,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "lady of the dark",
@@ -231,8 +212,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mermex queen",
@@ -242,8 +222,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "orc warlord",
@@ -253,8 +232,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "nomadic chieftan",
@@ -264,8 +242,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "guardian golem",
@@ -275,8 +252,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "giant spider",
@@ -286,8 +262,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "troll",
@@ -298,7 +273,7 @@
     "InStock": true,
     "InParadigm": true,
     "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnHoursOverride": 1
   },
   {
     "Name": "necromancer",
@@ -308,8 +283,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "spectral mage",
@@ -319,8 +293,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "thrag",
@@ -330,8 +303,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "minotaur champion",
@@ -341,8 +313,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "leo the quick",
@@ -352,8 +323,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark-elf high priestess",
@@ -363,8 +333,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "captain of the guard",
@@ -374,8 +343,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "flesh golem",
@@ -385,8 +353,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "gigantic black ooze",
@@ -410,8 +377,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "werewolf",
@@ -421,8 +387,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "slave-master",
@@ -432,8 +397,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "harpy queen",
@@ -443,8 +407,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "banshee",
@@ -454,8 +417,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "minotaur chieftain",
@@ -465,8 +427,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "gnoll chieftain",
@@ -476,8 +437,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "minotaur champion",
@@ -487,8 +447,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mad wizard",
@@ -498,8 +457,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "vile willow",
@@ -509,8 +467,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "lucentus",
@@ -520,8 +477,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark smuggler",
@@ -531,8 +487,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "warden",
@@ -542,8 +497,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "yekrath the blind",
@@ -553,8 +507,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "monkey spirit",
@@ -564,8 +517,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "ancient sand dragon",
@@ -576,7 +528,7 @@
     "InStock": true,
     "InParadigm": true,
     "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnHoursOverride": 250
   },
   {
     "Name": "nahr",
@@ -586,8 +538,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "ancient fire drake",
@@ -597,8 +548,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "zanthus the lich",
@@ -608,8 +558,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "luursa",
@@ -619,8 +568,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "jotun",
@@ -630,8 +578,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "volodar",
@@ -641,8 +588,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "darken beast lord",
@@ -655,8 +601,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "corpsemass",
@@ -666,8 +611,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "spiked overlord",
@@ -677,8 +621,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "huge alabaster dragon",
@@ -688,8 +631,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "harbinger of the void",
@@ -699,8 +641,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "empyrean dragon",
@@ -710,8 +651,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "ancient bloodwood tree",
@@ -721,8 +661,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "tsunami squid",
@@ -732,8 +671,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "xelrym-dhar",
@@ -743,8 +681,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark revenant",
@@ -754,8 +691,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "bloody executioner",
@@ -768,8 +704,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "kraken",
@@ -779,8 +714,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "majestic dragon",
@@ -790,8 +724,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "nahr",
@@ -801,8 +734,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "enormous blue dragon",
@@ -812,8 +744,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "great hydra",
@@ -823,8 +754,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "demon lord",
@@ -834,8 +764,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "golden phoenix",
@@ -845,8 +774,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "eldrezeth",
@@ -856,8 +784,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dreadlord of blood",
@@ -867,8 +794,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mother ungol",
@@ -878,8 +804,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "shadowborn relicmaster",
@@ -896,8 +821,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mayor of arlysia",
@@ -911,8 +835,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "colossal midnight dragon",
@@ -922,8 +845,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "templar grukthog",
@@ -933,8 +855,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "hydra",
@@ -944,8 +865,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "shadowborn loremaster",
@@ -963,8 +883,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "devil fiend malivek",
@@ -974,8 +893,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "shadow master",
@@ -988,8 +906,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "rotting beholder",
@@ -999,8 +916,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "shadowy figure",
@@ -1010,8 +926,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "game ender",
@@ -1021,8 +936,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "crazed magus",
@@ -1032,8 +946,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "hanging tree",
@@ -1043,8 +956,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "night hag",
@@ -1054,8 +966,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "fallen angel",
@@ -1065,8 +976,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "huge black dragon",
@@ -1076,8 +986,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "great green dragon",
@@ -1087,8 +996,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "gnaj the creator",
@@ -1098,8 +1006,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mind flayer magus",
@@ -1109,8 +1016,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "wraithlord",
@@ -1120,8 +1026,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "beholder",
@@ -1131,8 +1036,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "storm giant commander",
@@ -1142,8 +1046,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "storm giant king",
@@ -1153,8 +1056,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "yeshuz",
@@ -1164,8 +1066,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "deathgaze",
@@ -1175,8 +1076,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark engineer",
@@ -1189,8 +1089,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "xoth",
@@ -1200,8 +1099,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "gorlok",
@@ -1214,8 +1112,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "kraun the unholy",
@@ -1228,8 +1125,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "deadeye",
@@ -1242,8 +1138,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "shadow lord",
@@ -1262,8 +1157,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "rattleskull",
@@ -1276,8 +1170,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "lady malyse",
@@ -1289,8 +1182,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "lord chisholm",
@@ -1302,8 +1194,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "shadowborn prophet",
@@ -1315,8 +1206,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "aghatan",
@@ -1331,8 +1221,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "lord skorne",
@@ -1343,8 +1232,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "putrescent hulk",
@@ -1354,8 +1242,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "lord stryfe",
@@ -1365,8 +1252,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "tasloi shaman",
@@ -1376,8 +1262,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "fallen king",
@@ -1387,8 +1272,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "enigma lord",
@@ -1398,8 +1282,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "manscorpion king",
@@ -1409,8 +1292,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "lord of the hunt",
@@ -1433,8 +1315,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": true
+    "RespawnType": "Timed"
   },
   {
     "Name": "shadowcat",
@@ -1444,8 +1325,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "crystal spider",
@@ -1455,8 +1335,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "crystal golem",
@@ -1466,8 +1345,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "frost giant chieftan",
@@ -1477,8 +1355,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "flesh shaper",
@@ -1488,8 +1365,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "massive bore worm",
@@ -1499,8 +1375,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "grand master",
@@ -1510,8 +1385,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "adult red dragon",
@@ -1521,8 +1395,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "ancient spore dragon",
@@ -1532,8 +1405,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mammoth rot worm",
@@ -1543,8 +1415,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "animated juggernaut",
@@ -1554,8 +1425,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "stone giant chieftain",
@@ -1565,8 +1435,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "large red demonling",
@@ -1576,8 +1445,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "fire giant chieftan",
@@ -1587,8 +1455,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark-elf queen",
@@ -1598,19 +1465,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
-  },
-  {
-    "Name": "giant toad-beast",
-    "MonsterNumber": 1157,
-    "Rooms": [
-      "5/2160"
-    ],
-    "InStock": false,
-    "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "ozrinom the vampire lord",
@@ -1620,8 +1475,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "froghemoth",
@@ -1631,8 +1485,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "midnight unicorn",
@@ -1652,8 +1505,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "fair maiden",
@@ -1663,8 +1515,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark naga",
@@ -1674,8 +1525,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark phoenix",
@@ -1685,8 +1535,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mamba",
@@ -1699,8 +1548,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "demoness irikani",
@@ -1718,8 +1566,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dire grizzly matriarch",
@@ -1729,8 +1576,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "rakshasha rajah",
@@ -1740,8 +1586,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dread wraith",
@@ -1751,8 +1596,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "saracen high priest",
@@ -1762,8 +1606,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "gedric",
@@ -1773,8 +1616,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "miscreation",
@@ -1784,8 +1626,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "fallen champion",
@@ -1847,8 +1688,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "pharaoh rastep",
@@ -1858,8 +1698,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "aged earth dragon",
@@ -1871,8 +1710,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "aderem",
@@ -1882,8 +1720,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "vashti",
@@ -1893,8 +1730,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "ancient hellhound",
@@ -1904,8 +1740,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "massive black worm",
@@ -1915,8 +1750,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "massive white dragon",
@@ -1926,8 +1760,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "handsome man",
@@ -1937,8 +1770,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "beautiful woman",
@@ -1948,8 +1780,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "tasloi animal master",
@@ -1959,8 +1790,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "tasloi chief",
@@ -1970,8 +1800,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "hill giant chieftan",
@@ -1981,8 +1810,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark-elf archmage",
@@ -1992,8 +1820,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dread captain",
@@ -2007,8 +1834,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "crimson high priest",
@@ -2018,8 +1844,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "spectral priest",
@@ -2029,8 +1854,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "giant two-headed troll",
@@ -2040,8 +1864,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "crowned spider",
@@ -2080,8 +1903,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "giant roc",
@@ -2091,8 +1913,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "kai master",
@@ -2102,8 +1923,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "aquilas",
@@ -2113,8 +1933,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "fachan tyrant",
@@ -2124,8 +1943,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "bloodwing",
@@ -2135,8 +1953,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "will-o-the-wisp",
@@ -2146,8 +1963,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "death minion",
@@ -2157,8 +1973,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "daeron darksong",
@@ -2168,8 +1983,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "lumbering geist",
@@ -2180,8 +1994,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "scarab swarm",
@@ -2191,8 +2004,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "banished one",
@@ -2210,8 +2022,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "ancient guardian",
@@ -2221,8 +2032,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "ancient gremlin shaman",
@@ -2234,8 +2044,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "crazed inquisitor",
@@ -2245,8 +2054,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "remik of the ebon blade",
@@ -2256,8 +2064,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "hideous abomination",
@@ -2267,8 +2074,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "woodelf lord",
@@ -2278,8 +2084,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "choira pyromancer",
@@ -2289,8 +2094,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "darem tidegrasp",
@@ -2300,8 +2104,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "massive stone worm",
@@ -2311,8 +2114,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "giant river turtle",
@@ -2322,8 +2124,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "jura szerak",
@@ -2333,8 +2134,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "depraved murderer",
@@ -2344,8 +2144,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "sheriff lionheart",
@@ -2367,8 +2166,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "captain flintlock",
@@ -2380,8 +2178,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "orc warleader",
@@ -2391,8 +2188,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "serpentkin chieftain",
@@ -2402,8 +2198,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "serpentkin witchdoctor",
@@ -2413,8 +2208,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "alchemist",
@@ -2424,8 +2218,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "master assassin",
@@ -2435,8 +2228,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark-elf emissary",
@@ -2446,8 +2238,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "slave lord",
@@ -2457,8 +2248,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "elyssra",
@@ -2468,8 +2258,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "chrono lord",
@@ -2479,8 +2268,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "skyth rahzkis",
@@ -2490,8 +2278,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "grakh bonegrinder",
@@ -2501,8 +2288,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "huge obsidian golem",
@@ -2512,8 +2298,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "duergar lord",
@@ -2523,8 +2308,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "gorilla spirit",
@@ -2534,8 +2318,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "crane spirit",
@@ -2545,8 +2328,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "troglodyte chieftan",
@@ -2557,8 +2339,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "rakshasha sage",
@@ -2568,8 +2349,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "wandering cleric",
@@ -2586,8 +2366,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "black orc boss",
@@ -2597,8 +2376,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "orc warleader",
@@ -2608,8 +2386,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "kobold king",
@@ -2619,8 +2396,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mercenary captain",
@@ -2630,8 +2406,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "cave troll",
@@ -2641,8 +2416,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "catoblepas",
@@ -2666,8 +2440,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "justicar halford",
@@ -2683,8 +2456,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dao lord",
@@ -2693,9 +2465,9 @@
       "12/2251"
     ],
     "InStock": true,
-    "InParadigm": true,
+    "InParadigm": false,
     "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnHoursOverride": 23
   },
   {
     "Name": "argak the grey",
@@ -2705,8 +2477,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "lallim whitemane",
@@ -2716,8 +2487,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "sharh'kur",
@@ -2727,8 +2497,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "aurumvorax",
@@ -2738,45 +2507,18 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "dark mage",
     "MonsterNumber": 850,
     "Rooms": [
-      "7/1116",
-      "7/1118",
-      "7/1121",
-      "7/1123",
-      "7/1125",
-      "7/1130",
-      "7/1134",
-      "7/1140",
-      "7/1143",
-      "7/1147",
-      "7/1150",
-      "7/1152",
-      "7/1160",
-      "7/1162",
-      "7/1167",
-      "7/1176",
-      "7/1182",
-      "7/1186",
-      "7/1190",
-      "7/1205",
-      "7/1224",
-      "7/1229",
-      "7/1234",
-      "7/1247",
-      "7/1258",
-      "7/1282",
       "17/1773"
     ],
     "InStock": true,
-    "InParadigm": true,
+    "InParadigm": false,
     "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnHoursOverride": 4
   },
   {
     "Name": "efreeti",
@@ -2786,8 +2528,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "gnoll warleader",
@@ -2797,8 +2538,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "ice troll chieftan",
@@ -2808,8 +2548,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "king crab",
@@ -2819,8 +2558,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "magma lord",
@@ -2830,8 +2568,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "massive fanged spider",
@@ -2858,8 +2595,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "metallic monstrosity",
@@ -2869,8 +2605,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "sahuagin aquamancer",
@@ -2883,8 +2618,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mayor godfrey",
@@ -2896,8 +2630,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "mayor delanon",
@@ -2907,8 +2640,7 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "giant pulsating cocoon",
@@ -2918,8 +2650,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "cocoon",
@@ -2934,8 +2665,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "hanging cocoon",
@@ -2947,8 +2677,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "massive cocoon",
@@ -2960,8 +2689,7 @@
     ],
     "InStock": true,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   },
   {
     "Name": "cocoon",
@@ -2974,7 +2702,6 @@
     ],
     "InStock": false,
     "InParadigm": true,
-    "RespawnType": "Timed",
-    "ExactSpawn": false
+    "RespawnType": "Timed"
   }
 ]

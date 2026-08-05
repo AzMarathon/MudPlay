@@ -16,29 +16,21 @@ public readonly record struct BossWindowState(
 // at a set of fractions of that timer, earliest first, ending at 1.0 (guaranteed):
 //   Stock:    87.5% then full.
 //   Paradigm: 80% (-20), 90% (-10), 95% (-5), then full.
-//   ExactSpawn (Lord of the Hunt, Crimson Mist on Stock): full only, no early window.
 public static class BossTimerMath
 {
-    public static IReadOnlyList<double> SpawnFractions(RealmType realm, bool exactSpawn)
-    {
-        if (exactSpawn) return new[] { 1.0 };
-        return realm == RealmType.ParaMud
+    public static IReadOnlyList<double> SpawnFractions(RealmType realm)
+        => realm == RealmType.ParaMud
             ? new[] { 0.80, 0.90, 0.95, 1.0 }
             : new[] { 0.875, 1.0 };
-    }
 
     // The early spawn fractions (excluding the guaranteed 100%) in the tab's
     // left-to-right column order, matching the spreadsheet: Paradigm 5% / 10% / 20%
-    // off (fractions 0.95, 0.90, 0.80); Stock the single 87.5% point. Exact-spawn
-    // bosses have none. Each column counts down to its fraction and blanks once
-    // that moment passes.
-    public static IReadOnlyList<double> EarlyFractionsInDisplayOrder(RealmType realm, bool exactSpawn)
-    {
-        if (exactSpawn) return Array.Empty<double>();
-        return realm == RealmType.ParaMud
+    // off (fractions 0.95, 0.90, 0.80); Stock the single 87.5% point. Each column
+    // counts down to its fraction and blanks once that moment passes.
+    public static IReadOnlyList<double> EarlyFractionsInDisplayOrder(RealmType realm)
+        => realm == RealmType.ParaMud
             ? new[] { 0.95, 0.90, 0.80 }
             : new[] { 0.875 };
-    }
 
     // Column header labels paired with EarlyFractionsInDisplayOrder — "5%" / "10%" /
     // "20%" for Paradigm, "87.5%" for Stock.
@@ -64,7 +56,7 @@ public static class BossTimerMath
     // once elapsed reaches the full timer (the boss is guaranteed up — no longer
     // counting down). Otherwise reports time-to-full plus the earliest un-passed
     // early window (which is "full" itself once every early point has passed).
-    public static BossWindowState Describe(RealmType realm, bool exactSpawn, double fullHours, TimeSpan elapsed)
+    public static BossWindowState Describe(RealmType realm, double fullHours, TimeSpan elapsed)
     {
         double fullSecs = fullHours * 3600.0;
         double elapsedSecs = elapsed.TotalSeconds;
@@ -72,7 +64,7 @@ public static class BossTimerMath
             return new BossWindowState(true, TimeSpan.Zero, "full", TimeSpan.Zero);
 
         TimeSpan fullRem = TimeSpan.FromSeconds(fullSecs - elapsedSecs);
-        foreach (double f in SpawnFractions(realm, exactSpawn))
+        foreach (double f in SpawnFractions(realm))
         {
             double pointSecs = f * fullSecs;
             if (elapsedSecs < pointSecs)

@@ -39,14 +39,15 @@
                                     Width="95" FontFamily="{StaticResource FontMono}"/>
                 <DataGridCheckBoxColumn Header="Respawns @ Cleanup"
                                         Binding="{ReflectionBinding IsCleanup, Mode=TwoWay}" Width="140"/>
-                <DataGridCheckBoxColumn Header="Exact"
-                                        Binding="{ReflectionBinding ExactSpawn, Mode=TwoWay}" Width="70"/>
                 <DataGridCheckBoxColumn Header="Stock"
                                         Binding="{ReflectionBinding InStock, Mode=TwoWay}" Width="70"/>
                 <DataGridCheckBoxColumn Header="ParaMUD"
                                         Binding="{ReflectionBinding InParadigm, Mode=TwoWay}" Width="80"/>
                 <DataGridCheckBoxColumn Header="Show in Table"
                                         Binding="{ReflectionBinding ShowInTable, Mode=TwoWay}" Width="110"/>
+                <DataGridTextColumn Header="Notes"
+                                    Binding="{ReflectionBinding Notes, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    Width="220"/>
             </DataGrid.Columns>
         </DataGrid>
 

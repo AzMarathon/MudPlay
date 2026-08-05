@@ -52,40 +52,31 @@ public sealed class BossTimerTests : IDisposable
     public void Describe_Paradigm_WalksThresholdsInOrder()
     {
         // full = 24h. Early points at 19.2 / 21.6 / 22.8h, then 24h.
-        Assert.Equal("-20%", BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(0)).NextLabel);
-        Assert.Equal("-10%", BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(20)).NextLabel);
-        Assert.Equal("-5%", BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(22)).NextLabel);
-        Assert.Equal("full", BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(23)).NextLabel);
+        Assert.Equal("-20%", BossTimerMath.Describe(RealmType.ParaMud, 24, TimeSpan.FromHours(0)).NextLabel);
+        Assert.Equal("-10%", BossTimerMath.Describe(RealmType.ParaMud, 24, TimeSpan.FromHours(20)).NextLabel);
+        Assert.Equal("-5%", BossTimerMath.Describe(RealmType.ParaMud, 24, TimeSpan.FromHours(22)).NextLabel);
+        Assert.Equal("full", BossTimerMath.Describe(RealmType.ParaMud, 24, TimeSpan.FromHours(23)).NextLabel);
     }
 
     [Fact]
     public void Describe_Stock_HasSingleEarlyPoint()
     {
-        Assert.Equal("87.5%", BossTimerMath.Describe(RealmType.Stock, false, 24, TimeSpan.FromHours(0)).NextLabel);
-        Assert.Equal("full", BossTimerMath.Describe(RealmType.Stock, false, 24, TimeSpan.FromHours(22)).NextLabel);
-    }
-
-    [Fact]
-    public void Describe_ExactSpawn_HasNoEarlyWindow()
-    {
-        BossWindowState s = BossTimerMath.Describe(RealmType.Stock, exactSpawn: true, 10, TimeSpan.FromHours(1));
-        Assert.Equal("full", s.NextLabel);
-        Assert.False(s.Expired);
-        Assert.Equal(9, Math.Round(s.NextRemaining.TotalHours));
+        Assert.Equal("87.5%", BossTimerMath.Describe(RealmType.Stock, 24, TimeSpan.FromHours(0)).NextLabel);
+        Assert.Equal("full", BossTimerMath.Describe(RealmType.Stock, 24, TimeSpan.FromHours(22)).NextLabel);
     }
 
     [Fact]
     public void Describe_PastFullTimer_IsExpired()
     {
-        Assert.True(BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(24)).Expired);
-        Assert.True(BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(30)).Expired);
-        Assert.False(BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(23.9)).Expired);
+        Assert.True(BossTimerMath.Describe(RealmType.ParaMud, 24, TimeSpan.FromHours(24)).Expired);
+        Assert.True(BossTimerMath.Describe(RealmType.ParaMud, 24, TimeSpan.FromHours(30)).Expired);
+        Assert.False(BossTimerMath.Describe(RealmType.ParaMud, 24, TimeSpan.FromHours(23.9)).Expired);
     }
 
     [Fact]
     public void Describe_FullRemaining_CountsDownToGuaranteedSpawn()
     {
-        BossWindowState s = BossTimerMath.Describe(RealmType.ParaMud, false, 24, TimeSpan.FromHours(6));
+        BossWindowState s = BossTimerMath.Describe(RealmType.ParaMud, 24, TimeSpan.FromHours(6));
         Assert.Equal(18, Math.Round(s.FullRemaining.TotalHours));
     }
 
@@ -110,10 +101,10 @@ public sealed class BossTimerTests : IDisposable
     private void SeedBosses(params BossDef[] defs) => JsonStore.Save(_seedPath, defs.ToList());
 
     private static BossDef Boss(string name, int? number = 1, BossRespawnType type = BossRespawnType.Timed,
-        bool stock = true, bool para = true, bool exact = false, params string[] rooms) => new()
+        bool stock = true, bool para = true, params string[] rooms) => new()
     {
         Name = name, MonsterNumber = number, Rooms = rooms.ToList(),
-        InStock = stock, InParadigm = para, RespawnType = type, ExactSpawn = exact,
+        InStock = stock, InParadigm = para, RespawnType = type,
     };
 
     private (BossStore bosses, BossTimerStore timers, GameDataCache cache) NewStores()
@@ -378,18 +369,17 @@ public sealed class BossTimerTests : IDisposable
     [Fact]
     public void EarlyFractionsAndLabels_AreRealmSpecific()
     {
-        Assert.Equal(new[] { 0.95, 0.90, 0.80 }, BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.ParaMud, false));
-        Assert.Equal(new[] { 0.875 }, BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.Stock, false));
-        Assert.Empty(BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.ParaMud, exactSpawn: true));
+        Assert.Equal(new[] { 0.95, 0.90, 0.80 }, BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.ParaMud));
+        Assert.Equal(new[] { 0.875 }, BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.Stock));
         Assert.Equal(new[] { "5%", "10%", "20%" }, BossTimerMath.EarlyColumnLabels(RealmType.ParaMud));
         Assert.Equal(new[] { "87.5%" }, BossTimerMath.EarlyColumnLabels(RealmType.Stock));
     }
 
     // ----- row VM live columns (blank-when-expired) --------------------------
 
-    private BossRowViewModel Row(BossTimerStore timers, RealmType realm, int hours, bool exact = false)
+    private BossRowViewModel Row(BossTimerStore timers, RealmType realm, int hours)
     {
-        var def = Boss("ogre king", number: 50, exact: exact, rooms: "3/300");
+        var def = Boss("ogre king", number: 50, rooms: "3/300");
         return new BossRowViewModel(def, realm, hours, timers, () => { }, _ => { });
     }
 

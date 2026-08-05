@@ -18,8 +18,8 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty] private string _rooms = string.Empty;   // "map/room; map/room"
     [ObservableProperty] private string _respawnHoursText = string.Empty;
+    [ObservableProperty] private string _notes = string.Empty;
     [ObservableProperty] private bool _isCleanup;
-    [ObservableProperty] private bool _exactSpawn;
     [ObservableProperty] private bool _inStock;
     [ObservableProperty] private bool _inParadigm;
     [ObservableProperty] private bool _showInTable = true;
@@ -36,8 +36,8 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
         Rooms = BossRoomText.Format(def.Rooms);
         int? shown = def.RespawnHoursOverride ?? gameDataHours;
         RespawnHoursText = shown?.ToString() ?? string.Empty;
+        Notes = def.Notes;
         IsCleanup = def.RespawnType == BossRespawnType.Cleanup;
-        ExactSpawn = def.ExactSpawn;
         _stopBefore = def.StopBefore;
         InStock = def.InStock;
         InParadigm = def.InParadigm;
@@ -53,9 +53,9 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
         InStock = InStock,
         InParadigm = InParadigm,
         RespawnType = IsCleanup ? BossRespawnType.Cleanup : BossRespawnType.Timed,
-        ExactSpawn = ExactSpawn,
         StopBefore = _stopBefore,   // edited on the main table, carried through unchanged
         RespawnHoursOverride = ResolveOverride(),
+        Notes = Notes.Trim(),
         ShowInTable = ShowInTable,
     };
 

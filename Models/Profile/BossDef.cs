@@ -14,11 +14,11 @@ public enum BossRespawnType { Timed, Cleanup }
 // InStock/InParadigm gate visibility per active realm. Timer VALUES are NOT stored
 // here — resolved from game data so they stay correct across game versions.
 // StopBefore is a user flag: walk-to halts one room short of this boss's rooms.
-// ExactSpawn means no early window (100% timer only — e.g. Lord of the Hunt,
-// Crimson Mist on Stock). Removed is overlay-only: it hides a seed boss the user
-// deleted. RespawnHoursOverride is a user fallback for bosses game data can't
-// resolve a timer for — null means "use game data" (the normal case); a value
-// forces that respawn length regardless of the loaded set.
+// Removed is overlay-only: it hides a seed boss the user deleted.
+// RespawnHoursOverride is a user fallback for bosses game data can't resolve a
+// timer for — null means "use game data" (the normal case); a value forces that
+// respawn length regardless of the loaded set. Notes is free-text amplifying info
+// for bosses with nuances.
 public sealed class BossDef
 {
     public string Name { get; set; } = string.Empty;
@@ -27,9 +27,9 @@ public sealed class BossDef
     public bool InStock { get; set; }
     public bool InParadigm { get; set; }
     public BossRespawnType RespawnType { get; set; } = BossRespawnType.Timed;
-    public bool ExactSpawn { get; set; }
     public bool StopBefore { get; set; }
     public int? RespawnHoursOverride { get; set; }
+    public string Notes { get; set; } = string.Empty;
     // Whether this boss appears in the Player Workshop Bosses table. Default true;
     // unchecking it in the Manage dialog hides the row from the tab (the boss is
     // still tracked — timers, @timer, kill detection — just not listed there).
@@ -42,8 +42,8 @@ public sealed class BossDef
     {
         Name = Name, MonsterNumber = MonsterNumber, Rooms = new List<string>(Rooms),
         InStock = InStock, InParadigm = InParadigm, RespawnType = RespawnType,
-        ExactSpawn = ExactSpawn, StopBefore = StopBefore,
-        RespawnHoursOverride = RespawnHoursOverride, ShowInTable = ShowInTable, Removed = Removed,
+        StopBefore = StopBefore, RespawnHoursOverride = RespawnHoursOverride,
+        Notes = Notes, ShowInTable = ShowInTable, Removed = Removed,
     };
 
     // True when this boss carries no user edits relative to a seed entry — the
@@ -52,8 +52,9 @@ public sealed class BossDef
         string.Equals(Name, seed.Name, StringComparison.OrdinalIgnoreCase)
         && MonsterNumber == seed.MonsterNumber
         && InStock == seed.InStock && InParadigm == seed.InParadigm
-        && RespawnType == seed.RespawnType && ExactSpawn == seed.ExactSpawn
+        && RespawnType == seed.RespawnType
         && StopBefore == seed.StopBefore && RespawnHoursOverride == seed.RespawnHoursOverride
+        && string.Equals(Notes, seed.Notes, StringComparison.Ordinal)
         && ShowInTable == seed.ShowInTable && !Removed
         && Rooms.SequenceEqual(seed.Rooms, StringComparer.OrdinalIgnoreCase);
 }

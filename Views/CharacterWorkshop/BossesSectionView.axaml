@@ -87,7 +87,7 @@
                                 <Button Content="Mark" Padding="8,2" Margin="0,0,4,0"
                                         Command="{Binding MarkCommand}"
                                         ToolTip.Tip="Set this boss's kill time (defaults to now; editable)."/>
-                                <Button Content="Reset" Padding="7,2" Margin="0,0,4,0"
+                                <Button Content="Now" Padding="7,2" Margin="0,0,4,0"
                                         Command="{Binding ResetTimerCommand}"
                                         ToolTip.Tip="Stamp the kill at the current time."/>
                                 <Button Content="Clear" Padding="7,2"

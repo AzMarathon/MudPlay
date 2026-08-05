@@ -24,15 +24,18 @@ public sealed partial class BossRowViewModel : ObservableObject
     private readonly BossTimerStore _timers;
     private readonly Action _onEdit;
     private readonly Action<BossRowViewModel> _onMarkRequested;
+    // The resolved def this row came from. Only StopBefore is inline-editable; every
+    // other field (rooms, override, Notes, ShowInTable, flags) is carried through
+    // unchanged so a StopBefore toggle can't clobber a Manage-dialog edit.
+    private readonly BossDef _def;
     private RealmType _realm;
     private int? _respawnHours;
     private bool _suppress;
 
-    // Displayed name (read-only in the grid). Rooms / flags are held for persist but
-    // edited only in the Manage Bosses dialog.
+    // Displayed name (read-only in the grid). Rooms / Notes are held for the filter
+    // and tooltip; the rest of the def is edited only in the Manage dialog.
     [ObservableProperty] private string _name = string.Empty;
-    public string Rooms { get; set; } = string.Empty;   // "map/room; map/room"
-    public bool ExactSpawn { get; set; }
+    public string Rooms { get; set; } = string.Empty;   // "map/room; map/room" — held for the filter
 
     [ObservableProperty] private bool _stopBefore;
 
@@ -57,10 +60,6 @@ public sealed partial class BossRowViewModel : ObservableObject
     [ObservableProperty] private bool _isActive;
 
     public BossRespawnType RespawnType { get; }
-    public bool IsTimed => RespawnType == BossRespawnType.Timed;
-    public bool InStock { get; }
-    public bool InParadigm { get; }
-    public int? MonsterNumber { get; }
 
     public BossRowViewModel(
         BossDef def, RealmType realm, int? respawnHours, BossTimerStore timers,
@@ -73,15 +72,12 @@ public sealed partial class BossRowViewModel : ObservableObject
         _timers = timers;
         _onEdit = onEdit;
         _onMarkRequested = onMarkRequested;
+        _def = def;
         _suppress = true;
         Name = def.Name;
         Rooms = BossRoomText.Format(def.Rooms);
         StopBefore = def.StopBefore;
-        ExactSpawn = def.ExactSpawn;
         RespawnType = def.RespawnType;
-        InStock = def.InStock;
-        InParadigm = def.InParadigm;
-        MonsterNumber = def.MonsterNumber;
         RefreshDisplay(realm, respawnHours);
         _suppress = false;
     }
@@ -128,10 +124,11 @@ public sealed partial class BossRowViewModel : ObservableObject
 
         IsActive = true;
         double fullRem = fullSecs - elapsed;
-        StatusDisplay = BossTimerMath.FormatDuration(TimeSpan.FromSeconds(fullRem));
+        int pct = (int)(elapsed / fullSecs * 100.0);   // how much of the timer has elapsed
+        StatusDisplay = $"{BossTimerMath.FormatDuration(TimeSpan.FromSeconds(fullRem))} ({pct}%)";
         FullSortKey = (long)fullRem;
 
-        IReadOnlyList<double> fracs = BossTimerMath.EarlyFractionsInDisplayOrder(_realm, ExactSpawn);
+        IReadOnlyList<double> fracs = BossTimerMath.EarlyFractionsInDisplayOrder(_realm);
         (Early1Display, Early1SortKey) = Window(fracs, 0, elapsed, fullSecs);
         (Early2Display, Early2SortKey) = Window(fracs, 1, elapsed, fullSecs);
         (Early3Display, Early3SortKey) = Window(fracs, 2, elapsed, fullSecs);
@@ -156,17 +153,14 @@ public sealed partial class BossRowViewModel : ObservableObject
         Early1SortKey = Early2SortKey = Early3SortKey = InactiveSort;
     }
 
-    public BossDef ToDef() => new()
+    // Clone the source def with just the inline-edited StopBefore applied — every
+    // other field (rooms, override, Notes, ShowInTable, flags) round-trips untouched.
+    public BossDef ToDef()
     {
-        Name = Name.Trim().ToLowerInvariant(),
-        MonsterNumber = MonsterNumber,
-        Rooms = BossRoomText.Parse(Rooms),
-        InStock = InStock,
-        InParadigm = InParadigm,
-        RespawnType = RespawnType,
-        ExactSpawn = ExactSpawn,
-        StopBefore = StopBefore,
-    };
+        BossDef d = _def.Clone();
+        d.StopBefore = StopBefore;
+        return d;
+    }
 
     // Mark opens the date-time dialog (set / back-date). Reset stamps the kill at
     // the current time (quick "it just died"). Clear removes the running timer.
