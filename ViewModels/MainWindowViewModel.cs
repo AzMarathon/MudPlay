@@ -2594,15 +2594,30 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    // Last feed's stat-box presence, tracked so the arm below is rising-edge only.
+    private bool _statBoxOnScreen;
+
     // Per-feed screen watch feeding TrainerMenuTracker's live-screen detection
     // of the character-creation stat box (see the ScreenUpdated wiring in the
-    // ctor). Early-outs once character mode is armed, and pre-filters with an
-    // allocation-free marker scan so the string build below only runs when a
-    // stat box is actually on screen.
+    // ctor). Arms character-mode input only on the RISING edge of the box
+    // appearing — not every feed it's visible.
+    //
+    // Paradigm reuses the "Char. Creation" stat box for in-game `train stats`,
+    // and the box lingers on screen after the user is already back at the in-game
+    // prompt. A level-triggered arm re-armed off that stale box every feed, so the
+    // tracker flapped held→resume→held (the in-game prompt fired InputMenuExited,
+    // then the still-visible box re-armed) — which held the movement engine and
+    // stalled the walker after training (it advanced one room per manual `rm`).
+    // Presence is tracked unconditionally (even while armed) so the falling edge is
+    // seen; the box must actually leave and reappear before it can re-arm.
     private void OnScreenUpdatedForTrainerMenu()
     {
-        if (AppServices.Current.TrainerMenu.IsInputMenuActive) return;
-        if (!ScreenShowsStatBoxMarker()) return;
+        bool onScreen = ScreenShowsStatBoxMarker();
+        bool rising = onScreen && !_statBoxOnScreen;
+        _statBoxOnScreen = onScreen;
+
+        if (!rising) return;
+        if (AppServices.Current.TrainerMenu.IsInputMenuActive) return;   // already armed (e.g. via the `train stats` command)
         AppServices.Current.TrainerMenu.ObserveScreen(BuildVisibleScreenText());
     }
 
