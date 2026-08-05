@@ -11,6 +11,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Player Workshop window now fits its width to the active tab on each tab switch (wide tabs like Bosses get the room they need, narrow tabs shrink back); height matches the Equipment tab so long lists (Quest, Bosses) scroll instead of ballooning the window — stays freely resizable afterward
 - Fixed the walker stalling after training on Paradigm: the reused "Char. Creation" stat box lingered on screen and kept re-arming character-mode input, holding movement so it advanced only one room per manual `rm`. Character-mode input now arms only when the box first appears, not while it lingers
 - Fixed a mage re-casting its attack spell at the monster it just killed: the spell's own damage line fired an extra combat round-tick that slipped a second cast through, landing on the corpse. Combat spells now cast once per round (like a weapon swing), so the echo can't re-fire
+- Bug report now lists only your starred favourites instead of the entire Go To list, so it stays small
 - bug reports addressed: paradigm-20260805-095320, paradigm-20260805-095546, paradigm-20260805-095653
 
 ## 2.29.0
