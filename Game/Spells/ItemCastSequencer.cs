@@ -11,16 +11,19 @@ namespace FujinTerm.Game.Spells;
 // ItemCastToken (#<item name>).
 //
 // Only unlimited-use cast items are eligible — a limited-charge item would burn out
-// on a recast loop, and the Spell Book only ever offers a token for unlimited
-// items. The displaced weapon (and, for a two-handed cast item, the off-hand) are
-// read from the last i dump's EquippedItems (Weapon Hand / Off-Hand slots);
-// whatever isn't held simply isn't restored.
+// on a recast loop, and the Spell Book only ever offers a token for unlimited items.
 //
-// Two-handed dance: a two-handed cast item needs both hands, so when an off-hand is
-// held we remove it first, then eq the item, use it, eq the displaced weapon back
-// (which frees the off-hand slot), and finally eq the off-hand again. A one-handed
-// cast item just equips alongside the shield, so only the weapon is restored. eq is
-// the universal equip verb (matches CombatManager).
+// Restore is slot-aware. A cast item displaces only what sits in ITS OWN equip slot,
+// so we restore that slot from the last i dump's EquippedItems: a 1H weapon restores
+// the weapon hand, an off-hand item (a shield, a warhorn) restores the off-hand, a
+// worn item restores its worn slot — and it never touches the other hand. Whatever
+// isn't currently held simply isn't restored.
+//
+// Two-handed dance: a two-handed CAST item needs both hands, so it displaces the
+// weapon AND the off-hand. When an off-hand is held we remove it first, then eq the
+// item, use it, eq the displaced 1H weapon back (which drops the two-hander and frees
+// the off-hand slot), and finally eq the off-hand again. (Confirmed MajorMUD equip
+// order; see GAME_MECHANICS.md.) eq is the universal equip verb (matches CombatManager).
 //
 // The commands are sent back-to-back — MajorMUD queues typed input, and an item use
 // resolves the cast immediately so the restore can follow without waiting. The buff
@@ -83,28 +86,54 @@ public sealed class ItemCastSequencer
 
         string name = item.ItemName.Trim();
         InventorySnapshot inv = _inventory();
-        string? restoreWeapon = SlotItem(inv, WeaponHandSlot);
-        string? restoreOffHand = SlotItem(inv, OffHandSlot);
 
-        bool restoreWeaponDiffers = !string.IsNullOrWhiteSpace(restoreWeapon)
-            && !string.Equals(restoreWeapon, name, StringComparison.OrdinalIgnoreCase);
-        // A two-hander needs both hands: free the off-hand before wielding it,
-        // and put it back once the displaced 1H weapon reclaims the weapon hand.
-        bool juggleOffHand = item.IsTwoHanded
-            && !string.IsNullOrWhiteSpace(restoreOffHand)
-            && !string.Equals(restoreOffHand, name, StringComparison.OrdinalIgnoreCase);
+        // A two-handed cast weapon needs BOTH hands, so it displaces the weapon AND
+        // the off-hand: free the off-hand first, wield + use, then eq the 1H weapon
+        // back (which drops the two-hander and frees the off-hand slot) and finally
+        // re-wear the off-hand. Keyed on the CAST item being two-handed.
+        if (item.IsTwoHanded)
+        {
+            string? restoreWeapon = SlotItem(inv, WeaponHandSlot);
+            string? restoreOffHand = SlotItem(inv, OffHandSlot);
+            bool restoreWeaponDiffers = Differs(restoreWeapon, name);
+            bool juggleOffHand = Differs(restoreOffHand, name);
 
-        if (juggleOffHand) _wire.Send($"remove {restoreOffHand}");
+            if (juggleOffHand) _wire.Send($"remove {restoreOffHand}");
+            _wire.Send($"eq {name}");
+            _wire.Send($"use {name}");
+            if (restoreWeaponDiffers) _wire.Send($"eq {restoreWeapon}");
+            if (juggleOffHand) _wire.Send($"eq {restoreOffHand}");
+
+            _log?.Info(LogCategory,
+                $"item-cast item=\"{name}\" 2h=True casts={item.SpellName} " +
+                $"restore-weapon={restoreWeapon ?? "<none>"} restore-offhand={(juggleOffHand ? restoreOffHand : "<none>")}");
+            return true;
+        }
+
+        // A one-handed cast item displaces only whatever sits in ITS OWN wear slot —
+        // the weapon hand for a 1H weapon, the off-hand for a shield / warhorn, a worn
+        // slot for a charged amulet. Restore exactly that; never assume the weapon (an
+        // off-hand cast item that re-equipped the weapon would strand the buff item in
+        // the off-hand and never put the shield back — the reported bug).
+        string slot = string.IsNullOrWhiteSpace(item.WearSlot) ? WeaponHandSlot : item.WearSlot.Trim();
+        string? restore = SlotItem(inv, slot);
+        bool restoreDiffers = Differs(restore, name);
+
         _wire.Send($"eq {name}");
         _wire.Send($"use {name}");
-        if (restoreWeaponDiffers) _wire.Send($"eq {restoreWeapon}");
-        if (juggleOffHand) _wire.Send($"eq {restoreOffHand}");
+        if (restoreDiffers) _wire.Send($"eq {restore}");
 
         _log?.Info(LogCategory,
-            $"item-cast item=\"{name}\" 2h={item.IsTwoHanded} casts={item.SpellName} " +
-            $"restore-weapon={restoreWeapon ?? "<none>"} restore-offhand={(juggleOffHand ? restoreOffHand : "<none>")}");
+            $"item-cast item=\"{name}\" 2h=False slot={slot} casts={item.SpellName} " +
+            $"restore={restore ?? "<none>"}");
         return true;
     }
+
+    // A worn item worth restoring: the slot held something, and it isn't the cast
+    // item itself (equipping the cast item over its own copy needs no restore).
+    private static bool Differs(string? worn, string castName) =>
+        !string.IsNullOrWhiteSpace(worn)
+        && !string.Equals(worn, castName, StringComparison.OrdinalIgnoreCase);
 
     // The item name occupying the given slot in the last inventory dump, or null
     // when that slot is empty.

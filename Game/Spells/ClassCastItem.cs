@@ -26,9 +26,15 @@ namespace FujinTerm.Game.Spells;
 // the cast spell's rendered affect line ("AC +10", "Dmg 14–22", …) scaled to the
 // item's use-level, empty when the spell decodes to no figure — the Spell Book shows
 // it inline so a caster reads what the item actually does, not just its name.
+// WearSlot is the equip slot the item occupies (normalized to match the inventory's
+// EquippedItem.Slot labels): "Weapon Hand" for a weapon, "Off-Hand" for a shield /
+// held item like a warhorn, or a worn slot ("Neck", …). The cast sequencer restores
+// whatever that slot displaced — so an off-hand cast item puts the off-hand back, not
+// the weapon. Empty when unknown (the sequencer then falls back to the weapon hand).
 public readonly record struct ClassCastItem(
     int ItemNumber, string ItemName, int SpellNumber, string SpellName, int ManaCost, int UseCount,
-    bool IsTwoHanded = false, bool ClassRestricted = false, int MinLevel = 0, string SpellEffect = "")
+    bool IsTwoHanded = false, bool ClassRestricted = false, int MinLevel = 0, string SpellEffect = "",
+    string WearSlot = "")
 {
     // True when the item has unlimited uses. A genuine charge count is always
     // positive, so any value <= 0 (MajorMUD's -1 sentinel, occasionally 0) means
