@@ -56,8 +56,11 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<bool> HighlightShopsProperty =
         AvaloniaProperty.Register<MapControl, bool>(nameof(HighlightShops), defaultValue: true);
 
-    public static readonly StyledProperty<bool> HighlightSpellsProperty =
-        AvaloniaProperty.Register<MapControl, bool>(nameof(HighlightSpells), defaultValue: true);
+    // Room-spell overlay mode. Mono = flat purple on every spell room (the original
+    // behaviour); ByName = colour each spell room by which spell it carries (the
+    // spell number hashed into a categorical palette); Off = no spell fill.
+    public static readonly StyledProperty<SpellDisplayMode> SpellModeProperty =
+        AvaloniaProperty.Register<MapControl, SpellDisplayMode>(nameof(SpellMode), defaultValue: SpellDisplayMode.Mono);
 
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> WalkPathProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(WalkPath));
@@ -144,6 +147,16 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlySet<RoomKey>?> DeathRoomsProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(DeathRooms));
 
+    // Rooms listed by any boss entry in the Bosses table — each gets a gold crown.
+    // Rooms whose boss entry is flagged "stop before entering" ALSO appear in
+    // StopBeforeBossRooms and get a red/black halt ring around the crown. Supplied
+    // by NavigationViewModel from BossStore; refreshed on BossStore.Changed.
+    public static readonly StyledProperty<IReadOnlySet<RoomKey>?> BossRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(BossRooms));
+
+    public static readonly StyledProperty<IReadOnlySet<RoomKey>?> StopBeforeBossRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(StopBeforeBossRooms));
+
     public static readonly StyledProperty<bool> WalkPathIsAutoLairProperty =
         AvaloniaProperty.Register<MapControl, bool>(nameof(WalkPathIsAutoLair));
 
@@ -214,10 +227,10 @@ public sealed class MapControl : Control
         set => SetValue(HighlightShopsProperty, value);
     }
 
-    public bool HighlightSpells
+    public SpellDisplayMode SpellMode
     {
-        get => GetValue(HighlightSpellsProperty);
-        set => SetValue(HighlightSpellsProperty, value);
+        get => GetValue(SpellModeProperty);
+        set => SetValue(SpellModeProperty, value);
     }
 
     public IReadOnlyList<RoomKey>? WalkPath
@@ -302,6 +315,18 @@ public sealed class MapControl : Control
     {
         get => GetValue(DeathRoomsProperty);
         set => SetValue(DeathRoomsProperty, value);
+    }
+
+    public IReadOnlySet<RoomKey>? BossRooms
+    {
+        get => GetValue(BossRoomsProperty);
+        set => SetValue(BossRoomsProperty, value);
+    }
+
+    public IReadOnlySet<RoomKey>? StopBeforeBossRooms
+    {
+        get => GetValue(StopBeforeBossRoomsProperty);
+        set => SetValue(StopBeforeBossRoomsProperty, value);
     }
 
     public bool WalkPathIsAutoLair
@@ -505,6 +530,41 @@ public sealed class MapControl : Control
         return stops;
     }
 
+    // Categorical palette for the room-spell "by name" overlay (SpellDisplayMode.ByName).
+    // A room's spell record number is hashed into these swatches so differing room
+    // spells clustered together read as different colours — distinct, saturated hues
+    // that stay legible on the dark map, borders lightened like the heat stops. There
+    // are far more distinct room spells than slots, so rare spells may share a colour;
+    // the hover tooltip's "Room Spell: <name>" line is the key that disambiguates.
+    private static readonly string[] SpellCategoryHex =
+    {
+        "#E6194B", "#3CB44B", "#4363D8", "#F58231", "#911EB4",
+        "#42D4F4", "#F032E6", "#BFEF45", "#F58AB0", "#469990",
+        "#C9A0FF", "#B87333", "#FFD21E", "#B03060", "#5AC8A8",
+        "#9AA032", "#E8944A", "#4A6FE3", "#B0B0B0", "#2AA5C0",
+    };
+    private static readonly (IBrush fill, IPen pen)[] SpellCategory = BuildSpellCategory();
+
+    private static (IBrush, IPen)[] BuildSpellCategory()
+    {
+        var stops = new (IBrush, IPen)[SpellCategoryHex.Length];
+        for (int i = 0; i < SpellCategoryHex.Length; i++)
+        {
+            Color c = Color.Parse(SpellCategoryHex[i]);
+            stops[i] = (new SolidColorBrush(c), new Pen(new SolidColorBrush(LightenToward(c, Colors.White, 0.35)), 1.5));
+        }
+        return stops;
+    }
+
+    // Stable, well-distributed colour for a room-spell record number — a
+    // multiplicative (Knuth) hash so even adjacent spell numbers land on different
+    // swatches rather than clustering.
+    private static (IBrush fill, IPen pen) SpellColorFor(int spellNumber)
+    {
+        uint h = unchecked((uint)spellNumber * 2654435761u);
+        return SpellCategory[(int)(h % (uint)SpellCategory.Length)];
+    }
+
     private static Color LightenToward(Color a, Color b, double t)
     {
         byte Mix(byte x, byte y) => (byte)Math.Round(x + (y - x) * t);
@@ -636,6 +696,14 @@ public sealed class MapControl : Control
     {
         LineCap = PenLineCap.Round,
     };
+    // Boss-room crown — a gold silhouette drawn from primitives (like the skull) so
+    // it reads at any zoom without an emoji glyph. The thin darker rim keeps it
+    // legible over the amber current-room fill. The stop-before halt ring is a red
+    // ring backed by a thicker black edge so it stands out on any cell fill.
+    private static readonly IBrush CrownFill      = new SolidColorBrush(Color.Parse("#F1C34A"));
+    private static readonly IPen   CrownRimPen    = new Pen(new SolidColorBrush(Color.Parse("#7C5C14")), 1.0);
+    private static readonly IPen   StopRingPen     = new Pen(new SolidColorBrush(Color.Parse("#E64545")), 2.0);
+    private static readonly IPen   StopRingEdgePen = new Pen(new SolidColorBrush(Color.Parse("#141414")), 3.6);
     private static readonly IBrush SeqNumberFill  = new SolidColorBrush(Color.Parse("#FFFFFF"));
     private static readonly IBrush AutoLairFill   = new SolidColorBrush(Color.Parse("#DC821E"));
     private static readonly IPen   AutoLairBorder = new Pen(new SolidColorBrush(Color.Parse("#FFA500")), 2.0)
@@ -664,12 +732,13 @@ public sealed class MapControl : Control
         _hoverTimer.Stop();
         AffectsRender<MapControl>(LayoutProperty, CurrentRoomKeyProperty, DestinationRoomKeyProperty, GraphProperty,
             LairModeProperty, LairRespawnSecondsProperty, LairMaxRespawnSecondsProperty, LairMonsterCountsProperty,
-            HighlightShopsProperty, HighlightSpellsProperty,
+            HighlightShopsProperty, SpellModeProperty,
             WalkPathProperty, LoopPathProperty, LoopBuilderPathProperty, LoopBuilderWaypointsProperty,
             AutoLairWaypointsProperty, AutoLairApproachPathProperty,
             LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, LoopSequenceNumbersProperty,
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
-            PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty);
+            PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
+            BossRoomsProperty, StopBeforeBossRoomsProperty);
 
         // Auto-centre on the player's current room every time it
         // changes — but only when the
@@ -1102,6 +1171,10 @@ public sealed class MapControl : Control
 
             if (DeathRooms is not null && DeathRooms.Contains(kvp.Value))
                 DrawSkull(context, cell);
+
+            if (BossRooms is not null && BossRooms.Contains(kvp.Value))
+                DrawBossCrown(context, cell,
+                    stopBefore: StopBeforeBossRooms is not null && StopBeforeBossRooms.Contains(kvp.Value));
 
             if (LoopSequenceNumbers is not null
                 && LoopSequenceNumbers.TryGetValue(kvp.Value, out int seq)
@@ -1536,6 +1609,48 @@ public sealed class MapControl : Control
         ctx.DrawLine(SkullToothPen, new Point(mx + r * 0.2, toothTop), new Point(mx + r * 0.2, toothBot));
     }
 
+    // A gold crown marking a boss room (listed by a Bosses-table entry). Built from
+    // primitives like DrawSkull — a three-spike silhouette with jewelled tips — so
+    // it renders crisply at any zoom. When stopBefore is set (the boss's entry is
+    // flagged "stop before entering"), a red halt ring backed by a black edge is
+    // drawn around it so a walk-to that halts one room short is unmistakable.
+    private static void DrawBossCrown(DrawingContext ctx, Rect cell, bool stopBefore)
+    {
+        double span = Math.Min(cell.Width, cell.Height);
+        double mx = cell.X + cell.Width  / 2.0;
+        double my = cell.Y + cell.Height / 2.0;
+        double r  = span * 0.28;                     // crown half-width
+
+        // Stop-before halt ring first (under the crown) — black edge then red so it
+        // reads as a red ring with a dark outline on any cell fill.
+        if (stopBefore)
+        {
+            double ringR = r * 1.5;
+            ctx.DrawEllipse(null, StopRingEdgePen, new Point(mx, my), ringR, ringR);
+            ctx.DrawEllipse(null, StopRingPen,     new Point(mx, my), ringR, ringR);
+        }
+
+        StreamGeometry crown = new();
+        using (StreamGeometryContext g = crown.Open())
+        {
+            g.BeginFigure(new Point(mx - r,        my + r * 0.55), isFilled: true);
+            g.LineTo(new Point(mx - r,        my - r * 0.25));   // left spike
+            g.LineTo(new Point(mx - r * 0.42, my + r * 0.15));   // left dip
+            g.LineTo(new Point(mx,            my - r * 0.75));   // centre spike (tallest)
+            g.LineTo(new Point(mx + r * 0.42, my + r * 0.15));   // right dip
+            g.LineTo(new Point(mx + r,        my - r * 0.25));   // right spike
+            g.LineTo(new Point(mx + r,        my + r * 0.55));   // base
+            g.EndFigure(true);
+        }
+        ctx.DrawGeometry(CrownFill, CrownRimPen, crown);
+
+        // Jewelled spike tips so the crown still reads as a crown at small sizes.
+        double jr = r * 0.15;
+        ctx.DrawEllipse(CrownFill, CrownRimPen, new Point(mx - r, my - r * 0.25), jr, jr);
+        ctx.DrawEllipse(CrownFill, CrownRimPen, new Point(mx,     my - r * 0.75), jr, jr);
+        ctx.DrawEllipse(CrownFill, CrownRimPen, new Point(mx + r, my - r * 0.25), jr, jr);
+    }
+
     private void DrawSequenceNumber(DrawingContext ctx, Rect cell, int seq)
     {
         Typeface tf = new("Inter", FontStyle.Normal, FontWeight.Bold);
@@ -1790,10 +1905,15 @@ public sealed class MapControl : Control
             fill = ShopFill;
             pen = ShopBorderPen;
         }
-        else if (HighlightSpells && room is { Spell: > 0 })
+        else if (SpellMode != SpellDisplayMode.Off && room is { Spell: > 0 })
         {
-            fill = SpellFill;
-            pen = SpellBorderPen;
+            if (SpellMode == SpellDisplayMode.ByName)
+                (fill, pen) = SpellColorFor(room.Spell);
+            else
+            {
+                fill = SpellFill;
+                pen = SpellBorderPen;
+            }
         }
         else if (Layout?.VerticalHints is { } vhints && vhints.TryGetValue(key, out VerticalHint hint))
         {
