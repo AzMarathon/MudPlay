@@ -651,6 +651,12 @@ public static class BugReportBuilder
             foreach (string b in snap.Bosses) sb.Append("- ").Append(b).Append('\n');
         }
 
+        if (snap.Summons.Count > 0)
+        {
+            sb.Append("\n**Room summons** (").Append(snap.Summons.Count).Append(")\n\n");
+            foreach (string su in snap.Summons) sb.Append("- ").Append(su).Append('\n');
+        }
+
         return sb.ToString();
     }
 

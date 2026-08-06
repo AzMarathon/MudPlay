@@ -49,9 +49,17 @@ public readonly record struct ExpTarget(
     public bool Summons => ClearWaves > 1 || KillsPerMob > 1.0;
 }
 
+// A room whose entry-spell summons monsters on a d100 roll, re-rolled each combat
+// tick while you're in the room (nomonsters-gated: only when the room is otherwise
+// empty). ExpPerRoll is the probability-weighted exp of one roll (Σ band% × monster
+// exp); SummonChance is the chance any monster is summoned. The sim credits one roll
+// per visit, plus a second when a quick kill (rounds ≤ 2) lets another spawn before
+// you leave. See GAME_MECHANICS.md "Room-spell monster summons".
+public readonly record struct RoomSummon(string SpellName, double ExpPerRoll, double SummonChance);
+
 // One room in a lap (order matters), with its exp targets (may be empty — an
-// empty room still costs a travel step).
-public sealed record ExpRoomVisit(RoomKey Room, IReadOnlyList<ExpTarget> Targets);
+// empty room still costs a travel step) and any monster-summoning entry spell.
+public sealed record ExpRoomVisit(RoomKey Room, IReadOnlyList<ExpTarget> Targets, RoomSummon? Summon = null);
 
 // The loop as one lap's ordered rooms (no closing duplicate; the wrap from the
 // last room back to the first is one implicit step).
@@ -81,12 +89,18 @@ public readonly record struct ExpLairStat(
 // can show "crowned spider — +80k/hr, once per 15h" distinctly.
 public readonly record struct ExpBossStat(string Name, double ExpPerHour, int RegenHours);
 
+// A summoning room's flat contribution: the expected exp its entry-spell rolls
+// hand you per hour (already realm-multiplied), so the breakdown can show the extra
+// yield that used to go uncounted.
+public readonly record struct ExpSummonStat(RoomKey Room, string SpellName, double ExpPerHour, double SummonChance);
+
 public sealed record ExpSimResult(
     double ExpPerHour,
     double AvgLapSeconds,
     int LapsPerHour,
     IReadOnlyList<ExpLairStat> Lairs,
-    IReadOnlyList<ExpBossStat> Bosses);
+    IReadOnlyList<ExpBossStat> Bosses,
+    IReadOnlyList<ExpSummonStat> Summons);
 
 // Self-contained point-in-time snapshot of a live Exp/Hr Estimator session for the
 // bug report — the route, tunables, and computed result the user was looking at, so
@@ -105,7 +119,8 @@ public sealed record ExpEstimatorSnapshot(
     int LapsPerHour,
     string Summary,
     IReadOnlyList<string> Lairs,     // "map/room  Name — fires/hr, misses" per resolved lair
-    IReadOnlyList<string> Bosses);   // "Name — +exp/hr, once per Nh" per amortised boss
+    IReadOnlyList<string> Bosses,    // "Name — +exp/hr, once per Nh" per amortised boss
+    IReadOnlyList<string> Summons);  // "map/room  Spell — +exp/hr, N% summon" per summoning room
 
 public static class LoopExpSimulator
 {
@@ -117,7 +132,9 @@ public static class LoopExpSimulator
         ArgumentNullException.ThrowIfNull(s);
 
         IReadOnlyList<ExpRoomVisit> lap = route.Lap;
-        if (lap.Count == 0) return new ExpSimResult(0, 0, 0, Array.Empty<ExpLairStat>(), Array.Empty<ExpBossStat>());
+        if (lap.Count == 0)
+            return new ExpSimResult(0, 0, 0,
+                Array.Empty<ExpLairStat>(), Array.Empty<ExpBossStat>(), Array.Empty<ExpSummonStat>());
 
         double tick = s.SecondsPerRound > 0 ? s.SecondsPerRound : 5.0;   // combat cadence
         double roundsPerMob = Math.Max(0.01, s.RoundsPerMob);
@@ -146,8 +163,14 @@ public static class LoopExpSimulator
                 lairs.Add((lap[i].Room, tg.RespawnSeconds, tg.MobCount, tg.ExpPerMob, tg.IsInstant,
                     Math.Max(1, tg.ClearWaves), Math.Max(1.0, tg.KillsPerMob)));
             }
-        if (lairs.Count == 0 && bosses.Count == 0)
-            return new ExpSimResult(0, 0, 0, Array.Empty<ExpLairStat>(), Array.Empty<ExpBossStat>());
+        // A room-spell summon still yields exp even in a room with no placed lair, so
+        // it keeps the loop alive here (and computes a lap time from the walk alone).
+        bool hasSummons = false;
+        foreach (ExpRoomVisit v in lap)
+            if (v.Summon is { ExpPerRoll: > 0 }) { hasSummons = true; break; }
+        if (lairs.Count == 0 && bosses.Count == 0 && !hasSummons)
+            return new ExpSimResult(0, 0, 0,
+                Array.Empty<ExpLairStat>(), Array.Empty<ExpBossStat>(), Array.Empty<ExpSummonStat>());
 
         // Full-path walk time (continuous) plus travel waste — whole ticks lost to
         // lair-to-lair hops too long to hide in a kill's downtime. Both fixed by the
@@ -230,8 +253,27 @@ public static class LoopExpSimulator
             bossStats.Add(new ExpBossStat(b.Name, bossHr * s.RealConditionsMultiplier,
                 (int)Math.Round(regenHours)));
         }
+
+        // Room-spell summons: each summoning room hands you one averaged roll per
+        // visit (Σ band% × monster exp), plus a second roll's worth when a quick kill
+        // (rounds ≤ 2) lets another spawn before you leave — a per-lap fixture-style
+        // contribution scaled by laps/hr. Not gated on lair time; the nomonsters roll
+        // fires once the room's own placed mob (if any) is down.
+        var summonStats = new List<ExpSummonStat>();
+        bool quickKill = roundsPerMob <= 2.0;
+        foreach (ExpRoomVisit v in lap)
+        {
+            if (v.Summon is not { ExpPerRoll: > 0 } su) continue;
+            double perVisit = su.ExpPerRoll * (1.0 + (quickKill ? su.SummonChance : 0.0));
+            double hr = perVisit * lapsPerHour;
+            expPerHour += hr;
+            summonStats.Add(new ExpSummonStat(
+                v.Room, su.SpellName, hr * s.RealConditionsMultiplier, su.SummonChance));
+        }
+
         expPerHour *= s.RealConditionsMultiplier;
 
-        return new ExpSimResult(expPerHour, lapSeconds, (int)Math.Round(lapsPerHour), stats, bossStats);
+        return new ExpSimResult(
+            expPerHour, lapSeconds, (int)Math.Round(lapsPerHour), stats, bossStats, summonStats);
     }
 }

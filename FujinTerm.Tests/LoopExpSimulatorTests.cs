@@ -15,6 +15,8 @@ public sealed class LoopExpSimulatorTests
         => new(new RoomKey(map, room), targets);
     private static ExpRoomVisit Empty(int map, int room)
         => new(new RoomKey(map, room), Array.Empty<ExpTarget>());
+    private static ExpRoomVisit SummonRoom(int map, int room, string spell, double expPerRoll, double chance)
+        => new(new RoomKey(map, room), Array.Empty<ExpTarget>(), new RoomSummon(spell, expPerRoll, chance));
     private static ExpTarget Instant(int exp) => new(1, exp, 0);
     private static ExpTarget Lair(int mobs, double exp, int respawn) => new(mobs, exp, respawn);
     private static ExpTarget Boss(int id, double exp, int regenHours, string name = "boss")
@@ -275,6 +277,44 @@ public sealed class LoopExpSimulatorTests
         Assert.True(foldedResult.ExpPerHour > baseOnly, "death-summon fold must raise the estimate");
         Assert.True(foldedResult.ExpPerHour < baseOnly * 7.125, "extra clear time must temper the raw exp ratio");
         Assert.True(Assert.Single(foldedResult.Lairs).Summons);
+    }
+
+    [Fact]
+    public void RoomSummon_CountedEvenWithNoLair_QuickKillAddsBonusRoll()
+    {
+        // A summon-only room (crypt summon 2: 1850 expected exp/roll, 15% chance). It
+        // has no placed lair, yet its expected exp is still credited. A quick kill
+        // (rounds ≤ 2) adds a second roll's worth (× (1 + chance)); a slow kill gets
+        // only the base roll — so quick/slow = 1.15, independent of lap timing.
+        ExpRoute route = Route(SummonRoom(13, 3573, "crypt summon 2", 1850, 0.15));
+        var quickS = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 1, RealConditionsMultiplier: 1);
+        var slowS = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 3, RealConditionsMultiplier: 1);
+
+        ExpSimResult quick = LoopExpSimulator.Simulate(route, quickS);
+        ExpSimResult slow = LoopExpSimulator.Simulate(route, slowS);
+
+        Assert.True(quick.ExpPerHour > 0);                        // counted despite no lair
+        ExpSummonStat s = Assert.Single(quick.Summons);
+        Assert.Equal(new RoomKey(13, 3573), s.Room);
+        Assert.Equal("crypt summon 2", s.SpellName);
+        Assert.True(quick.ExpPerHour > slow.ExpPerHour);          // the rounds≤2 bonus roll
+        Assert.Equal(1.15, quick.ExpPerHour / slow.ExpPerHour, 3);
+    }
+
+    [Fact]
+    public void RoomSummon_AddsOnTopOfLair()
+    {
+        // The same room with a placed lair AND a summon spell yields strictly more
+        // than the lair alone — the summon exp is additive, not a replacement.
+        var s = Single(secPerStep: 1);
+        ExpRoomVisit lairOnly = Room(13, 3573, Lair(2, 5000, 120));
+        ExpRoomVisit withSummon = new(new RoomKey(13, 3573),
+            new[] { Lair(2, 5000, 120) }, new RoomSummon("crypt summon 2", 1850, 0.15));
+
+        double baseline = LoopExpSimulator.Simulate(Route(lairOnly, Empty(13, 3574)), s).ExpPerHour;
+        double summed = LoopExpSimulator.Simulate(Route(withSummon, Empty(13, 3574)), s).ExpPerHour;
+
+        Assert.True(summed > baseline, $"summon must add exp: {summed:N0} vs {baseline:N0}");
     }
 
     [Fact]

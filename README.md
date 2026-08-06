@@ -1,8 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.33.1**
-> - Item-cast buff swap now restores the item's actual slot: an off-hand buff (e.g. engraved warhorn) puts the off-hand shield back instead of re-equipping the weapon; works for any worn slot, not just weapon/off-hand
+> **Version 2.34.0**
+> - Exp/Hr estimator now counts monster-summoning room spells — rooms whose entry spell rolls extra monsters (e.g. Paradigm's crypt summons) add their expected exp to the estimate instead of being ignored, with a new "Room summons" breakdown line
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

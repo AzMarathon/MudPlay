@@ -47,6 +47,11 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     public ObservableCollection<ExpEstimatorBossRow> Bosses { get; } = new();
     public bool HasBosses => Bosses.Count > 0;
 
+    // Room-spell summon readout: rooms whose entry spell summons monsters, and the
+    // expected exp/hr each contributes (already folded into the headline estimate).
+    public ObservableCollection<ExpEstimatorSummonRow> Summons { get; } = new();
+    public bool HasSummons => Summons.Count > 0;
+
     [ObservableProperty] private string _proposedName = "";
     [ObservableProperty] private IReadOnlyList<RoomKey>? _previewedRoomKeys;
     [ObservableProperty] private IReadOnlyList<RoomKey>? _waypointKeys;
@@ -153,9 +158,13 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         foreach (ExpEstimatorBossRow b in Bosses)
             bosses.Add($"{b.Label} — {b.ContribLabel}");
 
+        var summonLines = new List<string>(Summons.Count);
+        foreach (ExpEstimatorSummonRow su in Summons)
+            summonLines.Add($"{su.RoomLabel}  {su.SpellName} — {su.ContribLabel}");
+
         return new ExpEstimatorSnapshot(
             ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
-            ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses);
+            ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses, summonLines);
     }
 
     private void Recompute()
@@ -163,7 +172,9 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         WaypointKeys = _clicks.Count == 0 ? null : new List<RoomKey>(_clicks);
         Lairs.Clear();
         Bosses.Clear();
+        Summons.Clear();
         OnPropertyChanged(nameof(HasBosses));
+        OnPropertyChanged(nameof(HasSummons));
 
         if (_clicks.Count < 2)
         {
@@ -204,7 +215,13 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
         }
         foreach (ExpBossStat b in r.Bosses)
             Bosses.Add(new ExpEstimatorBossRow(b.Name, b.ExpPerHour, b.RegenHours));
+        foreach (ExpSummonStat su in r.Summons)
+        {
+            string name = _graph.GetRoom(su.Room)?.DisplayName ?? su.Room.ToString();
+            Summons.Add(new ExpEstimatorSummonRow(su.Room, name, su.SpellName, su.ExpPerHour, su.SummonChance));
+        }
         OnPropertyChanged(nameof(HasBosses));
+        OnPropertyChanged(nameof(HasSummons));
 
         Summary = unreachable.Count > 0
             ? $"{unreachable.Count} unreachable segment(s) — fix the loop"
@@ -256,4 +273,14 @@ public sealed record ExpEstimatorBossRow(string Name, double ExpPerHour, int Reg
 {
     public string Label => string.IsNullOrWhiteSpace(Name) ? "boss" : Name;
     public string ContribLabel => $"+{ExpPerHour:N0}/hr · once per {RegenHours}h";
+}
+
+// One summoning room on the route: its entry spell rolls monsters (SummonChance to
+// hit each check), contributing ExpPerHour to the estimate. Shown apart from the
+// lairs so the extra yield these rooms provide is visible.
+public sealed record ExpEstimatorSummonRow(
+    RoomKey Room, string Name, string SpellName, double ExpPerHour, double SummonChance)
+{
+    public string RoomLabel => $"{Room.Map}/{Room.Room}";
+    public string ContribLabel => $"+{ExpPerHour:N0}/hr · {SummonChance:P0} summon";
 }

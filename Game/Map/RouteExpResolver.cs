@@ -27,10 +27,17 @@ public sealed class RouteExpResolver : IDisposable
     private Dictionary<int, MonsterInfo>? _monsters;        // monster Number -> resolved info
     private Dictionary<int, List<int>>? _summonSpells;     // spell Number -> summoned monster ids
     private Dictionary<(int Id, int Mobs), CascadeResult>? _roomCascades;   // (base monster, room spawn count) -> capped cascade
+    private Dictionary<int, (int TextBlock, string Name)>? _spellTextBlocks; // spell Number -> its TextBlock action + name
+    private Dictionary<int, string>? _tbActions;           // TBInfo Number -> raw Action string
+    private Dictionary<int, RoomSummon?>? _roomSummons;    // room-entry spell Number -> resolved summon (null cached)
 
     // Abil slot value 12 marks a "summon monster" ability; AbilVal holds the summoned
     // monster Number. A monster's DeathSpell fires this spell on death.
     private const int SummonAbility = 12;
+
+    // Abil slot value 148 is a "TextBlock" ability; on a room-entry spell its AbilVal
+    // points at a TBInfo roll table that can summon monsters (see RoomSummonParser).
+    private const int TextBlockAbility = 148;
 
     // Per-monster facts the estimator needs. Exp is the true value EXP × ExpMulti
     // (bosses store the un-multiplied EXP with a separate multiplier). A boss —
@@ -59,6 +66,9 @@ public sealed class RouteExpResolver : IDisposable
         _monsters = null;
         _summonSpells = null;
         _roomCascades = null;
+        _spellTextBlocks = null;
+        _tbActions = null;
+        _roomSummons = null;
     }
 
     public ExpRoute Resolve(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
@@ -72,8 +82,75 @@ public sealed class RouteExpResolver : IDisposable
         int lapCount = keys.Count - 1;
         var lap = new List<ExpRoomVisit>(lapCount);
         for (int i = 0; i < lapCount; i++)
-            lap.Add(new ExpRoomVisit(keys[i], ResolveTargets(keys[i])));
+            lap.Add(new ExpRoomVisit(keys[i], ResolveTargets(keys[i]), SummonForRoom(keys[i])));
         return new ExpRoute(lap);
+    }
+
+    // The monster-summoning entry spell in a room, or null. A room's Spell that carries
+    // a TextBlock ability (148) whose roll table summons monsters yields expected exp
+    // per visit — folded into the estimate on top of any placed lair. Memoised per
+    // spell (null cached too) so a repeated room-spell resolves once per set.
+    private RoomSummon? SummonForRoom(RoomKey key)
+    {
+        if (_graph.GetRoom(key) is not { Spell: > 0 } room) return null;
+        var cache = _roomSummons ??= new Dictionary<int, RoomSummon?>();
+        if (cache.TryGetValue(room.Spell, out RoomSummon? cached)) return cached;
+
+        RoomSummon? result = null;
+        if (SpellTextBlocks().TryGetValue(room.Spell, out (int TextBlock, string Name) tb))
+        {
+            RoomSummonTable? table = RoomSummonParser.Resolve(
+                tb.TextBlock,
+                n => TbActions().TryGetValue(n, out string? a) ? a : null,
+                id => (Math.Max(0, Monster(id).Exp), Monster(id).Name));
+            if (table is { ExpPerRoll: > 0 })
+                result = new RoomSummon(tb.Name, table.ExpPerRoll, table.SummonChance);
+        }
+        cache[room.Spell] = result;
+        return result;
+    }
+
+    // Spell Number -> (its first TextBlock-ability TBInfo number, spell Name), for the
+    // spells that carry an Abil==148 slot. Only these can be summon room-spells.
+    private Dictionary<int, (int TextBlock, string Name)> SpellTextBlocks()
+    {
+        if (_spellTextBlocks is not null) return _spellTextBlocks;
+        var map = new Dictionary<int, (int, string)>();
+        if (_cache.GetRawTable("Spells") is { } doc && doc.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                if (!row.TryGetProperty("Number", out JsonElement n) || !n.TryGetInt32(out int id)) continue;
+                for (int i = 0; row.TryGetProperty($"Abil-{i}", out JsonElement ab); i++)
+                {
+                    if (!ab.TryGetInt32(out int abv) || abv != TextBlockAbility) continue;
+                    if (!row.TryGetProperty($"AbilVal-{i}", out JsonElement av) || !av.TryGetInt32(out int tb) || tb <= 0) continue;
+                    string name = row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String
+                        ? nm.GetString()?.Trim() ?? string.Empty : string.Empty;
+                    map[id] = (tb, name);
+                    break;   // first TextBlock ability wins
+                }
+            }
+        }
+        return _spellTextBlocks = map;
+    }
+
+    // TBInfo Number -> its raw Action string (the roll-table / redirect chain
+    // RoomSummonParser walks). Built once, dropped on set change.
+    private Dictionary<int, string> TbActions()
+    {
+        if (_tbActions is not null) return _tbActions;
+        var map = new Dictionary<int, string>();
+        if (_cache.GetRawTable("TBInfo") is { } doc && doc.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                if (!row.TryGetProperty("Number", out JsonElement n) || !n.TryGetInt32(out int id)) continue;
+                if (row.TryGetProperty("Action", out JsonElement a) && a.ValueKind == JsonValueKind.String)
+                    map[id] = a.GetString() ?? string.Empty;
+            }
+        }
+        return _tbActions = map;
     }
 
     private IReadOnlyList<ExpTarget> ResolveTargets(RoomKey key)
