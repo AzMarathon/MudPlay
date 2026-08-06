@@ -1686,7 +1686,7 @@ public sealed class MapControl : Control
         ctx.DrawEllipse(CrownFill, CrownRimPen, new Point(mx + r, my - r * 0.25), jr, jr);
     }
 
-    // A double up-chevron ("level up here") marking a trainer room. Two stacked
+    // A triple up-chevron ("level up here") marking a trainer room. Three stacked
     // carets drawn from stroke primitives (no glyph), sized to the room node like
     // the crown; a dark edge under the bright green keeps them legible on any fill.
     private static void DrawTrainerIcon(DrawingContext ctx, Rect cell)
@@ -1694,16 +1694,17 @@ public sealed class MapControl : Control
         double nodeSize = Math.Max(cell.Width * 0.45, 3.0);
         double mx = cell.X + cell.Width  / 2.0;
         double my = cell.Y + cell.Height / 2.0;
-        double w = nodeSize * 0.28;   // half-width of each caret
-        double h = nodeSize * 0.20;   // arm drop of each caret
-        double topApexY = my - nodeSize * 0.20;
-        double botApexY = my - nodeSize * 0.02;   // nests just under the top caret
+        double w = nodeSize * 0.26;   // half-width of each caret
+        double h = nodeSize * 0.18;   // arm drop of each caret
+        double topApexY = my - nodeSize * 0.26;
+        double spacing  = nodeSize * 0.16;   // apex-to-apex; < h so the carets nest
 
-        // Dark edge first (wider), then the green on top.
-        DrawChevron(ctx, TrainerChevronEdgePen, mx, topApexY, w, h);
-        DrawChevron(ctx, TrainerChevronEdgePen, mx, botApexY, w, h);
-        DrawChevron(ctx, TrainerChevronPen, mx, topApexY, w, h);
-        DrawChevron(ctx, TrainerChevronPen, mx, botApexY, w, h);
+        // All dark edges first, then all green on top, so a lower caret's edge never
+        // covers the caret above it.
+        for (int i = 0; i < 3; i++)
+            DrawChevron(ctx, TrainerChevronEdgePen, mx, topApexY + i * spacing, w, h);
+        for (int i = 0; i < 3; i++)
+            DrawChevron(ctx, TrainerChevronPen, mx, topApexY + i * spacing, w, h);
     }
 
     // One upward caret (^): apex at (cx, apexY), arms dropping to ±w / +h.
