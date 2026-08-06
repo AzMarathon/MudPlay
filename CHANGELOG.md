@@ -6,6 +6,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Navigation map: boss rooms from the Bosses table now show a gold crown; a boss flagged "stop before entering" gets a red halt ring around its crown
 - Navigation map: the Spells overlay chip now cycles mono → by name → off — "by name" colours each room-spell room by which spell it carries, so clustered but different room spells (e.g. Swamp of Tharollok's spawners vs the swamp-poison) read apart; hover a room for its spell name. Saved per character
+- Manage Bosses dialog: widened so all columns are visible without horizontal scrolling
+- Manage Bosses dialog: "Add boss" now scrolls to and starts editing the new row instead of appending it out of sight at the bottom
 
 ## 2.31.4
 

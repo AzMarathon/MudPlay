@@ -3,11 +3,11 @@
         xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="820" d:DesignHeight="560"
+        mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="560"
         x:Class="FujinTerm.Views.CharacterWorkshop.ManageBossesDialog"
         x:DataType="vm:ManageBossesDialogViewModel"
         Title="Manage bosses"
-        Width="820" Height="560"
+        Width="1180" Height="560"
         MinWidth="560" MinHeight="360"
         WindowStartupLocation="CenterOwner">
 
@@ -17,6 +17,7 @@
                  Text="{Binding FilterText, Mode=TwoWay}"/>
 
         <DataGrid Grid.Row="1"
+                  x:Name="BossGrid"
                   ItemsSource="{Binding Rows}"
                   SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                   Background="{StaticResource ChromeBgSunkenBrush}"
