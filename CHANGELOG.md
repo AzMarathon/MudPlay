@@ -8,7 +8,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Player Workshop → CP Allocation: new "Apply this level" button applies a selected row's stats at the trainer you're standing at — but only when its CP fully lines up; it confirms via `stat` and clears the row only on a verified success
 - Auto-train / Auto-train-stats now toggle from the CP Allocation tab too, in sync with Settings → Auto-Trainer; the old Auto-Train toolbar button, menu item and keybind are removed
 - Settings → Auto-Trainer: new "Do not train above level" ceiling — auto-train reaches that level then stops (no accidental over-levelling)
-- Navigation map: trainer rooms now show an up-chevron "level up here" marker — every trainer for the active game-data set
+- Navigation map: trainer rooms now show a triple up-chevron "level up here" marker — every trainer for the active game-data set
+- Navigation Management: the toolbar Start button and the map's Navigation Management button now open one shared window (re-focused, never a second copy); the toolbar-opened one no longer drops the Go To tab
 
 ## 2.32.0
 

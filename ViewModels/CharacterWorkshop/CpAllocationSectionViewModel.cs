@@ -53,19 +53,33 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     // The grid row the user has selected — drives RemoveRowCommand.
     [ObservableProperty] private CpPlanRowViewModel? _selectedRow;
-    // Transient inline error (e.g. trying to remove a middle row); cleared on the next valid action.
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasRemoveError))]
-    private string? _removeError;
 
-    // True when a RemoveError is showing — drives its visibility.
-    public bool HasRemoveError => !string.IsNullOrEmpty(RemoveError);
-
-    // ----- auto-train ----------------------------------------------------
+    // ----- consolidated status line --------------------------------------------
+    // One notice area (right of the action buttons) for every transient/standing
+    // message this tab emits, so "can train now", "training…", apply results and
+    // row-edit errors never light up in three separate spots at once. Precedence,
+    // most-urgent first: an in-flight train, then the last action result, then the
+    // passive can-train hint — StatusText surfaces exactly one.
     // True when the saved plan has an affordable raise to apply at the current level.
-    [ObservableProperty] private bool _canTrainNow;
-    // True while a train run is in flight — disables the Train Now button.
-    [ObservableProperty] private bool _autoTrainBusy;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText), nameof(HasStatusText))]
+    private bool _canTrainNow;
+    // True while a train run is in flight (either engine) — disables the buttons.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText), nameof(HasStatusText))]
+    private bool _autoTrainBusy;
+    // Last user-action message: apply result, CP-fit refusal, or a row-edit error.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText), nameof(HasStatusText))]
+    private string? _actionMessage;
+
+    public string? StatusText =>
+        AutoTrainBusy ? "Training…"
+        : !string.IsNullOrEmpty(ActionMessage) ? ActionMessage
+        : CanTrainNow ? "● Can train now"
+        : null;
+
+    public bool HasStatusText => !string.IsNullOrEmpty(StatusText);
 
     // Captured on RefreshBaseline; inputs to the recalc.
     private CpPlanEntry _baseline = new();
@@ -126,7 +140,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         int level = Rows.Count > 0 ? Rows[^1].Level + 1 : Math.Max(2, _stats.Level + 1);
         CpPlanEntry seed = Rows.Count > 0 ? Rows[^1].ToEntry() : _baseline;
         _lastEditedStat = null;
-        RemoveError = null;
+        ActionMessage = null;
         Rows.Add(NewRow(level, seed));
         RecalcGrid();
         Persist();
@@ -141,16 +155,16 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         if (Rows.Count == 0) return;
         if (SelectedRow is null)
         {
-            RemoveError = "Select the top or bottom row to remove.";
+            ActionMessage = "Select the top or bottom row to remove.";
             return;
         }
         int idx = Rows.IndexOf(SelectedRow);
         if (idx != 0 && idx != Rows.Count - 1)
         {
-            RemoveError = "You can only remove the top or bottom row of the plan.";
+            ActionMessage = "You can only remove the top or bottom row of the plan.";
             return;
         }
-        RemoveError = null;
+        ActionMessage = null;
         _lastEditedStat = null;
         Rows.RemoveAt(idx);
         RecalcGrid();
@@ -162,7 +176,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private void Reset()
     {
         _lastEditedStat = null;
-        RemoveError = null;
+        ActionMessage = null;
         Rows.Clear();
         RecalcGrid();
         Persist();
@@ -172,8 +186,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     // Apply-this-level button against the newly selected row.
     partial void OnSelectedRowChanged(CpPlanRowViewModel? value)
     {
-        RemoveError = null;
-        ApplyLevelStatus = null;
+        ActionMessage = null;
         ApplyLevelCommand.NotifyCanExecuteChanged();
     }
 
@@ -249,7 +262,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         // Auto-train stats needs a saved CP plan to apply — refuse + revert without one.
         if (value && Rows.Count == 0)
         {
-            ApplyLevelStatus = "Save a CP allocation plan first — Auto-train stats has nothing to apply.";
+            ActionMessage = "Save a CP allocation plan first — Auto-train stats has nothing to apply.";
             _suppressToggleWriteback = true;
             try { AutoTrainStatsOn = false; }
             finally { _suppressToggleWriteback = false; }
@@ -263,13 +276,6 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private void OnProfileSavingReseed(CharacterProfile _) => SeedAutoTrainToggles();
 
     // ----- Apply this level (semi-manual) --------------------------------------
-    // Inline status for the Apply-this-level button (CP-fit refusal / result).
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasApplyLevelStatus))]
-    private string? _applyLevelStatus;
-
-    public bool HasApplyLevelStatus => !string.IsNullOrEmpty(ApplyLevelStatus);
-
     // Apply the SELECTED plan row's stats at the trainer we're standing at — only
     // when its CP genuinely lines up (fully affordable from live CP, nothing
     // trimmed). On a `stat`-confirmed success the row is cleared; else a status shows.
@@ -278,10 +284,10 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     {
         if (!TryResolveSelectedTargets(out int[] current, out int[] target, out string reason))
         {
-            ApplyLevelStatus = reason;
+            ActionMessage = reason;
             return;
         }
-        ApplyLevelStatus = "Applying at the trainer…";
+        ActionMessage = "Applying at the trainer…";
         _autoTrain.ApplyTargets(current, target);   // fires StateChanged → SyncAutoTrain disables the buttons
         SyncAutoTrain();
     }
@@ -298,14 +304,17 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     {
         if (ok && SelectedRow is { } row)
         {
-            ApplyLevelStatus = $"Level {row.Level} applied — plan row cleared.";
+            int level = row.Level;
+            // Remove first: dropping the selected row nulls SelectedRow, which clears
+            // ActionMessage via OnSelectedRowChanged — so set the success text AFTER.
             Rows.Remove(row);
             RecalcGrid();
             Persist();
+            ActionMessage = $"Level {level} applied — plan row cleared.";
         }
         else if (!ok)
         {
-            ApplyLevelStatus = "Couldn't confirm the training — nothing cleared (are you at a trainer?).";
+            ActionMessage = "Couldn't confirm the training — nothing cleared (are you at a trainer?).";
         }
         SyncAutoTrain();
     }

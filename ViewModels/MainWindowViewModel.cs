@@ -529,6 +529,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetRoomGameDataOpener(OpenRoomGameData);
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
+        AppServices.Current.SetNavManagerOpener(OpenNavManager);
 
         // Engine-state chip — same shape as the Navigation window's
         // top-bar badge (IDLE / WALKING / LOOPING / AUTO-LAIR). Lives
@@ -3800,16 +3801,13 @@ public partial class MainWindowViewModel : ObservableObject
             vm.OnFloorChangeRequested(key);
     }
 
-    // Guards against a second standalone Manage dialog opening while one is up.
-    private bool _manageDialogOpen;
-
     // Toolbar Start, which doubles as Resume. If a nav mode is paused,
     // resume it. If idle and a loop is staged via the Manage dialog's Load
     // action, run it straight away — "start the staged loop without
-    // reopening the map". Otherwise (idle, nothing staged) open the Manage
-    // dialog so the user can pick / load / run one.
+    // reopening the map". Otherwise (idle, nothing staged) open the shared
+    // Manage dialog so the user can pick / load / run one.
     [RelayCommand]
-    private async Task MovementStartAsync()
+    private void MovementStart()
     {
         Game.Map.MovementController ctl = AppServices.Current.MovementControl;
         if (ctl.IsUserPaused)
@@ -3823,7 +3821,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.LoopRunner.Start(staged);
             return;
         }
-        await OpenManagerStandaloneAsync();
+        OpenNavManager();
     }
 
     // Toolbar Pause — pauses the running engine (no-op if already paused / idle).
@@ -3834,13 +3832,25 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void MovementStop() => AppServices.Current.MovementControl.Stop();
 
-    // Open the Navigation Manage dialog on its own (no map window) so the
-    // user can browse / load / run saved loops + lairs. Guarded so a
-    // second press while it's up is a no-op rather than stacking dialogs.
-    private async Task OpenManagerStandaloneAsync()
+    // Singleton handle for the one Navigation Management dialog — re-press from
+    // either entry point (toolbar Start fallback, map window button) focuses it
+    // instead of stacking a second identical window.
+    private Views.Navigation.NavigationManagerDialog? _manageWindow;
+
+    // The single owner of the Navigation Management dialog. Browses / loads /
+    // runs saved loops + lairs and hosts the Go To favourites tab — no map window
+    // required. When the map is up and mid loop-build, its live LoopBuilder draft
+    // is handed to the dialog so the Draft "save this loop" section shows.
+    private void OpenNavManager()
     {
-        if (_manageDialogOpen) return;
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+        if (_manageWindow is { } existing) { existing.Activate(); return; }
+
         var s = AppServices.Current;
+        var mapVm = _navigationWindow?.DataContext as ViewModels.Navigation.NavigationViewModel;
+        var draft = mapVm?.LoopBuilder;   // non-null only while the map is in loop-build
+
         ViewModels.Navigation.NavigationManagerDialogViewModel vm = new(
             s.Loops,
             s.Lairs,
@@ -3849,23 +3859,38 @@ public partial class MainWindowViewModel : ObservableObject
             s.Confirm,
             s.Dialogs,
             folders: s.NavFolders,
+            draft: draft,
+            onDraftConsumed: draft is null ? null : () => mapVm!.ConsumeLoopBuildDraft(),
             runner: s.LoopRunner,
             mpImporter: s.MpImporter,
             log: s.Log,
             search: s.RoomSearch,
             walker: s.Walker,
             movement: s.MovementControl,
-            autoLair: s.AutoLair);
-        _manageDialogOpen = true;
-        try
+            autoLair: s.AutoLair,
+            favorites: s.Favorites);
+
+        Views.Navigation.NavigationManagerDialog window = new() { DataContext = vm };
+        // The dialog's Close button raises CloseRequested; mirror what
+        // DialogService does — close the window on it, and on any close run the
+        // VM's own event-unsubscribe path (its [RelayCommand] Close) so the store
+        // subscriptions it wired in its constructor don't leak on a title-bar X.
+        void OnCloseRequested(bool _) => window.Close();
+        vm.CloseRequested += OnCloseRequested;
+        window.Closed += (_, _) =>
         {
-            await s.Dialogs
-                .OpenWindowAsync<ViewModels.Navigation.NavigationManagerDialogViewModel, bool>(vm);
-        }
-        finally
+            vm.CloseRequested -= OnCloseRequested;
+            vm.CloseCommand.Execute(null);
+            _manageWindow = null;
+        };
+        // Same taskbar-restore coupling DialogService applies to owned children.
+        window.Activated += (_, _) =>
         {
-            _manageDialogOpen = false;
-        }
+            if (main.WindowState == Avalonia.Controls.WindowState.Minimized)
+                main.WindowState = Avalonia.Controls.WindowState.Normal;
+        };
+        _manageWindow = window;
+        window.Show(main);
     }
 
     // Singleton handle for the live SpellBookWindow — re-press toggles closed.

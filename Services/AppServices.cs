@@ -64,6 +64,14 @@ public sealed class AppServices
     public void SetNavigateToRoomOpener(Action<Game.Map.RoomKey> opener) => _navigateToRoomOpener = opener;
     public void NavigateToRoom(Game.Map.RoomKey key) => _navigateToRoomOpener?.Invoke(key);
 
+    // Opens (or re-focuses) the single Navigation Management dialog. Both the map
+    // window's "Navigation Management" button and the toolbar Start fallback route
+    // here so there's only ever one instance — no two identical windows. No-op
+    // until the main VM binds it.
+    private Action? _navManagerOpener;
+    public void SetNavManagerOpener(Action opener) => _navManagerOpener = opener;
+    public void OpenNavManager() => _navManagerOpener?.Invoke();
+
     // Centres the map on a room ONLY if the Navigation window is already open —
     // never force-opens it. Used by the room-detail popup's exit clicks, which
     // walk the popup itself to the neighbour and let an open map follow along

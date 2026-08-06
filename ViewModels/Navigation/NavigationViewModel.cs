@@ -2438,44 +2438,20 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     }
 
     // Open the Manage dialog — modeless surface for renaming / deleting
-    // saved loops and unmarking Auto-Lair rooms. This is where naming +
-    // lifecycle CRUD live; the bottom build strip is a pure status
-    // display.
+    // saved loops and unmarking Auto-Lair rooms. Routed through the shared
+    // single-instance opener (owned by the main VM) so this button and the
+    // toolbar Start fallback surface the exact same window rather than two
+    // identical ones. The opener pulls this map's live LoopBuilder draft for
+    // the dialog's Draft section.
     [RelayCommand]
-    private async Task OpenManagerAsync()
+    private void OpenManager() => _services.OpenNavManager();
+
+    // Exit LoopBuild mode after the Manage dialog's Draft section saves /
+    // discards the in-progress loop, so the bottom builder strip collapses.
+    // Invoked by the shared opener's onDraftConsumed hand-off.
+    public void ConsumeLoopBuildDraft()
     {
-        // Pass the live LoopBuilder (when in build mode) so the
-        // dialog's Draft section is the user's authoritative Save
-        // surface. The consumed callback exits LoopBuild mode here
-        // after Save / Discard so the bottom builder strip collapses.
-        // Runner reference lets the dialog show "Save running loop"
-        // + drive the editor's apply-to-running-loop prompt.
-        // New is now an away-from-the-map editor flow (opens the
-        // LoopEditor dialog) so no map-side hand-off callback is
-        // needed any more.
-        NavigationManagerDialogViewModel vm = new(
-            _services.Loops,
-            _services.Lairs,
-            _services.LairTimers,
-            _services.RoomGraph,
-            _services.Confirm,
-            _services.Dialogs,
-            folders: _services.NavFolders,
-            draft: LoopBuilder,
-            onDraftConsumed: () =>
-            {
-                if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
-            },
-            runner: _services.LoopRunner,
-            mpImporter: _services.MpImporter,
-            log: _services.Log,
-            search: _services.RoomSearch,
-            walker: _services.Walker,
-            movement: _services.MovementControl,
-            autoLair: _services.AutoLair,
-            favorites: _services.Favorites);
-        await _services.Dialogs
-            .OpenWindowAsync<NavigationManagerDialogViewModel, bool>(vm);
+        if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
     }
 
     // Toggle the Lair "build" mode (mirrors ToggleLoopMode). Exiting build

@@ -7,7 +7,7 @@
              x:Class="FujinTerm.Views.CharacterWorkshop.CpAllocationSectionView"
              x:DataType="vm:CpAllocationSectionViewModel">
 
-    <Grid Margin="22" RowDefinitions="Auto,Auto,Auto,*">
+    <Grid Margin="22" RowDefinitions="Auto,Auto,*">
 
         <!-- Plan actions. Train now walks to the nearest allowed, level-appropriate
              trainer and trains (+ applies the plan); Apply this level applies the
@@ -26,12 +26,11 @@
             <Button Content="Apply this level" Margin="0,0,12,6" Command="{Binding ApplyLevelCommand}"
                     IsVisible="{Binding HasCharacter}"
                     ToolTip.Tip="Select a plan row, then click to apply its stats at the trainer you're standing on via the train-stats screen — it only trains when that row's CP fully lines up with your available CP (otherwise it tells you why). On a `stat`-confirmed success the row is cleared."/>
-            <TextBlock Text="● Can train now" VerticalAlignment="Center" Margin="0,0,0,6"
-                       IsVisible="{Binding CanTrainNow}"
+            <!-- One consolidated status: in-flight train > last action result > can-train hint. -->
+            <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="0,0,0,6"
+                       TextWrapping="Wrap" MaxWidth="380"
+                       IsVisible="{Binding HasStatusText}"
                        Foreground="{StaticResource AccentAmberBrush}"/>
-            <TextBlock Text="Training…" VerticalAlignment="Center" Margin="0,0,0,6" FontStyle="Italic"
-                       IsVisible="{Binding AutoTrainBusy}"
-                       Foreground="{StaticResource ChromeFgSecBrush}"/>
         </WrapPanel>
 
         <!-- Auto-train parity toggles — mirror Settings → Auto-Trainer; flipping
@@ -44,20 +43,10 @@
                       ToolTip.Tip="After a train, apply this CP plan via the train-stats screen. Independent of Auto-train; needs a saved plan."/>
         </StackPanel>
 
-        <!-- Status line: row-removal error + Apply-this-level result. -->
-        <StackPanel Grid.Row="2" Spacing="2" Margin="0,0,0,8">
-            <TextBlock Text="{Binding RemoveError}" TextWrapping="Wrap"
-                       IsVisible="{Binding HasRemoveError}"
-                       Foreground="{StaticResource AccentAmberBrush}"/>
-            <TextBlock Text="{Binding ApplyLevelStatus}" TextWrapping="Wrap"
-                       IsVisible="{Binding HasApplyLevelStatus}"
-                       Foreground="{StaticResource ChromeFgSecBrush}"/>
-        </StackPanel>
-
         <!-- Editable per-level grid. Stat cells are editable; CP columns recompute.
              A stat that would overspend is auto-clamped to the highest affordable
              value, so CP Left never drops below 0. -->
-        <DataGrid Grid.Row="3"
+        <DataGrid Grid.Row="2"
                   ItemsSource="{Binding Rows}"
                   SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                   IsVisible="{Binding HasCharacter}"
@@ -104,7 +93,7 @@
         </DataGrid>
 
         <!-- Empty-state. -->
-        <TextBlock Grid.Row="3"
+        <TextBlock Grid.Row="2"
                    IsVisible="{Binding !HasCharacter}"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    TextWrapping="Wrap" MaxWidth="380" TextAlignment="Center"
