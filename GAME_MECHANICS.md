@@ -391,23 +391,40 @@ it isn't here and you're unsure, ask.
   an engine-issued between-round cast — in this realm a spell is cast by typing its cast-code
   (`Spells.Short`) directly (`swan`, `swan rat`), with no `c` verb precursor, so the client
   recognises a manual cast by that cast-code on the wire.
-- **[CONFIRMED]** *(2026-08-05, user)* **A spell attack command is functionally the same as a
-  physical attack command — one action per round against the target — except it costs mana and does
-  NOT auto-repeat.** A weapon swing is server-driven: you send the attack once and the server repeats
-  it each round and stops when the target dies. A spell does not repeat server-side, so the CLIENT
-  must re-issue it each round (the combat-tick heartbeat). Two consequences the client must handle:
-  - **Cast once per round.** The spell's own damage line (`Your <spell> hits <mob> for N damage!`)
-    matches the same combat-hit pattern the round tick is driven by, so it fires an *extra* tick a
-    beat after the cast. Re-casting on that echo double-fires the round — wasted mana on a live mob,
-    and a cast at the **corpse** when the echoed hit was the kill ("re-nukes the monster that just
-    died"). The client paces combat casts to one per round so the echo can't slip through, mirroring
-    the weapon's once-per-round server repeat.
-  - **Out of mana → no damage lines, keep the command.** When a single-target spell attack can't
-    afford the cast, the round produces **no output at all** (no fizzle line); the client keeps the
-    spell as the attack command and simply retries each round, casting once a mana regen tick makes it
-    affordable and the monster is still alive. **Room / multi-target** attack spells differ slightly:
-    they still *fire* at an empty room and emit a "nothing to hit here" style message (exact wording
-    unconfirmed — no test character yet).
+- **[CONFIRMED]** *(2026-08-05, user)* **A spell attack command AUTO-REPEATS server-side every round,
+  exactly like a weapon swing — on ALL realms.** You announce the spell once (type its cast-code +
+  target); the next combat tick it fires, and it keeps firing each round while the target is present
+  and mana suffices, with NO re-announcing. It stops when the target dies. So a spell attack is
+  functionally identical to a physical attack — announce once, the server owns the per-round repeat —
+  the only difference being the spell-slot gates (mana threshold + `MinManaPerCast`, `MaxCasts`,
+  `MinEnemies`). **The client must therefore announce once and NOT re-issue the spell every round**;
+  re-announcing a spell the server is already repeating double-fires the round (wasted mana on a live
+  mob; a cast at the **corpse** when the round was the kill — "re-nukes the monster that just died").
+  The client re-announces ONLY when the best action must change:
+  - **Target dies** → announce at the next target.
+  - **`MaxCasts` rounds elapsed** → switch to the next cascade action. Scope: **per-target** for the
+    single-target slots (normal / alternate attack spell, single-target debuff); **per-room** for the
+    two AoE slots (multi-attack, area debuff).
+  - **Current spell unaffordable** (`MinManaPerCast` vs live mana) **or the target is immune** →
+    switch down the cascade: alternate attack spell (if configured) → physical main weapon → physical
+    alternate weapon (if configured) → can't hit.
+  - **An AoE spell's live enemy count drops below `MinEnemies`** → switch to a single-target action.
+  - **Room / multi-target** attack spells fire at an empty room and emit a "nothing to hit here" style
+    message (exact wording unconfirmed — no test character yet).
+- **[CONFIRMED]** *(2026-08-05, user)* **`MaxCasts` counts combat ROUNDS, not individual casts.** It is
+  the maximum number of rounds the client will spend casting this spell at a target — one round counts
+  as one regardless of how many times the spell fires that round (e.g. a spell that casts twice per
+  round still spends a single round). The spell keeps casting only *while* mana also stays at or above
+  `MinManaPerCast`; whichever limit is hit first (rounds spent ≥ `MaxCasts`, **or** mana below the
+  reserve) ends the spell for that target and drops to the next cascade action. **Once dropped, stay
+  dropped for that target** — a mana-regen tick that lifts mana back above the reserve must NOT flip
+  the client back to the spell mid-fight; it commits to the weapon until the monster dies (or the room
+  clears). This is a per-target latch, mirroring the observed-immunity latch.
+- **[CONFIRMED]** *(2026-08-05, user)* **"You attempt to cast <spell>, but fail." means the spell DID
+  cast — mana was spent — but it missed the target (a hit-roll failure), NOT a fizzle and NOT
+  out-of-mana.** So an attack spell drains mana every round it repeats whether it lands or misses; a
+  "but fail" round is a spent round (mana down, zero damage), not a free retry. The client must not
+  treat this line as an out-of-mana / interrupt signal.
 - **[CONFIRMED]** **Martial-arts strikes (Punch / Kick / Jumpkick) are class-innate abilities, not a
   function of the trained Martial Arts skill.** A class grants a strike by listing its ability id in
   an `Abil-0..9` slot: **Punch = 29, Kick = 30, Jumpkick = 35** (Mystic carries all three at value 1

@@ -2587,6 +2587,41 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
+    public void BetweenRoundCast_BeforeDeathReObserveSwing_DoesNotDouble()
+    {
+        // Report paradigm-20260805-220759 ("doubled down on the physical attack"):
+        // a self-bless fired BETWEEN rounds (arming the cast-interrupt window), THEN
+        // a spell kill's death→re-observe re-engaged the survivor a beat later. The
+        // survivor's swing is fresh and in flight, but the kill's *Combat Off* still
+        // lands inside CastInterruptResumeWindow of the earlier bless — the old
+        // unconditional bypassAttackGuard defeated ResumeAfterAttackGuard and fired a
+        // redundant second `aa <survivor>`. Because the swing post-dates the cast, the
+        // cast did NOT interrupt it, so the resume must fall through to the guarded
+        // path and be suppressed.
+        using Harness h = new();
+        h.AddMonster(1, "angry bugbear", killable: false);
+        h.AddMonster(2, "short bugbear", killable: false);
+
+        h.Feed("Also here: angry bugbear, short bugbear.");
+        Assert.Equal("a angry bugbear", h.LastSent);
+
+        // The bless fires FIRST (between rounds), arming the cast-interrupt window.
+        h.Combat.NoteBetweenRoundCast();
+
+        // THEN the kill's death→re-observe re-engages the survivor — a fresh swing
+        // that post-dates the bless.
+        h.Combat.NoteUnattributedDeath();
+        Assert.Equal("a short bugbear", h.LastSent);
+        Assert.Equal("short bugbear", h.Combat.CurrentTarget);
+        int before = h.Sent.Count;
+
+        // The kill's *Combat Off* lands inside the bless's resume window. No double —
+        // the fresh survivor swing is guarded, not re-fired.
+        h.Feed("*Combat Off*");
+        Assert.Equal(before, h.Sent.Count);
+    }
+
+    [Fact]
     public void NullNumberArrival_UnresolvedName_IsEngaged()
     {
         // Report paradigm-20260716-124409 (didn't react to a monster entering the

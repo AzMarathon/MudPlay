@@ -2,6 +2,35 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.31.3
+
+- Combat: the percentage mana reserve now matches the mana number shown in Settings — an 82% reserve on a 66 max means 54 mana casts (not 55), so the spell no longer swaps to physical at the exact value you set as castable
+- bug reports addressed: paradigm-20260805-224742
+
+## 2.31.2
+
+- Combat: swapping an attack spell to physical on the round it kills the target no longer strands — a "Your command had no effect." reply now clears spell mode too, so the client re-observes instead of re-casting at the corpse
+- Combat: fixed a doubled physical swing when a between-round self-bless landed just before a spell kill (the survivor's fresh swing was re-fired on top of itself)
+- bug reports addressed: paradigm-20260805-220759
+
+## 2.31.1
+
+- Combat: once an attack spell stops for a monster — its MaxCasts rounds are spent, or mana falls below the per-cast reserve — the client now commits to the weapon for the rest of that monster instead of flipping back to the spell the moment a mana tick lifts it above the reserve again
+- bug reports addressed: paradigm-20260805-130847
+
+## 2.31.0
+
+- Combat spell "Min mana per cast" now shows its live equivalent beside each slot — the mana amount in Percentage mode, the % in Value mode (mirrors the Health tab)
+- Percentage mode now caps at 100%: Combat Min-mana-per-cast and the Health tab's HP / MA thresholds can no longer be set above 100% (existing over-100 values snap down when you switch to Percentage)
+- Settings tickers are whole numbers only — spell max-casts, min-enemies, min-mana, room monster counts, and Health thresholds no longer show trailing decimals
+
+## 2.30.3
+
+- Spell combat now mirrors physical combat: an attack spell is announced once and the server auto-repeats it each round, so the client no longer re-casts every round. Fixes the "double cast" and the cast at the monster that just died ("You don't see X here!")
+- Attack spells now engage a fresh monster instantly instead of waiting for it to swing at you first
+- Combat switches action correctly when it must: MaxCasts elapsed (per-target for single-target spells, per-room for AoE), out of mana or immune (cascade to the alternate spell / weapon), or a room thinned below the AoE minimum-enemies threshold
+- bug reports addressed: paradigm-20260805-105305, paradigm-20260805-105735, paradigm-20260805-105800
+
 ## 2.30.0
 
 - Terminal right-click menu gains a **Favorites** flyout — star up to 10 Go To destinations and walk there in one click without opening Navigation

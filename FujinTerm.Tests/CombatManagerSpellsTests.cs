@@ -50,11 +50,6 @@ public sealed class CombatManagerSpellsTests
         public bool Sneaking { get; set; }
         public HashSet<int> SeeHidden { get; } = new();
 
-        // Virtual clock for the combat heartbeat's recast floor — Tick() advances
-        // it a full round so the floor (which suppresses same-round re-casts, e.g.
-        // our own hit-echo tick) doesn't swallow the per-round heartbeat re-cast.
-        private DateTimeOffset _now = DateTimeOffset.UtcNow;
-
         public Harness(bool wireCaster = true)
         {
             DefaultPatterns.Seed(Router);
@@ -70,7 +65,6 @@ public sealed class CombatManagerSpellsTests
                 readOwnGivenName: () => "Fujin",
                 post: a => a(),                          // synchronous in tests
                 log: Log);
-            Combat.NowProvider = () => _now;
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.SetBackstabHooks(() => Sneaking, n => SeeHidden.Contains(n));
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
@@ -113,22 +107,12 @@ public sealed class CombatManagerSpellsTests
             Router.Dispatch(emitted);
         }
 
-        /// <summary>Mirror the AppServices tick-subscription order:
-        /// coordinator clears its cooldown first, then the combat heartbeat
-        /// re-decides. (CastingDirector sits between them in production but
+        /// <summary>One combat round. Mirrors the AppServices tick-subscription
+        /// order: the coordinator clears its cooldown first, then the combat
+        /// heartbeat re-decides. (CastingDirector sits between them in production but
         /// isn't under test here.)</summary>
         public void Tick()
         {
-            // A tick is a new combat round — advance the virtual clock past the
-            // heartbeat recast floor so the round's re-cast isn't suppressed.
-            TickAfter(TimeSpan.FromSeconds(6));
-        }
-
-        // Advance the virtual clock by an arbitrary gap, then tick — for exercising
-        // sub-round (our own hit-echo) vs full-round spacing against the recast floor.
-        public void TickAfter(TimeSpan gap)
-        {
-            _now += gap;
             Cast.OnCombatTick();
             Combat.OnCombatTick();
         }
@@ -369,61 +353,110 @@ public sealed class CombatManagerSpellsTests
         Assert.True(h.Combat.CanEngageMonster(1));                  // castable again → retry
     }
 
-    // ----- heartbeat keeps the cast going each round -------------------
+    // ----- announce once; the server auto-repeats -----------------------
 
     [Fact]
-    public void Heartbeat_ReCastsMultiAttack_EachRound()
+    public void Heartbeat_AnnouncesOnce_ServerAutoRepeats()
     {
+        // CONFIRMED mechanic: an announced spell attack auto-repeats server-side each
+        // round (like a weapon swing). So the client announces it ONCE and the
+        // heartbeat sends NOTHING on later rounds while the decision is unchanged —
+        // re-sending a spell the server is already repeating is the double/corpse-cast
+        // bug this rework removes.
         using Harness h = new();
         h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
         h.AddMonster(1, "giant rat");
 
-        h.Feed("Also here: giant rat.");      // round 1 — initial cast
-        h.Tick();                             // round 2 — heartbeat re-cast
-        h.Tick();                             // round 3 — heartbeat re-cast
+        h.Feed("Also here: giant rat.");      // announce once
+        h.Tick();                             // server repeats — no re-send
+        h.Tick();
 
-        Assert.Equal(3, h.AllSent.Count(s => s == "blast giant rat"));
+        Assert.Equal(1, h.AllSent.Count(s => s == "blast giant rat"));
         Assert.DoesNotContain("a giant rat", h.AllSent);
     }
 
     [Fact]
-    public void Heartbeat_SameRoundEchoTick_DoesNotReCast()
+    public void Heartbeat_MaxCastsReached_SwitchesToWeapon()
     {
-        // Our own "…for N damage!" hit matches the UserHits combat pattern and
-        // fires an extra tick a fraction of a second after the cast. That echo tick
-        // resets the coordinator cooldown, so without the recast floor the heartbeat
-        // fires a second cast this same round — which lands on the corpse when the
-        // echoed hit was the kill. The floor must swallow the echo but still allow
-        // the genuine next round's re-cast.
-        using Harness h = new();
-        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
-        h.AddMonster(1, "giant rat");
-
-        h.Feed("Also here: giant rat.");                 // round 1 — initial cast
-        h.TickAfter(TimeSpan.FromMilliseconds(300));      // hit-echo tick, same round
-        Assert.Equal(1, h.AllSent.Count(s => s == "blast giant rat"));   // no echo re-cast
-
-        h.TickAfter(TimeSpan.FromSeconds(6));             // genuine next round
-        Assert.Equal(2, h.AllSent.Count(s => s == "blast giant rat"));   // re-casts
-    }
-
-    [Fact]
-    public void Heartbeat_CastCapReached_FallsToWeaponOnce()
-    {
+        // MaxCasts is the number of rounds to cast the spell; after that the client
+        // re-announces the next cascade action (here the weapon, no attack spells
+        // configured). The spell is announced ONCE and the heartbeat counts each
+        // round toward the cap.
         using Harness h = new();
         h.Settings.MultiAttackSpell =
             new CombatSpellSlot { SpellName = "blast", MinEnemies = 1, MaxCastsPerRoom = 2 };
         h.AddMonster(1, "giant rat");
 
-        h.Feed("Also here: giant rat.");      // cast 1
-        h.Tick();                             // cast 2 (hits cap)
-        h.Tick();                             // cap reached → weapon
+        h.Feed("Also here: giant rat.");      // announce (round 1 of 2)
+        h.Tick();                             // round 2 of 2 — still repeating, no send
+        h.Tick();                             // cap reached → switch to weapon
 
-        Assert.Equal(2, h.AllSent.Count(s => s == "blast giant rat"));
+        Assert.Equal(1, h.AllSent.Count(s => s == "blast giant rat"));   // announced once
+        Assert.Equal("a giant rat", h.LastSent);                          // switched to weapon
+        h.Tick();                             // weapon mode — heartbeat quiet
         Assert.Equal("a giant rat", h.LastSent);
-        // Weapon mode now — heartbeat goes quiet, no further casts.
+    }
+
+    // ----- stop on death; re-engage the survivor as a spell -------------
+
+    [Fact]
+    public void SpellKill_SendsNothingAtTheCorpse()
+    {
+        // The kill ends the engagement (the server stops its repeat; the client
+        // clears spell mode). The heartbeat must not re-announce at the dead target —
+        // the "You don't see X here!" corpse cast this rework fixes.
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");        // announce harm
+        Assert.Equal("harm giant rat", h.LastSent);
+        int sentAtKill = h.Sent.Count;
+
+        h.Feed("The giant rat dies.");
         h.Tick();
-        Assert.Equal("a giant rat", h.LastSent);
+        h.Tick();
+
+        Assert.Equal(sentAtKill, h.Sent.Count);   // nothing sent after the kill
+    }
+
+    [Fact]
+    public void AfterKill_NextMonster_ReEngagedWithSpell()
+    {
+        // A spell fighter that kills a mob re-engages the next one with the SPELL
+        // (via the chooser), not a weapon swing.
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "orc");
+
+        h.Feed("Also here: giant rat.");        // announce harm at the rat
+        h.Feed("The giant rat dies.");          // kill
+        h.Feed("Also here: orc.");              // next monster
+        h.Tick();                               // re-announce at the survivor
+
+        Assert.Equal("harm orc", h.LastSent);
+        Assert.DoesNotContain("a orc", h.AllSent);
+    }
+
+    [Fact]
+    public void MaxCasts_SingleTarget_ResetsPerTarget()
+    {
+        // A single-target attack spell's MaxCasts is PER TARGET: after it caps on one
+        // mob, the next mob gets the spell again (not stuck on the weapon).
+        using Harness h = new();
+        h.Settings.NormalAttackSpell =
+            new CombatSpellSlot { SpellName = "harm", MinEnemies = 1, MaxCastsPerRoom = 1 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "orc");
+
+        h.Feed("Also here: giant rat.");        // announce harm at the rat (per-target cap 1)
+        Assert.Equal("harm giant rat", h.LastSent);
+        h.Feed("The giant rat dies.");          // kill → per-target counters reset
+        h.Feed("Also here: orc.");
+        h.Tick();
+
+        Assert.Equal("harm orc", h.LastSent);   // spell again, not weapon
     }
 
     [Fact]

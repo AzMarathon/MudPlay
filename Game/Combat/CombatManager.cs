@@ -581,6 +581,7 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory,
                 $"target died — clearing _currentTarget='{current}' (raw-name match)");
             _currentTarget = null;
+            _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
             ClearBackstabResolution();
             return;
         }
@@ -602,6 +603,7 @@ public sealed partial class CombatManager : IDisposable
                 _log?.Combat(LogCategory,
                     $"target died — clearing _currentTarget='{current}' (resolved-name match)");
                 _currentTarget = null;
+                _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
                 ClearBackstabResolution();
                 return;
             }
@@ -1756,8 +1758,13 @@ public sealed partial class CombatManager : IDisposable
         _log?.Combat(LogCategory,
             $"command-no-effect — dropping target={_currentTarget} + refreshing room");
         _currentTarget = null;
-        // A no-effect swing means the named target isn't hittable now — end any
-        // guard-redirect chase rather than re-firing at a target that won't resolve.
+        // A no-effect swing / cast means the named target isn't hittable now — a
+        // spell→weapon switch that raced the kill fires `aa <corpse>` and lands
+        // here, so end spell mode too (not just the weapon target) rather than
+        // leaving the heartbeat to re-cast at the corpse next tick.
+        _castingSpellTarget = null;
+        // ...and end any guard-redirect chase rather than re-firing at a target
+        // that won't resolve.
         _guardBlockedTarget = null;
         ClearBackstabResolution();
 
@@ -1800,6 +1807,7 @@ public sealed partial class CombatManager : IDisposable
         // Clear the target BEFORE the removal re-fires EntitiesObserved (mirrors
         // the specific-death ordering) so the re-pick sees a clean slate.
         _currentTarget = null;
+        _castingSpellTarget = null;   // end spell mode on the kill too — no corpse re-cast
         ClearBackstabResolution();
         if (_classifier.RemoveDeadEntity(presumedDead))
         {
@@ -1923,6 +1931,16 @@ public sealed partial class CombatManager : IDisposable
             // fresh swing — not the kill's Off. Suppressing it there strands the
             // survivor for a full round (the reported "cast a buff mid-fight, then
             // missed a combat round before re-attacking"), so resume.
+            //
+            // But bypass the attack-guard ONLY when the cast came at/after the last
+            // swing — that's what proves the cast interrupted the swing, so the
+            // "a fresh swing is still going" assumption behind ResumeAfterAttackGuard
+            // is genuinely false. When a swing went out AFTER the cast (a kill's
+            // death→re-observe re-engaged the survivor a beat after an earlier
+            // between-round bless), that swing IS fresh and in flight; bypassing the
+            // guard there fires a redundant second `aa <target>` on top of it — the
+            // reported "doubled down on the physical attack". Fall through to the
+            // guarded resume so ResumeAfterAttackGuard suppresses the double.
             if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _castingSpellTarget is null
                 && _classifier.Current is { } live
@@ -1934,7 +1952,25 @@ public sealed partial class CombatManager : IDisposable
                         "between-round-cast resume suppressed — kill this burst; " +
                         "deferring re-engage to the death→re-observe path");
                 else
-                    TryResumeEngage(live, bypassAttackGuard: true);
+                    TryResumeEngage(live, bypassAttackGuard: _lastAttackSentAt <= _betweenRoundCastAt);
+            }
+
+            // Spell analogue of the weapon resume above. A spell attack auto-repeats
+            // server-side, but a between-round cast (a survival heal) drops *Combat
+            // Off* and stops that repeat, so re-announce our spell. A kill already
+            // cleared _castingSpellTarget, so this fires only on a true interrupt (not
+            // a kill's Off); it re-decides through the chooser (DispatchRoundAction),
+            // so a lapsed spell condition switches cleanly, and it forces a fresh
+            // announce because the server dropped the repeat.
+            if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
+                && _castingSpellTarget is { } spellTarget
+                && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
+                && _classifier.Current is { } liveSpell
+                && TargetPresent(liveSpell, spellTarget)
+                && TryBuildCandidate(liveSpell, spellTarget) is { } spellCand)
+            {
+                _announcedSpellCode = null;
+                DispatchRoundAction(_readSettings(), spellCand, CountEngageable(liveSpell), liveSpell);
             }
 
             // Guard-redirect recovery. When a guarded monster is our priority, each

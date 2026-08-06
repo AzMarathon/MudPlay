@@ -85,21 +85,26 @@ public sealed class CastCoordinator : IDisposable
         _wireSender = sender;
     }
 
-    // True while any of the three gates would reject a cast (block latch,
-    // recent-cast cooldown, or min recast interval). Auto-clears the block latch on
-    // read once CastBlockExpiry elapses.
+    // Drop a stale block latch that no combat tick ever cleared (out of combat the
+    // tick never fires, so the latch must self-expire or buffs would never recast).
+    private void ExpireStaleBlockLatch()
+    {
+        if (_castBlocked && DateTimeOffset.Now - _castBlockedSince >= CastBlockExpiry)
+        {
+            _castBlocked = false;
+            _log?.Debug(LogCategory, "cast-block latch expired (no combat tick received)");
+        }
+    }
+
+    // True while the failure latch or the recent-cast cooldown would reject a cast.
+    // Auto-clears the block latch on read once CastBlockExpiry elapses.
     public bool IsCastBlocked
     {
         get
         {
-            DateTimeOffset now = DateTimeOffset.Now;
-            if (_castBlocked && now - _castBlockedSince >= CastBlockExpiry)
-            {
-                _castBlocked = false;
-                _log?.Debug(LogCategory, "cast-block latch expired (no combat tick received)");
-            }
+            ExpireStaleBlockLatch();
             if (_castBlocked) return true;
-            return now - _lastCastSentAt < CastCommandCooldown;
+            return DateTimeOffset.Now - _lastCastSentAt < CastCommandCooldown;
         }
     }
 
@@ -110,7 +115,12 @@ public sealed class CastCoordinator : IDisposable
     // "heal", "freedom"); whitespace-only is a no-op false return. target is an
     // optional explicit target — "self", a party member's name, or a monster name;
     // omit for self-cast spells where the server defaults the target to the caster.
-    public bool TryCast(string spellName, string? target = null)
+    // bypassRoundCooldown skips the once-per-round CastCommandCooldown so the initial
+    // combat engage casts at a fresh monster instantly — mirroring a weapon attack,
+    // which has no cooldown gate at all. It's used ONLY for that first engage; the
+    // failure latch and the MinRecastInterval burst guard still apply, so it can't
+    // double-fire or retry a fizzle. Per-round re-casts leave it false.
+    public bool TryCast(string spellName, string? target = null, bool bypassRoundCooldown = false)
     {
         if (string.IsNullOrWhiteSpace(spellName)) return false;
         if (_wireSender is null) return false;
@@ -127,7 +137,17 @@ public sealed class CastCoordinator : IDisposable
         }
 
         DateTimeOffset now = DateTimeOffset.Now;
-        if (IsCastBlocked)
+        ExpireStaleBlockLatch();
+
+        // The failure latch (fizzle / no-mana / interrupt) blocks regardless of the
+        // bypass — the last cast didn't take, so an instant retry would just re-fail.
+        if (_castBlocked)
+        {
+            CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked");
+            return false;
+        }
+        // The once-per-round cooldown gates re-casts; the initial engage bypasses it.
+        if (!bypassRoundCooldown && now - _lastCastSentAt < CastCommandCooldown)
         {
             CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked");
             return false;
