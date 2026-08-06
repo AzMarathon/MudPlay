@@ -1,14 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.33.0**
-> - Auto-train and Auto-train-stats are now independent toggles — auto-level without auto-spending CP, or vice-versa
-> - Player Workshop → CP Allocation: new "Apply this level" button applies a selected row's stats at the trainer you're at — only when its CP fully lines up; it confirms via `stat` and clears the row on verified success
-> - Auto-train / Auto-train-stats now toggle from the CP Allocation tab too, in sync with Settings → Auto-Trainer; the old Auto-Train toolbar button, menu item and keybind are removed
-> - Settings → Auto-Trainer: new "Do not train above level" ceiling — auto-train reaches that level then stops (no over-levelling)
-> - Navigation map: trainer rooms now show a triple up-chevron "level up here" marker — every trainer for the active game-data set
-> - Navigation Management is now one shared window from both the toolbar Start button and the map's Navigation Management button (re-focused, never a second copy) — Start opens it on the Go To tab, the map button on Loops
-> - Toolbar Start no longer greys out while a loop/goto is running; pressing it (click or Alt+V) opens Manage so you can switch destination by hitting Run on a different favourite / loop, and it stays depressed while any movement engine is in progress
+> **Version 2.33.1**
+> - Item-cast buff swap now restores the item's actual slot: an off-hand buff (e.g. engraved warhorn) puts the off-hand shield back instead of re-equipping the weapon; works for any worn slot, not just weapon/off-hand
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

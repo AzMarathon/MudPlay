@@ -17,10 +17,14 @@ public sealed class ItemCastSequencerTests
 {
     private static readonly IReadOnlyList<ClassCastItem> Items = new[]
     {
-        new ClassCastItem(1, "Emerald Tipped Crozier", 50, "bless", 0, 0),  // unlimited, free, 1H
+        new ClassCastItem(1, "Emerald Tipped Crozier", 50, "bless", 0, 0),  // unlimited, free, 1H weapon
         new ClassCastItem(2, "Scroll of Light", 60, "light", 0, 3),         // limited
         new ClassCastItem(3, "Shimmering Greatsword", 70, "shield", 8, 0,   // unlimited, two-handed
             IsTwoHanded: true),
+        new ClassCastItem(4, "Engraved Warhorn", 80, "warhorn blast", 0, 0, // unlimited, off-hand item
+            WearSlot: "Off-Hand"),
+        new ClassCastItem(5, "Amulet of Vigor", 90, "bless", 0, 0,          // unlimited, worn on the neck
+            WearSlot: "Neck"),
     };
 
     private static InventorySnapshot InvWith(params EquippedItem[] equipped)
@@ -115,6 +119,56 @@ public sealed class ItemCastSequencerTests
             "eq Shimmering Greatsword",
             "use Shimmering Greatsword",
             "eq battle axe",
+        }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_OffHandItem_RestoresOffHandNotWeapon()
+    {
+        // The reported bug: an off-hand cast item (a warhorn) displaces the OFF-HAND,
+        // so the off-hand (shield) must come back — the weapon is never touched.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeq(InvWith(
+            new EquippedItem("throwing hammers", "Weapon Hand"),
+            new EquippedItem("griffon shield", "Off-Hand")));
+
+        Assert.True(seq.Execute("#engraved warhorn"));
+        Assert.Equal(new[]
+        {
+            "eq Engraved Warhorn",
+            "use Engraved Warhorn",
+            "eq griffon shield",
+        }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_OffHandItem_NoOffHandHeld_SkipsRestore()
+    {
+        // Off-hand empty: nothing to restore, and the weapon stays put.
+        (ItemCastSequencer seq, List<byte[]> sent) =
+            NewSeq(InvWith(new EquippedItem("throwing hammers", "Weapon Hand")));
+
+        Assert.True(seq.Execute("#engraved warhorn"));
+        Assert.Equal(new[]
+        {
+            "eq Engraved Warhorn",
+            "use Engraved Warhorn",
+        }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_WornItem_RestoresThatSlot()
+    {
+        // Restore is general across worn slots — a neck cast item restores the neck.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeq(InvWith(
+            new EquippedItem("throwing hammers", "Weapon Hand"),
+            new EquippedItem("amethyst pendant", "Neck")));
+
+        Assert.True(seq.Execute("#amulet of vigor"));
+        Assert.Equal(new[]
+        {
+            "eq Amulet of Vigor",
+            "use Amulet of Vigor",
+            "eq amethyst pendant",
         }, Decode(sent));
     }
 

@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.33.1
+
+- Item-cast buff swap now restores the item's actual slot: an off-hand buff (e.g. engraved warhorn) puts the off-hand shield back instead of re-equipping the weapon; works for any worn slot, not just weapon/off-hand
+- bug reports addressed: paradigm-20260806-015831
+
 ## 2.33.0
 
 - Auto-train and Auto-train-stats are now independent toggles — auto-level without auto-spending CP, or auto-apply the plan on a manual/@train without auto-levelling

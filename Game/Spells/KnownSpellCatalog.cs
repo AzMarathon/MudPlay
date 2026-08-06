@@ -278,6 +278,10 @@ public sealed class KnownSpellCatalog
     private const int FirstWornSlot = 2;
     private const int LastWornSlot = 19;
 
+    // Inventory slot label a wielded weapon occupies (weapons aren't in the Worn
+    // table). Matches ItemCastSequencer's WeaponHandSlot + EquippedItem.Slot.
+    private const string WeaponHandSlotLabel = "Weapon Hand";
+
     // Every cast-on-use item the class can use — an Items row that both
     // (a) is usable by classNumber via its ClassRest-0..9 restriction (no
     // entries => universal) and (b) carries a CastsSp ability (code 43) naming
@@ -354,7 +358,8 @@ public sealed class KnownSpellCatalog
                 IsTwoHanded: LookupEnums.IsTwoHandedWeaponType(ReadInt(row, "WeaponType")),
                 ClassRestricted: ItemClassRestricted(row, classNumber),
                 MinLevel: minLevel,
-                SpellEffect: spellEffect));
+                SpellEffect: spellEffect,
+                WearSlot: WearSlotFor(row)));
         }
 
         results.Sort(static (a, b) =>
@@ -425,6 +430,18 @@ public sealed class KnownSpellCatalog
         if (ReadInt(row, "ItemType") == WeaponItemType) return true;
         int worn = ReadInt(row, "Worn");
         return worn is >= FirstWornSlot and <= LastWornSlot;
+    }
+
+    // The equip slot the cast item occupies, normalized to the inventory's
+    // EquippedItem.Slot labels so the sequencer can look up what it displaces: a
+    // weapon readies into the Weapon Hand; everything else into its Worn slot
+    // (Off-Hand for a shield / warhorn, Neck for an amulet, …). Empty only for an
+    // item that isn't a weapon and has no mapped Worn slot — the equippable filter
+    // above already excludes those, so in practice this always resolves.
+    private static string WearSlotFor(JsonElement row)
+    {
+        if (ReadInt(row, "ItemType") == WeaponItemType) return WeaponHandSlotLabel;
+        return LookupEnums.FormatWornSlot(ReadString(row, "Worn")) ?? string.Empty;
     }
 
     // One-pass Spells.Number → (Name, ManaCost) map for resolving cast-item
