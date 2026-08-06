@@ -1616,16 +1616,21 @@ public sealed class MapControl : Control
     // drawn around it so a walk-to that halts one room short is unmistakable.
     private static void DrawBossCrown(DrawingContext ctx, Rect cell, bool stopBefore)
     {
-        double span = Math.Min(cell.Width, cell.Height);
+        // Size to the drawn room NODE (DrawRoomNode's cell.Width * 0.45 square),
+        // not the whole tile, so the crown sits inside the visible room square
+        // instead of spilling over the gap between tiles.
+        double nodeSize = Math.Max(cell.Width * 0.45, 3.0);
         double mx = cell.X + cell.Width  / 2.0;
         double my = cell.Y + cell.Height / 2.0;
-        double r  = span * 0.28;                     // crown half-width
+        double r  = nodeSize * 0.34;                  // crown half-width — fits inside the node (and inside the ring)
 
         // Stop-before halt ring first (under the crown) — black edge then red so it
-        // reads as a red ring with a dark outline on any cell fill.
+        // reads as a red ring with a dark outline on any cell fill. Inscribed in the
+        // room node so the room's edges just touch the ring; the crown (widest point
+        // ~1.15r ≈ 0.39·node) clears comfortably inside it.
         if (stopBefore)
         {
-            double ringR = r * 1.5;
+            double ringR = nodeSize * 0.5;
             ctx.DrawEllipse(null, StopRingEdgePen, new Point(mx, my), ringR, ringR);
             ctx.DrawEllipse(null, StopRingPen,     new Point(mx, my), ringR, ringR);
         }
