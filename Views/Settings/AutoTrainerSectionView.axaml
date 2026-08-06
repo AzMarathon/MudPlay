@@ -18,7 +18,9 @@
 
     <Grid Margin="22" RowDefinitions="Auto,Auto,*" IsVisible="{Binding HasProfile}">
 
-        <!-- Toggles: master Auto-train then the cascading Auto-train stats on one row. -->
+        <!-- Two independent toggles on one row: Auto-train (auto-level) and
+             Auto-train stats (auto-apply the CP plan). Decoupled — either can run
+             without the other, so neither gates the other's enabled state. -->
         <StackPanel Grid.Row="0" Spacing="4">
             <StackPanel Orientation="Horizontal" Spacing="24">
                 <CheckBox Content="Auto-train"
@@ -26,7 +28,6 @@
                           ToolTip.Tip="When running a loop / auto-lair and a level-up is available, detour to an allowed trainer and train."/>
                 <CheckBox Content="Auto-train stats"
                           IsChecked="{Binding AutoTrainStats, Mode=TwoWay}"
-                          IsEnabled="{Binding AutoTrain}"
                           ToolTip.Tip="After training a level, apply the CP plan's row for the new level via the train-stats screen."/>
             </StackPanel>
             <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="540"
@@ -43,6 +44,17 @@
                                FormatString="0"
                                Value="{Binding LevelsToKeep, Mode=TwoWay}"
                                ToolTip.Tip="Always keep this many trainable levels banked. Auto-train and Train Now stop once only this many levels remain reachable. 0 trains every banked level."/>
+            </StackPanel>
+
+            <!-- Do not train above: a level ceiling. Auto-train reaches this level
+                 but never trains above it (reach N, then stop) — no over-levelling. -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Do not train above level" VerticalAlignment="Center"/>
+                <NumericUpDown MinWidth="110" VerticalAlignment="Center"
+                               Minimum="0" Maximum="200" Increment="1"
+                               FormatString="0"
+                               Value="{Binding DoNotTrainAbove, Mode=TwoWay}"
+                               ToolTip.Tip="Auto-train will train up to this level but never above it (reach it, then stop) — a guard against over-levelling once the exp and level-buffer gates would otherwise keep training. 0 = no ceiling."/>
             </StackPanel>
 
             <!-- Announce level-ups: when a live exp gain makes a new level

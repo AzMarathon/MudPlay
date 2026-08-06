@@ -33,6 +33,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private readonly ProfileService _profile;
     private readonly CpPlanState _planState;
     private readonly TrainerWalkManager _trainerWalk;
+    private readonly AutoTrainManager _autoTrain;
     private Control? _view;
     private bool _suppress;
     // The cell most recently edited by the user, so an overspend trims that cell
@@ -52,19 +53,33 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     // The grid row the user has selected — drives RemoveRowCommand.
     [ObservableProperty] private CpPlanRowViewModel? _selectedRow;
-    // Transient inline error (e.g. trying to remove a middle row); cleared on the next valid action.
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasRemoveError))]
-    private string? _removeError;
 
-    // True when a RemoveError is showing — drives its visibility.
-    public bool HasRemoveError => !string.IsNullOrEmpty(RemoveError);
-
-    // ----- auto-train ----------------------------------------------------
+    // ----- consolidated status line --------------------------------------------
+    // One notice area (right of the action buttons) for every transient/standing
+    // message this tab emits, so "can train now", "training…", apply results and
+    // row-edit errors never light up in three separate spots at once. Precedence,
+    // most-urgent first: an in-flight train, then the last action result, then the
+    // passive can-train hint — StatusText surfaces exactly one.
     // True when the saved plan has an affordable raise to apply at the current level.
-    [ObservableProperty] private bool _canTrainNow;
-    // True while a train run is in flight — disables the Train Now button.
-    [ObservableProperty] private bool _autoTrainBusy;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText), nameof(HasStatusText))]
+    private bool _canTrainNow;
+    // True while a train run is in flight (either engine) — disables the buttons.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText), nameof(HasStatusText))]
+    private bool _autoTrainBusy;
+    // Last user-action message: apply result, CP-fit refusal, or a row-edit error.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText), nameof(HasStatusText))]
+    private string? _actionMessage;
+
+    public string? StatusText =>
+        AutoTrainBusy ? "Training…"
+        : !string.IsNullOrEmpty(ActionMessage) ? ActionMessage
+        : CanTrainNow ? "● Can train now"
+        : null;
+
+    public bool HasStatusText => !string.IsNullOrEmpty(StatusText);
 
     // Captured on RefreshBaseline; inputs to the recalc.
     private CpPlanEntry _baseline = new();
@@ -74,7 +89,8 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     public CpAllocationSectionViewModel(PlayerStats stats, GameDataCache gameData,
                                         InventoryManager inventory, ProfileService profile,
-                                        CpPlanState planState, TrainerWalkManager trainerWalk)
+                                        CpPlanState planState, TrainerWalkManager trainerWalk,
+                                        AutoTrainManager autoTrain)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -82,22 +98,28 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(planState);
         ArgumentNullException.ThrowIfNull(trainerWalk);
+        ArgumentNullException.ThrowIfNull(autoTrain);
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
         _profile = profile;
         _planState = planState;
         _trainerWalk = trainerWalk;
+        _autoTrain = autoTrain;
 
         LoadPlanFromProfile();
         RefreshBaseline();
         SyncAutoTrain();
+        SeedAutoTrainToggles();
 
         _stats.PropertyChanged += OnStatsChanged;
         _inventory.Changed += OnInventoryChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
+        _profile.ProfileSaving += OnProfileSavingReseed;
         _trainerWalk.StateChanged += OnAutoTrainStateChanged;
         _trainerWalk.PlanApplied += OnPlanApplied;
+        _autoTrain.StateChanged += OnAutoTrainStateChanged;
+        _autoTrain.ApplyTargetsCompleted += OnApplyLevelCompleted;
     }
 
     // Auto-train applied (and removed) a level's CP row — reload the grid so the
@@ -118,7 +140,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         int level = Rows.Count > 0 ? Rows[^1].Level + 1 : Math.Max(2, _stats.Level + 1);
         CpPlanEntry seed = Rows.Count > 0 ? Rows[^1].ToEntry() : _baseline;
         _lastEditedStat = null;
-        RemoveError = null;
+        ActionMessage = null;
         Rows.Add(NewRow(level, seed));
         RecalcGrid();
         Persist();
@@ -133,16 +155,16 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         if (Rows.Count == 0) return;
         if (SelectedRow is null)
         {
-            RemoveError = "Select the top or bottom row to remove.";
+            ActionMessage = "Select the top or bottom row to remove.";
             return;
         }
         int idx = Rows.IndexOf(SelectedRow);
         if (idx != 0 && idx != Rows.Count - 1)
         {
-            RemoveError = "You can only remove the top or bottom row of the plan.";
+            ActionMessage = "You can only remove the top or bottom row of the plan.";
             return;
         }
-        RemoveError = null;
+        ActionMessage = null;
         _lastEditedStat = null;
         Rows.RemoveAt(idx);
         RecalcGrid();
@@ -154,14 +176,19 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private void Reset()
     {
         _lastEditedStat = null;
-        RemoveError = null;
+        ActionMessage = null;
         Rows.Clear();
         RecalcGrid();
         Persist();
     }
 
-    // Clearing / changing the selection dismisses a stale remove error.
-    partial void OnSelectedRowChanged(CpPlanRowViewModel? value) => RemoveError = null;
+    // Clearing / changing the selection dismisses stale status + re-evaluates the
+    // Apply-this-level button against the newly selected row.
+    partial void OnSelectedRowChanged(CpPlanRowViewModel? value)
+    {
+        ActionMessage = null;
+        ApplyLevelCommand.NotifyCanExecuteChanged();
+    }
 
     // Persist the current (clamped) plan to the loaded profile. Called after every
     // structural edit (add / remove / reset) and cell edit, so the plan saves itself
@@ -185,13 +212,148 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     private void OnAutoTrainStateChanged() => SyncAutoTrain();
 
-    // Mirror the coordinator's live state into the bound properties + command.
+    // Mirror the coordinator's live state into the bound properties + commands.
+    // Busy is either engine — the walk-train (Train now) or the form driver
+    // (Apply this level) — so both buttons disable while any train is in flight.
     private void SyncAutoTrain()
     {
         CanTrainNow = _trainerWalk.CanTrainNow;
-        AutoTrainBusy = _trainerWalk.IsBusy;
+        AutoTrainBusy = _trainerWalk.IsBusy || _autoTrain.IsBusy;
         TrainNowCommand.NotifyCanExecuteChanged();
+        ApplyLevelCommand.NotifyCanExecuteChanged();
     }
+
+    // ----- auto-train parity toggles (mirror Settings → Auto-Trainer) ----------
+    // Auto-train / Auto-train-stats live in profile.Settings["AutoTrainer"]. These
+    // toggles drive that DTO from the CP-Alloc tab; a flip elsewhere (Settings tab,
+    // reconnect) reseeds these via ProfileSaving so every surface stays agreed.
+    [ObservableProperty] private bool _autoTrainOn;
+    [ObservableProperty] private bool _autoTrainStatsOn;
+    private bool _suppressToggleWriteback;
+
+    private void SeedAutoTrainToggles()
+    {
+        AutoTrainerSettings dto = ReadAutoTrainer();
+        _suppressToggleWriteback = true;
+        try { AutoTrainOn = dto.AutoTrain; AutoTrainStatsOn = dto.AutoTrainStats; }
+        finally { _suppressToggleWriteback = false; }
+    }
+
+    private AutoTrainerSettings ReadAutoTrainer()
+    {
+        if (_profile.Current?.Settings is { } s
+            && s.TryGetValue("AutoTrainer", out System.Text.Json.JsonElement json))
+        {
+            try { return System.Text.Json.JsonSerializer.Deserialize<AutoTrainerSettings>(json) ?? new(); }
+            catch { /* malformed → defaults */ }
+        }
+        return new AutoTrainerSettings();
+    }
+
+    partial void OnAutoTrainOnChanged(bool value)
+    {
+        if (_suppressToggleWriteback) return;
+        _profile.UpdateSection<AutoTrainerSettings>("AutoTrainer", dto => dto.AutoTrain = value);
+    }
+
+    partial void OnAutoTrainStatsOnChanged(bool value)
+    {
+        if (_suppressToggleWriteback) return;
+        // Auto-train stats needs a saved CP plan to apply — refuse + revert without one.
+        if (value && Rows.Count == 0)
+        {
+            ActionMessage = "Save a CP allocation plan first — Auto-train stats has nothing to apply.";
+            _suppressToggleWriteback = true;
+            try { AutoTrainStatsOn = false; }
+            finally { _suppressToggleWriteback = false; }
+            return;
+        }
+        _profile.UpdateSection<AutoTrainerSettings>("AutoTrainer", dto => dto.AutoTrainStats = value);
+    }
+
+    // A save from any surface reseeds our toggles so they never drift from the
+    // persisted AutoTrainerSettings (the Settings tab, the reconnect re-enable, …).
+    private void OnProfileSavingReseed(CharacterProfile _) => SeedAutoTrainToggles();
+
+    // ----- Apply this level (semi-manual) --------------------------------------
+    // Apply the SELECTED plan row's stats at the trainer we're standing at — only
+    // when its CP genuinely lines up (fully affordable from live CP, nothing
+    // trimmed). On a `stat`-confirmed success the row is cleared; else a status shows.
+    [RelayCommand(CanExecute = nameof(CanApplyLevel))]
+    private void ApplyLevel()
+    {
+        if (!TryResolveSelectedTargets(out int[] current, out int[] target, out string reason))
+        {
+            ActionMessage = reason;
+            return;
+        }
+        ActionMessage = "Applying at the trainer…";
+        _autoTrain.ApplyTargets(current, target);   // fires StateChanged → SyncAutoTrain disables the buttons
+        SyncAutoTrain();
+    }
+
+    // Enabled the moment a plan row is selected and no train run is in flight; the
+    // CP-lines-up / has-a-raise validation runs on click so the refusal reasons in
+    // TryResolveSelectedTargets actually reach the user instead of a silently-dead
+    // button.
+    private bool CanApplyLevel() =>
+        !AutoTrainBusy && !_autoTrain.IsBusy && HasCharacter && SelectedRow is not null;
+
+    // The explicit apply reported back: clear the row only on a `stat`-verified success.
+    private void OnApplyLevelCompleted(bool ok)
+    {
+        if (ok && SelectedRow is { } row)
+        {
+            int level = row.Level;
+            // Remove first: dropping the selected row nulls SelectedRow, which clears
+            // ActionMessage via OnSelectedRowChanged — so set the success text AFTER.
+            Rows.Remove(row);
+            RecalcGrid();
+            Persist();
+            ActionMessage = $"Level {level} applied — plan row cleared.";
+        }
+        else if (!ok)
+        {
+            ActionMessage = "Couldn't confirm the training — nothing cleared (are you at a trainer?).";
+        }
+        SyncAutoTrain();
+    }
+
+    // Resolve the selected row to (current raw baseline, affordable clamped targets),
+    // with a user-facing `reason` when it can't: no row / no character, the row's full
+    // spend doesn't fit live CP (the budget clamp trimmed it), or there's nothing left
+    // to raise (already trained). Order matters — a trim outranks "already trained" so a
+    // CP shortfall never masquerades as a fully-trained level.
+    private bool TryResolveSelectedTargets(out int[] current, out int[] target, out string reason)
+    {
+        current = target = Array.Empty<int>();
+        reason = string.Empty;
+        if (!HasCharacter || SelectedRow is null)
+        {
+            reason = "Select a plan row to apply.";
+            return false;
+        }
+        int[] prev = ToArr(_baseline);
+        int[] rowTargets = ToArr(SelectedRow.ToEntry());
+        int[] clamped = CpPlanCalculator.ClampRowToBudget(
+            prev, rowTargets, ToArr(_raceMin), ToArr(_raceMax), _stats.Cp, _realm, null, out _);
+        if (!clamped.SequenceEqual(rowTargets))
+        {
+            reason = "This level's CP doesn't line up with the CP you have available.";
+            return false;
+        }
+        if (!AutoTrainSequenceBuilder.HasRaise(prev, clamped))
+        {
+            reason = "This level's stats are already trained — nothing to raise.";
+            return false;
+        }
+        current = prev;
+        target = clamped;
+        return true;
+    }
+
+    private static int[] ToArr(CpPlanEntry e) =>
+        new[] { e.Strength, e.Intellect, e.Willpower, e.Agility, e.Health, e.Charm };
 
     // ----- baseline + recalc ---------------------------------------------
 
@@ -242,6 +404,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
         RemoveRowCommand.NotifyCanExecuteChanged();
         ResetCommand.NotifyCanExecuteChanged();
+        ApplyLevelCommand.NotifyCanExecuteChanged();
 
         // Publish the (clamped) plan so the Level Projection tab can apply the
         // planned stat increases at each level.
@@ -293,6 +456,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         LoadPlanFromProfile();
         RefreshBaseline();
         SyncAutoTrain();
+        SeedAutoTrainToggles();
     }
 
     public override void Dispose()
@@ -300,7 +464,10 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         _stats.PropertyChanged -= OnStatsChanged;
         _inventory.Changed -= OnInventoryChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
+        _profile.ProfileSaving -= OnProfileSavingReseed;
         _trainerWalk.StateChanged -= OnAutoTrainStateChanged;
         _trainerWalk.PlanApplied -= OnPlanApplied;
+        _autoTrain.StateChanged -= OnAutoTrainStateChanged;
+        _autoTrain.ApplyTargetsCompleted -= OnApplyLevelCompleted;
     }
 }

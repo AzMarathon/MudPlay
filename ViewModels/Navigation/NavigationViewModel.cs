@@ -82,6 +82,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnStashChanged();
         _services.Bosses.Changed += RefreshBossRooms;
         RefreshBossRooms();
+        RefreshTrainerRooms();   // trainers come from game data; refreshed on set swap via OnGraphReloaded
         _services.AutoLair.MarkedChanged += OnAutoLairMarkedChanged;
         _services.AutoLair.ActiveChanged += OnAutoLairActiveChanged;
         _services.AutoLair.PhaseChanged  += OnAutoLairPhaseChanged;
@@ -491,6 +492,19 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         StopBeforeBossRooms = stop;
     }
 
+    // All trainer rooms for the active game-data set (shops with ShopType == 8),
+    // crawled straight from TrainerCatalog. Realm-scoped by the active set; the map
+    // draws only the current map, so off-map trainers never paint. Refreshed on set
+    // swap via OnGraphReloaded (the same beat that re-lays out the map).
+    private void RefreshTrainerRooms()
+    {
+        HashSet<RoomKey>? rooms = null;
+        foreach (Game.GameData.TrainerShop t in Game.GameData.TrainerCatalog.Enumerate(_services.GameData))
+            if (t.HasRoom)
+                (rooms ??= new HashSet<RoomKey>()).Add(new RoomKey(t.Map, t.Room));
+        TrainerRooms = rooms;
+    }
+
     // Death does a clean stop of every engine (same as the Stop button), which
     // clears the walker's own destination. Drop the UI's armed walk-to target too
     // so a later Run can't re-send us to a stale destination (the room we just
@@ -841,6 +855,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // RefreshBossRooms on BossStore.Changed / game-data set swap.
     [ObservableProperty] private IReadOnlySet<RoomKey>? _bossRooms;
     [ObservableProperty] private IReadOnlySet<RoomKey>? _stopBeforeBossRooms;
+
+    // Trainer rooms (game-data shops with ShopType == 8) — bound to
+    // MapControl.TrainerRooms (an up-chevron marker). Whole-active-set scope like
+    // BossRooms; refreshed by RefreshTrainerRooms when the map re-lays out.
+    [ObservableProperty] private IReadOnlySet<RoomKey>? _trainerRooms;
 
     [ObservableProperty] private bool _isAutoLairing;
 
@@ -2419,44 +2438,20 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     }
 
     // Open the Manage dialog — modeless surface for renaming / deleting
-    // saved loops and unmarking Auto-Lair rooms. This is where naming +
-    // lifecycle CRUD live; the bottom build strip is a pure status
-    // display.
+    // saved loops and unmarking Auto-Lair rooms. Routed through the shared
+    // single-instance opener (owned by the main VM) so this button and the
+    // toolbar Start fallback surface the exact same window rather than two
+    // identical ones. The opener pulls this map's live LoopBuilder draft for
+    // the dialog's Draft section.
     [RelayCommand]
-    private async Task OpenManagerAsync()
+    private void OpenManager() => _services.OpenNavManager(startOnGotoTab: false);
+
+    // Exit LoopBuild mode after the Manage dialog's Draft section saves /
+    // discards the in-progress loop, so the bottom builder strip collapses.
+    // Invoked by the shared opener's onDraftConsumed hand-off.
+    public void ConsumeLoopBuildDraft()
     {
-        // Pass the live LoopBuilder (when in build mode) so the
-        // dialog's Draft section is the user's authoritative Save
-        // surface. The consumed callback exits LoopBuild mode here
-        // after Save / Discard so the bottom builder strip collapses.
-        // Runner reference lets the dialog show "Save running loop"
-        // + drive the editor's apply-to-running-loop prompt.
-        // New is now an away-from-the-map editor flow (opens the
-        // LoopEditor dialog) so no map-side hand-off callback is
-        // needed any more.
-        NavigationManagerDialogViewModel vm = new(
-            _services.Loops,
-            _services.Lairs,
-            _services.LairTimers,
-            _services.RoomGraph,
-            _services.Confirm,
-            _services.Dialogs,
-            folders: _services.NavFolders,
-            draft: LoopBuilder,
-            onDraftConsumed: () =>
-            {
-                if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
-            },
-            runner: _services.LoopRunner,
-            mpImporter: _services.MpImporter,
-            log: _services.Log,
-            search: _services.RoomSearch,
-            walker: _services.Walker,
-            movement: _services.MovementControl,
-            autoLair: _services.AutoLair,
-            favorites: _services.Favorites);
-        await _services.Dialogs
-            .OpenWindowAsync<NavigationManagerDialogViewModel, bool>(vm);
+        if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
     }
 
     // Toggle the Lair "build" mode (mirrors ToggleLoopMode). Exiting build
@@ -2824,6 +2819,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // its monster + distance caches.
         RefreshLayout();
         RefreshTeleportRooms();
+        RefreshTrainerRooms();   // trainer set is per game-data set
     }
 
     // Walk every room with a non-zero Cmd and ask TBInfo whether the CMD's

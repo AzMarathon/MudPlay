@@ -52,11 +52,16 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
 
     // Master auto-train toggle (level-up at the trainer during loop/auto-lair).
     [ObservableProperty] private bool _autoTrain;
-    // Cascading toggle — apply the CP plan via `train stats` after each train.
+    // Independent toggle — apply the CP plan via `train stats` after each train.
     [ObservableProperty] private bool _autoTrainStats;
 
     // Trainable levels to always keep banked (0 = train everything).
     [ObservableProperty] private int _levelsToKeep;
+
+    // Level ceiling — auto-train reaches this level but never trains above it
+    // (0 = no ceiling). Guards against over-levelling once the exp/buffer gates
+    // would otherwise keep training.
+    [ObservableProperty] private int _doNotTrainAbove;
 
     // Broadcast "I can now train to level: N" when a live exp gain makes a new level trainable.
     [ObservableProperty] private bool _announceLevelUps;
@@ -87,6 +92,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     {
         Title, "Auto-train", "Auto-train stats", "trainer", "train", "guild", "level up",
         "announce level-ups", "announce channel", "levels to keep", "keep banked", "buffer",
+        "do not train above", "level ceiling", "max level", "stop at level",
     };
 
     public AutoTrainerSectionViewModel()
@@ -130,8 +136,9 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         AutoTrainerSettings dto = new()
         {
             AutoTrain = AutoTrain,
-            AutoTrainStats = AutoTrain && AutoTrainStats,   // cascade — never store stats-on without train-on
+            AutoTrainStats = AutoTrainStats,   // independent of AutoTrain (decoupled) — still gated on a saved CP plan
             LevelsToKeep = Math.Max(0, LevelsToKeep),
+            DoNotTrainAbove = Math.Max(0, DoNotTrainAbove),
             AnnounceLevelUps = AnnounceLevelUps,
             AnnounceChannel = AnnounceChannel,
             DisabledTrainers = disabled.Count == 0 ? null : disabled,
@@ -168,8 +175,9 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     {
         AutoTrainerSettings dto = ReadOrDefault();
         AutoTrain = dto.AutoTrain;
-        AutoTrainStats = dto.AutoTrain && dto.AutoTrainStats;
+        AutoTrainStats = dto.AutoTrainStats;
         LevelsToKeep = Math.Max(0, dto.LevelsToKeep);
+        DoNotTrainAbove = Math.Max(0, dto.DoNotTrainAbove);
         AnnounceLevelUps = dto.AnnounceLevelUps;
         AnnounceChannel = dto.AnnounceChannel;
         RebuildTrainers(dto.DisabledTrainers);
@@ -249,13 +257,10 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         }
     }
 
-    // Turning the master toggle off disables the stats cascade too, so the UI
-    // never shows "apply stats" enabled without "train" behind it.
-    partial void OnAutoTrainChanged(bool value)
-    {
-        if (!value) AutoTrainStats = false;
-        MarkDirty();
-    }
+    // Auto-train (auto-level at a trainer) and Auto-train stats (auto-apply the CP
+    // plan) are independent toggles — turning the master off no longer force-clears
+    // stats. Stats still requires a saved CP plan (see OnAutoTrainStatsChanged).
+    partial void OnAutoTrainChanged(bool value) => MarkDirty();
 
     partial void OnAutoTrainStatsChanged(bool value)
     {
@@ -285,6 +290,12 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         // The numeric stepper is clamped in the view, but guard here too so a
         // stray negative never persists as a bogus buffer.
         if (value < 0) { LevelsToKeep = 0; return; }   // re-enters with 0, marks dirty there
+        MarkDirty();
+    }
+
+    partial void OnDoNotTrainAboveChanged(int value)
+    {
+        if (value < 0) { DoNotTrainAbove = 0; return; }   // re-enters with 0, marks dirty there
         MarkDirty();
     }
 

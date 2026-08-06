@@ -157,6 +157,12 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlySet<RoomKey>?> StopBeforeBossRoomsProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(StopBeforeBossRooms));
 
+    // Rooms holding a trainer (game-data shops with ShopType == 8) — each gets an
+    // up-chevron "level up here" icon. Supplied by NavigationViewModel from
+    // TrainerCatalog; refreshed when the map re-lays out (game-data set swap).
+    public static readonly StyledProperty<IReadOnlySet<RoomKey>?> TrainerRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(TrainerRooms));
+
     public static readonly StyledProperty<bool> WalkPathIsAutoLairProperty =
         AvaloniaProperty.Register<MapControl, bool>(nameof(WalkPathIsAutoLair));
 
@@ -327,6 +333,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(StopBeforeBossRoomsProperty);
         set => SetValue(StopBeforeBossRoomsProperty, value);
+    }
+
+    public IReadOnlySet<RoomKey>? TrainerRooms
+    {
+        get => GetValue(TrainerRoomsProperty);
+        set => SetValue(TrainerRoomsProperty, value);
     }
 
     public bool WalkPathIsAutoLair
@@ -704,6 +716,20 @@ public sealed class MapControl : Control
     private static readonly IPen   CrownRimPen    = new Pen(new SolidColorBrush(Color.Parse("#7C5C14")), 1.0);
     private static readonly IPen   StopRingPen     = new Pen(new SolidColorBrush(Color.Parse("#E64545")), 2.0);
     private static readonly IPen   StopRingEdgePen = new Pen(new SolidColorBrush(Color.Parse("#141414")), 3.6);
+
+    // Trainer-room "level up here" double up-chevron — a bright level-up green over a
+    // dark edge so the carets read on any cell fill. Distinct from crown gold, shop
+    // cyan and lair magenta.
+    private static readonly IPen   TrainerChevronPen = new Pen(new SolidColorBrush(Color.Parse("#3FD07A")), 2.4)
+    {
+        LineJoin = PenLineJoin.Round,
+        LineCap  = PenLineCap.Round,
+    };
+    private static readonly IPen   TrainerChevronEdgePen = new Pen(new SolidColorBrush(Color.Parse("#0E3A22")), 4.2)
+    {
+        LineJoin = PenLineJoin.Round,
+        LineCap  = PenLineCap.Round,
+    };
     private static readonly IBrush SeqNumberFill  = new SolidColorBrush(Color.Parse("#FFFFFF"));
     private static readonly IBrush AutoLairFill   = new SolidColorBrush(Color.Parse("#DC821E"));
     private static readonly IPen   AutoLairBorder = new Pen(new SolidColorBrush(Color.Parse("#FFA500")), 2.0)
@@ -738,7 +764,7 @@ public sealed class MapControl : Control
             LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, LoopSequenceNumbersProperty,
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
             PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
-            BossRoomsProperty, StopBeforeBossRoomsProperty);
+            BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty);
 
         // Auto-centre on the player's current room every time it
         // changes — but only when the
@@ -1175,6 +1201,9 @@ public sealed class MapControl : Control
             if (BossRooms is not null && BossRooms.Contains(kvp.Value))
                 DrawBossCrown(context, cell,
                     stopBefore: StopBeforeBossRooms is not null && StopBeforeBossRooms.Contains(kvp.Value));
+
+            if (TrainerRooms is not null && TrainerRooms.Contains(kvp.Value))
+                DrawTrainerIcon(context, cell);
 
             if (LoopSequenceNumbers is not null
                 && LoopSequenceNumbers.TryGetValue(kvp.Value, out int seq)
@@ -1655,6 +1684,34 @@ public sealed class MapControl : Control
         ctx.DrawEllipse(CrownFill, CrownRimPen, new Point(mx - r, my - r * 0.25), jr, jr);
         ctx.DrawEllipse(CrownFill, CrownRimPen, new Point(mx,     my - r * 0.75), jr, jr);
         ctx.DrawEllipse(CrownFill, CrownRimPen, new Point(mx + r, my - r * 0.25), jr, jr);
+    }
+
+    // A triple up-chevron ("level up here") marking a trainer room. Three stacked
+    // carets drawn from stroke primitives (no glyph), sized to the room node like
+    // the crown; a dark edge under the bright green keeps them legible on any fill.
+    private static void DrawTrainerIcon(DrawingContext ctx, Rect cell)
+    {
+        double nodeSize = Math.Max(cell.Width * 0.45, 3.0);
+        double mx = cell.X + cell.Width  / 2.0;
+        double my = cell.Y + cell.Height / 2.0;
+        double w = nodeSize * 0.26;   // half-width of each caret
+        double h = nodeSize * 0.18;   // arm drop of each caret
+        double topApexY = my - nodeSize * 0.26;
+        double spacing  = nodeSize * 0.16;   // apex-to-apex; < h so the carets nest
+
+        // All dark edges first, then all green on top, so a lower caret's edge never
+        // covers the caret above it.
+        for (int i = 0; i < 3; i++)
+            DrawChevron(ctx, TrainerChevronEdgePen, mx, topApexY + i * spacing, w, h);
+        for (int i = 0; i < 3; i++)
+            DrawChevron(ctx, TrainerChevronPen, mx, topApexY + i * spacing, w, h);
+    }
+
+    // One upward caret (^): apex at (cx, apexY), arms dropping to ±w / +h.
+    private static void DrawChevron(DrawingContext ctx, IPen pen, double cx, double apexY, double w, double h)
+    {
+        ctx.DrawLine(pen, new Point(cx - w, apexY + h), new Point(cx, apexY));
+        ctx.DrawLine(pen, new Point(cx, apexY), new Point(cx + w, apexY + h));
     }
 
     private void DrawSequenceNumber(DrawingContext ctx, Rect cell, int seq)

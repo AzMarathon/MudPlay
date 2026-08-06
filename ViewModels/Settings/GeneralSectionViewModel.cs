@@ -280,14 +280,13 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
 
         // Auto-train's boot flag isn't part of AutoMode — it lives in the
         // "AutoTrainer" entry the Auto-Trainer tab owns. Read-modify-write only
-        // the AutoTrain bit so the tab's other fields (stats cascade, levels-to-
-        // keep, announce, disabled trainers) survive this Save. Clearing the
-        // stats cascade when train goes off mirrors the tab's own invariant.
+        // the AutoTrain bit so the tab's other fields (levels-to-keep, announce,
+        // disabled trainers, AutoTrainStats) survive this Save. AutoTrainStats is
+        // now independent of AutoTrain (decoupled), so it is NOT force-cleared here.
         AutoTrainerSettings trainer = ReadAutoTrainerOrDefault();
         if (trainer.AutoTrain != AmAutoTrain)
         {
             trainer.AutoTrain = AmAutoTrain;
-            if (!AmAutoTrain) trainer.AutoTrainStats = false;
             profile.Settings["AutoTrainer"] = JsonSerializer.SerializeToElement(trainer);
         }
 

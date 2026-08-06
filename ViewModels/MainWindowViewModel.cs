@@ -254,15 +254,6 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoHideActive;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoSearchActive;
 
-    // Live auto-train master toggle. Mirrors the Settings → Auto-Trainer
-    // "Auto-train" checkbox, but persists to AutoTrainerSettings (not the
-    // GeneralSettings.AutoMode set), so it is deliberately NOT part of
-    // IsAllAutoOff / the master All-auto kill switch — it's a leveling
-    // convenience, not a combat auto-response. The "Auto-train CP" cascade and
-    // per-trainer list stay in the settings tab; this only flips the master
-    // bit that the trainer walk engine reads live on each exp gain.
-    [ObservableProperty] private bool _isAutoTrainActive;
-
     // Master "Disable hangups" toggle. When on, every automatic disconnect
     // path (@hangup / @relog remote commands, low-HP emergency hangup,
     // nightly-cleanup log-off) is suppressed — the client drops the carrier
@@ -538,6 +529,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetRoomGameDataOpener(OpenRoomGameData);
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
+        AppServices.Current.SetNavManagerOpener(OpenNavManager);
 
         // Engine-state chip — same shape as the Navigation window's
         // top-bar badge (IDLE / WALKING / LOOPING / AUTO-LAIR). Lives
@@ -1279,24 +1271,26 @@ public partial class MainWindowViewModel : ObservableObject
             case "ToggleAutoSearch":
                 row.IsActive = IsAutoSearchActive;
                 break;
-            case "ToggleAutoTrain":
-                row.IsActive = IsAutoTrainActive;
-                break;
             case "ToggleAllAutoOff":
                 // Depressed = auto-responses running; inverse of "all off".
                 row.IsActive = !IsAllAutoOff;
                 break;
             case "MovementStart":
             {
-                // Always visible; enabled when idle (open Manage / run staged)
-                // or USER-paused (doubles as Resume). Keyed off IsUserPaused, not
-                // IsPaused — an engine wait (a mid-walk fight, a rest) must not
-                // flip this to "Resume"; only the user's own pause does.
+                // Always enabled: idle → run staged / open Manage; USER-paused →
+                // resume; already running → open Manage (Go To) so the user can
+                // switch where they're pathing mid-run. Tooltip keys off
+                // IsUserPaused, not IsPaused — an engine wait (a mid-walk fight, a
+                // rest) must not read as "Resume"; only the user's own pause does.
                 Game.Map.MovementController ctl = AppServices.Current.MovementControl;
-                row.IsActionEnabled = ctl.IsIdle || ctl.IsUserPaused;
+                row.IsActionEnabled = true;
+                // Depress while a movement engine is in progress (loop / goto /
+                // auto-lair, running or paused); back to default the moment
+                // movement stops (idle). OnMovementControlStateChanged re-runs this.
+                row.IsActive = ctl.IsActive;
                 row.Tooltip = ctl.IsUserPaused
                     ? "Resume movement"
-                    : "Start movement — run the staged loop, or open Manage to pick one";
+                    : "Start movement — run the staged loop, or open Manage to pick / switch one";
                 break;
             }
             case "MovementPause":
@@ -3812,30 +3806,27 @@ public partial class MainWindowViewModel : ObservableObject
             vm.OnFloorChangeRequested(key);
     }
 
-    // Guards against a second standalone Manage dialog opening while one is up.
-    private bool _manageDialogOpen;
-
-    // Toolbar Start, which doubles as Resume. If a nav mode is paused,
-    // resume it. If idle and a loop is staged via the Manage dialog's Load
-    // action, run it straight away — "start the staged loop without
-    // reopening the map". Otherwise (idle, nothing staged) open the Manage
-    // dialog so the user can pick / load / run one.
+    // Toolbar Start, which doubles as Resume. USER-paused → resume. Idle with a
+    // loop staged (Manage dialog's Load) → run it straight away. Otherwise — idle
+    // with nothing staged, OR already running a loop/goto — open the shared Manage
+    // dialog on the Go To tab, so the user can pick or SWITCH destination by
+    // hitting Run on a different favourite / loop mid-run.
     [RelayCommand]
-    private async Task MovementStartAsync()
+    private void MovementStart()
     {
-        Game.Map.MovementController ctl = AppServices.Current.MovementControl;
+        var s = AppServices.Current;
+        Game.Map.MovementController ctl = s.MovementControl;
         if (ctl.IsUserPaused)
         {
             ctl.Resume();
             return;
         }
-        if (!ctl.IsIdle) return;
-        if (AppServices.Current.LoopRunner.StagedLoop is { } staged)
+        if (ctl.IsIdle && s.LoopRunner.StagedLoop is { } staged)
         {
-            AppServices.Current.LoopRunner.Start(staged);
+            s.LoopRunner.Start(staged);
             return;
         }
-        await OpenManagerStandaloneAsync();
+        OpenNavManager(startOnGotoTab: true);
     }
 
     // Toolbar Pause — pauses the running engine (no-op if already paused / idle).
@@ -3846,13 +3837,33 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void MovementStop() => AppServices.Current.MovementControl.Stop();
 
-    // Open the Navigation Manage dialog on its own (no map window) so the
-    // user can browse / load / run saved loops + lairs. Guarded so a
-    // second press while it's up is a no-op rather than stacking dialogs.
-    private async Task OpenManagerStandaloneAsync()
+    // Singleton handle for the one Navigation Management dialog — re-press from
+    // either entry point (toolbar Start fallback, map window button) focuses it
+    // instead of stacking a second identical window.
+    private Views.Navigation.NavigationManagerDialog? _manageWindow;
+
+    // The single owner of the Navigation Management dialog. Browses / loads /
+    // runs saved loops + lairs and hosts the Go To favourites tab — no map window
+    // required. When the map is up and mid loop-build, its live LoopBuilder draft
+    // is handed to the dialog so the Draft "save this loop" section shows. The
+    // bool picks the default tab (toolbar Start → Go To, map button → Loops); an
+    // already-open dialog is switched to that tab and re-focused.
+    private void OpenNavManager(bool startOnGotoTab)
     {
-        if (_manageDialogOpen) return;
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+        if (_manageWindow is { } existing)
+        {
+            if (existing.DataContext is ViewModels.Navigation.NavigationManagerDialogViewModel evm)
+                evm.SelectTab(startOnGotoTab);
+            existing.Activate();
+            return;
+        }
+
         var s = AppServices.Current;
+        var mapVm = _navigationWindow?.DataContext as ViewModels.Navigation.NavigationViewModel;
+        var draft = mapVm?.LoopBuilder;   // non-null only while the map is in loop-build
+
         ViewModels.Navigation.NavigationManagerDialogViewModel vm = new(
             s.Loops,
             s.Lairs,
@@ -3861,23 +3872,39 @@ public partial class MainWindowViewModel : ObservableObject
             s.Confirm,
             s.Dialogs,
             folders: s.NavFolders,
+            draft: draft,
+            onDraftConsumed: draft is null ? null : () => mapVm!.ConsumeLoopBuildDraft(),
             runner: s.LoopRunner,
             mpImporter: s.MpImporter,
             log: s.Log,
             search: s.RoomSearch,
             walker: s.Walker,
             movement: s.MovementControl,
-            autoLair: s.AutoLair);
-        _manageDialogOpen = true;
-        try
+            autoLair: s.AutoLair,
+            favorites: s.Favorites,
+            startOnGotoTab: startOnGotoTab);
+
+        Views.Navigation.NavigationManagerDialog window = new() { DataContext = vm };
+        // The dialog's Close button raises CloseRequested; mirror what
+        // DialogService does — close the window on it, and on any close run the
+        // VM's own event-unsubscribe path (its [RelayCommand] Close) so the store
+        // subscriptions it wired in its constructor don't leak on a title-bar X.
+        void OnCloseRequested(bool _) => window.Close();
+        vm.CloseRequested += OnCloseRequested;
+        window.Closed += (_, _) =>
         {
-            await s.Dialogs
-                .OpenWindowAsync<ViewModels.Navigation.NavigationManagerDialogViewModel, bool>(vm);
-        }
-        finally
+            vm.CloseRequested -= OnCloseRequested;
+            vm.CloseCommand.Execute(null);
+            _manageWindow = null;
+        };
+        // Same taskbar-restore coupling DialogService applies to owned children.
+        window.Activated += (_, _) =>
         {
-            _manageDialogOpen = false;
-        }
+            if (main.WindowState == Avalonia.Controls.WindowState.Minimized)
+                main.WindowState = Avalonia.Controls.WindowState.Normal;
+        };
+        _manageWindow = window;
+        window.Show(main);
     }
 
     // Singleton handle for the live SpellBookWindow — re-press toggles closed.
@@ -4171,13 +4198,6 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ToggleAutoSearch() => IsAutoSearchActive = !IsAutoSearchActive;
 
-    // Flip the live IsAutoTrainActive bit (the partial OnXxxChanged hook
-    // persists it to AutoTrainerSettings.AutoTrain and the toolbar IsActive
-    // badge follows). Bound from the toolbar / Action-menu / hotkey — the same
-    // master toggle the Settings → Auto-Trainer checkbox drives.
-    [RelayCommand]
-    private void ToggleAutoTrain() => IsAutoTrainActive = !IsAutoTrainActive;
-
     // Flip the live IsDisableHangupsActive bit (the partial OnXxxChanged
     // hook persists it to GeneralSettings.DisableHangups and the toolbar
     // IsActive badge follows). Bound from the toolbar / Action-menu / hotkey.
@@ -4418,26 +4438,6 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnIsDisableHangupsActiveChanged(bool value)
         => PersistGeneralFlag("DisableHangups", value, g => g.DisableHangups = value);
 
-    // Auto-train lives in AutoTrainerSettings, not GeneralSettings.AutoMode, so
-    // it gets its own persist path (the AutoMode helpers can't reach it). The
-    // trainer walk engine reads AutoTrain live on each exp gain, so flipping
-    // the bit is enough — no engine re-eval call. Turning the master off also
-    // clears the AutoTrainStats cascade to keep the settings invariant (stats
-    // never on without train behind it), matching the settings tab.
-    partial void OnIsAutoTrainActiveChanged(bool value)
-    {
-        if (_suppressAutoEngineWriteback) return;
-        if (AppServices.Current.Profile.Current is not { } profile) return;
-        profile.Settings ??= new();
-        Models.Profile.AutoTrainerSettings dto = ReadAutoTrainerFromProfile(profile);
-        dto.AutoTrain = value;
-        if (!value) dto.AutoTrainStats = false;
-        profile.Settings["AutoTrainer"] =
-            System.Text.Json.JsonSerializer.SerializeToElement(dto);
-        AppServices.Current.Profile.Save();
-        AppServices.Current.Log.Info("AutoTrain", $"User turned Auto-train {(value ? "on" : "off")}.");
-    }
-
     private void PersistAutoModeFlag(string flag, bool value,
                                      Action<Models.Profile.AutoActionDefaults> mutator)
     {
@@ -4496,12 +4496,8 @@ public partial class MainWindowViewModel : ObservableObject
             IsAutoSneakActive    = am.AutoSneak;
             IsAutoHideActive     = am.AutoHide;
             IsAutoSearchActive   = am.AutoSearch;
-            // Auto-train is stored apart from AutoMode (AutoTrainerSettings),
-            // but reseeds on the same profile-lifecycle beats so its toolbar
-            // badge and the settings-tab checkbox stay agreed.
-            IsAutoTrainActive    = profile is null
-                ? false
-                : ReadAutoTrainerFromProfile(profile).AutoTrain;
+            // (Auto-train is no toolbar/menu surface — the Player Workshop
+            // CP-Alloc toggles + Settings → Auto-Trainer own its sync now.)
         }
         finally
         {

@@ -1,10 +1,14 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.32.0**
-> - Navigation map: boss rooms from the Bosses table now show a gold crown; a boss flagged "stop before entering" gets a red halt ring around its crown
-> - Navigation map: the Spells overlay chip now cycles mono → by name → off — "by name" colours each room-spell room by which spell it carries, so clustered but different room spells (e.g. Swamp of Tharollok's spawners vs the swamp-poison) read apart; hover a room for its spell name. Saved per character
-> - Manage Bosses dialog: widened to show all columns, and "Add boss" now scrolls to and starts editing the new row
+> **Version 2.33.0**
+> - Auto-train and Auto-train-stats are now independent toggles — auto-level without auto-spending CP, or vice-versa
+> - Player Workshop → CP Allocation: new "Apply this level" button applies a selected row's stats at the trainer you're at — only when its CP fully lines up; it confirms via `stat` and clears the row on verified success
+> - Auto-train / Auto-train-stats now toggle from the CP Allocation tab too, in sync with Settings → Auto-Trainer; the old Auto-Train toolbar button, menu item and keybind are removed
+> - Settings → Auto-Trainer: new "Do not train above level" ceiling — auto-train reaches that level then stops (no over-levelling)
+> - Navigation map: trainer rooms now show a triple up-chevron "level up here" marker — every trainer for the active game-data set
+> - Navigation Management is now one shared window from both the toolbar Start button and the map's Navigation Management button (re-focused, never a second copy) — Start opens it on the Go To tab, the map button on Loops
+> - Toolbar Start no longer greys out while a loop/goto is running; pressing it (click or Alt+V) opens Manage so you can switch destination by hitting Run on a different favourite / loop, and it stays depressed while any movement engine is in progress
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

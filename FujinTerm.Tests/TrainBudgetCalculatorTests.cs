@@ -81,4 +81,32 @@ public sealed class TrainBudgetCalculatorTests
         Assert.Equal(expected,
             TrainBudgetCalculator.LevelsToTrain(T(9), currentLevel: 5, Chart, Realm, keep, Cap));
     }
+
+    // ----- "Do not train above N" ceiling (reach N, then stop) -----------
+
+    [Theory]
+    [InlineData(0, 4)]    // no ceiling → all 4 banked (6..9)
+    [InlineData(7, 2)]    // reach 7 → only 6,7
+    [InlineData(9, 4)]    // ceiling at the top of what's banked → all 4
+    [InlineData(20, 4)]   // ceiling above what's banked → no effect
+    [InlineData(6, 1)]    // reach 6 → just 6
+    [InlineData(5, 0)]    // already at the ceiling → nothing
+    [InlineData(4, 0)]    // below current level → nothing
+    public void LevelsToTrain_Ceiling_CapsSoFinalLevelNeverExceedsN(int ceiling, int expected)
+    {
+        // T(9) at level 5 banks 4 (6..9); the ceiling limits to (ceiling - level).
+        Assert.Equal(expected,
+            TrainBudgetCalculator.LevelsToTrain(T(9), currentLevel: 5, Chart, Realm, keep: 0, Cap, ceiling));
+    }
+
+    [Theory]
+    [InlineData(5, 0, true)]    // 0 = no ceiling
+    [InlineData(5, 7, true)]    // below the ceiling → may train
+    [InlineData(6, 7, true)]
+    [InlineData(7, 7, false)]   // at the ceiling → stop
+    [InlineData(8, 7, false)]   // above → stop
+    public void WithinCeiling_TrueWhileBelowCeiling(int level, int ceiling, bool expected)
+    {
+        Assert.Equal(expected, TrainBudgetCalculator.WithinCeiling(level, ceiling));
+    }
 }
