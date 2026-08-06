@@ -1,5 +1,6 @@
 using System.IO;
 using FujinTerm.Game.Map;
+using FujinTerm.Models.Profile;
 using FujinTerm.Services;
 using Xunit;
 
@@ -317,6 +318,56 @@ public sealed class RoomTrackerTests : IDisposable
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(4, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void PersistCurrentRoomForSave_FlushesPredictedNeighbourPosition()
+    {
+        // Report paradigm-20260805-224603: on Paradigm's Graveyard every room shares
+        // the name "Graveyard", so grinding moves confirm by predicted-neighbour, not
+        // a 1-of-1 match — and the mid-session persistence gate deliberately leaves
+        // the on-disk anchor at the last strict locate (`rm`). Reopening then landed
+        // at that stale anchor. PersistCurrentRoomForSave (wired to ProfileSaving /
+        // save-on-close) must stamp the LIVE confirmed room so the next session
+        // hydrates where the player actually is. Modelled on the "Cleared Fields"
+        // identically-named 3-cycle, the local Graveyard analog.
+        RoomTracker tracker = NewTracker();
+        CharacterProfile profile = new() { LastKnownRoom = new RoomRef(4, 1) };
+        tracker.Hydrate(profile);                             // Confirmed at 4/1, anchor 4/1
+        Assert.Equal(new RoomKey(4, 1), tracker.State.CurrentRoom!.Key);
+
+        // Move N into the identically-named 4/2 — a predicted-neighbour confirm.
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.NoteMoveSent(Direction.N, t0);
+        tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S),
+            t0.AddMilliseconds(1500));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(4, 2), tracker.State.CurrentRoom!.Key);
+
+        // The predicted move did NOT advance the on-disk anchor (mid-session gate).
+        Assert.Equal(4, profile.LastKnownRoom!.Map);
+        Assert.Equal(1, profile.LastKnownRoom!.Room);
+
+        // A save now flushes the true live position.
+        tracker.PersistCurrentRoomForSave();
+        Assert.Equal(4, profile.LastKnownRoom!.Map);
+        Assert.Equal(2, profile.LastKnownRoom!.Room);
+    }
+
+    [Fact]
+    public void PersistCurrentRoomForSave_UnknownPosition_LeavesAnchorIntact()
+    {
+        // A Suspect/Unknown view at save time must not overwrite a good anchor with a
+        // guess — the flush is a no-op unless the position is Confirmed. Hydrating an
+        // anchor the active graph can't resolve leaves the tracker Unknown.
+        RoomTracker tracker = NewTracker();
+        CharacterProfile profile = new() { LastKnownRoom = new RoomRef(9, 9) };
+        tracker.Hydrate(profile);                             // 9/9 not in graph → stays Unknown
+        Assert.NotEqual(RoomConfidence.Confirmed, tracker.State.Confidence);
+
+        tracker.PersistCurrentRoomForSave();
+        Assert.Equal(9, profile.LastKnownRoom!.Map);
+        Assert.Equal(9, profile.LastKnownRoom!.Room);
     }
 
     [Fact]

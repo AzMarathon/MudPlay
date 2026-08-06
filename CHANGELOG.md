@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.31.4
+
+- Navigation: your position is now saved as it actually is when you close — reopening lands you where you left off instead of at your last manual `rm`, even after grinding through same-named rooms (e.g. Paradigm's Graveyard) where moves confirm by prediction
+- bug reports addressed: paradigm-20260805-224603
+
 ## 2.31.3
 
 - Combat: the percentage mana reserve now matches the mana number shown in Settings — an 82% reserve on a 66 max means 54 mana casts (not 55), so the spell no longer swaps to physical at the exact value you set as castable
