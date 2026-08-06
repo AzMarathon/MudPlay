@@ -7,6 +7,11 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Exp/Hr estimator now counts monster-summoning room spells: rooms whose entry spell rolls extra monsters (e.g. Paradigm's crypt summons) add their expected exp to the estimate instead of being ignored — an averaged roll per visit plus a bonus roll on quick kills, with a new "Room summons" breakdown line
 - bug reports addressed: paradigm-20260806-030133
 
+## 2.33.1
+
+- Item-cast buff swap now restores the item's actual slot: an off-hand buff (e.g. engraved warhorn) puts the off-hand shield back instead of re-equipping the weapon; works for any worn slot, not just weapon/off-hand
+- bug reports addressed: paradigm-20260806-015831
+
 ## 2.33.0
 
 - Auto-train and Auto-train-stats are now independent toggles — auto-level without auto-spending CP, or auto-apply the plan on a manual/@train without auto-levelling

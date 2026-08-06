@@ -1813,6 +1813,23 @@ occasionally **`0`**; **both are unlimited**, matching MMUD Explorer's own norma
 `If uses <= 0 Then uses = -1`. Only unlimited items are safe to feed a buff-recast loop; the Spell
 Book renders `<= 0` as the word "Unlimited" (never a raw "-1 uses").
 
+**Equip → use → restore swap (a readied buff item)** *([CONFIRMED] 2026-08-06, user)*: to command-cast
+from an item you must have it equipped, so the buff engine equips the cast item, `use`s it, then puts
+back whatever it displaced. **A buff item can live in ANY equip slot — not just weapon / off-hand**
+(a warhorn is off-hand, a charged amulet is neck, etc.). `eq <item>` drops the item into **its own**
+slot and displaces only what was there, so restore is **slot-specific**:
+- **1H weapon buff** → displaces the **weapon hand**; restore the weapon. (If you're on a 2H weapon,
+  a 1H buff swaps cleanly — `eq buff`, `use`, `eq <2H weapon>` — no off-hand step, the off-hand was
+  empty under the two-hander.)
+- **Off-hand buff** (warhorn, a held item) → displaces the **off-hand**; restore the off-hand shield.
+  **The weapon is never touched.** (Restoring the weapon instead — the bug — strands the buff in the
+  off-hand and never puts the shield back.)
+- **Worn buff** (amulet/ring/etc.) → displaces **that worn slot**; restore that slot's item.
+- **2H weapon buff** while holding a 1H weapon + off-hand → it needs **both** hands, so the order is:
+  `rem <off-hand>` → `eq <2H buff>` → `use` → `eq <1H weapon>` (this drops the two-hander and frees
+  the off-hand) → `eq <off-hand>`.
+Whatever slot was empty simply isn't restored (nothing to put back).
+
 ### Armour Class contributions — shadow, Prot-Evil, VileWard *([CONFIRMED] 2026-07-18, user)*
 
 Sources that feed a character's effective AC beyond the item/race/class/quest `+AC` (ability code
