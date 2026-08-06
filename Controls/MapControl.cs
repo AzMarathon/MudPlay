@@ -1622,15 +1622,16 @@ public sealed class MapControl : Control
         double nodeSize = Math.Max(cell.Width * 0.45, 3.0);
         double mx = cell.X + cell.Width  / 2.0;
         double my = cell.Y + cell.Height / 2.0;
-        double r  = nodeSize * 0.34;                  // crown half-width — fits inside the node (and inside the ring)
+        double r  = nodeSize * 0.42;                  // crown ~fills the room square
 
         // Stop-before halt ring first (under the crown) — black edge then red so it
-        // reads as a red ring with a dark outline on any cell fill. Inscribed in the
-        // room node so the room's edges just touch the ring; the crown (widest point
-        // ~1.15r ≈ 0.39·node) clears comfortably inside it.
+        // reads as a red ring with a dark outline on any cell fill. CIRCUMSCRIBES the
+        // room node: the square's four corners touch the ring's inner edge (radius =
+        // half-diagonal + half the edge-pen), so the crown gets the whole square to
+        // fill inside it.
         if (stopBefore)
         {
-            double ringR = nodeSize * 0.5;
+            double ringR = nodeSize * 0.5 * Math.Sqrt(2.0) + StopRingEdgePen.Thickness / 2.0;
             ctx.DrawEllipse(null, StopRingEdgePen, new Point(mx, my), ringR, ringR);
             ctx.DrawEllipse(null, StopRingPen,     new Point(mx, my), ringR, ringR);
         }
