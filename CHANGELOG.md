@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.32.0
+
+- Navigation map: boss rooms from the Bosses table now show a gold crown; a boss flagged "stop before entering" gets a red halt ring around its crown
+- Navigation map: the Spells overlay chip now cycles mono → by name → off — "by name" colours each room-spell room by which spell it carries, so clustered but different room spells (e.g. Swamp of Tharollok's spawners vs the swamp-poison) read apart; hover a room for its spell name. Saved per character
+- Manage Bosses dialog: widened so all columns are visible without horizontal scrolling
+- Manage Bosses dialog: "Add boss" now scrolls to and starts editing the new row instead of appending it out of sight at the bottom
+
 ## 2.31.4
 
 - Navigation: your position is now saved as it actually is when you close — reopening lands you where you left off instead of at your last manual `rm`, even after grinding through same-named rooms (e.g. Paradigm's Graveyard) where moves confirm by prediction

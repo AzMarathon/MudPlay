@@ -21,6 +21,11 @@ public sealed partial class ManageBossesDialogViewModel : ObservableObject, IDia
 {
     public event Action<bool>? CloseRequested;
 
+    // Raised when Add boss appends a fresh row, so the view can scroll it into view
+    // and drop the caret into it — the row lands at the end of a long grid and the
+    // user shouldn't have to hunt for it.
+    public event Action<ManageBossRowViewModel>? RowAdded;
+
     private readonly BossStore _bosses;
     private readonly GameDataCache _gameData;
     private readonly RealmType _realm;
@@ -72,6 +77,7 @@ public sealed partial class ManageBossesDialogViewModel : ObservableObject, IDia
         };
         _allRows.Add(row);
         SelectedRow = row;
+        RowAdded?.Invoke(row);
     }
 
     [RelayCommand]

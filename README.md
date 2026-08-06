@@ -1,8 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.31.4**
-> - Navigation: your position is now saved as it actually is when you close — reopening lands you where you left off instead of at your last manual `rm`, even after grinding through same-named rooms (e.g. Paradigm's Graveyard) where moves confirm by prediction
+> **Version 2.32.0**
+> - Navigation map: boss rooms from the Bosses table now show a gold crown; a boss flagged "stop before entering" gets a red halt ring around its crown
+> - Navigation map: the Spells overlay chip now cycles mono → by name → off — "by name" colours each room-spell room by which spell it carries, so clustered but different room spells (e.g. Swamp of Tharollok's spawners vs the swamp-poison) read apart; hover a room for its spell name. Saved per character
+> - Manage Bosses dialog: widened to show all columns, and "Add boss" now scrolls to and starts editing the new row
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

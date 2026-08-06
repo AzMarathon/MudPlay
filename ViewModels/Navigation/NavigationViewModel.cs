@@ -33,11 +33,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_services.Profile.Current is { NavMapCollapsed: true })
             _mapExpanded = false;
 
-        // Restore the lair-highlight mode the user last left. Seed the backing
-        // field directly so this doesn't loop back through OnLairModeChanged and
-        // re-save during construction.
+        // Restore the lair-highlight + room-spell overlay modes the user last left.
+        // Seed the backing fields directly so this doesn't loop back through the
+        // OnXxxChanged persistence handlers and re-save during construction.
         if (_services.Profile.Current is { } lairProfile)
+        {
             _lairMode = lairProfile.NavLairMode;
+            _spellMode = lairProfile.NavSpellMode;
+        }
 
         // 1 s tick — keeps the CURRENT NAV lair countdowns + the
         // BUILDING-LAIR strip in sync as time passes. Only runs while
@@ -77,6 +80,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnAvoidedChanged();
         _services.Movement.StashChanged   += OnStashChanged;
         OnStashChanged();
+        _services.Bosses.Changed += RefreshBossRooms;
+        RefreshBossRooms();
         _services.AutoLair.MarkedChanged += OnAutoLairMarkedChanged;
         _services.AutoLair.ActiveChanged += OnAutoLairActiveChanged;
         _services.AutoLair.PhaseChanged  += OnAutoLairPhaseChanged;
@@ -144,6 +149,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.LoopRunner.Event -= OnLoopRunnerEvent;
         _services.Movement.AvoidedChanged -= OnAvoidedChanged;
         _services.Movement.StashChanged   -= OnStashChanged;
+        _services.Bosses.Changed -= RefreshBossRooms;
         _services.AutoLair.MarkedChanged -= OnAutoLairMarkedChanged;
         _services.AutoLair.ActiveChanged -= OnAutoLairActiveChanged;
         _services.AutoLair.PhaseChanged  -= OnAutoLairPhaseChanged;
@@ -462,6 +468,29 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         DeathRooms = next;
     }
 
+    // Rooms listed by the Bosses-table entries for the active realm, projected onto
+    // the map as crown markers. BossRooms is every boss room; StopBeforeBossRooms is
+    // the subset whose entry is flagged "stop before entering" (its crown gains a
+    // red halt ring). Refreshed on BossStore.Changed — an add / edit / remove /
+    // StopBefore toggle, or a game-data set swap. Null when the realm has no boss
+    // rooms so the map draws nothing.
+    private void RefreshBossRooms()
+    {
+        HashSet<RoomKey>? all = null;
+        HashSet<RoomKey>? stop = null;
+        foreach (Models.Profile.BossDef b in _services.Bosses.ResolveForRealm(_services.GameData.ActiveRealm))
+        {
+            foreach (string wire in b.Rooms)
+            {
+                if (!RoomKey.TryParseWire(wire, out RoomKey k)) continue;
+                (all ??= new HashSet<RoomKey>()).Add(k);
+                if (b.StopBefore) (stop ??= new HashSet<RoomKey>()).Add(k);
+            }
+        }
+        BossRooms = all;
+        StopBeforeBossRooms = stop;
+    }
+
     // Death does a clean stop of every engine (same as the Stop button), which
     // clears the walker's own destination. Drop the UI's armed walk-to target too
     // so a later Run can't re-send us to a stale destination (the room we just
@@ -592,7 +621,34 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     }
 
     [ObservableProperty] private bool _highlightShops = true;
-    [ObservableProperty] private bool _highlightSpells = true;
+
+    // Spells chip is a three-stage toggle: Mono (flat purple on every spell room) ->
+    // ByName (colour each room by which spell it carries) -> Off -> Mono.
+    // HighlightSpells (the chip's active-fill flag) is derived: lit for anything but Off.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HighlightSpells))]
+    [NotifyPropertyChangedFor(nameof(SpellButtonLabel))]
+    private SpellDisplayMode _spellMode = SpellDisplayMode.Mono;
+
+    public bool HighlightSpells => SpellMode != SpellDisplayMode.Off;
+
+    public string SpellButtonLabel => SpellMode switch
+    {
+        SpellDisplayMode.ByName => "Spells: by name",
+        SpellDisplayMode.Off    => "Spells: off",
+        _                       => "Spells",
+    };
+
+    // Persist the room-spell overlay mode per-character so the map reopens the way
+    // the user left it (mirrors OnLairModeChanged).
+    partial void OnSpellModeChanged(SpellDisplayMode value)
+    {
+        if (_services.Profile.Current is not { } profile) return;
+        if (profile.NavSpellMode == value) return;
+        profile.NavSpellMode = value;
+        _services.Profile.Save();
+    }
+
     [ObservableProperty] private bool _legendVisible;
 
     // Per-room lair respawn times (seconds) for the visible layout, keyed by
@@ -621,7 +677,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _                       => LairDisplayMode.Uniform,
     };
     [RelayCommand] private void ToggleShops()  => HighlightShops  = !HighlightShops;
-    [RelayCommand] private void ToggleSpells() => HighlightSpells = !HighlightSpells;
+    [RelayCommand] private void ToggleSpells() => SpellMode = SpellMode switch
+    {
+        SpellDisplayMode.Mono   => SpellDisplayMode.ByName,
+        SpellDisplayMode.ByName => SpellDisplayMode.Off,
+        _                       => SpellDisplayMode.Mono,
+    };
     [RelayCommand] private void ToggleLegend() => LegendVisible   = !LegendVisible;
 
     // ----- Map binding ----------------------------------------------
@@ -773,6 +834,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Rooms with an un-recovered deathpile, bound to MapControl.DeathRooms — each
     // renders a skull. Refreshed by RefreshDeathRooms.
     [ObservableProperty] private IReadOnlySet<RoomKey>? _deathRooms;
+
+    // Rooms listed by any Bosses-table entry (bound to MapControl.BossRooms — a gold
+    // crown) and the subset whose entry is flagged "stop before entering" (bound to
+    // StopBeforeBossRooms — the crown gains a red halt ring). Refreshed by
+    // RefreshBossRooms on BossStore.Changed / game-data set swap.
+    [ObservableProperty] private IReadOnlySet<RoomKey>? _bossRooms;
+    [ObservableProperty] private IReadOnlySet<RoomKey>? _stopBeforeBossRooms;
+
     [ObservableProperty] private bool _isAutoLairing;
 
     [ObservableProperty]

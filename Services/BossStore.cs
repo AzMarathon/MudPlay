@@ -28,6 +28,13 @@ public sealed class BossStore
     // Active set whose overlay is loaded, or null when none.
     public string? ActiveSet { get; private set; }
 
+    // Fires when the resolved boss list changes — a Save (add / edit / remove /
+    // StopBefore toggle) or an active-set swap. Consumers that derive state from the
+    // boss list (the nav-map boss-room markers) re-read Resolve*/on this. Mirrors
+    // BossTimerStore.Changed; the def store lacked one, so map markers had no way to
+    // refresh on an edit.
+    public event Action? Changed;
+
     // seedPath defaults to the bootstrapped Global copy; parameterized so tests can
     // point at a scratch seed.
     public BossStore(LogService? log = null, string? seedPath = null)
@@ -43,10 +50,13 @@ public sealed class BossStore
     {
         _overlay.Clear();
         ActiveSet = string.IsNullOrWhiteSpace(setName) ? null : setName;
-        if (ActiveSet is null) return;
-        List<BossDef>? ov = JsonStore.Load<List<BossDef>>(AppPaths.BossesFile(ActiveSet));
-        if (ov is null) return;
-        foreach (BossDef b in ov) _overlay[b.Name] = b;
+        if (ActiveSet is not null)
+        {
+            List<BossDef>? ov = JsonStore.Load<List<BossDef>>(AppPaths.BossesFile(ActiveSet));
+            if (ov is not null)
+                foreach (BossDef b in ov) _overlay[b.Name] = b;
+        }
+        Changed?.Invoke();   // fire even when cleared to null, so derived markers clear
     }
 
     // The merged boss list. Overlay wins per Name; a Removed overlay entry hides the
@@ -93,5 +103,6 @@ public sealed class BossStore
         foreach (BossDef b in overlay) _overlay[b.Name] = b;
         JsonStore.Save(AppPaths.BossesFile(ActiveSet), overlay);
         _log?.Debug("Bosses", $"saved {overlay.Count} overlay delta(s) for set {ActiveSet}");
+        Changed?.Invoke();
     }
 }

@@ -127,6 +127,11 @@ public sealed class CharacterProfile
     // lairs the way they left it. Serialized by name, defaults to Uniform.
     public LairDisplayMode NavLairMode { get; set; } = LairDisplayMode.Uniform;
 
+    // The Navigation map's room-spell overlay mode (the "Spells" chip cycle:
+    // mono → by name → off). Persisted per-character like NavLairMode. Serialized by
+    // name, defaults to Mono (the original flat-purple "has a room spell" cue).
+    public SpellDisplayMode NavSpellMode { get; set; } = SpellDisplayMode.Mono;
+
     // Persisted left-pane proportions for resizable two-pane dialogs keyed by
     // stable id (e.g. "MonsterEditDialog"). Each value is the fraction (0.0–1.0)
     // of the splittable area occupied by the LEFT pane at the user's last close.
