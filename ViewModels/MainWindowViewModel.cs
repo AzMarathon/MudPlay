@@ -1284,6 +1284,10 @@ public partial class MainWindowViewModel : ObservableObject
                 // rest) must not read as "Resume"; only the user's own pause does.
                 Game.Map.MovementController ctl = AppServices.Current.MovementControl;
                 row.IsActionEnabled = true;
+                // Depress while a movement engine is in progress (loop / goto /
+                // auto-lair, running or paused); back to default the moment
+                // movement stops (idle). OnMovementControlStateChanged re-runs this.
+                row.IsActive = ctl.IsActive;
                 row.Tooltip = ctl.IsUserPaused
                     ? "Resume movement"
                     : "Start movement — run the staged loop, or open Manage to pick / switch one";
