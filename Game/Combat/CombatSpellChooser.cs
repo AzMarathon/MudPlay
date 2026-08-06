@@ -341,15 +341,23 @@ public sealed class CombatSpellChooser
     private static bool CastsOk(int? cap, int castsSoFar) =>
         cap is not { } c || castsSoFar < c;
 
-    private static bool ManaOk(CombatSpellSlot slot, in CombatSpellContext ctx, ThresholdMode mode)
+    private static bool ManaOk(CombatSpellSlot slot, in CombatSpellContext ctx, ThresholdMode mode) =>
+        ManaMeetsReserve(slot.MinManaPerCast, ctx.Mana, ctx.MaxMana, mode);
+
+    // Whether live MA meets a slot's per-cast mana reserve. In Percentage mode the
+    // reserve is compared against the ROUNDED absolute equivalent — the exact value
+    // the Settings "= mana / %" conversion label shows the user — NOT the raw
+    // fractional percentage. Otherwise a reserve like 82% of a 66 max (= 54.12) would
+    // reject 54 mana even though the label promises "54", so the spell wrongly
+    // swapped to physical at the value the user set as castable. A 0 reserve always
+    // passes; a 0 max in Percentage mode never does.
+    public static bool ManaMeetsReserve(int minManaPerCast, int ma, int maxMa, ThresholdMode mode)
     {
-        if (slot.MinManaPerCast <= 0) return true;
-        if (mode == ThresholdMode.Absolute)
-            return ctx.Mana >= slot.MinManaPerCast;
-        // Percentage of live max MA.
-        if (ctx.MaxMana <= 0) return false;
-        double pct = ctx.Mana * 100.0 / ctx.MaxMana;
-        return pct >= slot.MinManaPerCast;
+        if (minManaPerCast <= 0) return true;
+        if (mode == ThresholdMode.Absolute) return ma >= minManaPerCast;
+        if (maxMa <= 0) return false;
+        int threshold = (int)System.Math.Round(maxMa * minManaPerCast / 100.0);
+        return ma >= threshold;
     }
 }
 

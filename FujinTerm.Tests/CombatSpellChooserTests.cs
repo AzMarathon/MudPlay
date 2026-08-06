@@ -459,6 +459,29 @@ public sealed class CombatSpellChooserTests
     }
 
     [Fact]
+    public void ManaOk_Percentage_MeetsRoundedThreshold_NotRawFraction()
+    {
+        // Report paradigm-20260805-224742: 82% of a 66 max MA is 54.12; the Settings
+        // conversion label rounds that to "54", so 54 mana must CAST (matching what
+        // the user set as their reserve), not swap to physical because 54/66 = 81.8%
+        // falls a fraction under 82%.
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            SpellManaThresholdMode = ThresholdMode.Percentage,
+            NormalAttackSpell = Slot("disr", minMana: 82),
+        };
+
+        // 54 == Round(66 * 0.82) → casts.
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, Ctx(mana: 54, maxMana: 66)).Action);
+
+        // 53 is below the rounded 54-mana reserve → weapon.
+        Assert.Equal(CombatSpellAction.WeaponAttack,
+            sut.Choose(settings, Ctx(mana: 53, maxMana: 66)).Action);
+    }
+
+    [Fact]
     public void ManaOk_Percentage_ZeroMaxMana_NeverCasts()
     {
         CombatSpellChooser sut = new();

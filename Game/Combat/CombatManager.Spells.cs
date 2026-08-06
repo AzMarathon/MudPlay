@@ -754,16 +754,13 @@ public sealed partial class CombatManager
         yield return (settings.AlternateAttackSpell, CombatSpellAction.AlternateAttackSpell);
     }
 
-    // Whether the live MA meets a slot's per-cast mana floor — the same gate the
-    // chooser applies, lifted here so the actionability assessment can tell a
-    // transient mana stall from a permanent block. No floor → always affordable.
-    private bool ManaMeets(CombatSpellSlot slot, int ma, int maxMa, ThresholdMode mode)
-    {
-        if (slot.MinManaPerCast <= 0) return true;
-        if (mode == ThresholdMode.Absolute) return ma >= slot.MinManaPerCast;
-        if (maxMa <= 0) return false;
-        return ma * 100.0 / maxMa >= slot.MinManaPerCast;
-    }
+    // Whether the live MA meets a slot's per-cast mana floor — the SAME gate the
+    // chooser applies (shared CombatSpellChooser.ManaMeetsReserve, which compares
+    // the percentage reserve against its rounded absolute equivalent so it matches
+    // the Settings conversion label), lifted here so the actionability assessment
+    // can tell a transient mana stall from a permanent block.
+    private static bool ManaMeets(CombatSpellSlot slot, int ma, int maxMa, ThresholdMode mode) =>
+        CombatSpellChooser.ManaMeetsReserve(slot.MinManaPerCast, ma, maxMa, mode);
 
     // The reason we can't kill monsterNumber, or null when it's actionable.
     // Physical eligibility is checked first (deterministic, fails open); only when

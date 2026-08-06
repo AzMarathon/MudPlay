@@ -1,9 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.31.2**
-> - Combat: swapping an attack spell to physical on the round it kills the target no longer strands — a "Your command had no effect." reply now clears spell mode too, so the client re-observes instead of re-casting at the corpse
-> - Combat: fixed a doubled physical swing when a between-round self-bless landed just before a spell kill (the survivor's fresh swing was re-fired on top of itself)
+> **Version 2.31.3**
+> - Combat: the percentage mana reserve now matches the mana number shown in Settings — an 82% reserve on a 66 max means 54 mana casts (not 55), so the spell no longer swaps to physical at the exact value you set as castable
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
