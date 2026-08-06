@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.34.0
+
+- Exp/Hr estimator now counts monster-summoning room spells: rooms whose entry spell rolls extra monsters (e.g. Paradigm's crypt summons) add their expected exp to the estimate instead of being ignored — an averaged roll per visit plus a bonus roll on quick kills, with a new "Room summons" breakdown line
+- bug reports addressed: paradigm-20260806-030133
+
 ## 2.33.0
 
 - Auto-train and Auto-train-stats are now independent toggles — auto-level without auto-spending CP, or auto-apply the plan on a manual/@train without auto-levelling

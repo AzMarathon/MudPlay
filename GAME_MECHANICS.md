@@ -633,6 +633,35 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
 - So once killed they stay dead until the next cleanup instant, then return. The client models this as
   a DEAD / ALIVE state keyed to the per-BBS cleanup time, not a duration timer.
 
+### Room-spell monster summons *([CONFIRMED] 2026-08-06, user + game-data trace, Paradigm 1.9.1)*
+
+Distinct from a monster's death-summon: a **room itself** can summon monsters via its entry spell.
+`Rooms.Spell` names a `Spells` row cast **on room entry and re-cast every combat tick (~5s)** while
+you're in the room (the user times it at **~5.3s** — the tick, firing just after entry). These are the
+monster-spawning rooms that made the Exp/Hr estimator under-report: the exp comes from summons the
+route resolver never counted.
+
+- **The summon lives in a TextBlock, not an `Abil 12` slot.** The room spell carries a **`TextBlock`
+  ability (`Abil == 148`)** whose `AbilVal` is a **TBInfo `Number`**. The TBInfo `Action` string is the
+  roll table — so a room-summon is *not* found by scanning `Abil == 12` (that's the death-summon path).
+- **`nomonsters:` gate.** A leading `nomonsters:` condition means the spell **only fires when the room
+  holds no monsters** — so it can't stack summons: kill what's there, and the next tick may summon one.
+- **d100 roll table with cumulative bands.** Each `Action` line is `<cumulativeThreshold>:<act>[:<act>…]`;
+  a line's probability is `(threshold − prevThreshold) / topThreshold` (top is usually 100). A line whose
+  actions include **`summon <monsterNumber>`** summons that monster (from the Monsters table, normal
+  exp). Other actions (`addevil`, `message N`) are misses.
+- **Worked example — "crypt summon 2" (`Rooms.Spell 5248`, e.g. room `13/3573`):** `Abil-0 = 148`,
+  `AbilVal-0 = 3411`.
+  - TBInfo `3411`: `nomonsters:random 3412` → gate + redirect to the roll table `3412`.
+  - TBInfo `3412`: `60:addevil 0` (1–60, nothing) · `85:message 4064` (61–85, message) ·
+    `90:…:summon 2111` (86–90, **cairn wraith** 13000) · `95:…:summon 2119` (91–95, **ogre skeleton**
+    12000) · `100:…:summon 2122` (96–100, **zombie warrior** 12000).
+  - → **15% summon chance**, **1,850 expected exp per roll** (`0.05 × (13000+12000+12000)`).
+- **Estimator model** *(user design)*: credit each summoning room **one averaged roll per visit**
+  (`Σ band% × monster exp`), plus a **second roll's worth when a quick kill (rounds ≤ 2)** lets another
+  spawn before you leave (`× (1 + summonChance)`), scaled by laps/hr. A simplification of the true
+  per-tick loop, but it lands close and stops the under-report.
+
 ## Vitality — HP, dropping, and death
 
 **Max-HP sources** *([CONFIRMED])*

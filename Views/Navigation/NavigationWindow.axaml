@@ -1584,6 +1584,30 @@
                                             </ItemsControl>
                                         </StackPanel>
 
+                                        <!-- Room-spell summons: rooms whose entry spell rolls extra
+                                             monsters (nomonsters-gated), credited on top of the lair. -->
+                                        <StackPanel IsVisible="{Binding ExpEstimator.HasSummons}" Spacing="1">
+                                            <TextBlock Text="Room summons" FontSize="10"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}" Margin="0,3,0,0"/>
+                                            <ItemsControl ItemsSource="{Binding ExpEstimator.Summons}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:ExpEstimatorSummonRow">
+                                                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,1,14,1" ColumnSpacing="6">
+                                                            <TextBlock Grid.Column="0" FontSize="11" FontFamily="{StaticResource FontMono}"
+                                                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                                       Text="{Binding RoomLabel}"/>
+                                                            <TextBlock Grid.Column="1" FontSize="11"
+                                                                       Foreground="{StaticResource ChromeFgSecBrush}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Text="{Binding SpellName}"/>
+                                                            <TextBlock Grid.Column="2" FontSize="11" Foreground="#E0B060"
+                                                                       Text="{Binding ContribLabel}"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
                                         <Border Height="1" Background="{StaticResource ChromeBorderSoftBrush}"/>
 
                                         <TextBox Text="{Binding ExpEstimator.ProposedName, Mode=TwoWay}"
