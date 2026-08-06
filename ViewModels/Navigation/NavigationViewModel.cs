@@ -82,6 +82,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnStashChanged();
         _services.Bosses.Changed += RefreshBossRooms;
         RefreshBossRooms();
+        RefreshTrainerRooms();   // trainers come from game data; refreshed on set swap via OnGraphReloaded
         _services.AutoLair.MarkedChanged += OnAutoLairMarkedChanged;
         _services.AutoLair.ActiveChanged += OnAutoLairActiveChanged;
         _services.AutoLair.PhaseChanged  += OnAutoLairPhaseChanged;
@@ -491,6 +492,19 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         StopBeforeBossRooms = stop;
     }
 
+    // All trainer rooms for the active game-data set (shops with ShopType == 8),
+    // crawled straight from TrainerCatalog. Realm-scoped by the active set; the map
+    // draws only the current map, so off-map trainers never paint. Refreshed on set
+    // swap via OnGraphReloaded (the same beat that re-lays out the map).
+    private void RefreshTrainerRooms()
+    {
+        HashSet<RoomKey>? rooms = null;
+        foreach (Game.GameData.TrainerShop t in Game.GameData.TrainerCatalog.Enumerate(_services.GameData))
+            if (t.HasRoom)
+                (rooms ??= new HashSet<RoomKey>()).Add(new RoomKey(t.Map, t.Room));
+        TrainerRooms = rooms;
+    }
+
     // Death does a clean stop of every engine (same as the Stop button), which
     // clears the walker's own destination. Drop the UI's armed walk-to target too
     // so a later Run can't re-send us to a stale destination (the room we just
@@ -841,6 +855,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // RefreshBossRooms on BossStore.Changed / game-data set swap.
     [ObservableProperty] private IReadOnlySet<RoomKey>? _bossRooms;
     [ObservableProperty] private IReadOnlySet<RoomKey>? _stopBeforeBossRooms;
+
+    // Trainer rooms (game-data shops with ShopType == 8) — bound to
+    // MapControl.TrainerRooms (an up-chevron marker). Whole-active-set scope like
+    // BossRooms; refreshed by RefreshTrainerRooms when the map re-lays out.
+    [ObservableProperty] private IReadOnlySet<RoomKey>? _trainerRooms;
 
     [ObservableProperty] private bool _isAutoLairing;
 
@@ -2824,6 +2843,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // its monster + distance caches.
         RefreshLayout();
         RefreshTeleportRooms();
+        RefreshTrainerRooms();   // trainer set is per game-data set
     }
 
     // Walk every room with a non-zero Cmd and ask TBInfo whether the CMD's

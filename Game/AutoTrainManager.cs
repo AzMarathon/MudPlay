@@ -77,6 +77,20 @@ public sealed class AutoTrainManager : IDisposable
     // round-trip.
     public event Action? PlanCommitted;
 
+    // Raised after a semi-manual ApplyTargets run (the CP-Alloc "Apply this level"
+    // button): true when a follow-up `stat` shows the raw stats reached the applied
+    // targets, false on abort (not at a trainer) or mismatch. The auto/TrainNow path
+    // does NOT fire this — only an explicit ApplyTargets does.
+    public event Action<bool>? ApplyTargetsCompleted;
+
+    // This session is an explicit "apply this level" (verify via `stat` + report on
+    // completion) rather than the plan-by-level TrainNow.
+    private bool _explicitApply;
+    private int[] _applyTarget = Array.Empty<int>();
+    // Grace after the CP replay for the confirming `stat` screen to arrive + parse
+    // before we compare the raw stats to the target.
+    public TimeSpan StatVerifyDelay { get; } = TimeSpan.FromMilliseconds(1500);
+
     public AutoTrainManager(PlayerStats stats, GameDataCache gameData, InventoryManager inventory,
                             ProfileService profile, TrainerMenuTracker trainer, LogService? log = null)
     {
@@ -126,6 +140,67 @@ public sealed class AutoTrainManager : IDisposable
         _ = AwaitRenderThenReplayAsync(session);
     }
 
+    // Semi-manual "apply this level": apply an EXPLICIT set of raw-stat targets at
+    // the trainer the user is standing at (no plan-by-level resolve, no walk). The
+    // caller (CP-Alloc tab) validates affordability first. Uses the same
+    // send-`train stats` → await-menu → replay machinery; on completion fires
+    // ApplyTargetsCompleted — true when the confirming `stat` shows the raw stats
+    // reached the targets, false on abort (not at a trainer) / mismatch. No-op when
+    // already busy, no wire, wrong-length arrays, or nothing to raise.
+    public void ApplyTargets(int[] current, int[] target)
+    {
+        if (_phase != Phase.Idle || !_wire.IsBound) return;
+        if (current is not { Length: 6 } || target is not { Length: 6 }) return;
+        if (!AutoTrainSequenceBuilder.HasRaise(current, target)) return;
+
+        _applyTarget = target;
+        _explicitApply = true;
+        _sequence = AutoTrainSequenceBuilder.Build(current, target);
+        int session = ++_sessionId;
+        _phase = Phase.AwaitingMenu;
+        _log?.Info("AutoTrain", "Apply this level — sent `train stats`.");
+        _wire.Send("train stats");
+        StateChanged?.Invoke();
+        _ = AwaitMenuTimeoutAsync(session);
+        _ = AwaitRenderThenReplayAsync(session);
+    }
+
+    // After an explicit apply's CP replay, send `stat` and (once it has arrived)
+    // compare the freshly-resolved RAW stats to the target — the "confirm via stat
+    // on exit" the CP-Alloc button reports on.
+    private async Task VerifyExplicitApplyAsync(int session)
+    {
+        _wire.Send("stat");
+        await Task.Delay(StatVerifyDelay);
+        if (_sessionId != session) return;
+        bool ok = ExplicitTargetsReached();
+        _explicitApply = false;
+        _log?.Info("AutoTrain", ok
+            ? "Apply this level — `stat` confirms the plan was applied."
+            : "Apply this level — `stat` did not confirm the plan (unchanged / not at a trainer).");
+        ApplyTargetsCompleted?.Invoke(ok);
+    }
+
+    // True when the live RAW stats (displayed minus equipment, via CharacterPlanContext)
+    // have reached every target — training can't lower a stat, so "reached" is >=.
+    private bool ExplicitTargetsReached()
+    {
+        CharacterPlanContext ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory);
+        if (!ctx.HasCharacter || _applyTarget.Length != 6) return false;
+        int[] now = ToArray(ctx.Baseline);
+        for (int i = 0; i < 6; i++)
+            if (now[i] < _applyTarget[i]) return false;
+        return true;
+    }
+
+    // Fire the explicit-apply failure report if this aborted session was one.
+    private void ReportExplicitApplyAborted()
+    {
+        if (!_explicitApply) return;
+        _explicitApply = false;
+        ApplyTargetsCompleted?.Invoke(false);
+    }
+
     private async Task AwaitMenuTimeoutAsync(int session)
     {
         await Task.Delay(MenuEntryTimeout);
@@ -133,6 +208,7 @@ public sealed class AutoTrainManager : IDisposable
         {
             _phase = Phase.Idle;
             _log?.Info("AutoTrain", "Trainer screen never opened (not at a trainer?) — aborted.");
+            ReportExplicitApplyAborted();
             StateChanged?.Invoke();
         }
     }
@@ -175,6 +251,7 @@ public sealed class AutoTrainManager : IDisposable
         {
             _phase = Phase.Idle;
             _log?.Info("AutoTrain", "Trainer screen didn't open (not at a trainer?) — aborted.");
+            ReportExplicitApplyAborted();
             StateChanged?.Invoke();
         }
         else if (_phase == Phase.Replaying)
@@ -196,6 +273,10 @@ public sealed class AutoTrainManager : IDisposable
         // CP raises + SAVE are on the wire — let "plan committed" subscribers
         // (the plan-grid cleanup) react now, ahead of the menu-exit round-trip.
         PlanCommitted?.Invoke();
+
+        // An explicit "apply this level" run confirms via `stat` then reports so the
+        // CP-Alloc button clears its row only on verified success.
+        if (_explicitApply) _ = VerifyExplicitApplyAsync(session);
 
         // Safety: if the exit prompt never fires, release the latch after a grace.
         await Task.Delay(ExitGrace);

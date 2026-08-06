@@ -66,7 +66,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         var planState = new CpPlanState();
         Sections.Add(new LevelProjectionSectionViewModel(playerStats, gameData, planState));
 
-        Sections.Add(new CpAllocationSectionViewModel(playerStats, gameData, inventory, profile, planState, trainerWalk));
+        Sections.Add(new CpAllocationSectionViewModel(playerStats, gameData, inventory, profile, planState, trainerWalk, AppServices.Current.AutoTrain));
 
         Sections.Add(new QuestSectionViewModel(playerStats, gameData, profile, quests, questBonuses));
 

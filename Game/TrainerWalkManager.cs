@@ -178,11 +178,13 @@ public sealed class TrainerWalkManager : IDisposable
     {
         AutoTrainerSettings s = ReadSettings();
         int keep = Math.Max(0, s.LevelsToKeep);
+        int ceiling = Math.Max(0, s.DoNotTrainAbove);
         int toTrain = TrainBudgetCalculator.LevelsToTrain(
-            _stats.Exp, _stats.Level, Chart(), _gameData.ActiveRealm, keep, MaxTrainLoopSteps);
+            _stats.Exp, _stats.Level, Chart(), _gameData.ActiveRealm, keep, MaxTrainLoopSteps, ceiling);
 
-        // Banked levels past the reserve → train them (loop), applying CP if the
-        // Auto-train-stats toggle is on. The loop stops once only `keep` remain.
+        // Banked levels past the reserve (and under the ceiling) → train them (loop),
+        // applying CP if the Auto-train-stats toggle is on. The loop stops once only
+        // `keep` remain or the ceiling is reached.
         if (toTrain > 0)
         {
             Begin(loop: true, applyCp: s.AutoTrainStats, reply: null, keepLevels: keep);
@@ -195,9 +197,12 @@ public sealed class TrainerWalkManager : IDisposable
         if (!_autoTrain.CanTrainNow)
         {
             int banked = CountBankableAbove(_stats.Level);   // only the reserve message needs it
-            _log?.Info("AutoTrain", banked > 0
-                ? $"Nothing to train — keeping {banked} banked level{(banked == 1 ? "" : "s")} in reserve."
-                : "Nothing to train — no banked levels and CP already allocated.");
+            _log?.Info("AutoTrain",
+                banked > 0 && !TrainBudgetCalculator.WithinCeiling(_stats.Level, ceiling)
+                    ? $"Nothing to train — at the level ceiling ({ceiling}); {banked} banked level{(banked == 1 ? "" : "s")} held."
+                : banked > 0
+                    ? $"Nothing to train — keeping {banked} banked level{(banked == 1 ? "" : "s")} in reserve."
+                    : "Nothing to train — no banked levels and CP already allocated.");
             return;
         }
 
@@ -227,8 +232,9 @@ public sealed class TrainerWalkManager : IDisposable
     {
         if (IsBusy || !_wire.IsBound) return;
         AutoTrainerSettings s = ReadSettings();
-        // CP only applies in the looping "both toggles" mode (Mode C).
-        ResetRunState(loop: s.AutoTrain, applyCp: s.AutoTrain && s.AutoTrainStats, reply);
+        // Decoupled: AutoTrain drives the level-loop, AutoTrainStats drives the CP
+        // apply — each independent (either, neither, or both).
+        ResetRunState(loop: s.AutoTrain, applyCp: s.AutoTrainStats, reply);
         _target = null;       // no walk target — we're assumed to be at the trainer
         _resume = default;    // and not detouring a running engine
         _startLevel = _stats.Level;
@@ -414,11 +420,16 @@ public sealed class TrainerWalkManager : IDisposable
         // reserve (and the safety cap holds). We never refresh stats between loop
         // steps — PlayerStats.Level lags, so the bankable check rides _stats.Exp
         // (fixed mid-loop) against the just-attained level.
-        if (_loopTrain && _trainSteps < MaxTrainLoopSteps && CountBankableAbove(_attainedLevel) > _keepLevels)
+        int ceiling = Math.Max(0, ReadSettings().DoNotTrainAbove);
+        if (_loopTrain && _trainSteps < MaxTrainLoopSteps
+            && CountBankableAbove(_attainedLevel) > _keepLevels
+            && TrainBudgetCalculator.WithinCeiling(_attainedLevel, ceiling))
         {
             SendTrain();
             return;
         }
+        if (_loopTrain && ceiling > 0 && !TrainBudgetCalculator.WithinCeiling(_attainedLevel, ceiling))
+            _log?.Info("AutoTrain", $"Reached the level ceiling ({ceiling}) — stopping auto-train.");
 
         // Single train, banked exp exhausted, or cap hit → settle the run.
         BeginStatRefresh();
@@ -554,9 +565,12 @@ public sealed class TrainerWalkManager : IDisposable
         if (e.PropertyName != nameof(PlayerStats.Exp)) return;
         AutoTrainerSettings s = ReadSettings();
         int keep = Math.Max(0, s.LevelsToKeep);
-        if (!IsBusy && EngineActive && s.AutoTrain && CountBankableAbove(_stats.Level) > keep)
+        if (!IsBusy && EngineActive && s.AutoTrain
+            && CountBankableAbove(_stats.Level) > keep
+            && TrainBudgetCalculator.WithinCeiling(_stats.Level, Math.Max(0, s.DoNotTrainAbove)))
             // Armed auto-train: detour + loop-train down to the reserve, applying
-            // CP per the Auto-train-stats toggle.
+            // CP per the Auto-train-stats toggle. Suppressed once the level ceiling
+            // is reached.
             Begin(loop: true, applyCp: s.AutoTrainStats, reply: null, keepLevels: keep);
         else
             StateChanged?.Invoke();
@@ -680,8 +694,10 @@ public sealed class TrainerWalkManager : IDisposable
     private bool CanLevelNow()
     {
         if (_stats.Level <= 0) return false;
-        int keep = Math.Max(0, ReadSettings().LevelsToKeep);
-        return CountBankableAbove(_stats.Level) > keep;
+        AutoTrainerSettings s = ReadSettings();
+        int keep = Math.Max(0, s.LevelsToKeep);
+        return CountBankableAbove(_stats.Level) > keep
+            && TrainBudgetCalculator.WithinCeiling(_stats.Level, Math.Max(0, s.DoNotTrainAbove));
     }
 
     // How many further levels above level the banked exp can still reach — the

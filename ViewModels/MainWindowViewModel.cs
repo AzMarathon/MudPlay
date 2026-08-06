@@ -254,15 +254,6 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoHideActive;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoSearchActive;
 
-    // Live auto-train master toggle. Mirrors the Settings → Auto-Trainer
-    // "Auto-train" checkbox, but persists to AutoTrainerSettings (not the
-    // GeneralSettings.AutoMode set), so it is deliberately NOT part of
-    // IsAllAutoOff / the master All-auto kill switch — it's a leveling
-    // convenience, not a combat auto-response. The "Auto-train CP" cascade and
-    // per-trainer list stay in the settings tab; this only flips the master
-    // bit that the trainer walk engine reads live on each exp gain.
-    [ObservableProperty] private bool _isAutoTrainActive;
-
     // Master "Disable hangups" toggle. When on, every automatic disconnect
     // path (@hangup / @relog remote commands, low-HP emergency hangup,
     // nightly-cleanup log-off) is suppressed — the client drops the carrier
@@ -1278,9 +1269,6 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             case "ToggleAutoSearch":
                 row.IsActive = IsAutoSearchActive;
-                break;
-            case "ToggleAutoTrain":
-                row.IsActive = IsAutoTrainActive;
                 break;
             case "ToggleAllAutoOff":
                 // Depressed = auto-responses running; inverse of "all off".
@@ -4171,13 +4159,6 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ToggleAutoSearch() => IsAutoSearchActive = !IsAutoSearchActive;
 
-    // Flip the live IsAutoTrainActive bit (the partial OnXxxChanged hook
-    // persists it to AutoTrainerSettings.AutoTrain and the toolbar IsActive
-    // badge follows). Bound from the toolbar / Action-menu / hotkey — the same
-    // master toggle the Settings → Auto-Trainer checkbox drives.
-    [RelayCommand]
-    private void ToggleAutoTrain() => IsAutoTrainActive = !IsAutoTrainActive;
-
     // Flip the live IsDisableHangupsActive bit (the partial OnXxxChanged
     // hook persists it to GeneralSettings.DisableHangups and the toolbar
     // IsActive badge follows). Bound from the toolbar / Action-menu / hotkey.
@@ -4418,26 +4399,6 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnIsDisableHangupsActiveChanged(bool value)
         => PersistGeneralFlag("DisableHangups", value, g => g.DisableHangups = value);
 
-    // Auto-train lives in AutoTrainerSettings, not GeneralSettings.AutoMode, so
-    // it gets its own persist path (the AutoMode helpers can't reach it). The
-    // trainer walk engine reads AutoTrain live on each exp gain, so flipping
-    // the bit is enough — no engine re-eval call. Turning the master off also
-    // clears the AutoTrainStats cascade to keep the settings invariant (stats
-    // never on without train behind it), matching the settings tab.
-    partial void OnIsAutoTrainActiveChanged(bool value)
-    {
-        if (_suppressAutoEngineWriteback) return;
-        if (AppServices.Current.Profile.Current is not { } profile) return;
-        profile.Settings ??= new();
-        Models.Profile.AutoTrainerSettings dto = ReadAutoTrainerFromProfile(profile);
-        dto.AutoTrain = value;
-        if (!value) dto.AutoTrainStats = false;
-        profile.Settings["AutoTrainer"] =
-            System.Text.Json.JsonSerializer.SerializeToElement(dto);
-        AppServices.Current.Profile.Save();
-        AppServices.Current.Log.Info("AutoTrain", $"User turned Auto-train {(value ? "on" : "off")}.");
-    }
-
     private void PersistAutoModeFlag(string flag, bool value,
                                      Action<Models.Profile.AutoActionDefaults> mutator)
     {
@@ -4496,12 +4457,8 @@ public partial class MainWindowViewModel : ObservableObject
             IsAutoSneakActive    = am.AutoSneak;
             IsAutoHideActive     = am.AutoHide;
             IsAutoSearchActive   = am.AutoSearch;
-            // Auto-train is stored apart from AutoMode (AutoTrainerSettings),
-            // but reseeds on the same profile-lifecycle beats so its toolbar
-            // badge and the settings-tab checkbox stay agreed.
-            IsAutoTrainActive    = profile is null
-                ? false
-                : ReadAutoTrainerFromProfile(profile).AutoTrain;
+            // (Auto-train is no toolbar/menu surface — the Player Workshop
+            // CP-Alloc toggles + Settings → Auto-Trainer own its sync now.)
         }
         finally
         {

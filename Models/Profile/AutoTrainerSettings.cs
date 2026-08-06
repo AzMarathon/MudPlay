@@ -6,13 +6,15 @@ namespace FujinTerm.Models.Profile;
 // CharacterProfile.Settings. Surfaced by the Settings → Auto-Trainer tab.
 public sealed class AutoTrainerSettings
 {
-    // Master toggle: when running a loop / auto-lair and a level-up is
-    // available, detour to the appropriate trainer and train.
+    // Auto-level toggle: when running a loop / auto-lair and a level-up is
+    // available, detour to the appropriate trainer and train the level(s).
     public bool AutoTrain { get; set; }
 
-    // Cascading toggle (only meaningful when AutoTrain is on): after training a
-    // level, drive the train stats screen to apply the CP plan's row for the
-    // new level.
+    // Auto-apply-CP toggle — INDEPENDENT of AutoTrain (decoupled): whenever a train
+    // flow runs, drive the train-stats screen to apply the CP plan's row. On with
+    // AutoTrain off simply means no auto-trigger fires it, so it then only affects
+    // the manual Train-now / @train / "Apply this level" paths. Still requires a
+    // saved CP plan to have anything to apply.
     public bool AutoTrainStats { get; set; }
 
     // Buffer of trainable-but-untrained levels to always keep banked. Auto-train
@@ -20,6 +22,12 @@ public sealed class AutoTrainerSettings
     // from banked exp, so the character always carries a reserve. 0 (the
     // default) trains every banked level.
     public int LevelsToKeep { get; set; }
+
+    // Level ceiling: auto-train will train UP TO this level but never above it
+    // (reach N, then stop) — a guard against over-levelling / "OP"-ing a character
+    // once the exp + level-buffer gates would otherwise keep training. 0 (the
+    // default) = no ceiling.
+    public int DoNotTrainAbove { get; set; }
 
     // When on, broadcast "I can now train to level: N" on AnnounceChannel each
     // time a live experience gain makes a new level trainable — i.e. a
