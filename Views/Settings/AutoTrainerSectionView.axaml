@@ -18,7 +18,9 @@
 
     <Grid Margin="22" RowDefinitions="Auto,Auto,*" IsVisible="{Binding HasProfile}">
 
-        <!-- Toggles: master Auto-train then the cascading Auto-train stats on one row. -->
+        <!-- Two independent toggles on one row: Auto-train (auto-level) and
+             Auto-train stats (auto-apply the CP plan). Decoupled — either can run
+             without the other, so neither gates the other's enabled state. -->
         <StackPanel Grid.Row="0" Spacing="4">
             <StackPanel Orientation="Horizontal" Spacing="24">
                 <CheckBox Content="Auto-train"
@@ -26,7 +28,6 @@
                           ToolTip.Tip="When running a loop / auto-lair and a level-up is available, detour to an allowed trainer and train."/>
                 <CheckBox Content="Auto-train stats"
                           IsChecked="{Binding AutoTrainStats, Mode=TwoWay}"
-                          IsEnabled="{Binding AutoTrain}"
                           ToolTip.Tip="After training a level, apply the CP plan's row for the new level via the train-stats screen."/>
             </StackPanel>
             <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="540"

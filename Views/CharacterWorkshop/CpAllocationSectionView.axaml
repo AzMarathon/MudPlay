@@ -25,7 +25,7 @@
                     ToolTip.Tip="Walk to the nearest allowed, level-appropriate trainer and train, applying the plan."/>
             <Button Content="Apply this level" Margin="0,0,12,6" Command="{Binding ApplyLevelCommand}"
                     IsVisible="{Binding HasCharacter}"
-                    ToolTip.Tip="At a trainer, apply the SELECTED plan row's stats via the train-stats screen — but only when its CP fully lines up with your available CP. On a `stat`-confirmed success the row is cleared."/>
+                    ToolTip.Tip="Select a plan row, then click to apply its stats at the trainer you're standing on via the train-stats screen — it only trains when that row's CP fully lines up with your available CP (otherwise it tells you why). On a `stat`-confirmed success the row is cleared."/>
             <TextBlock Text="● Can train now" VerticalAlignment="Center" Margin="0,0,0,6"
                        IsVisible="{Binding CanTrainNow}"
                        Foreground="{StaticResource AccentAmberBrush}"/>

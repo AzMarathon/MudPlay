@@ -276,9 +276,9 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     [RelayCommand(CanExecute = nameof(CanApplyLevel))]
     private void ApplyLevel()
     {
-        if (!TryResolveSelectedTargets(out int[] current, out int[] target))
+        if (!TryResolveSelectedTargets(out int[] current, out int[] target, out string reason))
         {
-            ApplyLevelStatus = "This level's CP doesn't line up with what you have available.";
+            ApplyLevelStatus = reason;
             return;
         }
         ApplyLevelStatus = "Applying at the trainer…";
@@ -286,8 +286,12 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         SyncAutoTrain();
     }
 
+    // Enabled the moment a plan row is selected and no train run is in flight; the
+    // CP-lines-up / has-a-raise validation runs on click so the refusal reasons in
+    // TryResolveSelectedTargets actually reach the user instead of a silently-dead
+    // button.
     private bool CanApplyLevel() =>
-        !AutoTrainBusy && !_autoTrain.IsBusy && TryResolveSelectedTargets(out _, out _);
+        !AutoTrainBusy && !_autoTrain.IsBusy && HasCharacter && SelectedRow is not null;
 
     // The explicit apply reported back: clear the row only on a `stat`-verified success.
     private void OnApplyLevelCompleted(bool ok)
@@ -306,19 +310,34 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         SyncAutoTrain();
     }
 
-    // Resolve the selected row to (current raw baseline, affordable clamped targets);
-    // false when no row is selected, nothing raises, or the row's full spend doesn't
-    // fit live CP (the budget clamp trimmed it — the "CP doesn't line up" case).
-    private bool TryResolveSelectedTargets(out int[] current, out int[] target)
+    // Resolve the selected row to (current raw baseline, affordable clamped targets),
+    // with a user-facing `reason` when it can't: no row / no character, the row's full
+    // spend doesn't fit live CP (the budget clamp trimmed it), or there's nothing left
+    // to raise (already trained). Order matters — a trim outranks "already trained" so a
+    // CP shortfall never masquerades as a fully-trained level.
+    private bool TryResolveSelectedTargets(out int[] current, out int[] target, out string reason)
     {
         current = target = Array.Empty<int>();
-        if (!HasCharacter || SelectedRow is null) return false;
+        reason = string.Empty;
+        if (!HasCharacter || SelectedRow is null)
+        {
+            reason = "Select a plan row to apply.";
+            return false;
+        }
         int[] prev = ToArr(_baseline);
         int[] rowTargets = ToArr(SelectedRow.ToEntry());
         int[] clamped = CpPlanCalculator.ClampRowToBudget(
             prev, rowTargets, ToArr(_raceMin), ToArr(_raceMax), _stats.Cp, _realm, null, out _);
-        if (!clamped.SequenceEqual(rowTargets)) return false;   // trimmed → CP doesn't line up
-        if (!AutoTrainSequenceBuilder.HasRaise(prev, clamped)) return false;   // nothing to raise
+        if (!clamped.SequenceEqual(rowTargets))
+        {
+            reason = "This level's CP doesn't line up with the CP you have available.";
+            return false;
+        }
+        if (!AutoTrainSequenceBuilder.HasRaise(prev, clamped))
+        {
+            reason = "This level's stats are already trained — nothing to raise.";
+            return false;
+        }
         current = prev;
         target = clamped;
         return true;
