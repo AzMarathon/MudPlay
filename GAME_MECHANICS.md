@@ -411,6 +411,20 @@ it isn't here and you're unsure, ask.
   - **An AoE spell's live enemy count drops below `MinEnemies`** → switch to a single-target action.
   - **Room / multi-target** attack spells fire at an empty room and emit a "nothing to hit here" style
     message (exact wording unconfirmed — no test character yet).
+- **[CONFIRMED]** *(2026-08-05, user)* **`MaxCasts` counts combat ROUNDS, not individual casts.** It is
+  the maximum number of rounds the client will spend casting this spell at a target — one round counts
+  as one regardless of how many times the spell fires that round (e.g. a spell that casts twice per
+  round still spends a single round). The spell keeps casting only *while* mana also stays at or above
+  `MinManaPerCast`; whichever limit is hit first (rounds spent ≥ `MaxCasts`, **or** mana below the
+  reserve) ends the spell for that target and drops to the next cascade action. **Once dropped, stay
+  dropped for that target** — a mana-regen tick that lifts mana back above the reserve must NOT flip
+  the client back to the spell mid-fight; it commits to the weapon until the monster dies (or the room
+  clears). This is a per-target latch, mirroring the observed-immunity latch.
+- **[CONFIRMED]** *(2026-08-05, user)* **"You attempt to cast <spell>, but fail." means the spell DID
+  cast — mana was spent — but it missed the target (a hit-roll failure), NOT a fizzle and NOT
+  out-of-mana.** So an attack spell drains mana every round it repeats whether it lands or misses; a
+  "but fail" round is a spent round (mana down, zero damage), not a free retry. The client must not
+  treat this line as an out-of-mana / interrupt signal.
 - **[CONFIRMED]** **Martial-arts strikes (Punch / Kick / Jumpkick) are class-innate abilities, not a
   function of the trained Martial Arts skill.** A class grants a strike by listing its ability id in
   an `Abil-0..9` slot: **Punch = 29, Kick = 30, Jumpkick = 35** (Mystic carries all three at value 1

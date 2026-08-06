@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.31.1
+
+- Combat: once an attack spell stops for a monster — its MaxCasts rounds are spent, or mana falls below the per-cast reserve — the client now commits to the weapon for the rest of that monster instead of flipping back to the spell the moment a mana tick lifts it above the reserve again
+- bug reports addressed: paradigm-20260805-130847
+
 ## 2.31.0
 
 - Combat spell "Min mana per cast" now shows its live equivalent beside each slot — the mana amount in Percentage mode, the % in Value mode (mirrors the Health tab)

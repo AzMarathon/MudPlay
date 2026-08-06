@@ -1,10 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.31.0**
-> - Combat spell "Min mana per cast" now shows its live equivalent beside each slot — the mana amount in Percentage mode, the % in Value mode (mirrors the Health tab)
-> - Percentage mode now caps at 100%: Combat Min-mana-per-cast and the Health tab's HP / MA thresholds can no longer be set above 100% (existing over-100 values snap down when you switch to Percentage)
-> - Settings tickers are whole numbers only — spell max-casts, min-enemies, min-mana, room monster counts, and Health thresholds no longer show trailing decimals
+> **Version 2.31.1**
+> - Combat: once an attack spell stops for a monster — its MaxCasts rounds are spent, or mana falls below the per-cast reserve — the client now commits to the weapon for the rest of that monster instead of flipping back to the spell the moment a mana tick lifts it above the reserve again
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

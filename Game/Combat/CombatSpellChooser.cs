@@ -57,6 +57,22 @@ public sealed class CombatSpellChooser
     private readonly HashSet<string> _singleDebuffedTargets =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Per-target weapon latch. Once we've actually been casting a single-target
+    // attack spell at the current target and the cascade then lapses (its mana
+    // reserve is now unmet OR its MaxCasts rounds are spent), commit to the weapon
+    // for the rest of this target — a mana-regen tick that lifts mana back above
+    // the reserve must NOT flip us back to the spell mid-fight (CONFIRMED: MaxCasts
+    // / mana-reserve is a per-target latch, like observed immunity).
+    // _castSingleTargetAttackThisTarget gates the latch on a real spell round
+    // having happened, so a fresh target we simply couldn't afford yet is left free
+    // to start casting once mana regenerates rather than being latched to the
+    // weapon from the outset. Both are per-target and reset on target change /
+    // room clear. The latch never suppresses the spell when the weapon can't hit
+    // the target (ctx.WeaponIneffective) — there we still need the spell, so we
+    // wait for mana rather than swing uselessly.
+    private bool _attackSpellLatchedOff;
+    private bool _castSingleTargetAttackThisTarget;
+
     // Reset all per-room cast bookkeeping. Call when the room clears / the engine
     // starts a fresh engagement.
     public void ResetForNewRoom()
@@ -67,6 +83,8 @@ public sealed class CombatSpellChooser
         _normalAttackCasts = 0;
         _alternateAttackCasts = 0;
         _singleDebuffedTargets.Clear();
+        _attackSpellLatchedOff = false;
+        _castSingleTargetAttackThisTarget = false;
     }
 
     // Reset the per-TARGET single-target cast counters. The single-target slots
@@ -79,6 +97,8 @@ public sealed class CombatSpellChooser
         _singleDebuffCasts = 0;
         _normalAttackCasts = 0;
         _alternateAttackCasts = 0;
+        _attackSpellLatchedOff = false;
+        _castSingleTargetAttackThisTarget = false;
     }
 
     // Pick the round's combat action. Pure — does not mutate counters; the caller
@@ -110,10 +130,26 @@ public sealed class CombatSpellChooser
         // regardless of this choice.
         bool preferSpell = settings.ActionOrder == CombatActionOrder.SpellsFirst
                            || ctx.WeaponIneffective;
+
+        // The per-target weapon latch suppresses the single-target attack cascade —
+        // but never when the weapon can't hit this target (there we still need the
+        // spell, so we ignore the latch and wait for mana).
+        bool singleTargetSpent = _attackSpellLatchedOff && !ctx.WeaponIneffective;
+
         if (preferSpell
             && ctx.SpellsAvailable
-            && TryAttackSpell(settings, ctx, settings.SpellManaThresholdMode) is { } spell)
+            && TryAttackSpell(settings, ctx, settings.SpellManaThresholdMode, singleTargetSpent) is { } spell)
             return spell;
+
+        // The single-target attack cascade could not fire this round. If we'd
+        // already been casting a single-target attack spell at this target, its
+        // mana reserve is now unmet or its MaxCasts rounds are spent — latch to the
+        // weapon for the rest of this target so a mana regen can't flip us back
+        // mid-fight. Skipped when the weapon can't hit (we stay on the spell and
+        // wait for mana instead of committing to a useless swing).
+        if (preferSpell && ctx.SpellsAvailable
+            && _castSingleTargetAttackThisTarget && !ctx.WeaponIneffective)
+            _attackSpellLatchedOff = true;
 
         return CombatSpellDecision.Weapon;
     }
@@ -182,10 +218,12 @@ public sealed class CombatSpellChooser
     // normal, then alternate single-target damage spells. Returns null when none
     // can fire this round.
     private CombatSpellDecision? TryAttackSpell(
-        CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode)
+        CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool singleTargetSpent)
     {
         // Auto-Nuke gate: the multi-target attack spell is a nuke — when the
         // auto-engine is off we skip it and fall to the single-target spells.
+        // Multi-attack is room-scoped (MinEnemies), not target-scoped, so the
+        // per-target single-target latch never suppresses it.
         CombatSpellSlot multi = settings.MultiAttackSpell;
         if (ctx.AllowNukes
             && IsConfigured(multi)
@@ -193,6 +231,10 @@ public sealed class CombatSpellChooser
             && CastsOk(multi, _multiAttackCasts)
             && ManaOk(multi, ctx, mode))
             return new CombatSpellDecision(CombatSpellAction.MultiAttack, multi.SpellName!);
+
+        // Single-target attack cascade latched off for this target (its mana
+        // reserve is spent or its MaxCasts rounds elapsed) — skip to the weapon.
+        if (singleTargetSpent) return null;
 
         CombatSpellSlot normal = settings.NormalAttackSpell;
         if (ctx.OverrideAttackSpell is { } attackOverride)
@@ -248,9 +290,11 @@ public sealed class CombatSpellChooser
                 break;
             case CombatSpellAction.NormalAttackSpell:
                 _normalAttackCasts++;
+                _castSingleTargetAttackThisTarget = true;
                 break;
             case CombatSpellAction.AlternateAttackSpell:
                 _alternateAttackCasts++;
+                _castSingleTargetAttackThisTarget = true;
                 break;
             case CombatSpellAction.WeaponAttack:
             default:

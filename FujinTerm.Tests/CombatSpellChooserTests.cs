@@ -486,6 +486,152 @@ public sealed class CombatSpellChooserTests
             sut.Choose(settings, Ctx(mana: 0, maxMana: 0)).Action);
     }
 
+    // ----- Per-target weapon latch (mana reserve / MaxCasts) ------------
+    // Once a single-target attack spell has been casting at a target and its
+    // cascade lapses (mana reserve unmet OR MaxCasts rounds spent), the chooser
+    // commits to the weapon for that target — a mana-regen tick must NOT flip it
+    // back to the spell mid-fight (CONFIRMED per-target latch).
+
+    private static CombatSpellContext IneffectiveCtx(int mana, int maxMana = 100) =>
+        new(EnemyCount: 1, TargetRawName: "a rat", Mana: mana, MaxMana: maxMana,
+            BackstabPending: false, WeaponIneffective: true);
+
+    [Fact]
+    public void Latch_ManaReserveTrips_StaysOnWeaponWhenManaRegens()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            SpellManaThresholdMode = ThresholdMode.Percentage,
+            NormalAttackSpell = Slot("harm", minMana: 50), // reserve 50% of max
+        };
+
+        // Round 1: 60% ≥ 50% → cast, and a real spell round happened.
+        CombatSpellDecision r1 = sut.Choose(settings, Ctx(mana: 60, maxMana: 100));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, r1.Action);
+        sut.MarkCast(r1, "a rat");
+
+        // Round 2: 40% < 50% → reserve unmet → drop to the weapon and latch.
+        Assert.Equal(CombatSpellAction.WeaponAttack,
+            sut.Choose(settings, Ctx(mana: 40, maxMana: 100)).Action);
+
+        // Round 3: mana regenerated to 90% — WITHOUT the latch this would re-cast;
+        // WITH it we stay on the weapon for this target.
+        Assert.Equal(CombatSpellAction.WeaponAttack,
+            sut.Choose(settings, Ctx(mana: 90, maxMana: 100)).Action);
+    }
+
+    [Fact]
+    public void Latch_ClearsOnNewTarget_ReCastsFresh()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            SpellManaThresholdMode = ThresholdMode.Percentage,
+            NormalAttackSpell = Slot("harm", minMana: 50),
+        };
+
+        CombatSpellDecision r1 = sut.Choose(settings, Ctx(mana: 60, maxMana: 100));
+        sut.MarkCast(r1, "a rat");
+        Assert.Equal(CombatSpellAction.WeaponAttack,
+            sut.Choose(settings, Ctx(mana: 40, maxMana: 100)).Action);   // latched
+
+        // New target → the latch clears; a healthy-mana round casts again.
+        sut.ResetForNewTarget();
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, Ctx(mana: 90, maxMana: 100)).Action);
+    }
+
+    [Fact]
+    public void Latch_NotArmed_WhenSpellNeverCastOnTarget()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            SpellManaThresholdMode = ThresholdMode.Percentage,
+            NormalAttackSpell = Slot("harm", minMana: 50),
+        };
+
+        // Fresh target, mana too low to ever start — weapon, but NOT latched.
+        Assert.Equal(CombatSpellAction.WeaponAttack,
+            sut.Choose(settings, Ctx(mana: 40, maxMana: 100)).Action);
+
+        // Mana regenerates → the spell starts (the latch only arms after a real
+        // spell round, so a never-cast target isn't stuck on the weapon).
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, Ctx(mana: 90, maxMana: 100)).Action);
+    }
+
+    [Fact]
+    public void Latch_NotArmed_WhenWeaponCannotHitTarget()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            SpellManaThresholdMode = ThresholdMode.Percentage,
+            NormalAttackSpell = Slot("harm", minMana: 50),
+        };
+
+        // Weapon is proven ineffective — the spell is the only kill means.
+        CombatSpellDecision r1 = sut.Choose(settings, IneffectiveCtx(mana: 60));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, r1.Action);
+        sut.MarkCast(r1, "a rat");
+
+        // Reserve unmet this round — we don't latch (a useless swing helps nobody);
+        // we wait for mana instead.
+        sut.Choose(settings, IneffectiveCtx(mana: 40));
+
+        // Mana back up → the spell resumes rather than staying on the weapon.
+        Assert.Equal(CombatSpellAction.NormalAttackSpell,
+            sut.Choose(settings, IneffectiveCtx(mana: 90)).Action);
+    }
+
+    [Fact]
+    public void Latch_DoesNotSuppressMultiAttack()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            SpellManaThresholdMode = ThresholdMode.Percentage,
+            MultiAttackSpell = Slot("star", minEnemies: 2),
+            NormalAttackSpell = Slot("harm", minMana: 50),
+        };
+
+        // Single mob → normal fires, then its reserve trips → latch to weapon.
+        CombatSpellDecision r1 = sut.Choose(settings, Ctx(enemies: 1, mana: 60, maxMana: 100));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, r1.Action);
+        sut.MarkCast(r1, "a rat");
+        Assert.Equal(CombatSpellAction.WeaponAttack,
+            sut.Choose(settings, Ctx(enemies: 1, mana: 40, maxMana: 100)).Action);
+
+        // Room fills to 5 → the room-scoped AoE nuke is NOT suppressed by the
+        // single-target latch.
+        Assert.Equal(CombatSpellAction.MultiAttack,
+            sut.Choose(settings, Ctx(enemies: 5, mana: 90, maxMana: 100)).Action);
+    }
+
+    [Fact]
+    public void Latch_MaxCastsRoundsSpent_DropsToWeapon()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("harm", maxCasts: 2), // 2 rounds then switch
+        };
+
+        CombatSpellDecision r1 = sut.Choose(settings, Ctx());
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, r1.Action);
+        sut.MarkCast(r1, "a rat");
+
+        CombatSpellDecision r2 = sut.Choose(settings, Ctx());
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, r2.Action);
+        sut.MarkCast(r2, "a rat");
+
+        // Two rounds spent → drop to the weapon and stay there for the target.
+        Assert.Equal(CombatSpellAction.WeaponAttack, sut.Choose(settings, Ctx()).Action);
+        Assert.Equal(CombatSpellAction.WeaponAttack, sut.Choose(settings, Ctx()).Action);
+    }
+
     // ----- MarkCast / ResetForNewRoom bookkeeping -----------------------
 
     [Fact]
