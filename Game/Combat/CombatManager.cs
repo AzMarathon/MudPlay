@@ -1758,8 +1758,13 @@ public sealed partial class CombatManager : IDisposable
         _log?.Combat(LogCategory,
             $"command-no-effect — dropping target={_currentTarget} + refreshing room");
         _currentTarget = null;
-        // A no-effect swing means the named target isn't hittable now — end any
-        // guard-redirect chase rather than re-firing at a target that won't resolve.
+        // A no-effect swing / cast means the named target isn't hittable now — a
+        // spell→weapon switch that raced the kill fires `aa <corpse>` and lands
+        // here, so end spell mode too (not just the weapon target) rather than
+        // leaving the heartbeat to re-cast at the corpse next tick.
+        _castingSpellTarget = null;
+        // ...and end any guard-redirect chase rather than re-firing at a target
+        // that won't resolve.
         _guardBlockedTarget = null;
         ClearBackstabResolution();
 
@@ -1926,6 +1931,16 @@ public sealed partial class CombatManager : IDisposable
             // fresh swing — not the kill's Off. Suppressing it there strands the
             // survivor for a full round (the reported "cast a buff mid-fight, then
             // missed a combat round before re-attacking"), so resume.
+            //
+            // But bypass the attack-guard ONLY when the cast came at/after the last
+            // swing — that's what proves the cast interrupted the swing, so the
+            // "a fresh swing is still going" assumption behind ResumeAfterAttackGuard
+            // is genuinely false. When a swing went out AFTER the cast (a kill's
+            // death→re-observe re-engaged the survivor a beat after an earlier
+            // between-round bless), that swing IS fresh and in flight; bypassing the
+            // guard there fires a redundant second `aa <target>` on top of it — the
+            // reported "doubled down on the physical attack". Fall through to the
+            // guarded resume so ResumeAfterAttackGuard suppresses the double.
             if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _castingSpellTarget is null
                 && _classifier.Current is { } live
@@ -1937,7 +1952,7 @@ public sealed partial class CombatManager : IDisposable
                         "between-round-cast resume suppressed — kill this burst; " +
                         "deferring re-engage to the death→re-observe path");
                 else
-                    TryResumeEngage(live, bypassAttackGuard: true);
+                    TryResumeEngage(live, bypassAttackGuard: _lastAttackSentAt <= _betweenRoundCastAt);
             }
 
             // Spell analogue of the weapon resume above. A spell attack auto-repeats

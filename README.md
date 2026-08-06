@@ -1,8 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.31.1**
-> - Combat: once an attack spell stops for a monster — its MaxCasts rounds are spent, or mana falls below the per-cast reserve — the client now commits to the weapon for the rest of that monster instead of flipping back to the spell the moment a mana tick lifts it above the reserve again
+> **Version 2.31.2**
+> - Combat: swapping an attack spell to physical on the round it kills the target no longer strands — a "Your command had no effect." reply now clears spell mode too, so the client re-observes instead of re-casting at the corpse
+> - Combat: fixed a doubled physical swing when a between-round self-bless landed just before a spell kill (the survivor's fresh swing was re-fired on top of itself)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

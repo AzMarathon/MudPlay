@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.31.2
+
+- Combat: swapping an attack spell to physical on the round it kills the target no longer strands — a "Your command had no effect." reply now clears spell mode too, so the client re-observes instead of re-casting at the corpse
+- Combat: fixed a doubled physical swing when a between-round self-bless landed just before a spell kill (the survivor's fresh swing was re-fired on top of itself)
+- bug reports addressed: paradigm-20260805-220759
+
 ## 2.31.1
 
 - Combat: once an attack spell stops for a monster — its MaxCasts rounds are spent, or mana falls below the per-cast reserve — the client now commits to the weapon for the rest of that monster instead of flipping back to the spell the moment a mana tick lifts it above the reserve again
