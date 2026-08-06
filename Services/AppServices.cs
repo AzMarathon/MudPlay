@@ -2358,6 +2358,11 @@ public sealed class AppServices
         // cycle (app close / settings Apply / explicit save).
         Profile.ProfileLoaded += p => RoomTracker.Hydrate(p);
         Profile.ProfileClosed += () => RoomTracker.OnProfileClosed();
+        // On every save (including the save-on-close), stamp the live confirmed
+        // room as LastKnownRoom so the next session lands where the player actually
+        // is — not at the last strict anchor, which lags behind predicted-neighbour
+        // moves through same-named rooms.
+        Profile.ProfileSaving += _ => RoomTracker.PersistCurrentRoomForSave();
         if (Profile.Current is { } loaded) RoomTracker.Hydrate(loaded);
 
         // Outbound-command observer — recognises `look <dir>` peeks and

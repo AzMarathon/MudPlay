@@ -1,8 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.31.3**
-> - Combat: the percentage mana reserve now matches the mana number shown in Settings — an 82% reserve on a 66 max means 54 mana casts (not 55), so the spell no longer swaps to physical at the exact value you set as castable
+> **Version 2.31.4**
+> - Navigation: your position is now saved as it actually is when you close — reopening lands you where you left off instead of at your last manual `rm`, even after grinding through same-named rooms (e.g. Paradigm's Graveyard) where moves confirm by prediction
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

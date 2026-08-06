@@ -228,6 +228,27 @@ public sealed class RoomTracker
         RaiseStateChanged(prevConf, RoomConfidence.Confirmed, prev, room);
     }
 
+    // Flush the CURRENT confirmed room as the on-disk anchor at profile-save time
+    // (wired to ProfileService.ProfileSaving, so it covers the save-on-close). The
+    // mid-session SetRoom path deliberately keeps a trusted strict anchor over a
+    // predicted-neighbour deduction while playing — a shaky prediction must not
+    // poison the recovery anchor. But at save/close we want the NEXT session to
+    // hydrate where the player actually is: without this, a run of predicted moves
+    // through same-named rooms (Paradigm's Graveyard has ~100 identical "Graveyard"
+    // rooms, so every move confirms by prediction, never a 1-of-1 match) leaves the
+    // anchor frozen at the last `rm` and reload lands there instead of the real
+    // position. Writes the live position as the anchor and clears the replay tail
+    // (the anchor now IS the current room — nothing left to replay). No-op unless
+    // the position is Confirmed; a Suspect/Unknown view leaves the existing anchor
+    // untouched so we never overwrite a good anchor with a guess.
+    public void PersistCurrentRoomForSave()
+    {
+        if (_profile is null) return;
+        if (State.Confidence != RoomConfidence.Confirmed) return;
+        if (State.CurrentRoom is not { } room) return;
+        PersistConfirmedAnchor(room, State.LastUpdatedAt);
+    }
+
     // Called when the profile unloads. Detaches the persistence target.
     public void OnProfileClosed()
     {
