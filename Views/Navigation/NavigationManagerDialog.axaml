@@ -86,7 +86,7 @@
                  Loops + Auto-Lair folder tree (they share one on-disk folder
                  layout). Tab 2 = GOTO favourites, with their own profile-backed
                  folder set (the CRUD surface the pre-rework window hosted). -->
-            <TabControl Grid.Row="1">
+            <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
                 <TabItem Header="Loops &amp; Auto-Lairs">
             <Border BorderBrush="{StaticResource ChromeBorderBrush}"
                     BorderThickness="1"

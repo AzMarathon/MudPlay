@@ -1277,15 +1277,16 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             case "MovementStart":
             {
-                // Always visible; enabled when idle (open Manage / run staged)
-                // or USER-paused (doubles as Resume). Keyed off IsUserPaused, not
-                // IsPaused — an engine wait (a mid-walk fight, a rest) must not
-                // flip this to "Resume"; only the user's own pause does.
+                // Always enabled: idle → run staged / open Manage; USER-paused →
+                // resume; already running → open Manage (Go To) so the user can
+                // switch where they're pathing mid-run. Tooltip keys off
+                // IsUserPaused, not IsPaused — an engine wait (a mid-walk fight, a
+                // rest) must not read as "Resume"; only the user's own pause does.
                 Game.Map.MovementController ctl = AppServices.Current.MovementControl;
-                row.IsActionEnabled = ctl.IsIdle || ctl.IsUserPaused;
+                row.IsActionEnabled = true;
                 row.Tooltip = ctl.IsUserPaused
                     ? "Resume movement"
-                    : "Start movement — run the staged loop, or open Manage to pick one";
+                    : "Start movement — run the staged loop, or open Manage to pick / switch one";
                 break;
             }
             case "MovementPause":
@@ -3801,27 +3802,27 @@ public partial class MainWindowViewModel : ObservableObject
             vm.OnFloorChangeRequested(key);
     }
 
-    // Toolbar Start, which doubles as Resume. If a nav mode is paused,
-    // resume it. If idle and a loop is staged via the Manage dialog's Load
-    // action, run it straight away — "start the staged loop without
-    // reopening the map". Otherwise (idle, nothing staged) open the shared
-    // Manage dialog so the user can pick / load / run one.
+    // Toolbar Start, which doubles as Resume. USER-paused → resume. Idle with a
+    // loop staged (Manage dialog's Load) → run it straight away. Otherwise — idle
+    // with nothing staged, OR already running a loop/goto — open the shared Manage
+    // dialog on the Go To tab, so the user can pick or SWITCH destination by
+    // hitting Run on a different favourite / loop mid-run.
     [RelayCommand]
     private void MovementStart()
     {
-        Game.Map.MovementController ctl = AppServices.Current.MovementControl;
+        var s = AppServices.Current;
+        Game.Map.MovementController ctl = s.MovementControl;
         if (ctl.IsUserPaused)
         {
             ctl.Resume();
             return;
         }
-        if (!ctl.IsIdle) return;
-        if (AppServices.Current.LoopRunner.StagedLoop is { } staged)
+        if (ctl.IsIdle && s.LoopRunner.StagedLoop is { } staged)
         {
-            AppServices.Current.LoopRunner.Start(staged);
+            s.LoopRunner.Start(staged);
             return;
         }
-        OpenNavManager();
+        OpenNavManager(startOnGotoTab: true);
     }
 
     // Toolbar Pause — pauses the running engine (no-op if already paused / idle).
@@ -3840,12 +3841,20 @@ public partial class MainWindowViewModel : ObservableObject
     // The single owner of the Navigation Management dialog. Browses / loads /
     // runs saved loops + lairs and hosts the Go To favourites tab — no map window
     // required. When the map is up and mid loop-build, its live LoopBuilder draft
-    // is handed to the dialog so the Draft "save this loop" section shows.
-    private void OpenNavManager()
+    // is handed to the dialog so the Draft "save this loop" section shows. The
+    // bool picks the default tab (toolbar Start → Go To, map button → Loops); an
+    // already-open dialog is switched to that tab and re-focused.
+    private void OpenNavManager(bool startOnGotoTab)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
-        if (_manageWindow is { } existing) { existing.Activate(); return; }
+        if (_manageWindow is { } existing)
+        {
+            if (existing.DataContext is ViewModels.Navigation.NavigationManagerDialogViewModel evm)
+                evm.SelectTab(startOnGotoTab);
+            existing.Activate();
+            return;
+        }
 
         var s = AppServices.Current;
         var mapVm = _navigationWindow?.DataContext as ViewModels.Navigation.NavigationViewModel;
@@ -3868,7 +3877,8 @@ public partial class MainWindowViewModel : ObservableObject
             walker: s.Walker,
             movement: s.MovementControl,
             autoLair: s.AutoLair,
-            favorites: s.Favorites);
+            favorites: s.Favorites,
+            startOnGotoTab: startOnGotoTab);
 
         Views.Navigation.NavigationManagerDialog window = new() { DataContext = vm };
         // The dialog's Close button raises CloseRequested; mirror what

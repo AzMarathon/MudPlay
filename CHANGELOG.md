@@ -9,7 +9,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Auto-train / Auto-train-stats now toggle from the CP Allocation tab too, in sync with Settings → Auto-Trainer; the old Auto-Train toolbar button, menu item and keybind are removed
 - Settings → Auto-Trainer: new "Do not train above level" ceiling — auto-train reaches that level then stops (no accidental over-levelling)
 - Navigation map: trainer rooms now show a triple up-chevron "level up here" marker — every trainer for the active game-data set
-- Navigation Management: the toolbar Start button and the map's Navigation Management button now open one shared window (re-focused, never a second copy); the toolbar-opened one no longer drops the Go To tab
+- Navigation Management is now one shared window from both the toolbar Start button and the map's Navigation Management button (re-focused, never a second copy) — Start opens it on the Go To tab, the map button on Loops
+- Toolbar Start no longer greys out while a loop/goto is running; pressing it (click or Alt+V) opens Manage so you can switch destination by hitting Run on a different favourite / loop
 
 ## 2.32.0
 

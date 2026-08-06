@@ -137,7 +137,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         AutoWalkManager? walker = null,
         MovementController? movement = null,
         AutoLairManager? autoLair = null,
-        FavoritesStore? favorites = null)
+        FavoritesStore? favorites = null,
+        bool startOnGotoTab = false)
     {
         ArgumentNullException.ThrowIfNull(loops);
         ArgumentNullException.ThrowIfNull(lairSetups);
@@ -175,6 +176,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         RebuildLoops();
         RebuildLairSetups();
         RebuildFavorites();
+        SelectTab(startOnGotoTab);
     }
 
     private void OnFoldersChanged()
@@ -293,6 +295,14 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // Show the GOTO tab only when a FavoritesStore was supplied (the live Manage
     // flow); the transient import-only instance leaves it null.
     public bool HasGotoTab => _favorites is not null;
+
+    // Which tab is showing: 0 = Loops & Auto-Lairs, 1 = Go To. Two-way so user
+    // clicks stay in sync; driven by the entry point via SelectTab (toolbar Start
+    // opens on Go To, the map's Manage button on Loops).
+    [ObservableProperty] private int _selectedTabIndex;
+
+    // Land on the Go To tab (when it exists) or the Loops tab.
+    public void SelectTab(bool gotoTab) => SelectedTabIndex = gotoTab && HasGotoTab ? 1 : 0;
 
     private void RebuildFavorites()
     {

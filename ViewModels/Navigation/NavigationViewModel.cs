@@ -2444,7 +2444,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // identical ones. The opener pulls this map's live LoopBuilder draft for
     // the dialog's Draft section.
     [RelayCommand]
-    private void OpenManager() => _services.OpenNavManager();
+    private void OpenManager() => _services.OpenNavManager(startOnGotoTab: false);
 
     // Exit LoopBuild mode after the Manage dialog's Draft section saves /
     // discards the in-progress loop, so the bottom builder strip collapses.
