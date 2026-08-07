@@ -47,6 +47,7 @@ public sealed class AutoLightProvisioner
     private readonly Func<IReadOnlyList<LightItem>> _catalogue;
     private readonly Func<RoomKey, Room?> _resolveRoom;
     private readonly Func<int> _wornIllu;
+    private readonly Func<int> _roomLightSpellIllu;
     private readonly Func<AutoLightSettings> _settings;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
@@ -91,6 +92,7 @@ public sealed class AutoLightProvisioner
         Func<IReadOnlyList<LightItem>> catalogue,
         Func<RoomKey, Room?> resolveRoom,
         Func<int> wornIllu,
+        Func<int> roomLightSpellIllu,
         Func<AutoLightSettings> settings,
         LogService? log = null)
     {
@@ -99,12 +101,14 @@ public sealed class AutoLightProvisioner
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(resolveRoom);
         ArgumentNullException.ThrowIfNull(wornIllu);
+        ArgumentNullException.ThrowIfNull(roomLightSpellIllu);
         ArgumentNullException.ThrowIfNull(settings);
         _isEnabled = isEnabled;
         _snapshot = snapshot;
         _catalogue = catalogue;
         _resolveRoom = resolveRoom;
         _wornIllu = wornIllu;
+        _roomLightSpellIllu = roomLightSpellIllu;
         _settings = settings;
         _log = log;
     }
@@ -145,7 +149,7 @@ public sealed class AutoLightProvisioner
         IReadOnlyList<LightItem> catalogue = _catalogue();
         RouteLightScan scan = RouteLightScanner.Scan(route, _resolveRoom, wornIllu);
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            scan, wornIllu, snap.ReadiedLight,
+            scan, wornIllu, _roomLightSpellIllu(), snap.ReadiedLight,
             CarriedLights(snap.CarriedItems, catalogue), catalogue, _settings());
 
         switch (plan.Action)
@@ -193,7 +197,7 @@ public sealed class AutoLightProvisioner
         IReadOnlyList<LightItem> catalogue = _catalogue();
         RouteLightScan scan = RouteLightScanner.Scan(route, _resolveRoom, wornIllu);
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            scan, wornIllu, snap.ReadiedLight,
+            scan, wornIllu, _roomLightSpellIllu(), snap.ReadiedLight,
             CarriedLights(snap.CarriedItems, catalogue), catalogue, _settings());
 
         return plan.Action == AutoLightAction.Buy
@@ -221,7 +225,7 @@ public sealed class AutoLightProvisioner
 
         IReadOnlyList<LightItem> catalogue = _catalogue();
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            RouteLightScan.Empty, _wornIllu(), snap.ReadiedLight,
+            RouteLightScan.Empty, _wornIllu(), _roomLightSpellIllu(), snap.ReadiedLight,
             CarriedLights(snap.CarriedItems, catalogue), catalogue, _settings());
 
         if (plan.Action == AutoLightAction.Reorder)

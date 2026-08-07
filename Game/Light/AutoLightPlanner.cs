@@ -25,6 +25,7 @@ public static class AutoLightPlanner
     public static AutoLightPlan Plan(
         RouteLightScan routeScan,
         int wornIllu,
+        int roomLightSpellIllu,
         ReadiedLight? readied,
         IReadOnlyList<LightItem> carriedLights,
         IReadOnlyList<LightItem> catalogue,
@@ -34,7 +35,10 @@ public static class AutoLightPlanner
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(settings);
 
-        bool provisioningOn = settings.CarryHours > 0;
+        // In spell-only mode the engine never buys or readies light items — worn
+        // gear + the configured room-light spell are the whole story.
+        bool spellOnly = settings.UseRoomLightSpellOnly;
+        bool provisioningOn = !spellOnly && settings.CarryHours > 0;
         LightItem? preferred = FindByName(settings.PreferredLightName, catalogue);
 
         // 1. Reorder — a readied light dwindling below the minute threshold gets
@@ -56,7 +60,21 @@ public static class AutoLightPlanner
         // 2. Route runs dark — ready a carried light that covers it, else buy one.
         if (routeScan.NeedsLight)
         {
-            int minStrength = LightModel.IlluGapToSee(wornIllu, routeScan.DarkestRoomLight);
+            // Item need is measured against worn gear PLUS the configured
+            // room-light spell — the spell is a standing baseline the player
+            // maintains, so a light item only has to cover the remainder. When
+            // gear + spell already clear the darkest room, no item is needed.
+            int minStrength = LightModel.IlluGapToSee(wornIllu + roomLightSpellIllu, routeScan.DarkestRoomLight);
+            if (minStrength <= 0)
+                return AutoLightPlan.Nothing(
+                    $"route dark: worn gear + room-light spell cover "
+                    + $"(worn need {routeScan.NeededLightStrength}, spell illu {roomLightSpellIllu})");
+
+            // Spell-only mode never buys/readies items — rely on gear + spell and
+            // accept the darkness penalty if they fall short.
+            if (spellOnly)
+                return AutoLightPlan.Nothing(
+                    $"route dark: spell-only mode, gear + spell short by {minStrength} — no light items");
 
             // A light is already lit whose strength alone clears the darkest room
             // from the worn baseline — leave it be. The reorder branch above tops

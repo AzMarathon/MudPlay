@@ -39,7 +39,7 @@ public sealed class AutoLightPlannerTests
     public void LitRoute_NothingReadied_DoesNothing()
     {
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Lit, wornIllu: 0, readied: null,
+            Lit, wornIllu: 0, roomLightSpellIllu: 0, readied: null,
             carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings());
 
         Assert.Equal(AutoLightAction.None, plan.Action);
@@ -50,7 +50,7 @@ public sealed class AutoLightPlannerTests
     {
         // -300 room, 0 worn illu → need 150 illu. Carried lantern (175) covers.
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 0, readied: null,
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
             carriedLights: new[] { Lantern }, Catalogue, Settings());
 
         Assert.Equal(AutoLightAction.Ready, plan.Action);
@@ -64,7 +64,7 @@ public sealed class AutoLightPlannerTests
         // -160 room, 0 worn illu → need only 10 illu. Torch (100) already covers,
         // so auto readies the weaker torch, not the lantern.
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-160), wornIllu: 0, readied: null,
+            Dark(-160), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
             carriedLights: new[] { Lantern, Torch }, Catalogue, Settings());
 
         Assert.Equal(AutoLightAction.Ready, plan.Action);
@@ -77,7 +77,7 @@ public sealed class AutoLightPlannerTests
         // Need 150 illu; only a torch (100) on hand → buy the weakest covering
         // catalogue light (lantern), CarryHours 12 / 2 h burn → 6 copies.
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 0, readied: null,
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
             carriedLights: new[] { Torch }, Catalogue, Settings(carry: 12));
 
         Assert.Equal(AutoLightAction.Buy, plan.Action);
@@ -94,7 +94,7 @@ public sealed class AutoLightPlannerTests
         ReadiedLight lit = new("lantern", Readied: 200);
 
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 0, readied: lit,
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: lit,
             carriedLights: new[] { Torch }, Catalogue, Settings());
 
         Assert.Equal(AutoLightAction.None, plan.Action);
@@ -109,7 +109,7 @@ public sealed class AutoLightPlannerTests
         ReadiedLight lit = new("torch", Readied: 60);
 
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 0, readied: lit,
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: lit,
             carriedLights: new[] { Lantern }, Catalogue, Settings(reorder: 0));
 
         Assert.Equal(AutoLightAction.Ready, plan.Action);
@@ -122,7 +122,7 @@ public sealed class AutoLightPlannerTests
         // Need 150 illu but the user explicitly prefers a torch (100). Carried →
         // ready the torch anyway (explicit pick wins over coverage).
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 0, readied: null,
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
             carriedLights: new[] { Torch }, Catalogue, Settings(preferred: "torch"));
 
         Assert.Equal(AutoLightAction.Ready, plan.Action);
@@ -134,7 +134,7 @@ public sealed class AutoLightPlannerTests
     {
         // Prefer lantern, none carried → buy the lantern (not an auto-picked light).
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 0, readied: null,
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
             carriedLights: new[] { Torch }, Catalogue, Settings(carry: 12, preferred: "lantern"));
 
         Assert.Equal(AutoLightAction.Buy, plan.Action);
@@ -147,7 +147,7 @@ public sealed class AutoLightPlannerTests
     {
         // CarryHours 0 (provisioning off) still readies a carried light that covers.
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 0, readied: null,
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
             carriedLights: new[] { Lantern }, Catalogue, Settings(carry: 0));
 
         Assert.Equal(AutoLightAction.Ready, plan.Action);
@@ -160,7 +160,7 @@ public sealed class AutoLightPlannerTests
         // Need 150 illu, only a torch (100) on hand, provisioning off → ready the
         // torch as a best-effort partial (no buy possible).
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 0, readied: null,
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
             carriedLights: new[] { Torch }, Catalogue, Settings(carry: 0));
 
         Assert.Equal(AutoLightAction.Ready, plan.Action);
@@ -172,7 +172,7 @@ public sealed class AutoLightPlannerTests
     public void ProvisioningOff_NothingCarried_DoesNothing()
     {
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 0, readied: null,
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
             carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings(carry: 0));
 
         Assert.Equal(AutoLightAction.None, plan.Action);
@@ -181,10 +181,10 @@ public sealed class AutoLightPlannerTests
     [Fact]
     public void WornIllu_ShrinksNeed_LetsAWeakLightCover()
     {
-        // -300 room but +250 worn illu → need only 100 illu. Carried torch (100)
+        // -300 room but +50 worn illu → need only 100 illu. Carried torch (100)
         // now covers, so it readies rather than buying.
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Dark(-300), wornIllu: 250, readied: null,
+            Dark(-300), wornIllu: 50, roomLightSpellIllu: 0, readied: null,
             carriedLights: new[] { Torch }, Catalogue, Settings());
 
         Assert.Equal(AutoLightAction.Ready, plan.Action);
@@ -200,7 +200,7 @@ public sealed class AutoLightPlannerTests
         ReadiedLight low = new("lantern", Readied: 100);
 
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Lit, wornIllu: 0, readied: low,
+            Lit, wornIllu: 0, roomLightSpellIllu: 0, readied: low,
             carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings(carry: 12, reorder: 60));
 
         Assert.Equal(AutoLightAction.Reorder, plan.Action);
@@ -215,7 +215,7 @@ public sealed class AutoLightPlannerTests
         ReadiedLight healthy = new("lantern", Readied: 200);
 
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Lit, wornIllu: 0, readied: healthy,
+            Lit, wornIllu: 0, roomLightSpellIllu: 0, readied: healthy,
             carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings(carry: 12, reorder: 60));
 
         Assert.Equal(AutoLightAction.None, plan.Action);
@@ -227,7 +227,7 @@ public sealed class AutoLightPlannerTests
         ReadiedLight low = new("lantern", Readied: 10);
 
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Lit, wornIllu: 0, readied: low,
+            Lit, wornIllu: 0, roomLightSpellIllu: 0, readied: low,
             carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings(carry: 12, reorder: 0));
 
         Assert.Equal(AutoLightAction.None, plan.Action);
@@ -240,8 +240,50 @@ public sealed class AutoLightPlannerTests
         ReadiedLight low = new("lantern", Readied: 10);
 
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            Lit, wornIllu: 0, readied: low,
+            Lit, wornIllu: 0, roomLightSpellIllu: 0, readied: low,
             carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings(carry: 0, reorder: 60));
+
+        Assert.Equal(AutoLightAction.None, plan.Action);
+    }
+
+    // ----- room-light spell as a coverage tier (stage 3) -----
+
+    [Fact]
+    public void DarkRoute_RoomLightSpellCovers_DoesNothing()
+    {
+        // -300 room => worn need 150. A starlight-strength room-light spell (175)
+        // more than covers, so no light item is bought/readied even with none carried.
+        AutoLightPlan plan = AutoLightPlanner.Plan(
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 175, readied: null,
+            carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings());
+
+        Assert.Equal(AutoLightAction.None, plan.Action);
+    }
+
+    [Fact]
+    public void DarkRoute_SpellPartiallyCovers_BuysForRemainderOnly()
+    {
+        // -300 room (need 150 from worn). A weak spell (60) leaves a 90 gap, which a
+        // torch (100) covers — so it buys the cheaper torch instead of a lantern.
+        AutoLightPlan plan = AutoLightPlanner.Plan(
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 60, readied: null,
+            carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings());
+
+        Assert.Equal(AutoLightAction.Buy, plan.Action);
+        Assert.Equal("torch", plan.LightName);
+    }
+
+    [Fact]
+    public void SpellOnlyMode_DarkAndShort_NeverProvisions()
+    {
+        // Spell-only: even short (spell 60 < need 150), no item is bought or readied.
+        AutoLightSettings spellOnly = new()
+        {
+            CarryHours = 12, ReorderThresholdMinutes = 60, UseRoomLightSpellOnly = true,
+        };
+        AutoLightPlan plan = AutoLightPlanner.Plan(
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 60, readied: null,
+            carriedLights: new[] { Lantern }, Catalogue, spellOnly);
 
         Assert.Equal(AutoLightAction.None, plan.Action);
     }

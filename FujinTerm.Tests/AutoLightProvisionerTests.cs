@@ -62,6 +62,7 @@ public sealed class AutoLightProvisionerTests
     {
         public bool Enabled = true;
         public int WornIllu;
+        public int RoomLightSpellIllu;
         public InventorySnapshot Snapshot = Snap();
         public AutoLightSettings Settings = new() { CarryHours = 12, ReorderThresholdMinutes = 60 };
         public Func<RoomKey, Room?> Graph = GraphOf(RoomAt(A, -300));
@@ -76,6 +77,7 @@ public sealed class AutoLightProvisionerTests
                 catalogue:   () => Catalogue,
                 resolveRoom: k => Graph(k),
                 wornIllu:    () => WornIllu,
+                roomLightSpellIllu: () => RoomLightSpellIllu,
                 settings:    () => Settings);
             Engine.SetWireSender(_ => { });
             Engine.SetProvisioner(BuyRequests.Add);
@@ -180,6 +182,21 @@ public sealed class AutoLightProvisionerTests
         Assert.Equal(2, req.ItemId);            // lantern MDB id
         Assert.Equal("lantern", req.LightName);
         Assert.Equal(6, req.Count);             // CarryHours 12 / lantern 2 h burn
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void RoomLightSpellCovers_NoBuyHandoff()
+    {
+        // Same dark route + only a torch, but a room-light spell (175) covers the
+        // -300 room from the worn baseline — so the engine provisions no items.
+        Harness h = new()
+        {
+            Snapshot = Snap(carried: new[] { "torch" }),
+            RoomLightSpellIllu = 175,
+        };
+        h.Plan(A);
+        Assert.Empty(h.BuyRequests);
         Assert.Empty(h.Sent);
     }
 
