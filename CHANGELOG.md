@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.35.1
+
+- Fixed a crash on killing a boss (e.g. the mad wizard) when two client instances share one data folder: the boss-timer write no longer races on a shared temp file
+- Atomic JSON saves now use a unique temp file per write and ride out a concurrent replace, so two instances persisting the same realm-wide file can't collide
+- Boss-timer persistence failures are now logged instead of crashing the client mid-combat
+- bug reports addressed: Crash-20260806-233028, Crash-20260807-060547
+
 ## 2.35.0
 
 - Auto-light now treats a configured room-light spell as light coverage — its illu (individual + roomillu) counts toward the visibility total, so gear + spell that already cover no longer trigger item buying

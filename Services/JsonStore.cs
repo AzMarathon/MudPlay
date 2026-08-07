@@ -51,11 +51,50 @@ internal static class JsonStore
         string? dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-        // Atomic write: serialize to a sibling .tmp file, then rename over the
-        // target. File.Move with overwrite is atomic on every supported OS.
-        string tmp = path + ".tmp";
+        // Atomic write: serialize to a UNIQUE sibling temp file, then rename over the
+        // target so a reader never sees a half-written file. A per-write temp name
+        // (pid + guid) keeps two writers racing on the SAME target from colliding on
+        // one temp path — the case that crashed two client instances sharing a
+        // realm-wide file (boss-timers.json): both wrote "…json.tmp", the first
+        // File.Move renamed it away, and the second threw FileNotFoundException on the
+        // now-gone temp. With distinct temps each rename just overwrites the target.
+        string tmp = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
         string json = JsonSerializer.Serialize(value, Options);
-        File.WriteAllText(tmp, json);
-        File.Move(tmp, path, overwrite: true);
+        try
+        {
+            File.WriteAllText(tmp, json);
+            MoveWithRetry(tmp, path);
+        }
+        catch
+        {
+            // Don't leave our temp behind on a failed write; ignore if it's already
+            // gone. The original error still propagates to the caller.
+            try { File.Delete(tmp); } catch { /* best-effort cleanup */ }
+            throw;
+        }
+    }
+
+    // Rename src over dst, retrying briefly on the transient error a concurrent
+    // replace of the same destination raises. POSIX rename() is atomic and never
+    // collides, but Windows MoveFileEx locks the target for the swap, so two
+    // near-simultaneous replaces (two client instances persisting a shared file)
+    // can throw UnauthorizedAccessException / a sharing IOException. A handful of
+    // short retries clears that sub-millisecond window; a persistent failure (disk
+    // full, real permission denial) still surfaces on the final attempt.
+    private static void MoveWithRetry(string src, string dst)
+    {
+        const int attempts = 20;
+        for (int i = 1; ; i++)
+        {
+            try
+            {
+                File.Move(src, dst, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && i < attempts)
+            {
+                Thread.Sleep(Math.Min(i, 10) * 3);
+            }
+        }
     }
 }

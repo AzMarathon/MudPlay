@@ -205,7 +205,19 @@ public sealed class BossTimerStore
     private void Persist()
     {
         if (ActiveSet is null) return;
-        JsonStore.Save(AppPaths.BossTimersFile(ActiveSet), _killed);
+
+        // Boss-timer persistence is convenience bookkeeping fired from the combat
+        // death-line path — a write failure (transient IO, a filesystem hiccup)
+        // must never crash the client mid-fight. Log it and carry on; the in-memory
+        // timer still stands and the next kill/reset re-attempts the write.
+        try
+        {
+            JsonStore.Save(AppPaths.BossTimersFile(ActiveSet), _killed);
+        }
+        catch (Exception ex)
+        {
+            _log?.Warn("Bosses", $"failed to persist boss timers: {ex.Message}");
+        }
     }
 }
 
