@@ -25,9 +25,10 @@
          @version remote-command reply tracks every release without a
          hand-edit. Bump this here and the @version pong updates with
          the next build. Semver policy (post-1.0), by change type: MAJOR =
-         whole-program refactor, MINOR = a brand-new feature, PATCH = bug
-         fixes AND enhancements to existing features (one bump per report
-         handled or per enhancement). -->
+         whole-program refactor, MINOR = a brand-new feature or a large
+         (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
+         fixes AND ordinary enhancements to existing features (one bump per
+         report handled or per enhancement). -->
     <Version>2.35.2</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
