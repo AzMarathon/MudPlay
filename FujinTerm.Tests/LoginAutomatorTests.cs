@@ -86,10 +86,44 @@ public sealed class LoginAutomatorTests
         Assert.Equal("alice\r", sentVal);
     }
 
+    [Theory]
+    [InlineData("{user}")]
+    [InlineData("{userid}")]
+    [InlineData("{username}")]
+    public async Task UsernameAliases_AllSubstitute(string token)
+    {
+        AutomationStep s = new("Login:", token);
+        (LoginAutomator a, var sent) = Build(username: "alice", steps: s);
+        a.Start();
+        a.Feed(Ascii("Login:"));
+
+        await Task.Delay(20);
+        Assert.True(sent.TryDequeue(out string? sentVal));
+        Assert.Equal("alice\r", sentVal);
+    }
+
     [Fact]
     public async Task PasswordPlaceholder_Substitutes()
     {
         AutomationStep s = new("Password:", "{password}");
+        (LoginAutomator a, var sent) = Build(
+            resolvePassword: () => Task.FromResult<string?>("hunter2"), steps: s);
+        a.Start();
+        a.Feed(Ascii("Password:"));
+
+        await Task.Delay(20);
+        Assert.True(sent.TryDequeue(out string? sentVal));
+        Assert.Equal("hunter2\r", sentVal);
+    }
+
+    [Theory]
+    [InlineData("{pass}")]
+    [InlineData("{pswd}")]
+    [InlineData("{passwd}")]
+    [InlineData("{password}")]
+    public async Task PasswordAliases_AllSubstitute(string token)
+    {
+        AutomationStep s = new("Password:", token);
         (LoginAutomator a, var sent) = Build(
             resolvePassword: () => Task.FromResult<string?>("hunter2"), steps: s);
         a.Start();
