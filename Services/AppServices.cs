@@ -874,6 +874,10 @@ public sealed class AppServices
     // for computing carried illumination and provisioning a dark route.
     public Game.Light.LightItemIndex Lights { get; private set; } = null!;
 
+    // Resolves the illumination a configured room-light spell contributes, so the
+    // auto-light engine can count it toward coverage alongside worn +illu gear.
+    public Game.Light.RoomLightSpellResolver RoomLightSpell { get; private set; } = null!;
+
     // The highest Strength any race + class + gear build can reach on the
     // active set — the door FSM's per-set bash ceiling, replacing the old hardcoded
     // 200. Feeds Game.Map.DoorOpenManager via a provider so a
@@ -3209,6 +3213,7 @@ public sealed class AppServices
         // deferred (Inventory is assigned later in this method), so reading
         // PlayerIllumination.Current at tooltip / route time sees the live dump.
         Lights = new Game.Light.LightItemIndex(GameData);
+        RoomLightSpell = new Game.Light.RoomLightSpellResolver(GameData, Lights);
         PlayerIllumination = new Game.Light.PlayerIllumination(
             () => Inventory.Snapshot, Lights, GameData);
 
@@ -3988,6 +3993,11 @@ public sealed class AppServices
             catalogue:   () => Lights.All,
             resolveRoom: RoomGraph.GetRoom,
             wornIllu:    () => PlayerIllumination.WornOnly,
+            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(
+                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell),
+            roomLightSpellName: () =>
+                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell,
+            castRoomLightSpell: name => Cast.TryCast(name),
             settings:    () => ReadSection<Models.Profile.AutoLightSettings>(Profile.Current, "AutoLight"),
             log:         Log);
         Walker.SetRouteAnnouncer(AutoLightProvisioner.OnRoutePlanned);

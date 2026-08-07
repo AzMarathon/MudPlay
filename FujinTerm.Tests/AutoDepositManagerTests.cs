@@ -271,6 +271,9 @@ public sealed class AutoDepositManagerTests : IDisposable
             catalogue: () => h.Catalogue,
             resolveRoom: graph.GetRoom,
             wornIllu: () => h.WornIllu,
+            roomLightSpellIllu: () => 0,
+            roomLightSpellName: () => null,
+            castRoomLightSpell: _ => { },
             settings: () => h.LightSettings);
         Game.Light.AutoLightShopRouter lightShop = new(
             shopRoomsSellingItem: _ => h.LightShopRooms,

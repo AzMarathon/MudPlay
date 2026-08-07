@@ -47,6 +47,9 @@ public sealed class AutoLightProvisioner
     private readonly Func<IReadOnlyList<LightItem>> _catalogue;
     private readonly Func<RoomKey, Room?> _resolveRoom;
     private readonly Func<int> _wornIllu;
+    private readonly Func<int> _roomLightSpellIllu;
+    private readonly Func<string?> _roomLightSpellName;
+    private readonly Action<string> _castRoomLightSpell;
     private readonly Func<AutoLightSettings> _settings;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
@@ -91,6 +94,9 @@ public sealed class AutoLightProvisioner
         Func<IReadOnlyList<LightItem>> catalogue,
         Func<RoomKey, Room?> resolveRoom,
         Func<int> wornIllu,
+        Func<int> roomLightSpellIllu,
+        Func<string?> roomLightSpellName,
+        Action<string> castRoomLightSpell,
         Func<AutoLightSettings> settings,
         LogService? log = null)
     {
@@ -99,12 +105,18 @@ public sealed class AutoLightProvisioner
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(resolveRoom);
         ArgumentNullException.ThrowIfNull(wornIllu);
+        ArgumentNullException.ThrowIfNull(roomLightSpellIllu);
+        ArgumentNullException.ThrowIfNull(roomLightSpellName);
+        ArgumentNullException.ThrowIfNull(castRoomLightSpell);
         ArgumentNullException.ThrowIfNull(settings);
         _isEnabled = isEnabled;
         _snapshot = snapshot;
         _catalogue = catalogue;
         _resolveRoom = resolveRoom;
         _wornIllu = wornIllu;
+        _roomLightSpellIllu = roomLightSpellIllu;
+        _roomLightSpellName = roomLightSpellName;
+        _castRoomLightSpell = castRoomLightSpell;
         _settings = settings;
         _log = log;
     }
@@ -145,7 +157,7 @@ public sealed class AutoLightProvisioner
         IReadOnlyList<LightItem> catalogue = _catalogue();
         RouteLightScan scan = RouteLightScanner.Scan(route, _resolveRoom, wornIllu);
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            scan, wornIllu, snap.ReadiedLight,
+            scan, wornIllu, _roomLightSpellIllu(), snap.ReadiedLight,
             CarriedLights(snap.CarriedItems, catalogue), catalogue, _settings());
 
         switch (plan.Action)
@@ -193,7 +205,7 @@ public sealed class AutoLightProvisioner
         IReadOnlyList<LightItem> catalogue = _catalogue();
         RouteLightScan scan = RouteLightScanner.Scan(route, _resolveRoom, wornIllu);
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            scan, wornIllu, snap.ReadiedLight,
+            scan, wornIllu, _roomLightSpellIllu(), snap.ReadiedLight,
             CarriedLights(snap.CarriedItems, catalogue), catalogue, _settings());
 
         return plan.Action == AutoLightAction.Buy
@@ -221,7 +233,7 @@ public sealed class AutoLightProvisioner
 
         IReadOnlyList<LightItem> catalogue = _catalogue();
         AutoLightPlan plan = AutoLightPlanner.Plan(
-            RouteLightScan.Empty, _wornIllu(), snap.ReadiedLight,
+            RouteLightScan.Empty, _wornIllu(), _roomLightSpellIllu(), snap.ReadiedLight,
             CarriedLights(snap.CarriedItems, catalogue), catalogue, _settings());
 
         if (plan.Action == AutoLightAction.Reorder)
@@ -255,7 +267,15 @@ public sealed class AutoLightProvisioner
     public void OnDarkRoomObserved()
     {
         if (!_isEnabled()) return;
-        TryReadyBestCarried("dark room observed: ready carried light");
+        if (TryReadyBestCarried("dark room observed: ready carried light")) return;
+
+        // Nothing carried can light this room. The room-light spell is the tier
+        // above buying items (gear → spell → items): cast it. On a buff realm the
+        // room lights immediately; on a light-ball realm the cast drops a ball that
+        // the next dark-line observation readies via the carried path above. The
+        // authoritative "can't see" line is the only cast trigger, so a spell whose
+        // buff already covers never re-fires here (no dark line would arrive).
+        CastRoomLightSpellIfConfigured("dark room observed: no carried light covers");
     }
 
     // Predictive one-room-lookahead equip. The walker / loop-runner call this the
@@ -288,7 +308,10 @@ public sealed class AutoLightProvisioner
     // (ReadyLight's own guard) stops a repeated trigger on a stale snapshot from
     // double-`use`ing. Buying a light we don't carry stays with the reactive
     // need-poster / get path; this only readies what's already in the pack.
-    private void TryReadyBestCarried(string reason)
+    // Returns true when a covering carried light was readied (or a re-ready is
+    // already in flight) — i.e. the carried tier handled it; false when nothing
+    // carried can help, so the caller escalates to the room-light spell.
+    private bool TryReadyBestCarried(string reason)
     {
         InventorySnapshot snap = _snapshot();
 
@@ -302,23 +325,36 @@ public sealed class AutoLightProvisioner
 
         IReadOnlyList<LightItem> catalogue = _catalogue();
         IReadOnlyList<LightItem> carried = CarriedLights(snap.CarriedItems, catalogue);
-        if (carried.Count == 0) return;   // nothing carried — leave buying to the need-poster
+        if (carried.Count == 0) return false;   // nothing carried — escalate to the spell
 
         LightItem? pick = PreferredCarried(carried, _settings().PreferredLightName)
             ?? StrongestCarried(carried);
-        if (pick is not { } chosen) return;
+        if (pick is not { } chosen) return false;
 
         // What's effectively lit right now: 0 if nothing readied or the readied
         // light just burned out (stale snapshot), else its catalogue strength.
         int litStrength = !_readiedLightBurnedOut && snap.ReadiedLight is { } lit
             ? StrengthOf(lit.Name, catalogue)
             : 0;
-        if (chosen.Strength <= litStrength) return;   // nothing carried beats what's lit
+        if (chosen.Strength <= litStrength) return false;   // nothing carried beats what's lit
 
         // Swap only when a genuinely-lit different light is being replaced; a
         // burned-out light needs no `rem` (it's already gone).
         string? swapFrom = _readiedLightBurnedOut ? null : snap.ReadiedLight?.Name;
         ReadyLight(chosen.Name, swapFrom, snap.LastUpdated, reason);
+        return true;
+    }
+
+    // Cast the configured room-light spell when one is set. Escalation tier above
+    // provisioning items: reached only when no carried light covers the dark room.
+    // Anti-spam is delegated to CastCoordinator (round cooldown + buff-recast
+    // tracking), so a repeated dark line can't machine-gun the cast.
+    private void CastRoomLightSpellIfConfigured(string reason)
+    {
+        string? spell = _roomLightSpellName();
+        if (string.IsNullOrWhiteSpace(spell)) return;
+        _log?.Info(LogCategory, $"casting room-light spell '{spell.Trim()}' — {reason}");
+        _castRoomLightSpell(spell.Trim());
     }
 
     // Reactive handler for stepping into a room the graph knows the light level of.
