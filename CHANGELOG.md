@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
 
+## 2.35.0
+
+- Auto-light now treats a configured room-light spell as light coverage — its illu (individual + roomillu) counts toward the visibility total, so gear + spell that already cover no longer trigger item buying
+- Auto-light auto-casts the configured room-light spell on entering a dark room when no carried light covers: buff realms light instantly; light-ball realms cast then ready the generated ball
+- Auto-light preferred-light dropdown no longer lists shop-unsold lights (drops realm-generated light balls); new "only use my room-light spell (no items)" option never provisions items
+
 ## 2.34.0
 
 - Exp/Hr estimator now counts monster-summoning room spells: rooms whose entry spell rolls extra monsters (e.g. Paradigm's crypt summons) add their expected exp to the estimate instead of being ignored — an averaged roll per visit plus a bonus roll on quick kills, with a new "Room summons" breakdown line
