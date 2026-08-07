@@ -10,9 +10,9 @@ namespace FujinTerm.Services;
 // Drives the per-character BBS handshake. Walks the menu-nav sequence the user
 // authored on the BBS section — wait for a pattern, send a reply, move on —
 // until the final step's response is sent and LoggedIntoGame fires. The reply
-// text supports two case-insensitive placeholders: {username} / {userid} for
-// the configured username and {password} / {passwd} for the password decrypted
-// from PasswordProtector.
+// text supports case-insensitive credential placeholders: {user} / {userid} /
+// {username} for the configured username, and {pass} / {pswd} / {passwd} /
+// {password} for the password decrypted from PasswordProtector.
 //
 // One-shot credential guard: once a step containing {username} (resp.
 // {password}) has been answered AND the next step's pattern matches — meaning
@@ -30,10 +30,12 @@ public sealed class LoginAutomator : IDisposable
 
     // Case-insensitive — users may type "{Username}" or "{USERNAME}" and
     // still expect substitution. Compiled once at type init.
+    //   username: {user} / {userid} / {username}
+    //   password: {pass} / {pswd} / {passwd} / {password}
     private static readonly Regex UserPlaceholder =
-        new(@"\{user(?:name|id)\}", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"\{user(?:name|id)?\}", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex PasswordPlaceholder =
-        new(@"\{pass(?:word|wd)\}", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"\{(?:pass(?:word|wd)?|pswd)\}", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private readonly IReadOnlyList<AutomationStep> _steps;
     private readonly string? _username;

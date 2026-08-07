@@ -289,6 +289,11 @@
                         <Button Content="Add step" Command="{Binding AddMenuStepCommand}"
                                 HorizontalAlignment="Left" Margin="0,4,0,0"/>
 
+                        <!-- Credential-token legend for the Response field. -->
+                        <TextBlock Classes="FieldLabel" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Text="Response tokens:  {user} / {userid} / {username} → your username · {pass} / {pswd} / {passwd} / {password} → your password"
+                                   ToolTip.Tip="Type any of these in a step's Response and it's replaced with the character's saved username / password at logon."/>
+
                         <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0"
                               IsEnabled="{Binding HasImportSources}"
                               ToolTip.Tip="Copy the logon steps from another saved character. Replaces the steps above; usernames and passwords are never copied. Cancel the Settings window to undo.">
