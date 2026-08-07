@@ -43,12 +43,16 @@
                 <TextBlock Grid.Column="0" Text="Notes" FontSize="11"
                            Foreground="{StaticResource ChromeFgMutedBrush}"
                            VerticalAlignment="Top" Margin="0,4,0,0"/>
-                <TextBox   Grid.Column="1"
-                           Text="{Binding Notes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                           FontSize="11"
-                           AcceptsReturn="True"
-                           Height="48"
-                           TextWrapping="Wrap"/>
+                <StackPanel Grid.Column="1" Spacing="6">
+                    <TextBox   Text="{Binding Notes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                               FontSize="11"
+                               AcceptsReturn="True"
+                               Height="48"
+                               TextWrapping="Wrap"/>
+                    <CheckBox  Content="★  Set as favorite (shows in the right-click Favorites menu)"
+                               IsChecked="{Binding Favorite, Mode=TwoWay}"
+                               FontSize="11"/>
+                </StackPanel>
             </Grid>
 
             <TextBlock Grid.Row="2" Text="Marked lairs" FontSize="11"
@@ -174,13 +178,9 @@
                            Foreground="{StaticResource AccentRedBrush}"/>
             </Grid>
 
-            <!-- Action strip -->
+            <!-- Action strip. Col 0 is an empty spacer that keeps the
+                 Cancel / Save buttons right-aligned. -->
             <Grid Grid.Row="5" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="0,8,0,0">
-                <TextBlock Grid.Column="0"
-                           Text="Or right-click a room on the map → Add to Auto-Lair."
-                           FontSize="10"
-                           VerticalAlignment="Center"
-                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
                 <Button Grid.Column="1"
                         Content="Cancel"
                         Command="{Binding CancelCommand}"/>

@@ -44,6 +44,11 @@ public sealed class Loop
     // Free-form user notes. Empty by default.
     public string Notes { get; set; } = string.Empty;
 
+    // When true, this loop appears in the terminal's right-click Favorites
+    // menu (green) — clicking it starts the loop. Toggled by the "Set as
+    // favorite" checkbox in the loop editor.
+    public bool Favorite { get; set; }
+
     // Folder this loop lives under inside the BBS Loops directory, relative
     // to it, using / separators (e.g. "Sewers/Lower"). Empty = the Loops
     // root. Not serialised — the on-disk subdirectory is the source of

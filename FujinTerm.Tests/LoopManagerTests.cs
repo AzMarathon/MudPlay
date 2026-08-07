@@ -146,6 +146,22 @@ public sealed class LoopManagerTests : IDisposable
     }
 
     [Fact]
+    public void Save_RoundTripsFavoriteFlag()
+    {
+        // The "Set as favorite" flag (drives the terminal Favorites menu) must
+        // survive a save + reload.
+        LoopManager m1 = NewManager();
+        m1.LoadAll(_setName);
+        m1.Save(new Loop("Fav loop", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }) { Favorite = true });
+
+        LoopManager m2 = NewManager();
+        m2.LoadAll(_setName);
+        Loop? round = m2.Get("Fav loop");
+        Assert.NotNull(round);
+        Assert.True(round!.Favorite);
+    }
+
+    [Fact]
     public void Save_NoSetActive_IsNoOp()
     {
         LoopManager m = NewManager();

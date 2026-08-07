@@ -45,6 +45,10 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty] private string _notes = string.Empty;
 
+    // "Set as favorite" — surfaces this loop in the terminal's right-click
+    // Favorites menu (green), where clicking it starts the loop.
+    [ObservableProperty] private bool _favorite;
+
     public ObservableCollection<LoopWaypointRowViewModel> Waypoints { get; } = new();
 
     [ObservableProperty]
@@ -113,6 +117,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         _isNew = isNew;
         _name = loop.Name;
         _notes = loop.Notes ?? string.Empty;
+        _favorite = loop.Favorite;
         foreach (LoopWaypoint w in loop.Waypoints)
             Waypoints.Add(new LoopWaypointRowViewModel(w, graph));
         RenumberRows();
@@ -424,6 +429,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
 
         _original.Name      = newName;
         _original.Notes     = Notes ?? string.Empty;
+        _original.Favorite  = Favorite;
         _original.Waypoints = waypoints;
 
         // Rename → delete the old file (LoopManager keys by Loop.Name
