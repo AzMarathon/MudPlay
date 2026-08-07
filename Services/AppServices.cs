@@ -3995,6 +3995,9 @@ public sealed class AppServices
             wornIllu:    () => PlayerIllumination.WornOnly,
             roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(
                 ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell),
+            roomLightSpellName: () =>
+                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell,
+            castRoomLightSpell: name => Cast.TryCast(name),
             settings:    () => ReadSection<Models.Profile.AutoLightSettings>(Profile.Current, "AutoLight"),
             log:         Log);
         Walker.SetRouteAnnouncer(AutoLightProvisioner.OnRoutePlanned);

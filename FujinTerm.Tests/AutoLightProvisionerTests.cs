@@ -63,6 +63,8 @@ public sealed class AutoLightProvisionerTests
         public bool Enabled = true;
         public int WornIllu;
         public int RoomLightSpellIllu;
+        public string? RoomLightSpellName;
+        public readonly List<string> CastSpells = new();
         public InventorySnapshot Snapshot = Snap();
         public AutoLightSettings Settings = new() { CarryHours = 12, ReorderThresholdMinutes = 60 };
         public Func<RoomKey, Room?> Graph = GraphOf(RoomAt(A, -300));
@@ -78,6 +80,8 @@ public sealed class AutoLightProvisionerTests
                 resolveRoom: k => Graph(k),
                 wornIllu:    () => WornIllu,
                 roomLightSpellIllu: () => RoomLightSpellIllu,
+                roomLightSpellName: () => RoomLightSpellName,
+                castRoomLightSpell: CastSpells.Add,
                 settings:    () => Settings);
             Engine.SetWireSender(_ => { });
             Engine.SetProvisioner(BuyRequests.Add);
@@ -321,10 +325,81 @@ public sealed class AutoLightProvisionerTests
     [Fact]
     public void Reactive_DarkObserved_NothingCarried_SendsNothing()
     {
-        // No light in the pack → leave buying/getting to the reactive need-poster.
+        // No light in the pack and no room-light spell → leave buying/getting to
+        // the reactive need-poster; nothing is cast either.
         Harness h = new() { Snapshot = Snap(carried: new[] { "5 dagger" }) };
         h.Dark();
         Assert.Empty(h.Sent);
+        Assert.Empty(h.CastSpells);
+    }
+
+    [Fact]
+    public void Reactive_DarkObserved_NothingCarried_SpellConfigured_CastsSpell()
+    {
+        // Nothing carried covers the dark room but a room-light spell is set → the
+        // engine escalates to the spell tier and casts it (no wire `use`).
+        Harness h = new()
+        {
+            Snapshot = Snap(carried: new[] { "5 dagger" }),
+            RoomLightSpellName = "starlight",
+        };
+        h.Dark();
+        Assert.Empty(h.Sent);
+        Assert.Equal(new[] { "starlight" }, h.CastSpells);
+    }
+
+    [Fact]
+    public void Reactive_DarkObserved_CarriedCovers_SpellConfigured_ReadiesNotCasts()
+    {
+        // A carried light AND a spell are both available. The reactive path prefers
+        // the instant carried light (a readied light lights the room now; a cast
+        // costs a round + mana) — the spell is only the fallback when nothing's
+        // carried. Provisioning still counts the spell (Stage 3), so this doesn't
+        // over-buy.
+        Harness h = new()
+        {
+            Snapshot = Snap(carried: new[] { "torch" }),
+            RoomLightSpellName = "starlight",
+        };
+        h.Dark();
+        Assert.Equal(new[] { "use torch" }, h.Sent);
+        Assert.Empty(h.CastSpells);
+    }
+
+    [Fact]
+    public void Reactive_DarkObserved_Disabled_DoesNotCast()
+    {
+        Harness h = new()
+        {
+            Enabled = false,
+            Snapshot = Snap(carried: new[] { "5 dagger" }),
+            RoomLightSpellName = "starlight",
+        };
+        h.Dark();
+        Assert.Empty(h.CastSpells);
+    }
+
+    [Fact]
+    public void Reactive_DarkObserved_StockBall_CastsThenReadiesLandedBall()
+    {
+        // Stock light-ball flow across two dark lines: the first has nothing carried
+        // → cast the spell (which drops a ball). The ball lands in a newer dump; the
+        // second dark line readies it via the carried tier and does NOT re-cast.
+        Harness h = new()
+        {
+            Snapshot = Snap(carried: new[] { "5 dagger" }, stamp: 1),
+            RoomLightSpellName = "illuminate",
+        };
+        h.Dark();
+        Assert.Empty(h.Sent);
+        Assert.Equal(new[] { "illuminate" }, h.CastSpells);
+
+        // Ball landed — a fresh dump now carries it. (Modelled as the catalogue
+        // "torch": the provisioner readies whatever covering light appears.)
+        h.Snapshot = Snap(carried: new[] { "torch" }, stamp: 2);
+        h.Dark();
+        Assert.Equal(new[] { "use torch" }, h.Sent);
+        Assert.Equal(new[] { "illuminate" }, h.CastSpells);   // no second cast
     }
 
     [Fact]
