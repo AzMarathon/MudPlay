@@ -149,11 +149,14 @@ public sealed class LogDiagnosticsTests
     }
 
     [Fact]
-    public void LogDiagnosticsSettings_DefaultsOff()
+    public void LogDiagnosticsSettings_Defaults()
     {
+        // Debug + Combat default ON so a fresh character's Program Log already
+        // carries the decision trail a bug report needs; the heavier on-disk /
+        // hop-timing traces stay off.
         LogDiagnosticsSettings dto = new();
-        Assert.False(dto.Debug);
-        Assert.False(dto.Combat);
+        Assert.True(dto.Debug);
+        Assert.True(dto.Combat);
         Assert.False(dto.AutoCollect);
         Assert.False(dto.HopTiming);
     }

@@ -1,7 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.35.1**
+> **Version 2.36.0**
+> - Program Log now defaults Debug + Combat diagnostics ON, so a fresh character's bug report already carries the decision trail (on-disk log collection and hop-timing stay off)
 > - Fixed a crash on killing a boss (e.g. the mad wizard) when two client instances share one data folder: the boss-timer write no longer races on a shared temp file
 > - Atomic JSON saves now use a unique temp file per write and ride out a concurrent replace, so two instances persisting the same realm-wide file can't collide
 > - Boss-timer persistence failures are now logged instead of crashing the client mid-combat
