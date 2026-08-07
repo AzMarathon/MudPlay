@@ -4,18 +4,19 @@ namespace FujinTerm.Models.Profile;
 // entry in CharacterProfile.Settings.
 //
 // Char-tier (not Global) — different characters can carry different diagnostic
-// states. All flags default off: verbose Debug + Combat tracing and on-disk
-// log generation are troubleshooting affordances, not an everyday cost, so a
-// fresh character (no saved section) reads off. The live mirror is
-// Services.LogDiagnosticState; AppServices reads this section on profile load
-// and writes it back when a Log-pane toggle flips.
+// states. Debug + Combat tracing default ON so a fresh character's Program Log
+// already carries the decision-trail a bug report needs (the common case was a
+// capture with both off and nothing to diagnose). On-disk log generation and
+// hop-timing stay off — those are heavier, opt-in troubleshooting affordances.
+// The live mirror is Services.LogDiagnosticState; AppServices reads this section
+// on profile load and writes it back when a Log-pane toggle flips.
 public sealed class LogDiagnosticsSettings
 {
-    // Gate for the generation-gated Debug channel. Default off.
-    public bool Debug { get; set; }
+    // Gate for the generation-gated Debug channel. Default on.
+    public bool Debug { get; set; } = true;
 
-    // Gate for the generation-gated Combat channel. Default off.
-    public bool Combat { get; set; }
+    // Gate for the generation-gated Combat channel. Default on.
+    public bool Combat { get; set; } = true;
 
     // Gate for the on-disk diagnostic files (program / memory / combat-trace
     // writers under Data/Logs). Default off. When on, the client generates all

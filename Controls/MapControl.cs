@@ -548,12 +548,16 @@ public sealed class MapControl : Control
     // that stay legible on the dark map, borders lightened like the heat stops. There
     // are far more distinct room spells than slots, so rare spells may share a colour;
     // the hover tooltip's "Room Spell: <name>" line is the key that disambiguates.
-    private static readonly string[] SpellCategoryHex =
+    // Every swatch is deliberately CHROMATIC — no neutral grey — so a spell room never
+    // blends into the normal room fill (RoomFill #9B9B9B); a near-grey swatch made
+    // icy-mountain spell rooms vanish under the by-name filter. The chroma floor is
+    // pinned by MapSpellPaletteTests.
+    internal static readonly string[] SpellCategoryHex =
     {
         "#E6194B", "#3CB44B", "#4363D8", "#F58231", "#911EB4",
         "#42D4F4", "#F032E6", "#BFEF45", "#F58AB0", "#469990",
         "#C9A0FF", "#B87333", "#FFD21E", "#B03060", "#5AC8A8",
-        "#9AA032", "#E8944A", "#4A6FE3", "#B0B0B0", "#2AA5C0",
+        "#9AA032", "#E8944A", "#4A6FE3", "#7C4DFF", "#2AA5C0",
     };
     private static readonly (IBrush fill, IPen pen)[] SpellCategory = BuildSpellCategory();
 

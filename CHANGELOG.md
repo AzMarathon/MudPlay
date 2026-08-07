@@ -1,6 +1,15 @@
 # Version history
 
-Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a new feature or enhancement, **PATCH** = bug fixes (one increment per report handled).
+Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
+
+## 2.35.3
+
+- Map "Spells: by name" filter no longer tints a spell room near-grey — the palette dropped its neutral swatch, so spell rooms stay visible against normal rooms (was invisible in the icy mountains)
+- Program Log now defaults Debug + Combat diagnostics ON, so a fresh character's bug report already carries the decision trail (on-disk log collection and hop-timing stay off)
+- Fixed a crash on killing a boss (e.g. the mad wizard) when two client instances share one data folder: the boss-timer write no longer races on a shared temp file
+- Atomic JSON saves now use a unique temp file per write and ride out a concurrent replace, so two instances persisting the same realm-wide file can't collide
+- Boss-timer persistence failures are now logged instead of crashing the client mid-combat
+- bug reports addressed: Crash-20260806-233028, Crash-20260807-060547
 
 ## 2.35.0
 

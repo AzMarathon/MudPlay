@@ -4661,8 +4661,10 @@ public sealed class AppServices
     private void ResetLogDiagnosticsToDefaults()
     {
         _suppressLogDiagnosticsPersist = true;
-        LogDiagnostics.DebugDiagnostics  = false;
-        LogDiagnostics.CombatDiagnostics = false;
+        // Mirror LogDiagnosticsSettings defaults: Debug + Combat on, the heavier
+        // on-disk / hop-timing traces off.
+        LogDiagnostics.DebugDiagnostics  = true;
+        LogDiagnostics.CombatDiagnostics = true;
         LogDiagnostics.AutoCollectLogs   = false;
         LogDiagnostics.HopTiming         = false;
         _suppressLogDiagnosticsPersist = false;
