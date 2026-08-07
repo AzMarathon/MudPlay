@@ -29,9 +29,14 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
     // AutoLightSettings.PreferredLightName.
     public const string AutoPickLabel = "Automatic (per route)";
 
+    // Dropdown sentinel for "rely on my room-light spell, never buy/ready items"
+    // — persists as AutoLightSettings.UseRoomLightSpellOnly = true.
+    public const string SpellOnlyLabel = "Only use my room-light spell (no items)";
+
     private readonly ProfileService _profile;
     private readonly LightItemIndex? _lights;
     private readonly GameDataCache? _data;
+    private readonly ShopStockIndex? _shops;
     private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
@@ -60,14 +65,16 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private string _selectedLight = AutoPickLabel;
 
     public AutoLightSectionViewModel() : this(
-        AppServices.Current.Profile, TryGetLights(), TryGetData()) { }
+        AppServices.Current.Profile, TryGetLights(), TryGetData(), TryGetShops()) { }
 
-    public AutoLightSectionViewModel(ProfileService profile, LightItemIndex? lights, GameDataCache? data)
+    public AutoLightSectionViewModel(ProfileService profile, LightItemIndex? lights, GameDataCache? data,
+        ShopStockIndex? shops = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         _profile = profile;
         _lights = lights;
         _data = data;
+        _shops = shops;
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
         if (_data is not null) _data.ActiveSetChanged += OnActiveSetChanged;
@@ -94,6 +101,11 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
         try { return AppServices.Current.GameData; } catch { return null; } // design-time
     }
 
+    private static ShopStockIndex? TryGetShops()
+    {
+        try { return AppServices.Current.ShopStock; } catch { return null; }  // design-time
+    }
+
     // Human-readable summary of what CarryHours buys for the chosen light —
     // mirrors the user's "12 hours → 6 lanterns" mental model. Auto /
     // provisioning-off / unknown-light cases each read plainly.
@@ -101,6 +113,9 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
     {
         get
         {
+            if (SelectedLight == SpellOnlyLabel)
+                return "Never buys or readies light items — relies on worn +illu gear plus your "
+                     + "Room Light Spell (set one in Settings → Spells).";
             if (CarryHours <= 0)
                 return "Provisioning off — readies one light on demand, no stocking up.";
             if (SelectedLight == AutoPickLabel)
@@ -119,10 +134,18 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
         string previous = SelectedLight;
         AvailableLights.Clear();
         AvailableLights.Add(AutoPickLabel);
+        AvailableLights.Add(SpellOnlyLabel);
         if (_lights is not null)
             foreach (LightItem l in _lights.All)
+            {
+                // Only offer lights a shop actually sells — the engine buys them.
+                // This drops spell-generated ephemera (e.g. "light ball" from the
+                // ILLU spell) that aren't purchasable and would list on realms
+                // where ILLU is a buff, not a real carriable item.
+                if (_shops is not null && !_shops.AnyShopSells(l.Number)) continue;
                 if (!AvailableLights.Contains(l.Name))
                     AvailableLights.Add(l.Name);
+            }
 
         // Keep the prior pick if the new set still carries it; else fall back to
         // auto so the box never shows a name absent from its own item list.
@@ -133,11 +156,13 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
     {
         if (_profile.Current is not { } profile) return;
 
+        bool spellOnly = SelectedLight == SpellOnlyLabel;
         AutoLightSettings dto = new()
         {
             CarryHours = Math.Clamp(CarryHours, 0, 48),
             ReorderThresholdMinutes = Math.Clamp(ReorderThresholdMinutes, 0, 600),
-            PreferredLightName = SelectedLight == AutoPickLabel ? null : SelectedLight,
+            UseRoomLightSpellOnly = spellOnly,
+            PreferredLightName = spellOnly || SelectedLight == AutoPickLabel ? null : SelectedLight,
         };
 
         profile.Settings ??= new();
@@ -180,10 +205,12 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
         AutoLightSettings dto = ReadOrDefault();
         CarryHours = dto.CarryHours;
         ReorderThresholdMinutes = dto.ReorderThresholdMinutes;
-        SelectedLight = string.IsNullOrWhiteSpace(dto.PreferredLightName)
-                        || !AvailableLights.Contains(dto.PreferredLightName!)
-            ? AutoPickLabel
-            : dto.PreferredLightName!;
+        SelectedLight = dto.UseRoomLightSpellOnly
+            ? SpellOnlyLabel
+            : string.IsNullOrWhiteSpace(dto.PreferredLightName)
+              || !AvailableLights.Contains(dto.PreferredLightName!)
+                ? AutoPickLabel
+                : dto.PreferredLightName!;
         OnPropertyChanged(nameof(CarryReadout));
     }
 

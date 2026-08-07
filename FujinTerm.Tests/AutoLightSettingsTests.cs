@@ -22,6 +22,7 @@ public sealed class AutoLightSettingsTests
         Assert.Equal(6, dto.CarryHours);
         Assert.Equal(60, dto.ReorderThresholdMinutes);
         Assert.Null(dto.PreferredLightName);   // null = engine auto-picks per route
+        Assert.False(dto.UseRoomLightSpellOnly); // default: manage light items normally
     }
 
     [Fact]
@@ -32,6 +33,7 @@ public sealed class AutoLightSettingsTests
             CarryHours = 12,
             ReorderThresholdMinutes = 90,
             PreferredLightName = "lantern",
+            UseRoomLightSpellOnly = true,
         };
 
         string json = JsonSerializer.Serialize(src);
@@ -41,6 +43,7 @@ public sealed class AutoLightSettingsTests
         Assert.Equal(12, back!.CarryHours);
         Assert.Equal(90, back.ReorderThresholdMinutes);
         Assert.Equal("lantern", back.PreferredLightName);
+        Assert.True(back.UseRoomLightSpellOnly);
     }
 
     [Fact]

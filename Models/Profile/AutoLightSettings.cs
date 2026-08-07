@@ -28,4 +28,11 @@ public sealed class AutoLightSettings
     // route's darkest room (see Game.Light.RouteLightScanner). A named light the
     // active set doesn't carry falls back to auto-pick.
     public string? PreferredLightName { get; set; }
+
+    // "Only use my room-light spell (no items)" mode. When true the engine never
+    // buys or readies light items — it relies purely on worn +illu gear plus the
+    // configured room-light spell (SpellsSettings.RoomLightSpell), casting the
+    // spell to cover a dark room and accepting the darkness penalty if gear +
+    // spell still fall short. Overrides PreferredLightName (which is ignored).
+    public bool UseRoomLightSpellOnly { get; set; }
 }
