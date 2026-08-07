@@ -39,6 +39,10 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
 
     [ObservableProperty] private string _notes = string.Empty;
 
+    // "Set as favorite" — surfaces this setup in the terminal's right-click
+    // Favorites menu (amber), where clicking it loads + starts auto-lairing.
+    [ObservableProperty] private bool _favorite;
+
     // Per-marker row, ordered by Map / Room for a stable display.
     public ObservableCollection<LairMarkerRowViewModel> Markers { get; } = new();
 
@@ -101,6 +105,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
 
         Name  = setup.Name ?? string.Empty;
         Notes = setup.Notes ?? string.Empty;
+        Favorite = setup.Favorite;
         foreach (LairMarker m in setup.Markers) AddMarkerRow(m);
         Markers.CollectionChanged += (_, _) => OnPropertyChanged(nameof(CanSave));
     }
@@ -300,7 +305,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
                 skip: false));
         }
 
-        LairSetup saved = new(trimmed, markers) { Notes = Notes ?? string.Empty };
+        LairSetup saved = new(trimmed, markers) { Notes = Notes ?? string.Empty, Favorite = Favorite };
 
         // Renaming an existing setup needs the old file deleted —
         // LairManager keys files by name so a rename leaves the old

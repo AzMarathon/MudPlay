@@ -521,9 +521,24 @@
                                   ItemsSource="{Binding Favorites}">
                             <MenuItem.ItemContainerTheme>
                                 <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
-                                    <Setter Property="Header"    Value="{ReflectionBinding Label}"/>
-                                    <Setter Property="Command"   Value="{ReflectionBinding Walk}"/>
+                                    <!-- Header = the item itself, rendered by the
+                                         template below so only the name gets the
+                                         per-kind accent (room=blue, loop=green,
+                                         lair=amber); the "N)" prefix stays default. -->
+                                    <Setter Property="Header"    Value="{ReflectionBinding}"/>
+                                    <Setter Property="Command"   Value="{ReflectionBinding Command}"/>
                                     <Setter Property="IsEnabled" Value="{ReflectionBinding IsEnabled}"/>
+                                    <Setter Property="HeaderTemplate">
+                                        <Setter.Value>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <TextBlock Text="{ReflectionBinding Prefix}"/>
+                                                    <TextBlock Text="{ReflectionBinding Name}"
+                                                               Foreground="{ReflectionBinding NameBrush}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </Setter.Value>
+                                    </Setter>
                                 </ControlTheme>
                             </MenuItem.ItemContainerTheme>
                         </MenuItem>

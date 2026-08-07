@@ -1,23 +1,36 @@
 using System.Windows.Input;
+using Avalonia.Media;
 
 namespace FujinTerm.ViewModels;
 
-// One numbered slot in the terminal right-click Favorites flyout. A filled slot
-// carries a starred GOTO favourite's "N) label" and the command that walks there;
-// an empty slot ("N) (empty)") has no command and renders disabled. The command
-// is self-contained (captures the target room), so the flyout's ItemsSource-
-// wrapped MenuItems bind straight to it without reaching the MainWindowViewModel.
+// One entry in the terminal right-click Favorites flyout. Carries a numbered
+// prefix ("1)", rendered in the default menu colour) and a name rendered in a
+// per-kind accent (room/goto = blue, loop = green, auto-lair = amber), plus the
+// command run on click (walk to the room / start the loop / start the lair).
+// Items are self-contained (each carries its own command + brush), so the
+// flyout's ItemsSource-wrapped MenuItems bind straight to them without reaching
+// the MainWindowViewModel.
 public sealed class FavoriteMenuItem
 {
-    public string Label { get; }
-    public ICommand? Walk { get; }
+    // Numbered prefix — kept separate from the name so only the name gets the
+    // accent colour (the number + bracket stay the default menu foreground).
+    public string Prefix { get; }
 
-    // Filled slots are clickable; empty slots grey out.
-    public bool IsEnabled => Walk is not null;
+    public string Name { get; }
 
-    public FavoriteMenuItem(string label, ICommand? walk)
+    // Accent brush for the name, by favourite kind. Null falls back to the
+    // default menu foreground.
+    public IBrush? NameBrush { get; }
+
+    public ICommand? Command { get; }
+
+    public bool IsEnabled => Command is not null;
+
+    public FavoriteMenuItem(string prefix, string name, IBrush? nameBrush, ICommand? command)
     {
-        Label = label;
-        Walk = walk;
+        Prefix = prefix;
+        Name = name;
+        NameBrush = nameBrush;
+        Command = command;
     }
 }

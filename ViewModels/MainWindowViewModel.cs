@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -646,10 +647,13 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Profile.ProfileLoaded      += _ => RebuildGameDataSetsMenu();
 
         // Seed the terminal right-click Favorites flyout from the starred GOTO
-        // favourites and refresh it whenever they change (Favorites.Changed also
-        // fires on game-data set swaps, so a realm change refreshes too).
+        // favourites + favourited loops + favourited auto-lair setups, and
+        // refresh it whenever any of them change (all three events also fire on
+        // game-data set swaps, so a realm change refreshes too).
         RebuildFavoritesMenu();
         AppServices.Current.Favorites.Changed += RebuildFavoritesMenu;
+        AppServices.Current.Loops.LoopsChanged += RebuildFavoritesMenu;
+        AppServices.Current.Lairs.SetupsChanged += RebuildFavoritesMenu;
 
         // Apply the loaded profile's persisted scrollback size now — the
         // buffer was constructed with the default; AppServices already
@@ -3558,44 +3562,87 @@ public partial class MainWindowViewModel : ObservableObject
     // starred (rather than showing ten empty rows to someone not using it).
     public bool HasFavorites => _hasFavorites;
 
-    // Rebuild the flyout from the store's starred favourites: resolve each label
-    // (custom label, else the room's graph name), sort by label, then lay them out
-    // as numbered slots 1..MaxStarred — filled slots ("N) name") walk on click, the
-    // remaining slots show "N) (empty)" and render disabled.
+    // Per-kind accent brushes for the Favorites flyout names — matched to the
+    // CURRENT NAV per-engine colours (goto/walk-to = cyan-blue, loop = green,
+    // auto-lair = amber) so the menu reads the same as the map + rail.
+    private static readonly IBrush GotoFavBrush = new SolidColorBrush(Color.Parse("#5FB3D9"));
+    private static readonly IBrush LoopFavBrush = new SolidColorBrush(Color.Parse("#7AB870"));
+    private static readonly IBrush LairFavBrush = new SolidColorBrush(Color.Parse("#D4A24C"));
+
+    // Rebuild the flyout: starred GOTO rooms (walk on click, blue), then
+    // favourited loops (start the loop, green), then favourited auto-lair setups
+    // (load + start, amber). Numbered 1..N sequentially; only the name is
+    // accented — the "N)" prefix stays the default menu colour.
     private void RebuildFavoritesMenu()
     {
-        var rows = new List<(string label, Game.Map.RoomKey key)>();
-        foreach (FavoriteRoom f in AppServices.Current.Favorites.StarredFavorites())
+        var s = AppServices.Current;
+        Favorites.Clear();
+        int number = 0;
+
+        // Rooms — resolve label (custom, else graph name), sorted by label.
+        var roomRows = new List<(string label, Game.Map.RoomKey key)>();
+        foreach (FavoriteRoom f in s.Favorites.StarredFavorites())
         {
             Game.Map.RoomKey key = new(f.Map, f.Room);
             string label = !string.IsNullOrWhiteSpace(f.Label)
                 ? f.Label!
-                : AppServices.Current.RoomGraph.GetRoom(key) is { } r ? r.Name : key.ToString();
-            rows.Add((label, key));
+                : s.RoomGraph.GetRoom(key) is { } r ? r.Name : key.ToString();
+            roomRows.Add((label, key));
         }
-        rows.Sort((a, b) => string.Compare(a.label, b.label, StringComparison.OrdinalIgnoreCase));
-
-        Favorites.Clear();
-        _hasFavorites = rows.Count > 0;
-        if (_hasFavorites)
+        roomRows.Sort((a, b) => string.Compare(a.label, b.label, StringComparison.OrdinalIgnoreCase));
+        foreach ((string label, Game.Map.RoomKey key) in roomRows)
         {
-            for (int slot = 0; slot < FavoritesStore.MaxStarred; slot++)
-            {
-                int number = slot + 1;
-                if (slot < rows.Count)
-                {
-                    Game.Map.RoomKey target = rows[slot].key;
-                    Favorites.Add(new FavoriteMenuItem(
-                        $"{number}) {rows[slot].label}",
-                        new AsyncRelayCommand(() => WalkToFavoriteRoomAsync(target))));
-                }
-                else
-                {
-                    Favorites.Add(new FavoriteMenuItem($"{number}) (empty)", walk: null));
-                }
-            }
+            Game.Map.RoomKey target = key;
+            Favorites.Add(new FavoriteMenuItem($"{++number})", label, GotoFavBrush,
+                new AsyncRelayCommand(() => WalkToFavoriteRoomAsync(target))));
         }
+
+        // Loops — favourited only, sorted by name; click starts the loop.
+        foreach (Game.Map.Loop loop in s.Loops.Loops
+                     .Where(l => l.Favorite)
+                     .OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            Game.Map.Loop target = loop;
+            Favorites.Add(new FavoriteMenuItem($"{++number})", loop.Name, LoopFavBrush,
+                new RelayCommand(() => StartLoopFavorite(target))));
+        }
+
+        // Auto-lair setups — favourited only, sorted by name; click loads + starts.
+        foreach (Models.Profile.LairSetup setup in s.Lairs.Setups
+                     .Where(x => x.Favorite)
+                     .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            Models.Profile.LairSetup target = setup;
+            Favorites.Add(new FavoriteMenuItem($"{++number})", setup.Name, LairFavBrush,
+                new RelayCommand(() => StartLairFavorite(target))));
+        }
+
+        _hasFavorites = Favorites.Count > 0;
         OnPropertyChanged(nameof(HasFavorites));
+    }
+
+    // Start a favourited loop from the flyout — stop any conflicting engine
+    // first, then hand the loop to the runner (which approaches the start
+    // waypoint and begins the cycle).
+    private void StartLoopFavorite(Game.Map.Loop loop)
+    {
+        var s = AppServices.Current;
+        if (s.AutoLair.IsActive) s.AutoLair.Stop("loop favorite started");
+        s.LoopRunner.Start(loop);
+    }
+
+    // Start a favourited auto-lair setup from the flyout — mirrors the
+    // Navigation manager's "Load" then Start: stop conflicting engines, replace
+    // the live markers with the setup's, and begin auto-lairing.
+    private void StartLairFavorite(Models.Profile.LairSetup setup)
+    {
+        var s = AppServices.Current;
+        if (s.LoopRunner.State != Game.Map.LoopState.Idle) s.LoopRunner.Stop("auto-lair favorite started");
+        if (s.AutoLair.IsActive) s.AutoLair.Stop("auto-lair favorite started");
+        s.AutoLair.Clear();
+        foreach (Models.Profile.LairMarker m in setup.Markers)
+            s.AutoLair.Mark(new Game.Map.RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
+        s.AutoLair.Start();
     }
 
     // Walk to a starred favourite from the right-click flyout — stop any running

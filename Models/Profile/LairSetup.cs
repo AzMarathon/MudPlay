@@ -22,6 +22,12 @@ public sealed class LairSetup
     public int SchemaVersion { get; set; } = 1;
     public string Name { get; set; } = string.Empty;
     public string? Notes { get; set; }
+
+    // When true, this setup appears in the terminal's right-click Favorites
+    // menu (amber) — clicking it loads the markers and starts auto-lairing.
+    // Toggled by the "Set as favorite" checkbox in the Auto-Lair editor.
+    public bool Favorite { get; set; }
+
     public List<LairMarker> Markers { get; set; } = new();
 
     // Folder this setup lives under inside the BBS Loops directory, relative to
