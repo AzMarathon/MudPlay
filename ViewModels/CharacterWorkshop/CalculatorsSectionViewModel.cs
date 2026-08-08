@@ -274,68 +274,95 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     // ----- Mana-regen breakpoint calculator --------------------------------
 
-    public string[] ManaMageryOptions { get; } = { "Mage", "Druid" };
-
-    // All inputs are freely editable so the calculator doubles as a planner for
-    // stat allocations / level-ups / gear upgrades. They seed from the live
-    // character only when it's a mage or druid (SeedManaFromActuals); otherwise
-    // they keep neutral defaults for a from-scratch what-if.
-    [ObservableProperty] private string _selectedManaMagery = "Mage";
+    // One dropdown of the caster classes (mage magery = 1, druid magery = 3) in
+    // the active set — the selected class carries BOTH its MageryType (which stat
+    // drives regen) and its MageryLVL (the tier), read from game data, so it
+    // replaces the old magery + tier pickers.
+    public ObservableCollection<string> ManaClassOptions { get; } = new();
+    [ObservableProperty] private string? _selectedManaClass;
     [ObservableProperty] private bool _isDruidManaMagery;
+
+    // Every input is editable so the calculator doubles as a planner for stat
+    // allocations / level-ups / gear upgrades; it seeds from the live character
+    // only when it's a mage or druid (SeedManaFromActuals).
     [ObservableProperty] private int _manaLevel = 1;
     [ObservableProperty] private int _manaIntellect = 1;
     [ObservableProperty] private int _manaWillpower = 1;
-    [ObservableProperty] private int _manaMageryLevel = 3;
     [ObservableProperty] private int _manaGearRegenPercent;
 
-    public ObservableCollection<string> ManaRollSpellNames { get; } = new();
-    [ObservableProperty] private string? _selectedManaRollSpell;
+    // Racial floors for the INT / WIL pickers — the lowest base value any race can
+    // start with (min mINT / mWIL across the Races table), so a picker opens at a
+    // real minimum instead of 1.
+    [ObservableProperty] private int _manaIntMinimum = 1;
+    [ObservableProperty] private int _manaWilMinimum = 1;
 
     // Outputs.
     [ObservableProperty] private string _manaBaseTickText = "—";
     [ObservableProperty] private string _manaGearTickText = "—";
     [ObservableProperty] private bool _manaHasRollSpell;
+    [ObservableProperty] private string _manaRollSpellText = "—";
     [ObservableProperty] private string _manaRollRangeText = "—";
     [ObservableProperty] private string _manaWorstTickText = "—";
     [ObservableProperty] private string _manaBestTickText = "—";
     [ObservableProperty] private string _manaRerollAdviceText = "";
     public ObservableCollection<ManaBreakpointRow> ManaBreakpoints { get; } = new();
 
-    partial void OnSelectedManaMageryChanged(string value)
-    {
-        RebuildRollSpellNames();
-        RecomputeManaRegen();
-    }
+    // "Model a roll" slider: bounds are the spell's min / max roll at the current
+    // level; sliding picks a roll value and the readout shows what it is, its
+    // position in the range (the 0-100% the player asked for), and the tick it
+    // yields — so an observed roll can be lined up against the breakpoints.
+    [ObservableProperty] private int _manaRollMin;
+    [ObservableProperty] private int _manaRollMax;
+    [ObservableProperty] private double _manaRollSample;
+    [ObservableProperty] private string _manaSampleReadoutText = "—";
+
+    partial void OnManaRollSampleChanged(double value) => UpdateManaSampleReadout();
+
+    partial void OnSelectedManaClassChanged(string? value) => RecomputeManaRegen();
     partial void OnManaLevelChanged(int value) => RecomputeManaRegen();
     partial void OnManaIntellectChanged(int value) => RecomputeManaRegen();
     partial void OnManaWillpowerChanged(int value) => RecomputeManaRegen();
-    partial void OnManaMageryLevelChanged(int value) => RecomputeManaRegen();
     partial void OnManaGearRegenPercentChanged(int value) => RecomputeManaRegen();
-    partial void OnSelectedManaRollSpellChanged(string? value) => RecomputeManaRegen();
 
-    private int SelectedManaMageryType => SelectedManaMagery == "Druid" ? 3 : 1;
+    // MageryType (1 mage / 3 druid) and tier for the selected class, from game data.
+    private (int Type, int Level) ResolveManaMagery()
+    {
+        if (SelectedManaClass is { } cls && _gameData.FindRowByName("Classes", cls) is JsonElement row)
+            return (GetInt(row, "MageryType"), GetInt(row, "MageryLVL"));
+        return (1, 0);
+    }
 
-    // Seed the calculator from the live character only when it's a caster whose
-    // magery this tool models (mage type 1, druid type 3). Non-casters leave the
-    // defaults so the tool still opens as a blank planner. Runs inside the
-    // suspend guard so the batch of input assignments recomputes once.
+    // Seed from the live character only when it's a caster this tool models (mage
+    // type 1, druid type 3): select that class and adopt its level / stats / gear.
+    // A non-caster falls back to the first caster class and the racial stat floors
+    // so the tool still opens as a from-scratch planner. Batched under the suspend
+    // guard so the assignments recompute once.
     private void SeedManaFromActuals()
     {
         _suspendManaRecompute = true;
         try
         {
-            RebuildRollSpellsForSet();
-            if (_liveMageryType is 1 or 3)
+            _rollSpells = _spellCatalog.RollSpells();
+            ComputeStatFloors();
+            RebuildManaClassOptions();
+
+            if (_liveMageryType is 1 or 3 && !string.IsNullOrEmpty(_stats.Class)
+                && ManaClassOptions.Contains(_stats.Class))
             {
-                SelectedManaMagery = _liveMageryType == 3 ? "Druid" : "Mage";
+                SelectedManaClass = _stats.Class;
                 ManaLevel = _level;
                 ManaIntellect = _intel;
                 ManaWillpower = _wil;
-                ManaMageryLevel = _liveMageryLevel;
                 ManaGearRegenPercent = _manaGearRegenPct;
             }
-            IsDruidManaMagery = SelectedManaMageryType == 3;
-            RebuildRollSpellNames();
+            else
+            {
+                SelectedManaClass = ManaClassOptions.FirstOrDefault();
+                ManaLevel = Math.Max(1, ManaLevel);
+                ManaIntellect = ManaIntMinimum;
+                ManaWillpower = ManaWilMinimum;
+                ManaGearRegenPercent = 0;
+            }
         }
         finally
         {
@@ -344,64 +371,88 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         RecomputeManaRegen();
     }
 
-    // Rescan the active set's code-145 roll spells (nature tap / mana flux). Called
-    // on seed; the magery filter is applied in RebuildRollSpellNames.
-    private void RebuildRollSpellsForSet() => _rollSpells = _spellCatalog.RollSpells();
-
-    // Populate the picker with the roll spells whose own magery matches the
-    // selected type, preserving the current pick when it survives the filter.
-    private void RebuildRollSpellNames()
+    // Lowest base INT / WIL across all races (mINT / mWIL) — the floor the pickers
+    // seed and clamp to. Falls back to 1 when the set has no Races table.
+    private void ComputeStatFloors()
     {
-        int magery = SelectedManaMageryType;
-        var names = _rollSpells.Where(s => s.Magery == magery)
-                               .Select(s => s.Name)
-                               .Where(n => !string.IsNullOrWhiteSpace(n))
-                               .Distinct(StringComparer.OrdinalIgnoreCase)
-                               .ToList();
-        if (ManaRollSpellNames.SequenceEqual(names)) return;
+        int minInt = int.MaxValue, minWil = int.MaxValue;
+        if (_gameData.GetRawTable("Races") is { } doc)
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                minInt = Math.Min(minInt, GetInt(row, "mINT"));
+                minWil = Math.Min(minWil, GetInt(row, "mWIL"));
+            }
+        ManaIntMinimum = minInt is int.MaxValue or <= 0 ? 1 : minInt;
+        ManaWilMinimum = minWil is int.MaxValue or <= 0 ? 1 : minWil;
+    }
 
-        string? keep = SelectedManaRollSpell;
-        ManaRollSpellNames.Clear();
-        foreach (string n in names) ManaRollSpellNames.Add(n);
-        SelectedManaRollSpell = keep is not null && names.Contains(keep, StringComparer.OrdinalIgnoreCase)
-            ? keep
-            : names.FirstOrDefault();
+    // The active set's caster classes (mage / druid magery), sorted by name.
+    private void RebuildManaClassOptions()
+    {
+        var names = new List<string>();
+        if (_gameData.GetRawTable("Classes") is { } doc)
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                if (GetInt(row, "MageryType") is not (1 or 3)) continue;
+                if (row.TryGetProperty("Name", out JsonElement nameEl)
+                    && nameEl.GetString() is { Length: > 0 } n)
+                    names.Add(n);
+            }
+        names.Sort(StringComparer.OrdinalIgnoreCase);
+        if (ManaClassOptions.SequenceEqual(names)) return;
+
+        string? keep = SelectedManaClass;
+        ManaClassOptions.Clear();
+        foreach (string n in names) ManaClassOptions.Add(n);
+        if (keep is not null && names.Contains(keep, StringComparer.OrdinalIgnoreCase))
+            SelectedManaClass = keep;
+    }
+
+    // Resolve the current inputs from the editable fields + the selected class's
+    // magery (shared by the full recompute and the slider readout).
+    private ManaRegenBreakpointCalculator.Inputs BuildManaInputs()
+    {
+        (int mageryType, int mageryLevel) = ResolveManaMagery();
+        return new ManaRegenBreakpointCalculator.Inputs(
+            Level: Math.Max(1, ManaLevel),
+            MageryType: mageryType,
+            Intellect: ManaIntellect,
+            Willpower: ManaWillpower,
+            MageryLevel: mageryLevel,
+            GearRegenPercent: ManaGearRegenPercent,
+            Realm: _realm);
     }
 
     private void RecomputeManaRegen()
     {
         if (_suspendManaRecompute) return;
 
-        IsDruidManaMagery = SelectedManaMageryType == 3;
-        var inputs = new ManaRegenBreakpointCalculator.Inputs(
-            Level: Math.Max(1, ManaLevel),
-            MageryType: SelectedManaMageryType,
-            Intellect: ManaIntellect,
-            Willpower: ManaWillpower,
-            MageryLevel: ManaMageryLevel,
-            GearRegenPercent: ManaGearRegenPercent,
-            Realm: _realm);
+        ManaRegenBreakpointCalculator.Inputs inputs = BuildManaInputs();
+        IsDruidManaMagery = inputs.MageryType == 3;
 
-        int baseTick = ManaRegenBreakpointCalculator.Tick(
-            inputs with { GearRegenPercent = 0 }, 0);
-        int gearTick = ManaRegenBreakpointCalculator.Tick(inputs, 0);
-        ManaBaseTickText = TickText(baseTick);
-        ManaGearTickText = TickText(gearTick);
+        ManaBaseTickText = TickText(ManaRegenBreakpointCalculator.Tick(inputs with { GearRegenPercent = 0 }, 0));
+        ManaGearTickText = TickText(ManaRegenBreakpointCalculator.Tick(inputs, 0));
 
-        KnownSpell? spell = _rollSpells.FirstOrDefault(
-            s => string.Equals(s.Name, SelectedManaRollSpell, StringComparison.OrdinalIgnoreCase));
+        // Auto-resolve the roll spell for this magery: mana flux (mage) / nature
+        // tap (druid) — the single code-145 roll spell whose own Magery matches.
+        KnownSpell? spell = _rollSpells.FirstOrDefault(s => s.Magery == inputs.MageryType);
         ManaHasRollSpell = spell is not null;
         ManaBreakpoints.Clear();
 
         if (spell is not { } roll)
         {
+            ManaRollSpellText = "—";
             ManaRollRangeText = "—";
             ManaWorstTickText = "—";
             ManaBestTickText = "—";
-            ManaRerollAdviceText = "Pick a roll spell to see the reroll breakpoints.";
+            ManaRollMin = 0;
+            ManaRollMax = 0;
+            ManaSampleReadoutText = "—";
+            ManaRerollAdviceText = "No mana-regen roll spell for this magery in the active game data.";
             return;
         }
 
+        ManaRollSpellText = roll.Name;
         (long rmin, long rmax) = SpellCalculator.AffectMagnitude(roll.Formula, Math.Max(1, ManaLevel));
         ManaRegenBreakpointCalculator.Result r =
             ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
@@ -409,6 +460,18 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         ManaRollRangeText = $"{r.RollMin}–{r.RollMax} %ManaRgn at level {Math.Max(1, ManaLevel)}";
         ManaWorstTickText = TickText(r.WorstTick);
         ManaBestTickText = TickText(r.BestTick);
+
+        // Slider bounds follow the level-scaled range; keep the sample inside it,
+        // defaulting to the best roll when the range shifted out from under it.
+        ManaRollMin = r.RollMin;
+        ManaRollMax = r.RollMax;
+        double clampedSample = ManaRollSample < r.RollMin || ManaRollSample > r.RollMax
+            ? r.RollMax
+            : ManaRollSample;
+        if (Math.Abs(clampedSample - ManaRollSample) > double.Epsilon)
+            ManaRollSample = clampedSample;   // fires the readout via OnManaRollSampleChanged
+        else
+            UpdateManaSampleReadout();
 
         foreach (ManaRegenBreakpointCalculator.Breakpoint b in r.Breakpoints)
             ManaBreakpoints.Add(new ManaBreakpointRow(
@@ -431,6 +494,24 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
                 $"Reroll until it rolls ≥ {rec} to reach {tick} MP/tick, then stop — higher rolls don't add a tick until the next breakpoint. " +
                 $"Set Settings → Spells → Mana-Regen Reroll Threshold to {rec}.";
         }
+    }
+
+    // Live readout for the "model a roll" slider: the picked roll value, where it
+    // sits in the range (0-100%), and the tick it produces.
+    private void UpdateManaSampleReadout()
+    {
+        if (!ManaHasRollSpell || ManaRollMax <= 0)
+        {
+            ManaSampleReadoutText = "—";
+            return;
+        }
+        int roll = (int)Math.Round(ManaRollSample);
+        roll = Math.Clamp(roll, ManaRollMin, ManaRollMax);
+        double frac = ManaRollMax > ManaRollMin
+            ? (double)(roll - ManaRollMin) / (ManaRollMax - ManaRollMin)
+            : 0;
+        int tick = ManaRegenBreakpointCalculator.Tick(BuildManaInputs(), roll);
+        ManaSampleReadoutText = $"roll {roll}  •  {frac * 100:0}% of range  •  {tick} MP/tick";
     }
 
     private static string TickText(int tick)

@@ -479,45 +479,32 @@
 
                                 <StackPanel Orientation="Horizontal" Spacing="14">
                                     <StackPanel Spacing="3">
-                                        <TextBlock Classes="FieldLabel" Text="Magery"/>
-                                        <ComboBox ItemsSource="{Binding ManaMageryOptions}"
-                                                  SelectedItem="{Binding SelectedManaMagery, Mode=TwoWay}"
-                                                  MinWidth="118"
-                                                  ToolTip.Tip="Mage regen keys off INT; druid off (INT+WIL)/2."/>
+                                        <TextBlock Classes="FieldLabel" Text="Class"/>
+                                        <ComboBox ItemsSource="{Binding ManaClassOptions}"
+                                                  SelectedItem="{Binding SelectedManaClass, Mode=TwoWay}"
+                                                  MinWidth="180"
+                                                  ToolTip.Tip="Mage / druid classes only. Sets the magery stat (mage = INT, druid = (INT+WIL)/2) and the magery tier from game data."/>
                                     </StackPanel>
                                     <StackPanel Spacing="3">
                                         <TextBlock Classes="FieldLabel" Text="Level"/>
                                         <NumericUpDown Classes="Stat" Minimum="1" Value="{Binding ManaLevel, Mode=TwoWay}"/>
-                                    </StackPanel>
-                                    <StackPanel Spacing="3">
-                                        <TextBlock Classes="FieldLabel" Text="Magery Lvl"/>
-                                        <NumericUpDown Classes="Stat" Value="{Binding ManaMageryLevel, Mode=TwoWay}"
-                                                       ToolTip.Tip="The class magery tier (Classes MageryLVL) — a constant per class, not your character level. Also sets max mana."/>
                                     </StackPanel>
                                 </StackPanel>
 
                                 <StackPanel Orientation="Horizontal" Spacing="14">
                                     <StackPanel Spacing="3">
                                         <TextBlock Classes="FieldLabel" Text="Intellect"/>
-                                        <NumericUpDown Classes="Stat" Value="{Binding ManaIntellect, Mode=TwoWay}"/>
+                                        <NumericUpDown Classes="Stat" Minimum="{Binding ManaIntMinimum}" Value="{Binding ManaIntellect, Mode=TwoWay}"/>
                                     </StackPanel>
                                     <StackPanel Spacing="3" IsVisible="{Binding IsDruidManaMagery}">
                                         <TextBlock Classes="FieldLabel" Text="Willpower"/>
-                                        <NumericUpDown Classes="Stat" Value="{Binding ManaWillpower, Mode=TwoWay}"/>
+                                        <NumericUpDown Classes="Stat" Minimum="{Binding ManaWilMinimum}" Value="{Binding ManaWillpower, Mode=TwoWay}"/>
                                     </StackPanel>
                                     <StackPanel Spacing="3">
                                         <TextBlock Classes="FieldLabel" Text="+ManaRgn% (gear)"/>
                                         <NumericUpDown Classes="Stat" Minimum="-9999" Value="{Binding ManaGearRegenPercent, Mode=TwoWay}"
                                                        ToolTip.Tip="Summed +ManaRgn% from gear and completed quests (ability 145)."/>
                                     </StackPanel>
-                                </StackPanel>
-
-                                <StackPanel Spacing="3">
-                                    <TextBlock Classes="FieldLabel" Text="Roll spell (nature tap / mana flux)"/>
-                                    <ComboBox ItemsSource="{Binding ManaRollSpellNames}"
-                                              SelectedItem="{Binding SelectedManaRollSpell, Mode=TwoWay}"
-                                              MinWidth="260" HorizontalAlignment="Left"
-                                              PlaceholderText="Pick the mana-regen roll spell for this magery…"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -540,14 +527,29 @@
                         <Border Classes="SubBox" IsVisible="{Binding ManaHasRollSpell}">
                             <StackPanel Spacing="10">
                                 <TextBlock Classes="Section" Text="With roll spell"/>
-                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Roll range" Margin="0,2,16,2"/>
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaRollRangeText}" Margin="0,2"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Worst roll (0%)" Margin="0,2,16,2"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaWorstTickText}" Margin="0,2"/>
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Best roll (100%)" Margin="0,2,16,2"/>
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaBestTickText}" Margin="0,2"/>
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Spell" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaRollSpellText}" Margin="0,2"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Roll range" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaRollRangeText}" Margin="0,2"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Worst roll (0%)" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaWorstTickText}" Margin="0,2"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Best roll (100%)" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaBestTickText}" Margin="0,2"/>
                                 </Grid>
+
+                                <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,2"/>
+
+                                <TextBlock Classes="Section" Text="Model a roll"/>
+                                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                           Text="Slide from the worst (min) to the best (max) roll for this level to see any roll's value, its position in the range, and the tick it lands."/>
+                                <Slider Minimum="{Binding ManaRollMin}" Maximum="{Binding ManaRollMax}"
+                                        Value="{Binding ManaRollSample, Mode=TwoWay}"
+                                        TickFrequency="1" IsSnapToTickEnabled="True"
+                                        Width="480" HorizontalAlignment="Left"/>
+                                <TextBlock Classes="FieldValue"
+                                           Foreground="{StaticResource AccentAmberBrush}"
+                                           Text="{Binding ManaSampleReadoutText}"/>
 
                                 <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,2"/>
 
