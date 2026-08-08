@@ -2,8 +2,9 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 2.35.4
+## 2.36.0
 
+- New Mana Regen calculator (Calculators tab): plan level / stat / gear against mana-regen tick breakpoints for a mage or druid, and see exactly where to set the nature-tap / mana-flux reroll threshold so you stop rerolling once the best reachable tick is hit
 - Loops no longer freeze forever when combat interrupts a move mid-step: a stall watchdog now detects the never-confirmed move and re-establishes position (Paradigm `rm` resync / stock footprint backtrack) so the loop resumes instead of standing still
 - bug reports addressed: paradigm-20260807-133143
 

@@ -463,6 +463,123 @@
                     </StackPanel>
                 </Expander>
 
+                <!-- ===== Mana Regen ===== -->
+                <Expander Width="560" HorizontalAlignment="Left">
+                    <Expander.Header>
+                        <TextBlock Classes="BoxTitle" Text="Mana Regen"/>
+                    </Expander.Header>
+
+                    <StackPanel Spacing="14" Margin="0,8,0,0">
+                        <!-- ===== Inputs (all editable — plan level / stats / gear) ===== -->
+                        <Border Classes="SubBox">
+                            <StackPanel Spacing="10">
+                                <TextBlock Classes="Section" Text="Inputs"/>
+                                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                           Text="Seeds from your character when it's a mage or druid; every field is editable so you can plan stat points, level-ups and gear."/>
+
+                                <StackPanel Orientation="Horizontal" Spacing="14">
+                                    <StackPanel Spacing="3">
+                                        <TextBlock Classes="FieldLabel" Text="Magery"/>
+                                        <ComboBox ItemsSource="{Binding ManaMageryOptions}"
+                                                  SelectedItem="{Binding SelectedManaMagery, Mode=TwoWay}"
+                                                  MinWidth="118"
+                                                  ToolTip.Tip="Mage regen keys off INT; druid off (INT+WIL)/2."/>
+                                    </StackPanel>
+                                    <StackPanel Spacing="3">
+                                        <TextBlock Classes="FieldLabel" Text="Level"/>
+                                        <NumericUpDown Classes="Stat" Minimum="1" Value="{Binding ManaLevel, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                    <StackPanel Spacing="3">
+                                        <TextBlock Classes="FieldLabel" Text="Magery Lvl"/>
+                                        <NumericUpDown Classes="Stat" Value="{Binding ManaMageryLevel, Mode=TwoWay}"
+                                                       ToolTip.Tip="The class magery tier (Classes MageryLVL) — a constant per class, not your character level. Also sets max mana."/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="14">
+                                    <StackPanel Spacing="3">
+                                        <TextBlock Classes="FieldLabel" Text="Intellect"/>
+                                        <NumericUpDown Classes="Stat" Value="{Binding ManaIntellect, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                    <StackPanel Spacing="3" IsVisible="{Binding IsDruidManaMagery}">
+                                        <TextBlock Classes="FieldLabel" Text="Willpower"/>
+                                        <NumericUpDown Classes="Stat" Value="{Binding ManaWillpower, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                    <StackPanel Spacing="3">
+                                        <TextBlock Classes="FieldLabel" Text="+ManaRgn% (gear)"/>
+                                        <NumericUpDown Classes="Stat" Minimum="-9999" Value="{Binding ManaGearRegenPercent, Mode=TwoWay}"
+                                                       ToolTip.Tip="Summed +ManaRgn% from gear and completed quests (ability 145)."/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="FieldLabel" Text="Roll spell (nature tap / mana flux)"/>
+                                    <ComboBox ItemsSource="{Binding ManaRollSpellNames}"
+                                              SelectedItem="{Binding SelectedManaRollSpell, Mode=TwoWay}"
+                                              MinWidth="260" HorizontalAlignment="Left"
+                                              PlaceholderText="Pick the mana-regen roll spell for this magery…"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ===== Natural tick (no spell) ===== -->
+                        <Border Classes="SubBox">
+                            <StackPanel Spacing="10">
+                                <TextBlock Classes="Section" Text="Natural tick (every 30s)"/>
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Level + stat" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaBaseTickText}" Margin="0,2"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="+ gear ManaRgn%" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaGearTickText}"
+                                               Foreground="{StaticResource AccentAmberBrush}" Margin="0,2"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ===== Roll spell + breakpoints ===== -->
+                        <Border Classes="SubBox" IsVisible="{Binding ManaHasRollSpell}">
+                            <StackPanel Spacing="10">
+                                <TextBlock Classes="Section" Text="With roll spell"/>
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Roll range" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaRollRangeText}" Margin="0,2"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Worst roll (0%)" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaWorstTickText}" Margin="0,2"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Best roll (100%)" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaBestTickText}" Margin="0,2"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,2"/>
+
+                                <TextBlock Classes="Section" Text="Breakpoints reachable by the roll"/>
+                                <Grid ColumnDefinitions="70,140,90,Auto" Margin="0,2,0,0">
+                                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Tick"/>
+                                    <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Needs"/>
+                                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Range"/>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding ManaBreakpoints}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ManaBreakpointRow">
+                                            <Grid ColumnDefinitions="70,140,90,Auto" Margin="0,1">
+                                                <TextBlock Grid.Column="0" Classes="FieldValue" Text="{Binding Tick}"/>
+                                                <TextBlock Grid.Column="1" Classes="FieldValue" Text="{Binding Roll}"/>
+                                                <TextBlock Grid.Column="2" Classes="FieldValue" Text="{Binding RangePct}"/>
+                                                <TextBlock Grid.Column="3" Classes="FieldValue" Text="◄ target"
+                                                           Foreground="{StaticResource AccentAmberBrush}"
+                                                           IsVisible="{Binding IsRecommended}" Margin="6,0,0,0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                           Foreground="{StaticResource AccentAmberBrush}"
+                                           Text="{Binding ManaRerollAdviceText}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Expander>
+
                 <!-- ===== Realm Rankings ===== -->
                 <!-- Unlike the fixed-560 calculators above, this one grows to the
                      full leaderboard table when expanded; MinWidth keeps it flush

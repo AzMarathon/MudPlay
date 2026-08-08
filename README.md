@@ -1,7 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.35.4**
+> **Version 2.36.0**
+> - New Mana Regen calculator (Calculators tab): plan level / stat / gear against mana-regen tick breakpoints for a mage or druid, and see exactly where to set the nature-tap / mana-flux reroll threshold so you stop rerolling once the best reachable tick is hit
 > - Loops no longer freeze forever when combat interrupts a move mid-step: a stall watchdog now detects the never-confirmed move and re-establishes position (Paradigm `rm` resync / stock footprint backtrack) so the loop resumes instead of standing still
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

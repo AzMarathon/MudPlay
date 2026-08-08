@@ -120,6 +120,32 @@ public sealed class KnownSpellCatalog
         return results;
     }
 
+    // Every code-145 mana-regen ROLL spell in the active set (nature tap / mana
+    // flux) — a 145 slot whose stored value is 0, so its magnitude is rolled from
+    // the level-scaled Min/Max range each cast. Not class- or level-gated: the
+    // mana-regen planner lists them by their own Magery so a player can model the
+    // roll for a build they don't hold yet. Sorted by Magery then Name.
+    public IReadOnlyList<KnownSpell> RollSpells()
+    {
+        List<KnownSpell> results = new();
+        JsonDocument? doc = _cache.GetRawTable("Spells");
+        if (doc is null) return results;
+
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            KnownSpell spell = ToKnownSpell(row);
+            if (RegenSpellClassifier.Has(spell.Formula, RegenSpellTraits.ManaRegenRoll))
+                results.Add(spell);
+        }
+
+        results.Sort(static (a, b) =>
+        {
+            int byMagery = a.Magery.CompareTo(b.Magery);
+            return byMagery != 0 ? byMagery : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+        });
+        return results;
+    }
+
     // Look up a single learnable spell by its Short cast-code for the given
     // class. Returns null when no usable spell matches. level 0 ignores the
     // level gate.

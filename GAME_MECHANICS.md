@@ -662,6 +662,24 @@ route resolver never counted.
   spawn before you leave (`× (1 + summonChance)`), scaled by laps/hr. A simplification of the true
   per-tick loop, but it lands close and stops the under-report.
 
+## Mana regeneration & the ManaRgn breakpoints *([CONFIRMED] 2026-08-08, against the engine's own reference formula)*
+
+Passive (non-resting, non-meditating) mana regen ticks **every 30 s** (6 rounds) and adds a whole-MP amount computed by one integer formula. `CharacterCalculator.CalcManaRegen` implements it; the Level Projection grid already relies on it.
+
+```
+S (base stat) by magery type:  mage = INT ·  priest = WIL ·  druid = (INT + WIL) / 2 ·  bard = CHM ·  mystic = fixed 1
+base = trunc( (level + 20) · S · (mageryLevel + 2) / 1650 )
+tick = trunc( (ManaRgn% + 100) · base / 100 )        [stock]
+tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD — functionally equivalent]
+```
+
+- **`mageryLevel`** is the class's magery tier (`Classes.MageryLVL`), a constant per class — NOT the character level. It also drives max mana: `MaxMana = (mageryLevel · level · 2) + 6`. (A stock ability code 145 = "ManaRgn".)
+- **`ManaRgn%`** is the sum of every code-145 source: gear/quest `addability 145 N` bonuses (`+N ManaRgn`) **plus** a cast mana-regen roll spell's rolled magnitude. It is a **percent modifier on the tick, not flat mana**.
+- **Breakpoints are emergent, not a table.** Because `tick` is truncated, it steps up by 1 MP only when `ManaRgn%` (or level / stat) crosses the integer threshold `(N·100/base − 100)`. Between thresholds, extra ManaRgn% does nothing.
+- **Roll spells (nature tap / mana flux)** carry a code-145 slot with stored value 0; the magnitude is rolled per cast from the level-scaled range `Min/Max = base + trunc(inc/incLVLs · level)` (the same `SpellCalculator.AffectMagnitude` scaling every affect uses). So the worst roll = Min, best = Max, and the rolled value adds straight into `ManaRgn%`. This is why a reroll only helps when the range can cross a truncation breakpoint at the current level — otherwise it just burns mana.
+
+**Unverified / modelled (not from the engine reference, don't hard-depend):** the roll's *distribution* across `[Min,Max]` is treated as linear for "where on the range" purposes but is not proven uniform; the meditate path (10 s tick, ManaRgn% excluded) is a reverse-engineered model; whether the live engine caps summed ManaRgn% is unknown. The mana-regen breakpoint calculator uses only the CONFIRMED passive formula above.
+
 ## Vitality — HP, dropping, and death
 
 **Max-HP sources** *([CONFIRMED])*
