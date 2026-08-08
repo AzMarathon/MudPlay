@@ -37,6 +37,14 @@ public sealed class ItemCastSequencerTests
         return (seq, seq.LastSentForTests);
     }
 
+    private static (ItemCastSequencer Seq, List<byte[]> Sent) NewSeqWithDesired(
+        InventorySnapshot inv, System.Func<string, string?> desiredSlotItem)
+    {
+        ItemCastSequencer seq = new(() => Items, () => inv, log: null, desiredSlotItem: desiredSlotItem);
+        seq.SetWireSender(_ => { });
+        return (seq, seq.LastSentForTests);
+    }
+
     private static List<string> Decode(IEnumerable<byte[]> sent)
         => sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
 
@@ -156,6 +164,40 @@ public sealed class ItemCastSequencerTests
     }
 
     [Fact]
+    public void Execute_OffHandItem_AlreadyEquipped_RestoresFromEquipManager()
+    {
+        // Report 1: the warhorn is STILL in the off-hand from a prior session, so the
+        // live slot can't say what belongs there (it reads back the buff item itself).
+        // Fall back to the equipment manager's Default off-hand, and skip the redundant
+        // re-equip of the already-worn buff item.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeqWithDesired(
+            InvWith(
+                new EquippedItem("throwing hammers", "Weapon Hand"),
+                new EquippedItem("Engraved Warhorn", "Off-Hand")),
+            slot => slot == "Off-Hand" ? "griffon shield" : null);
+
+        Assert.True(seq.Execute("#engraved warhorn"));
+        Assert.Equal(new[]
+        {
+            "use Engraved Warhorn",
+            "eq griffon shield",
+        }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_OffHandItem_AlreadyEquipped_NoEquipManagerFallback_SkipsRestore()
+    {
+        // Buff item stuck in-slot but no configured loadout to consult → fire the buff,
+        // restore nothing, and still never touch the weapon.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeq(InvWith(
+            new EquippedItem("throwing hammers", "Weapon Hand"),
+            new EquippedItem("Engraved Warhorn", "Off-Hand")));
+
+        Assert.True(seq.Execute("#engraved warhorn"));
+        Assert.Equal(new[] { "use Engraved Warhorn" }, Decode(sent));
+    }
+
+    [Fact]
     public void Execute_WornItem_RestoresThatSlot()
     {
         // Restore is general across worn slots — a neck cast item restores the neck.
@@ -173,17 +215,16 @@ public sealed class ItemCastSequencerTests
     }
 
     [Fact]
-    public void Execute_AlreadyWieldingCastItem_SkipsRestore()
+    public void Execute_AlreadyWieldingCastItem_UsesInPlaceNoReequipNoRestore()
     {
+        // The cast item is already in its slot — skip the redundant re-equip (the
+        // game would just say "you do not have <item> left unequipped"), just use it,
+        // and restore nothing (it's the wielded gear).
         (ItemCastSequencer seq, List<byte[]> sent) =
             NewSeq(InvWith(new EquippedItem("Emerald Tipped Crozier", "Weapon Hand")));
 
         Assert.True(seq.Execute("#emerald tipped crozier"));
-        Assert.Equal(new[]
-        {
-            "eq Emerald Tipped Crozier",
-            "use Emerald Tipped Crozier",
-        }, Decode(sent));
+        Assert.Equal(new[] { "use Emerald Tipped Crozier" }, Decode(sent));
     }
 
     [Fact]

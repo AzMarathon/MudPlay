@@ -459,15 +459,22 @@ public sealed class KnownSpellCatalog
     }
 
     // The equip slot the cast item occupies, normalized to the inventory's
-    // EquippedItem.Slot labels so the sequencer can look up what it displaces: a
-    // weapon readies into the Weapon Hand; everything else into its Worn slot
-    // (Off-Hand for a shield / warhorn, Neck for an amulet, …). Empty only for an
-    // item that isn't a weapon and has no mapped Worn slot — the equippable filter
-    // above already excludes those, so in practice this always resolves.
-    private static string WearSlotFor(JsonElement row)
+    // EquippedItem.Slot labels so the sequencer can look up what it displaces:
+    // Off-Hand for a shield / warhorn, Neck for an amulet, the Weapon Hand for a
+    // weapon. Prefer the real Worn slot — an item can be flagged a non-weapon
+    // ItemType yet worn in a body slot (an engraved warhorn is ItemType=Armour,
+    // Worn=Off-Hand), and `eq` drops it into that Worn slot; only a true weapon
+    // (Worn 0/Nowhere) rides the weapon hand. Read Worn as an INT — it's a numeric
+    // JSON field, so the string reader hands back null and the slot came back empty
+    // (the bug that mislabeled the warhorn "Weapon Hand"). Empty only when neither
+    // a mapped Worn slot nor a weapon, which the equippable filter already excludes.
+    internal static string WearSlotFor(JsonElement row)
     {
+        int worn = ReadInt(row, "Worn");
+        if (worn is >= FirstWornSlot and <= LastWornSlot)
+            return LookupEnums.FormatWornSlot(worn) ?? WeaponHandSlotLabel;
         if (ReadInt(row, "ItemType") == WeaponItemType) return WeaponHandSlotLabel;
-        return LookupEnums.FormatWornSlot(ReadString(row, "Worn")) ?? string.Empty;
+        return string.Empty;
     }
 
     // One-pass Spells.Number → (Name, ManaCost) map for resolving cast-item

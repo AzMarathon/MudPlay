@@ -43,19 +43,25 @@ public sealed class ItemCastSequencer
 
     private readonly Func<IReadOnlyList<ClassCastItem>> _castItems;
     private readonly Func<InventorySnapshot> _inventory;
+    // Given an inventory slot label, the item the equipment manager wants worn there
+    // (its Default set), or null. Used as the restore fallback when the live slot
+    // can't say what belongs there — see RestoreTarget. Null when unwired (tests).
+    private readonly Func<string, string?>? _desiredSlotItem;
     private readonly WireSender _wire = new();
     private readonly LogService? _log;
 
     public ItemCastSequencer(
         Func<IReadOnlyList<ClassCastItem>> castItems,
         Func<InventorySnapshot> inventory,
-        LogService? log = null)
+        LogService? log = null,
+        Func<string, string?>? desiredSlotItem = null)
     {
         ArgumentNullException.ThrowIfNull(castItems);
         ArgumentNullException.ThrowIfNull(inventory);
         _castItems = castItems;
         _inventory = inventory;
         _log = log;
+        _desiredSlotItem = desiredSlotItem;
     }
 
     // Bind the wire sink (the wrapped engine sender).
@@ -116,17 +122,34 @@ public sealed class ItemCastSequencer
         // off-hand cast item that re-equipped the weapon would strand the buff item in
         // the off-hand and never put the shield back — the reported bug).
         string slot = string.IsNullOrWhiteSpace(item.WearSlot) ? WeaponHandSlot : item.WearSlot.Trim();
-        string? restore = SlotItem(inv, slot);
-        bool restoreDiffers = Differs(restore, name);
+        string? restore = RestoreTarget(inv, slot, name);
+        // Skip a redundant re-equip when the cast item is already in its slot (left
+        // there from a prior session) — the game would just answer "you do not have
+        // <item> left unequipped." The use still fires, and the restore below swaps
+        // the right gear back in over it.
+        bool alreadyWorn = string.Equals(SlotItem(inv, slot), name, StringComparison.OrdinalIgnoreCase);
 
-        _wire.Send($"eq {name}");
+        if (!alreadyWorn) _wire.Send($"eq {name}");
         _wire.Send($"use {name}");
-        if (restoreDiffers) _wire.Send($"eq {restore}");
+        if (restore is not null) _wire.Send($"eq {restore}");
 
         _log?.Info(LogCategory,
             $"item-cast item=\"{name}\" 2h=False slot={slot} casts={item.SpellName} " +
-            $"restore={restore ?? "<none>"}");
+            $"already-worn={alreadyWorn} restore={restore ?? "<none>"}");
         return true;
+    }
+
+    // What to put back into `slot` after the cast: the live gear there, unless that
+    // slot is empty or still holds the cast item itself (e.g. the buff item was left
+    // equipped across a session) — then fall back to what the equipment manager wants
+    // in that slot, so the buff still swaps the right gear back in. Null when there's
+    // nothing worth restoring.
+    private string? RestoreTarget(InventorySnapshot inv, string slot, string castName)
+    {
+        string? live = SlotItem(inv, slot);
+        if (Differs(live, castName)) return live;
+        string? desired = _desiredSlotItem?.Invoke(slot);
+        return Differs(desired, castName) ? desired : null;
     }
 
     // A worn item worth restoring: the slot held something, and it isn't the cast
