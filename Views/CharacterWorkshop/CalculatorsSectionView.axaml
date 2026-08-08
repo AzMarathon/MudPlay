@@ -476,7 +476,7 @@
                             <StackPanel Spacing="10">
                                 <TextBlock Classes="Section" Text="Inputs"/>
                                 <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
-                                           Text="Seeds from your character when it's a mage or druid; every field is editable so you can plan stat points, level-ups and gear."/>
+                                           Text="Seeds from your character when it's a mage, priest or druid; every field is editable so you can plan stat points, level-ups and gear."/>
 
                                 <StackPanel Orientation="Horizontal" Spacing="14">
                                     <StackPanel Spacing="3">
@@ -484,7 +484,7 @@
                                         <ComboBox ItemsSource="{Binding ManaClassOptions}"
                                                   SelectedItem="{Binding SelectedManaClass, Mode=TwoWay}"
                                                   MinWidth="180"
-                                                  ToolTip.Tip="Mage / druid classes only. Sets the magery stat (mage = INT, druid = (INT+WIL)/2) and the magery tier from game data."/>
+                                                  ToolTip.Tip="Mage / Priest / Druid classes only. Sets the magery stat (mage = INT, priest = WIL, druid = (INT+WIL)/2) and the magery tier from game data."/>
                                     </StackPanel>
                                     <StackPanel Spacing="3">
                                         <TextBlock Classes="FieldLabel" Text="Level"/>
@@ -493,11 +493,11 @@
                                 </StackPanel>
 
                                 <StackPanel Orientation="Horizontal" Spacing="14">
-                                    <StackPanel Spacing="3">
+                                    <StackPanel Spacing="3" IsVisible="{Binding ManaUsesInt}">
                                         <TextBlock Classes="FieldLabel" Text="Intellect"/>
                                         <NumericUpDown Classes="Stat" Minimum="{Binding ManaIntMinimum}" Value="{Binding ManaIntellect, Mode=TwoWay}"/>
                                     </StackPanel>
-                                    <StackPanel Spacing="3" IsVisible="{Binding IsDruidManaMagery}">
+                                    <StackPanel Spacing="3" IsVisible="{Binding ManaUsesWil}">
                                         <TextBlock Classes="FieldLabel" Text="Willpower"/>
                                         <NumericUpDown Classes="Stat" Minimum="{Binding ManaWilMinimum}" Value="{Binding ManaWillpower, Mode=TwoWay}"/>
                                     </StackPanel>
@@ -529,7 +529,7 @@
                             <StackPanel Spacing="8">
                                 <TextBlock Classes="Section" Text="Tick vs level"/>
                                 <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
-                                           Text="Natural tick (with gear) across your level −1 to +5, one line per magery-stat value in +5 steps (INT for a mage, the (INT+WIL)/2 average for a druid) — a step up is a breakpoint. The dashed line marks your level."/>
+                                           Text="Natural tick (with gear) across your level −1 to +5, one line per magery-stat value in +5 steps (INT for a mage, WIL for a priest, the (INT+WIL)/2 average for a druid) — a step up is a breakpoint. Lines stop at the highest that stat can be trained. The dashed line marks your level."/>
                                 <controls:ManaRegenChart Data="{Binding ManaChart}" Height="240" HorizontalAlignment="Stretch"/>
 
                                 <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,4"/>
@@ -551,7 +551,7 @@
                         <!-- ===== Roll spell + breakpoints ===== -->
                         <Border Classes="SubBox" IsVisible="{Binding ManaHasRollSpell}">
                             <StackPanel Spacing="10">
-                                <TextBlock Classes="Section" Text="With roll spell"/>
+                                <TextBlock Classes="Section" Text="Mana regen spell"/>
                                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Spell" Margin="0,2,16,2"/>
                                     <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaRollSpellText}" Margin="0,2"/>
