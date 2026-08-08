@@ -8,7 +8,9 @@ namespace FujinTerm.ViewModels.CharacterWorkshop;
 public sealed record ManaRegenChartSeries(string Label, uint ColorArgb, IReadOnlyList<int> Ticks);
 
 // The data the Mana Regen chart control renders: the level window on the X axis,
-// which level to mark as "current", and the stat-value series (natural tick vs
-// level, so the step-ups are the breakpoints). Recomputed by the calculator VM.
+// which level to mark as "current" and the tick there (the "you are here" point),
+// and the stat-value series (natural tick vs level, so the step-ups are the
+// breakpoints). Recomputed by the calculator VM.
 public sealed record ManaRegenChartData(
-    int MinLevel, int MaxLevel, int CurrentLevel, IReadOnlyList<ManaRegenChartSeries> Series);
+    int MinLevel, int MaxLevel, int CurrentLevel, int CurrentTick,
+    IReadOnlyList<ManaRegenChartSeries> Series);

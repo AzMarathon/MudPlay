@@ -31,6 +31,8 @@ public sealed class ManaRegenChart : Control
     private static readonly IPen GridPen = new Pen(new SolidColorBrush(Color.FromArgb(0x40, 0x80, 0x80, 0x80)), 1.0);
     private static readonly IPen CurrentPen = new Pen(new SolidColorBrush(Color.FromArgb(0xC0, 0xFF, 0xD2, 0x4D)), 1.5)
     { DashStyle = new DashStyle(new double[] { 3, 3 }, 0) };
+    private static readonly IPen CurrentMarkerPen = new Pen(new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xD2, 0x4D)), 2.0);
+    private static readonly IBrush CurrentMarkerFill = new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xE0, 0x3A));
     private static readonly Typeface Tf = new("Inter");
 
     public override void Render(DrawingContext ctx)
@@ -104,6 +106,16 @@ public sealed class ManaRegenChart : Control
             ctx.FillRectangle(brush, new Rect(legendX, plot.Y - 15, 10, 3));
             ctx.DrawText(ft, new Point(legendX + 14, plot.Y - 21));
             legendX += 14 + ft.Width + 14;
+        }
+
+        // "You are here": a prominent ring at the current level / tick, only when
+        // it falls inside the plotted level + tick window.
+        if (d.CurrentLevel >= d.MinLevel && d.CurrentLevel <= d.MaxLevel
+            && d.CurrentTick >= yMin && d.CurrentTick <= yMax)
+        {
+            Point here = new(XFor(d.CurrentLevel), YFor(d.CurrentTick));
+            ctx.DrawEllipse(null, CurrentMarkerPen, here, 5, 5);
+            ctx.DrawEllipse(CurrentMarkerFill, null, here, 2, 2);
         }
     }
 

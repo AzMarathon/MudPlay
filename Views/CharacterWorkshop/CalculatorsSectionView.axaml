@@ -531,6 +531,20 @@
                                 <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
                                            Text="Natural tick (with gear) across your level −1 to +5, one line per magery-stat value in +5 steps (INT for a mage, the (INT+WIL)/2 average for a druid) — a step up is a breakpoint. The dashed line marks your level."/>
                                 <controls:ManaRegenChart Data="{Binding ManaChart}" Height="240" HorizontalAlignment="Stretch"/>
+
+                                <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,4"/>
+
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="3">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="You are here"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaCurrentTickText}"
+                                               Foreground="{StaticResource AccentAmberBrush}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Next tick via stat"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaNextByStatText}"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Next tick via level"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaNextByLevelText}"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Next tick via ManaRgn%"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaNextByRegenText}"/>
+                                </Grid>
                             </StackPanel>
                         </Border>
 

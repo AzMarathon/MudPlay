@@ -320,6 +320,12 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // breakpoint step-ups are visible while planning level-ups / stat points.
     [ObservableProperty] private ManaRegenChartData? _manaChart;
 
+    // "You are here" + how far the next tick is by stat / level / +ManaRgn%.
+    [ObservableProperty] private string _manaCurrentTickText = "—";
+    [ObservableProperty] private string _manaNextByStatText = "—";
+    [ObservableProperty] private string _manaNextByLevelText = "—";
+    [ObservableProperty] private string _manaNextByRegenText = "—";
+
     // Distinct line colours (ARGB), reused from the map spell palette's saturated
     // hues so the series read apart on the panel.
     private static readonly uint[] ChartPalette =
@@ -442,6 +448,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         ManaBaseTickText = TickText(ManaRegenBreakpointCalculator.Tick(inputs with { GearRegenPercent = 0 }, 0));
         ManaGearTickText = TickText(ManaRegenBreakpointCalculator.Tick(inputs, 0));
         BuildManaChart(inputs);
+        ComputeManaDistances(inputs);
 
         // Auto-resolve the roll spell for this magery: mana flux (mage) / nature
         // tap (druid) — the single code-145 roll spell whose own Magery matches.
@@ -536,7 +543,44 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             }
             series.Add(new ManaRegenChartSeries(druid ? $"avg {sv}" : $"INT {sv}", ChartPalette[k], ticks));
         }
-        ManaChart = new ManaRegenChartData(lo, hi, Math.Clamp(ManaLevel, lo, hi), series);
+        int currentTick = ManaRegenBreakpointCalculator.Tick(inputs, 0);
+        ManaChart = new ManaRegenChartData(lo, hi, Math.Clamp(ManaLevel, lo, hi), currentTick, series);
+    }
+
+    // "You are here" + how far the NEXT whole-MP tick is, measured three
+    // independent ways from the current level / stat / gear: magery stat points,
+    // levels, and +ManaRgn%. Each search raises one axis until the tick steps up.
+    private void ComputeManaDistances(ManaRegenBreakpointCalculator.Inputs inputs)
+    {
+        int cur = ManaRegenBreakpointCalculator.Tick(inputs, 0);
+        int target = cur + 1;
+        bool druid = inputs.MageryType == 3;
+        int curStat = druid ? (inputs.Intellect + inputs.Willpower) / 2 : inputs.Intellect;
+        ManaCurrentTickText = $"{cur} MP/tick  •  level {inputs.Level}  •  {(druid ? "avg" : "INT")} {curStat}";
+
+        int? statDelta = null;
+        for (int d = 1; d <= 300; d++)
+        {
+            int s = curStat + d;
+            ManaRegenBreakpointCalculator.Inputs pt = druid
+                ? inputs with { Intellect = s, Willpower = s }
+                : inputs with { Intellect = s };
+            if (ManaRegenBreakpointCalculator.Tick(pt, 0) >= target) { statDelta = d; break; }
+        }
+        ManaNextByStatText = statDelta is { } sd
+            ? (druid ? $"+{sd} magery stat  (raise INT+WIL so the avg climbs {sd})" : $"+{sd} INT")
+            : "> 300";
+
+        int? lvlDelta = null;
+        for (int d = 1; d <= 300; d++)
+            if (ManaRegenBreakpointCalculator.Tick(inputs with { Level = inputs.Level + d }, 0) >= target)
+            { lvlDelta = d; break; }
+        ManaNextByLevelText = lvlDelta is { } ld ? $"+{ld} level{(ld == 1 ? "" : "s")}" : "> 300";
+
+        int? regenDelta = null;
+        for (int d = 1; d <= 500; d++)
+            if (ManaRegenBreakpointCalculator.Tick(inputs, d) >= target) { regenDelta = d; break; }
+        ManaNextByRegenText = regenDelta is { } rd ? $"+{rd}% ManaRgn (gear or roll)" : "> 500";
     }
 
     // Live readout for the "model a roll" slider: the picked roll value, where it
