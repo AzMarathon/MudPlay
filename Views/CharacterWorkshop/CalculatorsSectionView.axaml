@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
+             xmlns:controls="using:FujinTerm.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="620"
@@ -520,6 +521,16 @@
                                     <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaGearTickText}"
                                                Foreground="{StaticResource AccentAmberBrush}" Margin="0,2"/>
                                 </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ===== Tick vs level chart (breakpoints = step-ups) ===== -->
+                        <Border Classes="SubBox">
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="Section" Text="Tick vs level"/>
+                                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                           Text="Natural tick (with gear) across your level −1 to +5, one line per INT value in +5 steps — a step up is a breakpoint. The dashed line marks your level."/>
+                                <controls:ManaRegenChart Data="{Binding ManaChart}" Height="240" HorizontalAlignment="Stretch"/>
                             </StackPanel>
                         </Border>
 

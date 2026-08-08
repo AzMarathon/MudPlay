@@ -316,6 +316,15 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     [ObservableProperty] private double _manaRollSample;
     [ObservableProperty] private string _manaSampleReadoutText = "—";
 
+    // Natural-tick-vs-level chart (X = level −1..+5, one line per INT value) so the
+    // breakpoint step-ups are visible while planning level-ups / stat points.
+    [ObservableProperty] private ManaRegenChartData? _manaChart;
+
+    // Distinct line colours (ARGB), reused from the map spell palette's saturated
+    // hues so the series read apart on the panel.
+    private static readonly uint[] ChartPalette =
+        { 0xFFE6194B, 0xFF3CB44B, 0xFF4363D8, 0xFFF58231, 0xFF911EB4 };
+
     partial void OnManaRollSampleChanged(double value) => UpdateManaSampleReadout();
 
     partial void OnSelectedManaClassChanged(string? value) => RecomputeManaRegen();
@@ -432,6 +441,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
         ManaBaseTickText = TickText(ManaRegenBreakpointCalculator.Tick(inputs with { GearRegenPercent = 0 }, 0));
         ManaGearTickText = TickText(ManaRegenBreakpointCalculator.Tick(inputs, 0));
+        BuildManaChart(inputs);
 
         // Auto-resolve the roll spell for this magery: mana flux (mage) / nature
         // tap (druid) — the single code-145 roll spell whose own Magery matches.
@@ -494,6 +504,30 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
                 $"Reroll until it rolls ≥ {rec} to reach {tick} MP/tick, then stop — higher rolls don't add a tick until the next breakpoint. " +
                 $"Set Settings → Spells → Mana-Regen Reroll Threshold to {rec}.";
         }
+    }
+
+    // Natural tick (no spell) vs level over the [level−1, level+5] window, one
+    // series per INT value from the current up in +5 steps — so the breakpoint
+    // step-ups across levels AND the gain from allocating INT are both visible.
+    // For druids INT is one half of the driving stat (WIL held at its input), so a
+    // series still reads "raise INT and watch the breakpoint arrive sooner".
+    private void BuildManaChart(ManaRegenBreakpointCalculator.Inputs inputs)
+    {
+        int lo = Math.Max(1, ManaLevel - 1);
+        int hi = Math.Max(lo, ManaLevel + 5);
+        int baseInt = Math.Max(ManaIntMinimum, ManaIntellect);
+
+        var series = new List<ManaRegenChartSeries>();
+        for (int k = 0; k < ChartPalette.Length; k++)
+        {
+            int iv = baseInt + k * 5;
+            var ticks = new int[hi - lo + 1];
+            for (int lv = lo; lv <= hi; lv++)
+                ticks[lv - lo] = ManaRegenBreakpointCalculator.Tick(
+                    inputs with { Level = lv, Intellect = iv }, 0);
+            series.Add(new ManaRegenChartSeries($"INT {iv}", ChartPalette[k], ticks));
+        }
+        ManaChart = new ManaRegenChartData(lo, hi, Math.Clamp(ManaLevel, lo, hi), series);
     }
 
     // Live readout for the "model a roll" slider: the picked roll value, where it
