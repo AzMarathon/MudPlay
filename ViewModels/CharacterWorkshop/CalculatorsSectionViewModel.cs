@@ -507,25 +507,34 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     }
 
     // Natural tick (no spell) vs level over the [level−1, level+5] window, one
-    // series per INT value from the current up in +5 steps — so the breakpoint
-    // step-ups across levels AND the gain from allocating INT are both visible.
-    // For druids INT is one half of the driving stat (WIL held at its input), so a
-    // series still reads "raise INT and watch the breakpoint arrive sooner".
+    // series per magery-regen-stat value from the current up in +5 steps — so the
+    // breakpoint step-ups across levels AND the gain from allocating stat points
+    // are both visible. The stepped stat is the one that actually drives regen:
+    // INT for a mage, the (INT+WIL)/2 average for a druid — a druid series is
+    // realised by feeding INT=WIL=value, which yields exactly that average, so both
+    // WIL and INT move the line (matching CalcManaRegen).
     private void BuildManaChart(ManaRegenBreakpointCalculator.Inputs inputs)
     {
         int lo = Math.Max(1, ManaLevel - 1);
         int hi = Math.Max(lo, ManaLevel + 5);
-        int baseInt = Math.Max(ManaIntMinimum, ManaIntellect);
+        bool druid = inputs.MageryType == 3;
+
+        int floor = druid ? (ManaIntMinimum + ManaWilMinimum) / 2 : ManaIntMinimum;
+        int baseStat = Math.Max(floor, druid ? (ManaIntellect + ManaWillpower) / 2 : ManaIntellect);
 
         var series = new List<ManaRegenChartSeries>();
         for (int k = 0; k < ChartPalette.Length; k++)
         {
-            int iv = baseInt + k * 5;
+            int sv = baseStat + k * 5;
             var ticks = new int[hi - lo + 1];
             for (int lv = lo; lv <= hi; lv++)
-                ticks[lv - lo] = ManaRegenBreakpointCalculator.Tick(
-                    inputs with { Level = lv, Intellect = iv }, 0);
-            series.Add(new ManaRegenChartSeries($"INT {iv}", ChartPalette[k], ticks));
+            {
+                ManaRegenBreakpointCalculator.Inputs pt = druid
+                    ? inputs with { Level = lv, Intellect = sv, Willpower = sv }
+                    : inputs with { Level = lv, Intellect = sv };
+                ticks[lv - lo] = ManaRegenBreakpointCalculator.Tick(pt, 0);
+            }
+            series.Add(new ManaRegenChartSeries(druid ? $"avg {sv}" : $"INT {sv}", ChartPalette[k], ticks));
         }
         ManaChart = new ManaRegenChartData(lo, hi, Math.Clamp(ManaLevel, lo, hi), series);
     }

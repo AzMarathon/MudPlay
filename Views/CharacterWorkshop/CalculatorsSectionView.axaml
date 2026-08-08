@@ -529,7 +529,7 @@
                             <StackPanel Spacing="8">
                                 <TextBlock Classes="Section" Text="Tick vs level"/>
                                 <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
-                                           Text="Natural tick (with gear) across your level −1 to +5, one line per INT value in +5 steps — a step up is a breakpoint. The dashed line marks your level."/>
+                                           Text="Natural tick (with gear) across your level −1 to +5, one line per magery-stat value in +5 steps (INT for a mage, the (INT+WIL)/2 average for a druid) — a step up is a breakpoint. The dashed line marks your level."/>
                                 <controls:ManaRegenChart Data="{Binding ManaChart}" Height="240" HorizontalAlignment="Stretch"/>
                             </StackPanel>
                         </Border>
