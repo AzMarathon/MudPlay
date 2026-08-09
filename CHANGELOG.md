@@ -2,10 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 2.39.1
+## 2.39.3
 
 - Death now clears the client's condition tracker, so a knockdown / held ("flat on your back") state whose in-game recovery line never arrived can't survive the death and leave navigation stuck "Paused by: Held" while the character is free to move
-- bug reports addressed: paradigm-20260809-114444
+- Combat now falls back to your alternate attack command when a spell used as your attack command draws "no effect" (e.g. priest `harm` vs an acid slime immune to it) — previously only attack *spells* fell back, so a spell in the command slot kept firing uselessly
+- Game Data → monster "Override Attack Spell" is now "Override Attack" and accepts either a spell number or a plain command/cast-code (`attack`, `bash`, `harm`): a typed command now saves (it was silently dropped before) and is forced against that monster over the normal combat flow
+- bug reports addressed: paradigm-20260809-114444, paradigm-20260809-131642
 
 ## 2.39.0
 

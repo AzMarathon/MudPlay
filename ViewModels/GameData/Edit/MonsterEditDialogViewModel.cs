@@ -39,7 +39,9 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
 
     [ObservableProperty] private string _preAttackSpellId = string.Empty;
     [ObservableProperty] private string _preAttackCount = string.Empty;
-    [ObservableProperty] private string _attackSpellId = string.Empty;
+    // "Override Attack" holds EITHER a Spell.Number (spell-rung, needs Max) OR a
+    // raw command / cast-code like "attack" or "harm" (sent as-is). See ParseAttackOverride.
+    [ObservableProperty] private string _attackOverride = string.Empty;
     [ObservableProperty] private string _attackCount = string.Empty;
 
     [ObservableProperty] private bool _dontBackstab;
@@ -105,7 +107,10 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
 
         PreAttackSpellId = (existing?.OverridePreAttackSpellId is { } pi) ? pi.ToString() : string.Empty;
         PreAttackCount   = (existing?.OverridePreAttackCount   is { } pc) ? pc.ToString() : string.Empty;
-        AttackSpellId    = (existing?.OverrideAttackSpellId    is { } ai) ? ai.ToString() : string.Empty;
+        // A command override wins the box display; else fall back to the spell id.
+        AttackOverride   = existing?.OverrideAttackCommand is { Length: > 0 } cmd
+            ? cmd
+            : (existing?.OverrideAttackSpellId is { } ai ? ai.ToString() : string.Empty);
         AttackCount      = (existing?.OverrideAttackCount      is { } ac) ? ac.ToString() : string.Empty;
 
         DontBackstab = existing?.DontBackstab ?? false;
@@ -129,6 +134,7 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     [RelayCommand]
     private void Save()
     {
+        (int? attackSpellId, string? attackCommand) = ParseAttackOverride(AttackOverride);
         MonsterOverlay overlay = new()
         {
             Name                     = string.IsNullOrWhiteSpace(Name) ? null : Name,
@@ -136,8 +142,9 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
             Priority                 = Priority,
             OverridePreAttackSpellId = ParseNullableInt(PreAttackSpellId),
             OverridePreAttackCount   = ParseNullableInt(PreAttackCount),
-            OverrideAttackSpellId    = ParseNullableInt(AttackSpellId),
+            OverrideAttackSpellId    = attackSpellId,
             OverrideAttackCount      = ParseNullableInt(AttackCount),
+            OverrideAttackCommand    = attackCommand,
             DontBackstab             = DontBackstab,
         };
 
@@ -268,6 +275,21 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
 
     private static int? ParseNullableInt(string? text)
         => int.TryParse(text, out int n) ? n : null;
+
+    // The "Override Attack" box holds EITHER a Spell.Number (routed through the
+    // mana-gated attack-spell rung — needs a Max cast count) OR a raw command /
+    // cast-code like "attack" or "harm" (sent verbatim, no gating). A positive
+    // integer reads as a spell id; any other non-empty text is a command; blank
+    // is no override. Exactly one of the pair is set (or both null) — the two are
+    // kept mutually exclusive so a species never carries both an id and a command.
+    // This is also why typing "attack" now persists: it lands as a command
+    // instead of being silently dropped by an int-only parse.
+    public static (int? SpellId, string? Command) ParseAttackOverride(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return (null, null);
+        string trimmed = text.Trim();
+        return int.TryParse(trimmed, out int n) && n > 0 ? (n, null) : (null, trimmed);
+    }
 }
 
 // Returned by MonsterEditDialogViewModel on Save. WccNoStr is the monster's WCC No as a

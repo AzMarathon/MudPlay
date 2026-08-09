@@ -1780,6 +1780,82 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
+    public void SpellCommandNoEffect_FallsBackToAlternateCommand()
+    {
+        // Report paradigm-20260809-131642: a SPELL used as the attack COMMAND
+        // ("harm" in NormalAttackCommand) reaches the wire via the command path,
+        // so the server's immunity reply is the SPELL line, not the weapon line.
+        // The command path must still fall back to the alternate command.
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "harm";
+        h.Settings.AlternateAttackCommand = "attack";
+        h.AddMonster(1, "acid slime", killable: true);
+
+        h.Feed("Also here: acid slime.");
+        Assert.Equal("harm acid slime", h.LastSent);
+
+        h.Feed("Your spell has no effect on acid slime.");
+
+        Assert.Equal("attack acid slime", h.LastSent);   // dropped to the alternate command
+    }
+
+    [Fact]
+    public void SpellCommandNoEffect_NoDistinctAlternate_ConcedesAndMovesOn()
+    {
+        // Same command-slot spell, but no distinct alternate to fall to → the
+        // command is genuinely ineffective here: drop the target and CR to re-pick
+        // rather than re-hammering the immune command every round.
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "harm";
+        h.Settings.AlternateAttackCommand = "harm";   // same → nothing to fall to
+        h.AddMonster(1, "acid slime", killable: true);
+        h.Feed("Also here: acid slime.");
+        h.Sent.Clear();
+
+        h.Feed("Your spell has no effect on acid slime.");
+
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.True(h.CrRefreshSends >= 1);
+    }
+
+    [Fact]
+    public void AttackCommandOverride_ForcesConfiguredCommand_OverGlobal()
+    {
+        // A per-monster "Override Attack" command forces that verb for the species,
+        // ignoring the global NormalAttackCommand.
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "harm";
+        h.AddMonster(1, "acid slime", killable: true);
+        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "attack" };
+
+        h.Feed("Also here: acid slime.");
+
+        Assert.Equal("attack acid slime", h.LastSent);
+        Assert.Equal("acid slime", h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void AttackCommandOverride_IsTrusted_NoFallbackOnNoEffect()
+    {
+        // The forced command is trusted — a "no effect" line must NOT flip it to the
+        // alternate (mirrors the spell-id override's bypass-gates contract).
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "harm";
+        h.Settings.AlternateAttackCommand = "attack";
+        h.AddMonster(1, "acid slime", killable: true);
+        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "smite" };
+
+        h.Feed("Also here: acid slime.");
+        Assert.Equal("smite acid slime", h.LastSent);
+        h.Sent.Clear();
+
+        h.Feed("Your spell has no effect on acid slime.");
+
+        Assert.Empty(h.Sent);                            // no fallback re-send
+        Assert.Equal("acid slime", h.Combat.CurrentTarget);
+    }
+
+    [Fact]
     public void ExhaustedMonster_Skipped_EngineRetargetsAnotherHostile()
     {
         // With a second, killable hostile present, exhausting the first monster's

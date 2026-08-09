@@ -172,6 +172,24 @@ public sealed partial class CombatManager
         if (!string.Equals(_currentTarget, picked.RawName, StringComparison.OrdinalIgnoreCase))
             _spellChooser.ResetForNewTarget();
 
+        // A per-monster forced attack COMMAND wins over the entire normal flow
+        // (spell chooser + weapon pick): send it verbatim and let the server
+        // auto-repeat it like any attack command. Announced once per target so a
+        // log read shows why this species diverges from the Combat-tab commands.
+        // It's trusted — no effectiveness-gate fallback second-guesses it (the
+        // user hand-picked it), mirroring the spell-id override's bypass contract.
+        if (AttackCommandOverrideFor(picked.MonsterNumber) is { } forcedCommand)
+        {
+            bool newTarget = !string.Equals(_currentTarget, picked.RawName, StringComparison.OrdinalIgnoreCase);
+            if (newTarget)
+                _log?.Combat(LogCategory,
+                    $"per-monster attack-command override '{forcedCommand}' (#{picked.MonsterNumber}) — forcing over normal flow");
+            SendAttack(forcedCommand, picked.RawName, picked.Priority);
+            _currentTarget = picked.RawName;
+            _backstabOpenerConsumed = true;
+            return;
+        }
+
         CombatSpellContext ctx = CombatSpellsWired
             ? BuildContext(settings, obs, picked.RawName, enemyCount, picked.MonsterNumber)
             : BuildWeaponContext(settings, obs, picked.RawName, enemyCount, picked.MonsterNumber);
@@ -496,6 +514,18 @@ public sealed partial class CombatManager
         if (monsterNumber < 0) return (null, null);
         MonsterOverlay overlay = ResolveOverlay(monsterNumber);
         return ResolveSpellOverride(overlay.OverrideAttackSpellId, overlay.OverrideAttackCount);
+    }
+
+    // The per-monster forced attack COMMAND for this species, or null when none
+    // is set. A raw verb sent verbatim (bypassing the spell/weapon flow and the
+    // "no effect" fallback); trimmed to null when blank. Distinct from the
+    // spell-id override — no cast-rung, no mana gate; the server repeats it like
+    // any attack command.
+    private string? AttackCommandOverrideFor(int monsterNumber)
+    {
+        if (monsterNumber < 0) return null;
+        string? cmd = ResolveOverlay(monsterNumber).OverrideAttackCommand;
+        return string.IsNullOrWhiteSpace(cmd) ? null : cmd.Trim();
     }
 
     // Resolve this monster's override pre-attack spell to a (cast-code, cap) pair,
@@ -863,7 +893,21 @@ public sealed partial class CombatManager
     // spells, so a no-effect line that follows one of those is ignored here.
     private void OnSpellNoEffect(MatchResult match)
     {
-        if (!CombatSpellsWired || !_isEnabled()) return;
+        if (!_isEnabled()) return;
+
+        // A spell placed in the ATTACK-COMMAND slot (NormalAttackCommand = "harm")
+        // reaches the wire via SendAttack, not a chooser cast, so _lastCastAction
+        // is null when its immunity line lands. The spell-slot cascade below can't
+        // act on it — fall the COMMAND path back instead (report
+        // paradigm-20260809-131642: priest `harm` as the attack command vs an acid
+        // slime never dropped to the alternate `attack` command).
+        if (_lastCastAction is null)
+        {
+            FallBackToAlternateCommandOnImmunity();
+            return;
+        }
+
+        if (!CombatSpellsWired) return;
         if (_lastCastAction is not (CombatSpellAction.NormalAttackSpell
                                   or CombatSpellAction.AlternateAttackSpell))
             return;
@@ -883,6 +927,46 @@ public sealed partial class CombatManager
                 $"spell-no-effect species={species} action={_lastCastAction.Value} — marking immune");
 
         ReDecideAfterImmunity(_readSettings());
+    }
+
+    // A spell used as the attack COMMAND draws the same "no effect" immunity line
+    // as a chooser-cast attack spell, but it went out through SendAttack so the
+    // spell-slot cascade never sees it. Mirror OnWeaponNoEffect's normal-fail
+    // branch for the command path: mark the species failed vs the normal command
+    // (so the next pick's ShouldUseAlternateWeapon prefers the alternate) and
+    // re-send THIS round with the alternate command so the round isn't burned. A
+    // per-monster forced command owns its species and is trusted, so it never
+    // falls back here. _normalWeaponFailedMonsters is shared with the weapon path —
+    // it reads as "the normal ATTACK (command or weapon) failed vs this species".
+    private void FallBackToAlternateCommandOnImmunity()
+    {
+        if (_currentTarget is not { } target) return;
+        string species = ResolveSpeciesByName(target);
+        if (string.IsNullOrEmpty(species)) return;
+
+        // A forced per-monster command owns this species — don't second-guess it.
+        int monsterNumber = _classifier.Current is { } obs ? ResolveMonsterNumber(obs, target) : -1;
+        if (AttackCommandOverrideFor(monsterNumber) is not null) return;
+
+        CombatSettings settings = _readSettings();
+        string normal    = settings.NormalAttackCommand?.Trim()    ?? string.Empty;
+        string alternate = settings.AlternateAttackCommand?.Trim() ?? string.Empty;
+        bool distinctAlternate = alternate.Length > 0
+            && !string.Equals(alternate, normal, StringComparison.OrdinalIgnoreCase);
+
+        if (distinctAlternate && _normalWeaponFailedMonsters.Add(species))
+        {
+            _log?.Info(LogCategory,
+                $"command-no-effect species={species} cmd='{normal}' — falling back to '{alternate}'");
+            SendAttack(alternate, target, priority: null);
+            return;
+        }
+
+        // No distinct alternate, or the alternate already failed too → the whole
+        // command chain is out for this species. Concede it and re-pick / move on.
+        AnnounceCannotAttack(species);
+        _currentTarget = null;
+        TrySendRoomRefresh($"attack command ineffective vs {species} — re-pick / move on");
     }
 
     // After recording an immunity, re-run the chooser against the live room for

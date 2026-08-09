@@ -1,8 +1,10 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.39.1**
-> - Death now clears the client's condition tracker, so a knockdown / held ("flat on your back") state whose in-game recovery line never arrived can't survive the death and leave navigation stuck "Paused by: Held" while the character is free to move
+> **Version 2.39.3**
+> - Death now clears the client's condition tracker, so a knockdown / held ("flat on your back") state whose recovery line never arrived can't survive the death and leave navigation stuck "Paused by: Held"
+> - Combat falls back to your alternate attack command when a spell used as your attack command draws "no effect" (e.g. priest `harm` vs an immune acid slime) — previously only attack spells fell back
+> - Game Data monster "Override Attack Spell" is now "Override Attack" and accepts a spell number OR a plain command (`attack`, `bash`, `harm`): a typed command now saves and is forced against that monster over the normal combat flow
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
