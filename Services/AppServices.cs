@@ -1207,6 +1207,11 @@ public sealed class AppServices
     // gates".
     public Game.Remote.PartyLevelTracker PartyLevel { get; private set; } = null!;
 
+    // Once-a-day party stats probe — on the first join with a player each local
+    // day, telepaths them @level + @version and records the version onto their
+    // player record. Gated by Settings → Party "probe stats on partying".
+    public Game.Remote.PartyProbeManager PartyProbe { get; private set; } = null!;
+
     // On-demand party-wealth probe — broadcasts @wealth and forwards each
     // reply to PartyWealth. Unlike the level probe it doesn't persist to
     // the players table (wealth drifts); it's fired only when a route
@@ -3363,6 +3368,7 @@ public sealed class AppServices
         // @health) once we're back in the realm after a disconnect — they were
         // suspended on the drop so nothing leaks into the login-menu nav.
         PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
+        PromptScanner.PromptObserved += _ => PartyProbe.NotifyEnteredRealm();
         // A fresh character starts disarmed: zero the counters, then Suspend so
         // accrual waits for that character's first in-game prompt. (Disconnect
         // disarms via MainWindowVM; @reset / the window button keep counting.)
@@ -3772,15 +3778,16 @@ public sealed class AppServices
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
 
         // Party-level probe + tracker. The probe broadcasts @level and
-        // persists each reply into the players table (RecordLevel), so the
-        // exact level supersedes the title band. The tracker fires it on
-        // roster change and exposes the party's most-constraining level
-        // window; MovementFilter reads that window to route a following
-        // party around gates a member can't clear. Always-on — routing a
-        // party around a gate it can't clear is never wanted OFF; the only
-        // gate is "am I leading a party". WarmStaleLevels re-probes a member
-        // whose exact level is unknown or older than a day, wired into the
-        // route-scoped MovementFilter.LevelWarmProbe below.
+        // persists each reply into the players table (RecordLevel) — the sole
+        // @level recorder, so a level (from the route-gate probe, the once-a-day
+        // PartyProbeManager send, or a manual /<player> @level) supersedes the
+        // title band. The tracker exposes the party's most-constraining level
+        // window (MovementFilter reads it to route a following party around
+        // gates a member can't clear) and, via WarmStaleLevels, re-probes a
+        // member whose exact level is unknown or not from today when a planned
+        // route actually crosses a level gate — wired into the route-scoped
+        // MovementFilter.LevelWarmProbe below. Leader-scoped; the on-partying
+        // level refresh lives in PartyProbeManager, not here.
         PartyLevelProbe = new Game.Remote.PartyLevelProbe(
             PartyBroadcaster, Chat, PartyState,
             recordLevel: (given, level) => Players.RecordLevel(given, level, DateTime.UtcNow),
@@ -3791,6 +3798,16 @@ public sealed class AppServices
             log: Log);
         Movement.PartyLevelBoundsProvider = PartyLevel.Bounds;
         Movement.LevelWarmProbe = PartyLevel.WarmStaleLevels;
+
+        // Once-a-day party stats probe. On the first party of the local day with
+        // a given player it telepaths @level + @version and records the version
+        // onto their player record (@level rides PartyLevelProbe's recorder). Its
+        // wire sender is bound at connect (MainWindowViewModel); NotifyDisconnected
+        // / NotifyEnteredRealm suspend it at the login menu like PartyPoller.
+        PartyProbe = new Game.Remote.PartyProbeManager(Chat, PartyState, Players, Log)
+        {
+            IsInTrainerMenu = () => TrainerMenu.MenuOwnsKeyboard,
+        };
 
         // Party-wealth probe + tracker. Unlike level, wealth isn't kept warm —
         // it drifts with loot / spend — so the tracker probes @wealth only when
@@ -5791,6 +5808,7 @@ public sealed class AppServices
         PartyPoller.HealthNagFrequency    = nagFreq;
         PartyPoller.HealthNagMaxTotal     = nagMax;
         PartyPoller.HealthNagEnabled      = dto.SendHealthToMembers;
+        PartyProbe.Enabled                = dto.ProbeStatsOnPartyJoin;
     }
 
     private void ResetPartyToDefaults()
@@ -5816,6 +5834,7 @@ public sealed class AppServices
         PartyPoller.HealthNagFrequency    = nagFreq;
         PartyPoller.HealthNagMaxTotal     = nagMax;
         PartyPoller.HealthNagEnabled      = defaults.SendHealthToMembers;
+        PartyProbe.Enabled                = defaults.ProbeStatsOnPartyJoin;
     }
 
     // Push the loaded character's Models.Profile.TalkSettings

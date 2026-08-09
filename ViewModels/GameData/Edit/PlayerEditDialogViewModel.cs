@@ -96,6 +96,10 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     // Read-only display strings for the observation footer.
     public string FirstSeenText => _original.FirstSeenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
     public string LastSeenText  => _original.LastSeenUtc .ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    // Client version from the @version party probe, and when we last partied — both
+    // null until the party stats probe records them.
+    public string? VersionText     => _original.Version;
+    public string? LastPartiedText => _original.LastPartiedUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
     public string? Race           => _original.Race;
     public string? Alignment      => _original.Alignment;
     // In-game class title (renamed to avoid colliding with the Window-bound Title).
@@ -123,14 +127,17 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
 
     // Display value for the Level row. Prefers the exact level learned from an @level probe
     // reply (PlayerRecord.Level); falls back to the title-derived range from ClassTitleTable
-    // when the player has never answered one. null when neither is known.
+    // when the player has never answered one — OR when the title band has clearly moved above
+    // a now-stale exact reading (the player trained since we last asked), per the shared
+    // PartyLevelEstimate reconciliation rule. null when neither is known.
     public string? LevelText
     {
         get
         {
-            if (_original.Level is { } exact) return exact.ToString();
-            (int min, int max)? range = ClassTitleTable.LookupLevelRange(_original.Title);
-            return range is null ? null : ClassTitleTable.FormatLevelRange(range.Value);
+            (int Min, int Max)? range = ClassTitleTable.LookupLevelRange(_original.Title);
+            var estimate = new FujinTerm.Game.Map.PartyLevelEstimate(_original.Level, range);
+            if (estimate.Low is not { } lo || estimate.High is not { } hi) return null;
+            return ClassTitleTable.FormatLevelRange((lo, hi));
         }
     }
 

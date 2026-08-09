@@ -84,6 +84,8 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NagInitialDelayEditable))]
     private bool _sendHealthToMembers = true;
+    // Master enable for the once-a-day @level + @version party stats probe. Default on.
+    [ObservableProperty] private bool _probeStatsOnPartyJoin = true;
 
     // The shared initial-delay spinner (in Options, next to the @join toggle)
     // edits the value both nag flows use, so it's editable whenever either nag
@@ -197,6 +199,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
             JoinNagMaxTotalSec       = Math.Clamp(JoinNagMaxTotalSec,     5, 600),
             SendJoinToInvited        = SendJoinToInvited,
             SendHealthToMembers      = SendHealthToMembers,
+            ProbeStatsOnPartyJoin    = ProbeStatsOnPartyJoin,
             IfLeadingWaitTotalSec    = Math.Clamp(IfLeadingWaitTotalSec,  0, 3600),
             ReturnDistanceRooms      = Math.Clamp(ReturnDistanceRooms,    1, 500),
 
@@ -261,6 +264,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         JoinNagMaxTotalSec         = dto.JoinNagMaxTotalSec;
         SendJoinToInvited          = dto.SendJoinToInvited;
         SendHealthToMembers        = dto.SendHealthToMembers;
+        ProbeStatsOnPartyJoin      = dto.ProbeStatsOnPartyJoin;
         IfLeadingWaitTotalSec      = dto.IfLeadingWaitTotalSec;
         ReturnDistanceRooms        = dto.ReturnDistanceRooms;
 
@@ -389,6 +393,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         svcs.PartyPoller.HealthNagFrequency    = nagFreq;
         svcs.PartyPoller.HealthNagMaxTotal     = nagMax;
         svcs.PartyPoller.HealthNagEnabled      = dto.SendHealthToMembers;
+        svcs.PartyProbe.Enabled                = dto.ProbeStatsOnPartyJoin;
         svcs.Party.DisconnectGraceWindow   = TimeSpan.FromSeconds(Math.Clamp(dto.IfLeadingWaitTotalSec,  0, 3600));
         svcs.PartyComeback.ReturnDistanceRooms = Math.Clamp(dto.ReturnDistanceRooms, 1, 500);
     }
@@ -412,6 +417,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     partial void OnJoinNagMaxTotalSecChanged(int value)         => MarkDirty();
     partial void OnSendJoinToInvitedChanged(bool value)         => MarkDirty();
     partial void OnSendHealthToMembersChanged(bool value)       => MarkDirty();
+    partial void OnProbeStatsOnPartyJoinChanged(bool value)     => MarkDirty();
     partial void OnIfLeadingWaitTotalSecChanged(int value)      => MarkDirty();
     partial void OnReturnDistanceRoomsChanged(int value)        => MarkDirty();
     partial void OnMinorPartyHealSpellChanged(string? value)    => MarkDirty();

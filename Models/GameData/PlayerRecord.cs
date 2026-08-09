@@ -38,7 +38,10 @@ namespace FujinTerm.Models.GameData;
 // learned: the party level-gate check treats an exact level older than the
 // staleness horizon as due for a fresh @level re-probe (a member could have
 // levelled since), so a long-lived exact reading doesn't silently drift out
-// of date. null whenever Level is null (no reading to age).
+// of date. null whenever Level is null (no reading to age). Version is the
+// client + version string from an @version probe reply (VersionAt stamps when),
+// and LastPartiedUtc is when we last started partying with this player — both
+// learned by the party stats probe.
 public sealed record PlayerObservation(
     string GivenName,
     string FamilyName,
@@ -63,7 +66,17 @@ public sealed record PlayerObservation(
     // first, falling back to the given name when it's null. Both account and
     // in-game names are unique, so the mapping is 1:1. null = no override
     // (account name equals the in-game name, the common case).
-    string? AccountName = null)
+    string? AccountName = null,
+    // The player's client + version string from an @version probe reply — e.g.
+    // "FujinTerm 2.37.0", "MegaMud 1.03u" — recorded verbatim from whatever their
+    // client answered. null until they answer one. VersionAt stamps when it was
+    // learned (null whenever Version is null).
+    string? Version = null,
+    DateTime? VersionAt = null,
+    // When we last STARTED partying with this player (UTC), driving the
+    // once-per-local-day "first party of the day" stats probe (@level + @version).
+    // null if we've never partied with them since this record was created.
+    DateTime? LastPartiedUtc = null)
 {
     // Combined display name — "GivenName FamilyName", trimmed. Used by the
     // database's case-insensitive lookup and by the customization
@@ -145,7 +158,12 @@ public sealed record PlayerRecord(
     // Mirrors PlayerObservation.AccountName (BBS tier) into the merged row so
     // the edit dialog can show + author it. null = account name equals the
     // in-game name.
-    string? AccountName = null)
+    string? AccountName = null,
+    // Mirror of PlayerObservation.Version / VersionAt / LastPartiedUtc (BBS tier)
+    // so the edit dialog + Players tab can display them.
+    string? Version = null,
+    DateTime? VersionAt = null,
+    DateTime? LastPartiedUtc = null)
 {
     // Combined display name — "GivenName FamilyName", trimmed. Identical
     // contract to PlayerObservation.DisplayName so callers don't have to
@@ -177,7 +195,10 @@ public sealed record PlayerRecord(
         Equipment:           obs.Equipment,
         Level:               obs.Level,
         LevelAt:             obs.LevelAt,
-        AccountName:         obs.AccountName);
+        AccountName:         obs.AccountName,
+        Version:             obs.Version,
+        VersionAt:           obs.VersionAt,
+        LastPartiedUtc:      obs.LastPartiedUtc);
 
     // Pull just the customization slice off this merged row (used by the edit dialog Save path).
     public PlayerCustomization ToCustomization() => new(

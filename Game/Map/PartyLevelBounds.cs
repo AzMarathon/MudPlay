@@ -15,17 +15,28 @@ namespace FujinTerm.Game.Map;
 // MinLevel is cleared only if even the floor clears it) and High takes the
 // band's CAP (they could be as high as that, so a MaxLevel cap is respected
 // against the ceiling). An @level probe collapses the band to a single exact
-// value; the tracker re-probes when that exact reading ages past its staleness
-// horizon so the estimate never gates on a level the member has outgrown.
+// value.
+//
+// Exact normally supersedes the band, but with one refinement: if the band's
+// FLOOR is above the exact reading (TitleRange.Min > Exact), the member has
+// clearly trained since — their who title moved up to a band that starts above
+// our recorded level — so a now-stale exact would gate them too low. In that
+// case the title band wins until we re-learn an exact level that's at or above
+// the band's floor. (A lower or overlapping band never overrides a valid
+// exact — only a band whose floor has passed the exact does.)
 public readonly record struct PartyLevelEstimate(int? Exact, (int Min, int Max)? TitleRange)
 {
-    // Lowest level this member could be — exact if known, else the title band's
-    // floor.
-    public int? Low => Exact ?? TitleRange?.Min;
+    // True when the exact reading is trustworthy: known, and not undercut by a
+    // title band whose floor has risen above it.
+    private bool UseExact => Exact is { } e && (TitleRange is not { } t || e >= t.Min);
 
-    // Highest level this member could be — exact if known, else the title
+    // Lowest level this member could be — exact when trusted, else the title
+    // band's floor.
+    public int? Low => UseExact ? Exact : TitleRange?.Min;
+
+    // Highest level this member could be — exact when trusted, else the title
     // band's cap.
-    public int? High => Exact ?? TitleRange?.Max;
+    public int? High => UseExact ? Exact : TitleRange?.Max;
 }
 
 // Pure fold of the leader's level and every party member's level estimate into

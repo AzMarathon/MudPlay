@@ -1,15 +1,12 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.37.0**
-> - Item Finder: new trial-gearset panel (toggle at the top-right of the results, hidden by default) to plan a loadout — one dropdown per slot listing the currently-filtered items, plus a Hold lock per slot
-> - "Import from live" copies your worn set into the trial slots; "Clear" empties them
-> - "Find Best" fills every non-held slot with the best equippable item for a chosen stat (Armour Class, damage, HP, mana, each +stat, resists, …) — find-best one stat, Hold the keepers, find-best another, and fill up
-> - The panel projects the trial set's worn-item stats (the same readout as the Equipment Manager) and its encumbrance — exact weight and None/Light/Medium/Heavy — over your current
-> - Drag the divider between the trial slots and the stats readout to rebalance them; the split is remembered per profile
-> - Right-click a result row → "Trial-Equip this Item" drops it into its slot
-> - Double-clicking a result now opens that item's record dialog directly instead of jumping to the Game Data Browser
-> - A trial slot's tooltip shows a weapon's base damage, swing speed and proc-casts; AC Blur is shown as its own stat (tooltip, readout, results column, Find Best filter) rather than mislabeled as flat Armour Class
+> **Version 2.38.0**
+> - Party stats probe: the first time you party with a player each day, the client asks them `@level` and `@version` and records their exact level + client version onto their player record (Game Data → Players); `@health` still fires on every join for live vitals. New Party setting (on by default)
+> - `@version` replies (e.g. `{FujinTerm 2.38.0}`, `{MegaMud 1.03u}`) are captured per player; the player edit dialog shows Version + Last partied
+> - Level display reconciles exact vs. title: a recorded exact wins, unless the player's title band has climbed above it (they trained since we last asked) — then the title range shows until we re-learn an exact at or above the band's floor
+> - Route level-gating treats a recorded level as fresh for the current day (was 24h) and re-learns it via the daily probe or any manual `@level`; the old leader-only roster-change poll is retired
+> - Peer `@level` replies from other FujinTerm clients (brace-wrapped) now record correctly
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -10,12 +10,13 @@ using Xunit;
 namespace FujinTerm.Tests;
 
 /// <summary>
-/// The tracker keeps party level bounds warm for path planning: it fires
-/// an <c>@level</c> probe on roster change (debounced) and folds each
-/// member's known level (exact, else title band) into the (Low, High)
-/// window <see cref="MovementFilter"/> reads. Wired to a real probe +
-/// <see cref="PlayerDatabase"/> so the probe→persist→read loop is exercised
-/// end to end.
+/// The tracker folds each party member's known level (exact, else title band)
+/// into the (Low, High) window <see cref="MovementFilter"/> reads, and tops up a
+/// member whose level is unknown or not from the current day via
+/// <c>WarmStaleLevels</c> when a route crosses a level gate. The on-partying
+/// @level refresh lives in PartyProbeManager, not here — so the tracker no longer
+/// auto-probes on roster change. Wired to a real probe + <see cref="PlayerDatabase"/>
+/// so the reply→persist→read loop is exercised end to end.
 /// </summary>
 public sealed class PartyLevelTrackerTests
 {
@@ -171,92 +172,11 @@ public sealed class PartyLevelTrackerTests
         Assert.Equal((40, 40), h.Tracker.Bounds());   // only self is known
     }
 
-    // ----- Probe firing + debounce ---------------------------------------
+    // The tracker no longer auto-probes on roster change (that moved to
+    // PartyProbeManager) — so no test here asserts a probe fires on join. Bounds
+    // + the demand-driven WarmStaleLevels are what remain.
 
-    [Fact]
-    public void Probe_FiresOnRosterChange_WhenLeading()
-    {
-        var h = new Harness();
-        h.AddMember("Bob");
-        h.Lead();
-
-        Assert.Equal(1, h.Probes);
-        Assert.NotEmpty(h.Wire);   // /Bob @level went out
-    }
-
-    [Fact]
-    public void Probe_DoesNotFire_WhenNotLeading()
-    {
-        var h = new Harness();
-        h.AddMember("Bob");
-        h.State.IsInParty = true;   // following, not leading
-
-        Assert.Equal(0, h.Probes);
-    }
-
-    [Fact]
-    public void Probe_Refires_WhenRosterGrows()
-    {
-        var h = new Harness();
-        h.AddMember("Bob");
-        h.Lead();
-        Assert.Equal(1, h.Probes);
-
-        h.AddMember("Al");          // roster signature changes
-        Assert.Equal(2, h.Probes);
-    }
-
-    [Fact]
-    public void Probe_NotRefired_WhenSelfMemberAdded()
-    {
-        var h = new Harness();
-        h.AddMember("Bob");
-        h.Lead();
-        Assert.Equal(1, h.Probes);
-
-        h.AddMember("Me", self: true);   // self excluded from the signature
-        Assert.Equal(1, h.Probes);       // no re-probe
-    }
-
-    // ----- Invited members are never probed until they join --------------
-
-    [Fact]
-    public void Probe_DoesNotFire_ForInvitedMember()
-    {
-        var h = new Harness();
-        h.AddMember("Tristian", invited: true);   // invited, not yet joined
-        h.Lead();
-
-        Assert.Equal(0, h.Probes);   // no @level while only invited
-        Assert.Empty(h.Wire);
-    }
-
-    [Fact]
-    public void Probe_FiresOnJoin_WhenInvitedFlagClears()
-    {
-        var h = new Harness();
-        PartyMember m = h.AddMember("Tristian", invited: true);
-        h.Lead();
-        Assert.Equal(0, h.Probes);
-
-        m.IsInvited = false;   // acceptance: invited→joined transition
-        Assert.Equal(1, h.Probes);
-        Assert.NotEmpty(h.Wire);   // /Tristian @level now goes out
-    }
-
-    [Fact]
-    public void Probe_InvitedMemberAlongsideJoined_OnlyProbesJoined()
-    {
-        var h = new Harness();
-        h.AddMember("Bob");                        // already joined
-        h.AddMember("Tristian", invited: true);    // pending invite
-        h.Lead();
-
-        Assert.Equal(1, h.Probes);
-        // Only Bob is telepathed; the invited row is skipped.
-        Assert.Single(h.Wire);
-        Assert.Contains("/Bob", System.Text.Encoding.Latin1.GetString(h.Wire[0]));
-    }
+    // ----- Invited members are excluded from bounds + warm ---------------
 
     [Fact]
     public void Bounds_SkipsInvitedMember()
@@ -285,18 +205,33 @@ public sealed class PartyLevelTrackerTests
     // ----- End-to-end: probe reply persists and shows up in Bounds -------
 
     [Fact]
-    public void ProbeReply_PersistsLevel_ReflectedInBounds()
+    public void LevelReply_PersistsLevel_ReflectedInBounds()
     {
         var h = new Harness { SelfLevel = 40 };
         h.AddMember("Bob");
         h.Lead();
-        Assert.Equal(1, h.Probes);          // probe went out on join
         Assert.Null(h.Players.Find("Bob")?.Level);
 
-        h.Reply("Bob", Harness.Level(18));   // Bob answers @level
+        // The probe's parser records ANY @level reply (auto-probe, the once-a-day
+        // PartyProbeManager send, or a manual /Bob @level) — not just one it kicked
+        // off — so a reply alone persists and folds into the window.
+        h.Reply("Bob", Harness.Level(18));
 
         Assert.Equal(18, h.Players.Find("Bob")!.Level);   // persisted via the probe seam
         Assert.Equal((18, 40), h.Tracker.Bounds());        // and folded into the window
+    }
+
+    [Fact]
+    public void LevelReply_BraceWrapped_StillRecords()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Bob");
+        h.Lead();
+
+        // A reply from another FujinTerm client is brace-wrapped by SendReply.
+        h.Reply("Bob", "{" + Harness.Level(22) + "}");
+
+        Assert.Equal(22, h.Players.Find("Bob")!.Level);
     }
 
     // ----- Route-scoped freshness warm (WarmStaleLevels) -----------------
@@ -327,17 +262,17 @@ public sealed class PartyLevelTrackerTests
     }
 
     [Fact]
-    public void WarmStaleLevels_StaleExact_Reprobes()
+    public void WarmStaleLevels_PriorDayExact_Reprobes()
     {
         var h = new Harness { SelfLevel = 40 };
         h.AddMember("Bob");
         h.Lead();
         h.Players.RecordLevel("Bob", 30, h.Now);   // recorded at UnixEpoch
 
-        h.Now = DateTime.UnixEpoch + TimeSpan.FromHours(25);   // aged past the 24h horizon
+        h.Now = DateTime.UnixEpoch + TimeSpan.FromHours(25);   // a later calendar day
         int before = h.Probes;
         h.Tracker.WarmStaleLevels();
-        Assert.Equal(before + 1, h.Probes);   // stale reading → re-probe
+        Assert.Equal(before + 1, h.Probes);   // reading not from today → re-probe
     }
 
     [Fact]

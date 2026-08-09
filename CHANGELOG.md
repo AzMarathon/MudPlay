@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 2.38.0
+
+- Party stats probe: the first time you party with a player each day, the client asks them `@level` and `@version` and records their exact level + client version onto their player record (shown in Game Data → Players); `@health` still fires on every join for live vitals. New Party setting "probe party members' level & version on the first party of the day" (on by default)
+- `@version` replies (e.g. `{FujinTerm 2.38.0}`, `{MegaMud 1.03u}`) are now captured and stored per player; the player edit dialog shows Version + Last partied
+- Level display now reconciles exact vs. title: a recorded exact level wins, unless the player's title band has climbed above it (they trained since we last asked) — then the title range is shown until we re-learn an exact at or above the band's floor
+- Route level-gating now treats a recorded level as fresh for the current day (was a fixed 24h window), and re-learns it via the once-a-day probe or any manual `@level`; the old leader-only roster-change level poll is retired
+- Peer `@level` replies from other FujinTerm clients (brace-wrapped) now record correctly
+
 ## 2.37.0
 
 - Item Finder: new trial-gearset panel (toggle at the top-right of the results, hidden by default) to plan a loadout — one dropdown per slot listing the currently-filtered items, plus a Hold lock per slot

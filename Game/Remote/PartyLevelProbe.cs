@@ -82,12 +82,15 @@ public sealed partial class PartyLevelProbe : IDisposable
 
     // Require the full "Level N, X exp," shape (not just a leading "Level N")
     // so a member's chatter that happens to start "Level 5, …" can't be
-    // misread as a level reply while a probe is open.
-    [GeneratedRegex(@"^Level (\d+), [\d,]+ exp\b",
+    // misread as a level reply while a probe is open. The optional leading `{`
+    // tolerates the brace-wrap the engine adds at SendReply time, so a reply
+    // from another FujinTerm client ("{Level 12, …}") parses too — without it a
+    // peer-to-peer @level round-trip never recorded.
+    [GeneratedRegex(@"^\{?Level (\d+), [\d,]+ exp\b",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex LevelReply();
 
-    [GeneratedRegex(@"^level unknown\b",
+    [GeneratedRegex(@"^\{?level unknown\b",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex LevelUnknownReply();
 
