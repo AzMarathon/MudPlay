@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using FujinTerm.Game.Inventory;
 using FujinTerm.Services;
 using FujinTerm.ViewModels.CharacterWorkshop;
@@ -35,19 +38,54 @@ public partial class ItemFinderWindow : Window
     // Column lookup keyed as above, built once from the fixed column set.
     private Dictionary<string, DataGridColumn>? _columnByKey;
 
+    // Stable key for the trial panel's slots-vs-stats split ratio (per-profile).
+    private const string TrialSplitterId = "ItemFinderTrialSplit";
+
     public ItemFinderWindow()
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        // Right-click doesn't select a DataGrid row on its own, so the context menu's
+        // "Trial-Equip this Item" (bound to SelectedItem) would target the wrong row.
+        // Select the row under the cursor first, on the tunnelling pass so it lands
+        // before the menu opens.
+        ItemsGrid.AddHandler(PointerPressedEvent, OnGridPointerPressed, RoutingStrategies.Tunnel);
+        // Trial panel's slots pane (row 3) vs. stats pane (row 5) split — remembered
+        // per profile so a hand-sized layout survives reopening the finder.
+        AppServices.Current.SplitterLayouts.AttachGridRows(
+            owner: this, grid: TrialGrid, topRowIndex: 3, bottomRowIndex: 5, id: TrialSplitterId);
     }
+
+    private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(ItemsGrid).Properties.IsRightButtonPressed) return;
+        if ((e.Source as Visual)?.FindAncestorOfType<DataGridRow>(includeSelf: true) is { DataContext: ItemFinderEntry entry })
+            ItemsGrid.SelectedItem = entry;
+    }
+
+    // Width the window grows/shrinks by when the trial flyout shows/hides — the
+    // panel (340) plus the grid's column spacing (12) — so the results table keeps
+    // its width instead of the panel eating into it.
+    private const double TrialPanelWidth = 352;
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_vm is not null) _vm.ColumnLayoutChanged -= ApplyColumnLayout;
+        if (_vm is not null)
+        {
+            _vm.ColumnLayoutChanged -= ApplyColumnLayout;
+            _vm.PropertyChanged -= OnVmPropertyChanged;
+        }
         _vm = DataContext as ItemFinderViewModel;
         if (_vm is null) return;
         _vm.ColumnLayoutChanged += ApplyColumnLayout;
+        _vm.PropertyChanged += OnVmPropertyChanged;
         ApplyColumnLayout();
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ItemFinderViewModel.ShowTrialPanel) && _vm is not null)
+            Width += _vm.ShowTrialPanel ? TrialPanelWidth : -TrialPanelWidth;
     }
 
     // Map each column to its layout key once — the Tag for the stat columns, and the
@@ -115,13 +153,13 @@ public partial class ItemFinderWindow : Window
                 order[i].DisplayIndex = i;
     }
 
-    // Double-click a result → jump to that item's Game Data record. A double-tap
-    // also selects the row, so SelectedItem is the double-clicked entry. The finder
-    // stays open (modeless) alongside the browser.
+    // Double-click a result → open that item's record (edit dialog) directly. A
+    // double-tap also selects the row, so SelectedItem is the double-clicked entry.
+    // The finder stays open (modeless) alongside the record.
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (ItemsGrid.SelectedItem is ItemFinderEntry entry && entry.Number > 0)
-            AppServices.Current.OpenItemGameData(entry.Number);
+            _ = AppServices.Current.ItemRecord.OpenAsync(entry.Number);
     }
 
     // Take over sorting so numeric stat columns lead with their biggest values.

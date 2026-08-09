@@ -128,6 +128,16 @@ public static class EquipmentSlotMap
         _ => Label(slot),
     };
 
+    // The slot a candidate item for `slot` is catalogued under: the paired Finger /
+    // Wrist slots collapse to their slot-1 variant (SlotForItem tags every ring
+    // Finger1, every bracelet Wrist1), so slot-2 draws from the same pool.
+    public static EquipmentSlot PrimarySlot(EquipmentSlot slot) => slot switch
+    {
+        EquipmentSlot.Finger2 => EquipmentSlot.Finger1,
+        EquipmentSlot.Wrist2 => EquipmentSlot.Wrist1,
+        _ => slot,
+    };
+
     // True for the two virtual slots (AlternateWeapon / AlternateOffHand) — they
     // never send a wire wear; applying a set writes CombatSettings instead.
     public static bool IsVirtual(EquipmentSlot slot) =>

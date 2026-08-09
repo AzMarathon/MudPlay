@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using FujinTerm.Game.Calculators;
 using FujinTerm.Game.Inventory;
 using FujinTerm.Services;
+using FujinTerm.ViewModels.CharacterWorkshop;
 using Xunit;
 
 namespace FujinTerm.Tests;
@@ -82,6 +84,31 @@ public sealed class EquipmentStatAggregationTests : IDisposable
         Assert.Equal(25, b.Totals.PlusMaxHp);
         Assert.Contains("Strength", b.PerStatSources.Keys);
         Assert.Equal("+5", b.PerStatSources["Strength"][0].DisplayValue);
+    }
+
+    [Fact]
+    public void BlurAc_TrackedSeparatelyFromFlatAc()
+    {
+        // Abil 2 = flat +6 AC (worn armour), Abil 10 = +12 blur AC (encumbrance-scaled).
+        GameDataCache cache = CacheWithItems(Item("manablade",
+            ("Abil-0", 2), ("AbilVal-0", 6),
+            ("Abil-1", 10), ("AbilVal-1", 12)));
+
+        EquipmentStatBreakdown b = CharacterCalculator.AggregateEquipmentStats(
+            new[] { new EquippedItem("manablade", "Weapon Hand") }, cache);
+
+        // PlusAC stays inclusive (combat / projected-AC math); blur is tracked apart.
+        Assert.Equal(18, b.Totals.PlusAC);
+        Assert.Equal(12, b.Totals.PlusAcBlur);
+
+        // Contributions are partitioned: flat AC under "Armour Class", blur under "AC Blur".
+        Assert.Equal("manablade", b.PerStatSources["Armour Class"][0].ItemName);
+        Assert.Equal("manablade", b.PerStatSources["AC Blur"][0].ItemName);
+
+        // The readout shows the flat AC (18 − 12 = 6) apart from the blur (12).
+        List<EquipBonusRow> rows = EquipBonusRowBuilder.Build(b);
+        Assert.Equal("+6", rows.Single(r => r.Stat == "Armour Class").Value);
+        Assert.Equal("+12", rows.Single(r => r.Stat == "AC Blur").Value);
     }
 
     [Fact]

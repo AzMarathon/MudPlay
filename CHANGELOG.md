@@ -2,6 +2,21 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 2.37.0
+
+- Item Finder: new trial-gearset panel (toggle at the top-right of the results, hidden by default) to plan a loadout — one dropdown per slot listing the currently-filtered items, plus a Hold lock per slot
+- "Import from live" copies your worn set into the trial slots; "Clear" empties them
+- "Find Best" clears every non-held slot then fills it with the best equippable item for a chosen stat (Armour Class, damage, HP, mana, each +stat, resists, …), honouring the finder's class / alignment / level filters — find-best one stat, Hold the keepers, find-best another, and fill up
+- Quick "filter by name" box at the top of the results, and hovering a trial slot shows the placed item's stats
+- The panel projects the trial set's worn-item stats (the same readout as the Equipment Manager) and its encumbrance — exact weight and None/Light/Medium/Heavy — over your current
+- Drag the divider between the trial slots and the stats readout to rebalance them (so the readout stays visible when the window isn't maximized); the split is remembered per profile
+- Right-click a result row → "Trial-Equip this Item" drops it into its slot
+- Double-clicking a result now opens that item's record dialog directly instead of jumping to the Game Data Browser
+- Find Best "Max/Min Damage" now counts the +damage gear bonus too (not just a weapon's base damage), so it fills damage-bonus armour/jewellery slots, not only the weapon
+- A trial slot's hover tooltip now shows a weapon's base damage, swing speed and any proc-cast (e.g. "Casts (85%/swing): mana flare — Dmg 240-350"), not just its worn-stat bonuses
+- AC Blur is now shown as its own stat everywhere — trial tooltip, projected-stats readout, a new results column and a Find Best filter — instead of being mislabeled as flat Armour Class (blur AC scales inversely with encumbrance, so it isn't the same thing)
+- bug reports addressed: paradigm-20260808-203733
+
 ## 2.36.0
 
 - Main window title now shows the running version — `FujinTerm v<x.y.z> — <profile> — <BBS>`

@@ -349,7 +349,10 @@ public static class CharacterCalculator
         switch (abilId)
         {
             case 2: totals.PlusAC += abilVal; statKey = "Armour Class"; break;
-            case 10: totals.PlusAC += abilVal; statKey = "Armour Class"; tag = "[BLUR]"; break;
+            // Blur AC (Abil 10) folds into the inclusive PlusAC for combat math, but is
+            // also tracked in PlusAcBlur and grouped under its own "AC Blur" stat key so
+            // readouts show it apart from flat worn AC (it's encumbrance-scaled, not flat).
+            case 10: totals.PlusAC += abilVal; totals.PlusAcBlur += abilVal; statKey = "AC Blur"; break;
             case 7: totals.PlusDR += abilVal / 10.0; statKey = "Damage Resist"; break;
 
             case 46: totals.PlusStrength += abilVal; statKey = "Strength"; break;

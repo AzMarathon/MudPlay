@@ -13,6 +13,7 @@ using FujinTerm.Game.Calculators;
 using FujinTerm.Game.Inventory;
 using FujinTerm.Models.Profile;
 using FujinTerm.Services;
+using FujinTerm.ViewModels.GameData.Edit;
 
 namespace FujinTerm.ViewModels.CharacterWorkshop;
 
@@ -74,6 +75,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ("BsAccuracyText", static e => e.BsAccuracyText),
         ("BsDamageText",   static e => e.BsDamageText),
         ("AcText",         static e => e.AcText),
+        ("AcBlurText",     static e => e.AcBlurText),
         ("DrText",         static e => e.DrText),
         ("HpText",         static e => e.HpText),
         ("HpRegenText",    static e => e.HpRegenText),
@@ -120,9 +122,18 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         { AttackBase, "Bash", "Smash", "Punch", "Kick", "Jumpkick" };
 
     private readonly GameDataCache _gameData;
+    private readonly InventoryManager _inventory;
+    // Renders a weapon's base damage / speed / proc-cast rows for the slot tooltip —
+    // the same record view the item edit dialog shows. Charm only affects shop pricing
+    // (unused here), so a snapshot at open is fine.
+    private readonly ItemMdbViewBuilder _mdbBuilder;
     // Rebuilt whenever the attack type changes (Swings are recomputed per type), so
     // not readonly. The option lists are still derived once from the first build.
     private IReadOnlyList<ItemFinderEntry> _all;
+    // Name → catalog entry, for the trial panel's weight + right-click-equip lookups.
+    // Rebuilt with _all (item data is stable across attack types, but the instances
+    // aren't). Case-insensitive; first entry of a name wins.
+    private Dictionary<string, ItemFinderEntry> _entryByName = new(StringComparer.OrdinalIgnoreCase);
     // The live character's swing inputs, snapshot at open; reused on every rebuild.
     private readonly ItemFinderEntry.SwingContext? _swing;
     private readonly Dictionary<string, EquipmentSlot> _slotByLabel = new(StringComparer.Ordinal);
@@ -183,6 +194,9 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
 
     [ObservableProperty] private string _countText = string.Empty;
 
+    // Quick name filter (top of the results). Empty = off; substring, case-insensitive.
+    [ObservableProperty] private string _nameFilter = string.Empty;
+
     // ----- Character group -----
     [ObservableProperty] private string? _selectedClass = AnyClass;
     [ObservableProperty] private int _usableLevel;
@@ -218,6 +232,24 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     [ObservableProperty] private int _maxStrReq;     // required-strength gate (≤)
     [ObservableProperty] private int _maxLevelReq;   // required-level gate (≤)
 
+    // ----- Trial gearset (right flyout, default hidden) -----
+    // The what-if loadout: one row per equippable slot, each holding a trialled item
+    // + a Hold lock. Projects stats + encumbrance without touching real gear.
+    [ObservableProperty] private bool _showTrialPanel;
+    public ObservableCollection<TrialSlotRow> TrialSlots { get; } = new();
+
+    // Find-Best filter dropdown (labels from the engine's registry) + the selection.
+    public IReadOnlyList<string> TrialFilterOptions { get; } =
+        TrialGearFinder.Filters.Select(static f => f.Label).ToArray();
+    [ObservableProperty] private string? _selectedTrialFilter;
+
+    // Projected worn-item stat readout for the trial set (same rows as the Equipment
+    // Manager's Bonuses), and the encumbrance overlay vs the live character.
+    public ObservableCollection<EquipBonusRow> TrialBonusRows { get; } = new();
+    [ObservableProperty] private bool _hasTrialBonuses;
+    [ObservableProperty] private string _currentEncumbranceText = "—";
+    [ObservableProperty] private string _trialEncumbranceText = "—";
+
     public ItemFinderViewModel(
         GameDataCache gameData, PlayerStats stats, InventoryManager inventory,
         AlignmentBucket? alignment)
@@ -226,15 +258,20 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(inventory);
         _gameData = gameData;
+        _inventory = inventory;
+        _mdbBuilder = new ItemMdbViewBuilder(gameData, stats.Charm);
         // Snapshot the live character's swing inputs once at open — the finder is a
         // static browse aid, so the Swings column reflects the character as they are
         // when it's opened rather than tracking mid-browse stat changes.
         _swing = BuildSwingContext(gameData, stats, inventory);
         _all = ItemFinderEntry.BuildCatalog(gameData, _swing);
+        IndexCatalog();
 
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
 
         BuildOptionLists();
+        BuildTrialSlots();
+        SelectedTrialFilter = TrialFilterOptions.Count > 0 ? TrialFilterOptions[0] : null;
 
         // Open pre-narrowed to the live character — class / level / alignment — so
         // the first thing shown is "what can I wear", not the whole catalog. These
@@ -255,6 +292,15 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         _filterSuspended = false;
         PropertyChanged += OnFilterPropertyChanged;
         ApplyFilter();
+        RecomputeTrial();
+    }
+
+    private void IndexCatalog()
+    {
+        var map = new Dictionary<string, ItemFinderEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (ItemFinderEntry e in _all)
+            if (!e.IsSynthetic) map.TryAdd(e.Name, e);
+        _entryByName = map;
     }
 
     // Assemble the per-weapon swing inputs from the live character. Null when no
@@ -342,6 +388,12 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         {
             case nameof(CountText):
             case nameof(RowsView):
+            // Trial-panel state isn't a results filter — don't re-run the predicate.
+            case nameof(ShowTrialPanel):
+            case nameof(SelectedTrialFilter):
+            case nameof(CurrentEncumbranceText):
+            case nameof(TrialEncumbranceText):
+            case nameof(HasTrialBonuses):
                 return;
             // The Swings column is recomputed per attack type, so a change there
             // rebuilds the catalog rather than just re-running the row predicate.
@@ -362,6 +414,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     {
         _filterSuspended = true;
         _all = ItemFinderEntry.BuildCatalog(_gameData, _swing, AttackTypeFor(SelectedAttackType));
+        IndexCatalog();
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
         _filterSuspended = false;
         ApplyFilter();
@@ -408,6 +461,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         CountText = string.Create(CultureInfo.InvariantCulture,
             $"Showing {RowsView.Count:N0} of {_all.Count:N0} items");
         RefreshColumnLayout();
+        RebuildTrialOptions();
     }
 
     // Recompute the whole column presentation for the current view — which optional
@@ -465,6 +519,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         // gear, so it ignores every filter and always shows under its attack type.
         if (e.IsSynthetic) return true;
 
+        if (!string.IsNullOrWhiteSpace(NameFilter)
+            && e.Name.IndexOf(NameFilter.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
+            return false;
+
         // "(All slots)" keeps every non-weapon item — weapons drop out.
         if (_activeArmourOnly && e.Slot == EquipmentSlot.Weapon) return false;
         if (_activeSlot is { } slot && e.Slot != slot) return false;
@@ -505,6 +563,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     private void Reset()
     {
         _filterSuspended = true;
+        NameFilter = string.Empty;
         SelectedClass = AnyClass;
         UsableLevel = 0;
         SelectedAlignment = AnyAlign;
@@ -523,6 +582,217 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         // rather than only re-running the filter over the current projection.
         RebuildForAttackType();
     }
+
+    // ----- Trial gearset -------------------------------------------------
+
+    [RelayCommand]
+    private void ToggleTrialPanel() => ShowTrialPanel = !ShowTrialPanel;
+
+    // One trial row per real equip slot — the two virtual Alt slots (combat-swap
+    // weapons, never worn) are excluded from the loadout being modelled.
+    private void BuildTrialSlots()
+    {
+        foreach (EquipmentSlot s in EquipmentSlotMap.DisplayOrder)
+        {
+            if (EquipmentSlotMap.IsVirtual(s)) continue;
+            TrialSlots.Add(new TrialSlotRow(s, EquipmentSlotMap.Label(s), RecomputeTrial));
+        }
+    }
+
+    // Refresh each trial slot's dropdown to the currently-filtered results that fit
+    // it (paired Finger/Wrist slots share their slot-1 pool). The current pick is
+    // preserved even when the filter would exclude it.
+    private void RebuildTrialOptions()
+    {
+        if (TrialSlots.Count == 0) return;
+        var byFamily = new Dictionary<EquipmentSlot, List<string>>();
+        foreach (object? o in RowsView)
+        {
+            if (o is not ItemFinderEntry e || e.IsSynthetic) continue;
+            if (!byFamily.TryGetValue(e.Slot, out List<string>? list)) byFamily[e.Slot] = list = new();
+            list.Add(e.Name);
+        }
+        foreach (TrialSlotRow row in TrialSlots)
+        {
+            EquipmentSlot family = EquipmentSlotMap.PrimarySlot(row.Slot);
+            IReadOnlyList<string> names = byFamily.TryGetValue(family, out List<string>? l)
+                ? l.Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase).ToList()
+                : Array.Empty<string>();
+            row.RebuildOptions(names);
+        }
+    }
+
+    // Copy the live worn set into the trial slots (paired slots fill 1 then 2).
+    [RelayCommand]
+    private void ImportFromLive()
+    {
+        foreach (TrialSlotRow row in TrialSlots) row.SetItemQuiet(null);
+        var used = new HashSet<EquipmentSlot>();
+        foreach (EquippedItem e in _inventory.Snapshot.EquippedItems)
+        {
+            if (EquipmentSlotMap.FromWornString(e.Slot) is not { } slot) continue;
+            if (PlaceRowFor(slot, used) is not { } row) continue;
+            row.SetItemQuiet(e.Name);
+            used.Add(row.Slot);
+        }
+        RecomputeTrial();
+    }
+
+    // The trial row to drop an item for `slot` into: the exact slot, or the paired
+    // partner when slot-1 is already taken (a second ring / bracelet).
+    private TrialSlotRow? PlaceRowFor(EquipmentSlot slot, ISet<EquipmentSlot> used)
+    {
+        TrialSlotRow? exact = TrialSlots.FirstOrDefault(r => r.Slot == slot);
+        if (exact is not null && !used.Contains(exact.Slot)) return exact;
+        EquipmentSlot? partner = slot switch
+        {
+            EquipmentSlot.Finger1 => EquipmentSlot.Finger2,
+            EquipmentSlot.Wrist1 => EquipmentSlot.Wrist2,
+            _ => null,
+        };
+        if (partner is { } p && TrialSlots.FirstOrDefault(r => r.Slot == p) is { } second && !used.Contains(p))
+            return second;
+        return exact;
+    }
+
+    [RelayCommand]
+    private void ClearTrial()
+    {
+        foreach (TrialSlotRow row in TrialSlots) row.SetItemQuiet(null);
+        RecomputeTrial();
+    }
+
+    // Fill every non-held slot with the best equippable item for the chosen filter.
+    [RelayCommand]
+    private void FindBest()
+    {
+        if (TrialGearFinder.Filters.FirstOrDefault(f => f.Label == SelectedTrialFilter) is not { } filter)
+            return;
+        var held = new HashSet<EquipmentSlot>(TrialSlots.Where(r => r.Hold).Select(r => r.Slot));
+        var current = TrialSlots.ToDictionary(r => r.Slot, r => r.ItemName);
+        var targets = TrialSlots.Select(r => r.Slot).ToList();
+
+        // Honor the finder's requirement gates too (class / alignment / usable-at-level
+        // ride CanEquip via the args above; the level- and strength-req ceilings are
+        // finder-only filters, so they come in as an extra predicate).
+        Dictionary<EquipmentSlot, string> best = TrialGearFinder.FindBest(
+            _all, targets, held, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
+            e => (MaxLevelReq <= 0 || e.LevelReq <= MaxLevelReq)
+              && (MaxStrReq <= 0 || e.StrReq <= MaxStrReq));
+
+        // Every non-held slot is cleared, then filled with this filter's best (null
+        // when it found nothing). Hold the keepers, run another filter, and repeat.
+        foreach (TrialSlotRow row in TrialSlots)
+        {
+            if (row.Hold) continue;
+            row.SetItemQuiet(best.TryGetValue(row.Slot, out string? name) ? name : null);
+        }
+        RecomputeTrial();
+    }
+
+    // Right-click "Trial-Equip this Item" on a results row — drop it into its slot,
+    // overriding whatever's there.
+    [RelayCommand]
+    private void TrialEquip(ItemFinderEntry? entry)
+    {
+        if (entry is null || entry.IsSynthetic) return;
+        if (TrialSlots.FirstOrDefault(r => r.Slot == entry.Slot) is not { } row) return;
+        row.SetItemQuiet(entry.Name);
+        RecomputeTrial();
+    }
+
+    // Recompute the trial set's projected stat readout + encumbrance overlay.
+    private void RecomputeTrial()
+    {
+        var items = new List<EquippedItem>();
+        int trialWeight = 0;
+        foreach (TrialSlotRow row in TrialSlots)
+        {
+            if (row.ItemName is not { } name)
+            {
+                row.ItemTooltip = null;
+                continue;
+            }
+            items.Add(new EquippedItem(name, SlotTag(row.Slot)));
+            if (_entryByName.TryGetValue(name, out ItemFinderEntry? e)) trialWeight += e.Encum;
+            row.ItemTooltip = BuildItemTooltip(name, row.Slot);
+        }
+
+        EquipmentStatBreakdown b = CharacterCalculator.AggregateEquipmentStats(items, _gameData);
+        TrialBonusRows.Clear();
+        foreach (EquipBonusRow r in EquipBonusRowBuilder.Build(b)) TrialBonusRows.Add(r);
+        HasTrialBonuses = TrialBonusRows.Count > 0;
+
+        EncumbranceReading enc = _inventory.Snapshot.Encumbrance;
+        if (enc.MaxWeight > 0)
+        {
+            CurrentEncumbranceText = string.Create(CultureInfo.InvariantCulture,
+                $"Current: {enc.CurrentWeight:N0}/{enc.MaxWeight:N0}  ({enc.Percentage}%)  {enc.Category}");
+            int currentWorn = 0;
+            foreach (EquippedItem we in _inventory.Snapshot.EquippedItems)
+                if (_entryByName.TryGetValue(we.Name, out ItemFinderEntry? e)) currentWorn += e.Encum;
+            int projected = Math.Max(0, enc.CurrentWeight - currentWorn) + trialWeight;
+            int pct = (int)((long)projected * 100 / enc.MaxWeight);
+            TrialEncumbranceText = string.Create(CultureInfo.InvariantCulture,
+                $"With trial set: {projected:N0}/{enc.MaxWeight:N0}  ({pct}%)  {EncumbranceCategory.ForPercent(pct)}");
+        }
+        else
+        {
+            CurrentEncumbranceText = "Current encumbrance unknown (connect and check inventory)";
+            TrialEncumbranceText = trialWeight > 0
+                ? string.Create(CultureInfo.InvariantCulture, $"Trial set weight: {trialWeight:N0}")
+                : "—";
+        }
+    }
+
+    // The AggregateEquipmentStats slot tag: weapon / off-hand fold accuracy into
+    // their own buckets, everything else is generic worn.
+    private static string SlotTag(EquipmentSlot slot) => slot switch
+    {
+        EquipmentSlot.Weapon => "Weapon Hand",
+        EquipmentSlot.OffHand => "Off-Hand",
+        _ => "Worn",
+    };
+
+    // A single item's stat lines for the slot's hover tooltip — the same per-stat
+    // readout the panel shows, aggregated for just this item. For a weapon the worn-stat
+    // bonuses don't cover its attack profile, so its base damage / speed / proc-casts are
+    // prepended from the item's record view.
+    private string BuildItemTooltip(string name, EquipmentSlot slot)
+    {
+        EquipmentStatBreakdown b = CharacterCalculator.AggregateEquipmentStats(
+            new[] { new EquippedItem(name, SlotTag(slot)) }, _gameData);
+
+        var lines = new List<string>();
+        if (_entryByName.TryGetValue(name, out ItemFinderEntry? e) && e.WeaponType >= 0)
+            lines.AddRange(WeaponTooltipLines(e));
+        lines.AddRange(EquipBonusRowBuilder.Build(b).Select(r => $"{r.Stat}  {r.Value}"));
+
+        return lines.Count == 0 ? name : name + "\n" + string.Join("\n", lines);
+    }
+
+    // Weapon-only tooltip lines: base damage and swing speed from the catalog entry,
+    // plus any proc / use-cast rows ("Casts (85%/swing): mana flare" and its "Effect:
+    // Dmg 240-350") pulled from the item's MDB record so they match the record dialog.
+    private IEnumerable<string> WeaponTooltipLines(ItemFinderEntry e)
+    {
+        var lines = new List<string>();
+        if (e.MinDmg != 0 || e.MaxDmg != 0) lines.Add($"Damage  {e.MinDmg}-{e.MaxDmg}");
+        if (e.WeaponSpeed > 0) lines.Add($"Speed  {e.WeaponSpeed}");
+        if (e.Number > 0)
+            foreach (KeyValuePair<string, string> kv in
+                     _mdbBuilder.Build(e.Number.ToString(CultureInfo.InvariantCulture)).OtherInfo)
+                if (IsWeaponCastLine(kv.Key))
+                    lines.Add($"{kv.Key.Trim()}: {kv.Value}");
+        return lines;
+    }
+
+    // The MDB "Other Info" rows that describe a weapon's proc / use-cast: the "Casts
+    // (…)" spell row and its indented "  Effect" damage sub-row.
+    private static bool IsWeaponCastLine(string key)
+        => key.StartsWith("Casts", StringComparison.Ordinal)
+        || key.Trim().Equals("Effect", StringComparison.Ordinal);
 
     // Close the finder (read-only — no result to commit).
     [RelayCommand]

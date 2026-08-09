@@ -43,7 +43,7 @@
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
-        <Grid ColumnDefinitions="280,*" ColumnSpacing="12">
+        <Grid ColumnDefinitions="280,*,Auto" ColumnSpacing="12">
 
             <!-- ===== Left: grouped, selectively-applied filters ===== -->
             <Grid Grid.Column="0" RowDefinitions="*,Auto">
@@ -75,6 +75,12 @@
                                                    Value="{Binding UsableLevel, Mode=TwoWay}"
                                                    ToolTip.Tip="Show only items a character of this level can wear (0 = any)."/>
                                     <TextBlock Classes="FieldLabel" Text="Usable at level"/>
+                                </DockPanel>
+                                <DockPanel>
+                                    <NumericUpDown DockPanel.Dock="Right" Classes="filter"
+                                                   Maximum="200" Value="{Binding MaxLevelReq, Mode=TwoWay}"
+                                                   ToolTip.Tip="Show items whose required level is this or lower (0 = off)."/>
+                                    <TextBlock Classes="FieldLabel" Text="Level req"/>
                                 </DockPanel>
                                 <StackPanel Spacing="2">
                                     <TextBlock Classes="FieldLabel" Text="Attack type"/>
@@ -191,12 +197,6 @@
                                                    ToolTip.Tip="Show items whose required strength is this or lower (0 = off)."/>
                                     <TextBlock Classes="FieldLabel" Text="Strength req"/>
                                 </DockPanel>
-                                <DockPanel>
-                                    <NumericUpDown DockPanel.Dock="Right" Classes="filter"
-                                                   Maximum="200" Value="{Binding MaxLevelReq, Mode=TwoWay}"
-                                                   ToolTip.Tip="Show items whose required level is this or lower (0 = off)."/>
-                                    <TextBlock Classes="FieldLabel" Text="Level req"/>
-                                </DockPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -211,10 +211,19 @@
             <!-- ===== Right: the combined item list ===== -->
             <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="8">
 
-                <TextBlock Grid.Row="0" Text="{Binding CountText}"
-                           Foreground="{StaticResource ChromeFgSecBrush}"
-                           FontSize="{StaticResource FontSizeSm}"
-                           VerticalAlignment="Center"/>
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                    <TextBlock Grid.Column="0" Text="{Binding CountText}"
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeSm}"
+                               VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Text="{Binding NameFilter, Mode=TwoWay}"
+                             PlaceholderText="Filter by name…" Width="240" HorizontalAlignment="Left"
+                             VerticalAlignment="Center"
+                             ToolTip.Tip="Show only items whose name contains this text."/>
+                    <Button Grid.Column="2" Content="Trial set ▸"
+                            Command="{Binding ToggleTrialPanelCommand}"
+                            ToolTip.Tip="Show / hide the trial gearset panel — plan a loadout and see its stats + encumbrance."/>
+                </Grid>
 
                 <!-- ReflectionBinding: the non-generic DataGridCollectionView hides the
                      row item's type from the compiled-binding pass, so columns fall back
@@ -235,6 +244,13 @@
                           VerticalScrollBarVisibility="Auto"
                           DoubleTapped="OnRowDoubleTapped"
                           Sorting="OnGridSorting">
+                    <DataGrid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Trial-Equip this Item"
+                                      Command="{Binding TrialEquipCommand}"
+                                      CommandParameter="{Binding #ItemsGrid.SelectedItem}"/>
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Slot"       Binding="{ReflectionBinding SlotLabel}"      SortMemberPath="SlotOrder"  Width="100"/>
                         <DataGridTextColumn Header="Name"       Binding="{ReflectionBinding Name}"           SortMemberPath="Name"       Width="200"/>
@@ -250,6 +266,7 @@
                         <DataGridTextColumn Header="BS Acc"     Binding="{ReflectionBinding BsAccuracyText}" SortMemberPath="BsAccuracy" Width="78"  Tag="BsAccuracyText"/>
                         <DataGridTextColumn Header="BS Min-Max" Binding="{ReflectionBinding BsDamageText}"   SortMemberPath="BsMax"      Width="106" Tag="BsDamageText"/>
                         <DataGridTextColumn Header="AC"         Binding="{ReflectionBinding AcText}"         SortMemberPath="Ac"         Width="56"  Tag="AcText"/>
+                        <DataGridTextColumn Header="AC Blur"    Binding="{ReflectionBinding AcBlurText}"     SortMemberPath="AcBlur"     Width="72"  Tag="AcBlurText"/>
                         <DataGridTextColumn Header="DR"         Binding="{ReflectionBinding DrText}"         SortMemberPath="Dr"         Width="56"  Tag="DrText"/>
                         <DataGridTextColumn Header="HP"         Binding="{ReflectionBinding HpText}"         SortMemberPath="Hp"         Width="62"  Tag="HpText"/>
                         <DataGridTextColumn Header="HP Regen"   Binding="{ReflectionBinding HpRegenText}"    SortMemberPath="HpRegen"    Width="92"  Tag="HpRegenText"/>
@@ -282,6 +299,93 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>
+
+            <!-- ===== Right flyout: trial gearset (default hidden) ===== -->
+            <Border Grid.Column="2" Classes="Group" Width="340" Margin="0" Padding="10"
+                    IsVisible="{Binding ShowTrialPanel}">
+                <!-- Slots (row 3) and the stats readout (row 5) are both star-height so a
+                     GridSplitter (row 4) can rebalance them; the split ratio persists
+                     per-profile via SplitterLayoutStore. Both panes scroll when short. -->
+                <Grid x:Name="TrialGrid" RowDefinitions="Auto,Auto,Auto,3*,Auto,2*" RowSpacing="0">
+
+                    <StackPanel Grid.Row="0" Spacing="6">
+                        <TextBlock Classes="Group" Text="Trial gearset"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="Import from live" Command="{Binding ImportFromLiveCommand}"
+                                    ToolTip.Tip="Copy your currently-worn gear into the trial slots."/>
+                            <Button Content="Clear" Command="{Binding ClearTrialCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,8,0,6">
+                        <ComboBox ItemsSource="{Binding TrialFilterOptions}"
+                                  SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
+                                  MinWidth="150"/>
+                        <Button Content="Find Best" Command="{Binding FindBestCommand}"
+                                ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat."/>
+                    </StackPanel>
+
+                    <Grid Grid.Row="2" ColumnDefinitions="44,72,*" Margin="0,0,0,4" ColumnSpacing="4">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Hold"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Slot"/>
+                        <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Item"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding TrialSlots}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TrialSlotRow">
+                                    <Grid ColumnDefinitions="44,72,*" Margin="0,1,16,1" ColumnSpacing="4">
+                                        <CheckBox Grid.Column="0" IsChecked="{Binding Hold, Mode=TwoWay}"
+                                                  VerticalAlignment="Center" Margin="8,0,0,0"
+                                                  ToolTip.Tip="Lock this slot so Find Best won't change it."/>
+                                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
+                                        <ComboBox Grid.Column="2" ItemsSource="{Binding Options}"
+                                                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                                                  HorizontalAlignment="Stretch" MaxDropDownHeight="320"
+                                                  ToolTip.Tip="{Binding ItemTooltip}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <GridSplitter Grid.Row="4" Height="6" Margin="0,6"
+                                  HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                  ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                                  Background="{StaticResource ChromeBorderBrush}" ShowsPreview="False"
+                                  ToolTip.Tip="Drag to resize the slots vs. the stats readout."/>
+
+                    <Grid Grid.Row="5" RowDefinitions="Auto,Auto,*" RowSpacing="0">
+                        <StackPanel Grid.Row="0" Spacing="2">
+                            <TextBlock Classes="FieldLabel" Text="{Binding CurrentEncumbranceText}"/>
+                            <TextBlock Text="{Binding TrialEncumbranceText}"
+                                       Foreground="{StaticResource AccentAmberBrush}"
+                                       FontSize="{StaticResource FontSizeSm}"/>
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="1" Classes="Group" Text="Projected stats" Margin="0,8,0,4"
+                                   IsVisible="{Binding HasTrialBonuses}"/>
+
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                      IsVisible="{Binding HasTrialBonuses}">
+                            <ItemsControl ItemsSource="{Binding TrialBonusRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:EquipBonusRow">
+                                        <!-- Right margin keeps the value clear of the scrollbar. -->
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,1,16,1">
+                                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Stat}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                                       FontFamily="{StaticResource FontMono}"
+                                                       ToolTip.Tip="{Binding Tooltip}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Border>
         </Grid>
     </Border>
 </Window>

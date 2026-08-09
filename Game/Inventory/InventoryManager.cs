@@ -33,9 +33,6 @@ public sealed partial class InventoryManager : IDisposable
     // LogService category — [Inventory] rows per parse / patch.
     public const string LogCategory = "Inventory";
 
-    // Stock None/Light encumbrance boundary (percent).
-    private const int StockNoneCeiling = 16;
-
     private const int MaxCaptureLines = 50;
 
     private readonly LogService? _log;
@@ -989,14 +986,8 @@ public sealed partial class InventoryManager : IDisposable
         }
     }
 
-    // Stock boundaries (None ≤ 16%).
     private static EncumbranceLevel DeriveCategory(int percentage)
-    {
-        if (percentage <= StockNoneCeiling) return EncumbranceLevel.None;
-        if (percentage <= 33) return EncumbranceLevel.Light;
-        if (percentage <= 66) return EncumbranceLevel.Medium;
-        return EncumbranceLevel.Heavy;
-    }
+        => EncumbranceCategory.ForPercent(percentage);
 
     // The game labels a two-handed weapon "(Two handed)" in your own inventory
     // but "(Weapon Hand)" in player listings; fold both to one slot so callers

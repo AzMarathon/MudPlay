@@ -1263,6 +1263,10 @@ public sealed class AppServices
     // via ItemOverlaySeedStore.GetOverlay(int).
     public ItemOverlaySeedStore ItemOverlaySeed { get; private set; } = null!;
 
+    // Opens the item record (edit) dialog by Number from any surface — the Item
+    // Finder double-click. Constructed once; single-instance dialog across callers.
+    public ItemRecordDialogService ItemRecord { get; private set; } = null!;
+
     // Background audit comparing player-facing spells in the active
     // set against the Messages catalogue's Links field — surfaces a
     // summary LogEntry per audit run so users know which spells
@@ -2246,6 +2250,12 @@ public sealed class AppServices
         // entries, so it's constructed after the store above. Lazy and
         // self-invalidating, so there's no ActiveSetChanged subscription to wire.
         ItemSources = new ItemSourceIndex(GameData, TBInfo, Log);
+
+        // Shared item-record opener — opens the item edit dialog by Number from any
+        // surface (the Item Finder's double-click), reusing the browser's read-only
+        // view assembly. Deps all constructed above; charm read live off PlayerStats.
+        ItemRecord = new ItemRecordDialogService(
+            GameData, Resolver, Dialogs, ItemOverlaySeed, ItemSources, () => PlayerStats.Charm);
 
         // Room graph — seeded from the active set's Rooms.json every time the
         // set switches. Built once per swap; consumers hold typed Room

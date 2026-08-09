@@ -1864,6 +1864,19 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
   evil**. The exact scale is unconfirmed (and it's unclear MME models it), so the client notes its
   **presence only** and never prints a magnitude.
 
+### Blur AC (ability code 10) — encumbrance-scaled, NOT flat *([CONFIRMED] 2026-08-08, user)*
+
+Blur AC (ability code **10**, the item field shown as "AC Blur") is **fundamentally different from
+flat worn AC** (code 2): its effective value **scales inversely with carried encumbrance**. At **0%
+load** the wearer gets the **full** listed value; at **100% (heavy)** it grants **0**. So a "AC Blur
+12" item gives 12 AC when unburdened and nothing when maxed out — it linearly interpolates between.
+
+Because of this, the client surfaces blur **as its own "AC Blur" line/column**, never merged into the
+flat "Armour Class" figure (the Item Finder, trial-set readout, and Equipment Manager all split it
+out). Internally the aggregate `PlusAC` still carries the nominal blur value for the combat/projected
+formulas — the split is a **display** distinction — and the finder shows the nominal (max) value, not
+an encumbrance-adjusted one, since it's a planning aid without a fixed load assumption.
+
 ## Currency & cash
 
 - **[CONFIRMED]** Five denominations, each with its own full coin name:
