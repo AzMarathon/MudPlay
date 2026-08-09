@@ -50,6 +50,19 @@ public sealed class SplitterLayoutStore
         owner.Closing += (_, _) => CaptureFrom(grid, leftColumnIndex, rightColumnIndex, id);
     }
 
+    // Row equivalent of AttachGrid: persists a vertical split between two rows of
+    // grid (topRowIndex above the splitter, bottomRowIndex below) under id. Same
+    // ratio semantics — topHeight / (topHeight + bottomHeight).
+    public void AttachGridRows(Window owner, Grid grid, int topRowIndex, int bottomRowIndex, string id)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(grid);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        owner.Opened  += (_, _) => RestoreRowsOnto(grid, topRowIndex, bottomRowIndex, id);
+        owner.Closing += (_, _) => CaptureFromRows(grid, topRowIndex, bottomRowIndex, id);
+    }
+
     // Snapshot every known ratio — used by ProfileSaving.
     public Dictionary<string, double> Snapshot()
         => new(_ratios, StringComparer.OrdinalIgnoreCase);
@@ -88,6 +101,32 @@ public sealed class SplitterLayoutStore
         if (total <= 0) return;
 
         double ratio = left / total;
+        if (ratio < MinRatio || ratio > MaxRatio) return;
+        _ratios[id] = ratio;
+    }
+
+    private void RestoreRowsOnto(Grid grid, int topIdx, int bottomIdx, string id)
+    {
+        if (!_ratios.TryGetValue(id, out double ratio)) return;
+        if (ratio < MinRatio || ratio > MaxRatio) return;
+        if (topIdx >= grid.RowDefinitions.Count) return;
+        if (bottomIdx >= grid.RowDefinitions.Count) return;
+
+        grid.RowDefinitions[topIdx].Height    = new GridLength(ratio,       GridUnitType.Star);
+        grid.RowDefinitions[bottomIdx].Height = new GridLength(1.0 - ratio, GridUnitType.Star);
+    }
+
+    private void CaptureFromRows(Grid grid, int topIdx, int bottomIdx, string id)
+    {
+        if (topIdx >= grid.RowDefinitions.Count) return;
+        if (bottomIdx >= grid.RowDefinitions.Count) return;
+
+        double top    = grid.RowDefinitions[topIdx].ActualHeight;
+        double bottom = grid.RowDefinitions[bottomIdx].ActualHeight;
+        double total  = top + bottom;
+        if (total <= 0) return;
+
+        double ratio = top / total;
         if (ratio < MinRatio || ratio > MaxRatio) return;
         _ratios[id] = ratio;
     }

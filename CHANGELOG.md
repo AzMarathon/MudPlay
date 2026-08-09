@@ -9,6 +9,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - "Find Best" clears every non-held slot then fills it with the best equippable item for a chosen stat (Armour Class, damage, HP, mana, each +stat, resists, …), honouring the finder's class / alignment / level filters — find-best one stat, Hold the keepers, find-best another, and fill up
 - Quick "filter by name" box at the top of the results, and hovering a trial slot shows the placed item's stats
 - The panel projects the trial set's worn-item stats (the same readout as the Equipment Manager) and its encumbrance — exact weight and None/Light/Medium/Heavy — over your current
+- Drag the divider between the trial slots and the stats readout to rebalance them (so the readout stays visible when the window isn't maximized); the split is remembered per profile
 - Right-click a result row → "Trial-Equip this Item" drops it into its slot
 - Double-clicking a result now opens that item's record dialog directly instead of jumping to the Game Data Browser
 - Find Best "Max/Min Damage" now counts the +damage gear bonus too (not just a weapon's base damage), so it fills damage-bonus armour/jewellery slots, not only the weapon

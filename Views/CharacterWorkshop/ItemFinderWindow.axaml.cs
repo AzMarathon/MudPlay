@@ -38,6 +38,9 @@ public partial class ItemFinderWindow : Window
     // Column lookup keyed as above, built once from the fixed column set.
     private Dictionary<string, DataGridColumn>? _columnByKey;
 
+    // Stable key for the trial panel's slots-vs-stats split ratio (per-profile).
+    private const string TrialSplitterId = "ItemFinderTrialSplit";
+
     public ItemFinderWindow()
     {
         InitializeComponent();
@@ -47,6 +50,10 @@ public partial class ItemFinderWindow : Window
         // Select the row under the cursor first, on the tunnelling pass so it lands
         // before the menu opens.
         ItemsGrid.AddHandler(PointerPressedEvent, OnGridPointerPressed, RoutingStrategies.Tunnel);
+        // Trial panel's slots pane (row 3) vs. stats pane (row 5) split — remembered
+        // per profile so a hand-sized layout survives reopening the finder.
+        AppServices.Current.SplitterLayouts.AttachGridRows(
+            owner: this, grid: TrialGrid, topRowIndex: 3, bottomRowIndex: 5, id: TrialSplitterId);
     }
 
     private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)

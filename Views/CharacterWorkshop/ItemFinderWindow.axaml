@@ -302,9 +302,10 @@
             <!-- ===== Right flyout: trial gearset (default hidden) ===== -->
             <Border Grid.Column="2" Classes="Group" Width="340" Margin="0" Padding="10"
                     IsVisible="{Binding ShowTrialPanel}">
-                <!-- Slots size to content (row 3 Auto) so they never scroll; the stats
-                     readout (row 7 *) takes the remaining height and scrolls instead. -->
-                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*" RowSpacing="0">
+                <!-- Slots (row 3) and the stats readout (row 5) are both star-height so a
+                     GridSplitter (row 4) can rebalance them; the split ratio persists
+                     per-profile via SplitterLayoutStore. Both panes scroll when short. -->
+                <Grid x:Name="TrialGrid" RowDefinitions="Auto,Auto,Auto,3*,Auto,2*" RowSpacing="0">
 
                     <StackPanel Grid.Row="0" Spacing="6">
                         <TextBlock Classes="Group" Text="Trial gearset"/>
@@ -329,51 +330,59 @@
                         <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Item"/>
                     </Grid>
 
-                    <ItemsControl Grid.Row="3" ItemsSource="{Binding TrialSlots}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:TrialSlotRow">
-                                <Grid ColumnDefinitions="44,72,*" Margin="0,1" ColumnSpacing="4">
-                                    <CheckBox Grid.Column="0" IsChecked="{Binding Hold, Mode=TwoWay}"
-                                              VerticalAlignment="Center" Margin="8,0,0,0"
-                                              ToolTip.Tip="Lock this slot so Find Best won't change it."/>
-                                    <TextBlock Grid.Column="1" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
-                                    <ComboBox Grid.Column="2" ItemsSource="{Binding Options}"
-                                              SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-                                              HorizontalAlignment="Stretch" MaxDropDownHeight="320"
-                                              ToolTip.Tip="{Binding ItemTooltip}"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <Border Grid.Row="4" Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,8"/>
-
-                    <StackPanel Grid.Row="5" Spacing="2">
-                        <TextBlock Classes="FieldLabel" Text="{Binding CurrentEncumbranceText}"/>
-                        <TextBlock Text="{Binding TrialEncumbranceText}"
-                                   Foreground="{StaticResource AccentAmberBrush}"
-                                   FontSize="{StaticResource FontSizeSm}"/>
-                    </StackPanel>
-
-                    <TextBlock Grid.Row="6" Classes="Group" Text="Projected stats" Margin="0,8,0,4"
-                               IsVisible="{Binding HasTrialBonuses}"/>
-
-                    <ScrollViewer Grid.Row="7" VerticalScrollBarVisibility="Auto"
-                                  IsVisible="{Binding HasTrialBonuses}">
-                        <ItemsControl ItemsSource="{Binding TrialBonusRows}">
+                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding TrialSlots}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:EquipBonusRow">
-                                    <!-- Right margin keeps the value clear of the scrollbar. -->
-                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1,16,1">
-                                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Stat}"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding Value}"
-                                                   FontFamily="{StaticResource FontMono}"
-                                                   ToolTip.Tip="{Binding Tooltip}"/>
+                                <DataTemplate x:DataType="vm:TrialSlotRow">
+                                    <Grid ColumnDefinitions="44,72,*" Margin="0,1,16,1" ColumnSpacing="4">
+                                        <CheckBox Grid.Column="0" IsChecked="{Binding Hold, Mode=TwoWay}"
+                                                  VerticalAlignment="Center" Margin="8,0,0,0"
+                                                  ToolTip.Tip="Lock this slot so Find Best won't change it."/>
+                                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
+                                        <ComboBox Grid.Column="2" ItemsSource="{Binding Options}"
+                                                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                                                  HorizontalAlignment="Stretch" MaxDropDownHeight="320"
+                                                  ToolTip.Tip="{Binding ItemTooltip}"/>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
+
+                    <GridSplitter Grid.Row="4" Height="6" ResizeDirection="Rows"
+                                  HorizontalAlignment="Stretch" Background="Transparent"
+                                  ToolTip.Tip="Drag to resize the slots vs. the stats readout."/>
+
+                    <Grid Grid.Row="5" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="0">
+                        <Border Grid.Row="0" Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,8"/>
+
+                        <StackPanel Grid.Row="1" Spacing="2">
+                            <TextBlock Classes="FieldLabel" Text="{Binding CurrentEncumbranceText}"/>
+                            <TextBlock Text="{Binding TrialEncumbranceText}"
+                                       Foreground="{StaticResource AccentAmberBrush}"
+                                       FontSize="{StaticResource FontSizeSm}"/>
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="2" Classes="Group" Text="Projected stats" Margin="0,8,0,4"
+                                   IsVisible="{Binding HasTrialBonuses}"/>
+
+                        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto"
+                                      IsVisible="{Binding HasTrialBonuses}">
+                            <ItemsControl ItemsSource="{Binding TrialBonusRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:EquipBonusRow">
+                                        <!-- Right margin keeps the value clear of the scrollbar. -->
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,1,16,1">
+                                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Stat}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                                       FontFamily="{StaticResource FontMono}"
+                                                       ToolTip.Tip="{Binding Tooltip}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>

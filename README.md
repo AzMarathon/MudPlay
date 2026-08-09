@@ -6,6 +6,7 @@
 > - "Import from live" copies your worn set into the trial slots; "Clear" empties them
 > - "Find Best" fills every non-held slot with the best equippable item for a chosen stat (Armour Class, damage, HP, mana, each +stat, resists, …) — find-best one stat, Hold the keepers, find-best another, and fill up
 > - The panel projects the trial set's worn-item stats (the same readout as the Equipment Manager) and its encumbrance — exact weight and None/Light/Medium/Heavy — over your current
+> - Drag the divider between the trial slots and the stats readout to rebalance them; the split is remembered per profile
 > - Right-click a result row → "Trial-Equip this Item" drops it into its slot
 > - Double-clicking a result now opens that item's record dialog directly instead of jumping to the Game Data Browser
 >
