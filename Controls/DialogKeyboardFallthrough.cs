@@ -1,4 +1,3 @@
-using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -7,36 +6,48 @@ using FujinTerm.Services;
 
 namespace FujinTerm.Controls;
 
-// Makes a modeless dialog "leak" its keystrokes back to the main terminal, so you
-// can keep typing at the game while another window is open — unless you're
-// actually editing a text field in the dialog. Attached once per window by
-// DialogService.
+// Makes every window OTHER than the main terminal window "leak" its keystrokes
+// back to the terminal, so you can keep typing at the game while another window
+// is open — unless you're actually editing a text field in that window.
 //
-// The handlers run on the BUBBLE phase (and not for already-handled events), so
-// the dialog's own controls always get first crack: a keystroke only reaches the
-// terminal if the dialog left it unhandled. On top of that we skip forwarding
-// when a TextBox owns the focus (you're typing into a field) and when the key is
-// one the dialog needs for its own navigation (Tab / Escape / menu chords).
+// Installed once at startup as a class handler on Window, so it covers every
+// window uniformly: the modeless dialogs spawned by DialogService AND the many
+// windows shown directly via Window.Show (Character Workshop, Map, Log pane,
+// etc.). A per-window attach would miss the latter.
+//
+// The handlers run on the BUBBLE phase and not for already-handled events, so the
+// window's own controls always get first crack: a keystroke only reaches the
+// terminal if that window left it unhandled. On top of that we skip forwarding
+// when a TextBox owns the focus (you're typing into a field), when the key is one
+// the window needs for its own navigation (Tab / Escape / menu chords), and for
+// the main window itself (the terminal already handles its own input there).
 //
 // Forwarded keys run the terminal's real input core (macros, local line buffer,
 // command history, escape-sequence mapping) via TerminalInputRouter — identical
-// to typing directly in the terminal, not a raw socket write. The whole thing is
-// gated by TerminalInputRouter.Enabled (a user setting); off ⇒ classic focus
-// behaviour.
+// to typing directly in the terminal, not a raw socket write. Gated by
+// TerminalInputRouter.Enabled (a user setting); off ⇒ classic focus behaviour.
 public static class DialogKeyboardFallthrough
 {
-    public static void Attach(Window window)
+    private static bool _installed;
+    private static Window? _mainWindow;
+
+    // Register the app-wide class handlers once, capturing the main window so its
+    // own input is left untouched. Called from App startup after the main window
+    // is created.
+    public static void Install(Window mainWindow)
     {
-        ArgumentNullException.ThrowIfNull(window);
-        window.AddHandler(InputElement.KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
-        window.AddHandler(InputElement.TextInputEvent, OnTextInput, RoutingStrategies.Bubble);
+        _mainWindow = mainWindow;
+        if (_installed) return;
+        _installed = true;
+        InputElement.KeyDownEvent.AddClassHandler<Window>(OnKeyDown, RoutingStrategies.Bubble);
+        InputElement.TextInputEvent.AddClassHandler<Window>(OnTextInput, RoutingStrategies.Bubble);
     }
 
-    private static void OnKeyDown(object? sender, KeyEventArgs e)
+    private static void OnKeyDown(Window window, KeyEventArgs e)
     {
-        if (e.Handled || sender is not Visual v) return;
+        if (e.Handled || ReferenceEquals(window, _mainWindow)) return;
         if (AppServices.CurrentOrNull?.TerminalInput is not { Enabled: true, HasTerminal: true } router) return;
-        if (IsTextInputFocused(v)) return;
+        if (IsTextInputFocused(window)) return;
         if (!ShouldForwardKey(e.Key, e.KeyModifiers)) return;
 
         // ForwardKey consumes only keys the terminal actually maps (macro,
@@ -46,11 +57,11 @@ public static class DialogKeyboardFallthrough
             e.Handled = true;
     }
 
-    private static void OnTextInput(object? sender, TextInputEventArgs e)
+    private static void OnTextInput(Window window, TextInputEventArgs e)
     {
-        if (e.Handled || string.IsNullOrEmpty(e.Text) || sender is not Visual v) return;
+        if (e.Handled || ReferenceEquals(window, _mainWindow) || string.IsNullOrEmpty(e.Text)) return;
         if (AppServices.CurrentOrNull?.TerminalInput is not { Enabled: true, HasTerminal: true } router) return;
-        if (IsTextInputFocused(v)) return;
+        if (IsTextInputFocused(window)) return;
 
         if (router.ForwardText(e.Text))
             e.Handled = true;
@@ -61,10 +72,10 @@ public static class DialogKeyboardFallthrough
     // editable ComboBox and AutoCompleteBox, which all surface a focused TextBox —
     // are covered by the single is-TextBox check (the same test BackscrollWindow
     // uses for its Ctrl+C).
-    internal static bool IsTextInputFocused(Visual anyElementInWindow)
-        => TopLevel.GetTopLevel(anyElementInWindow)?.FocusManager?.GetFocusedElement() is TextBox;
+    internal static bool IsTextInputFocused(Visual window)
+        => TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() is TextBox;
 
-    // Keys the dialog keeps for itself rather than forwarding: focus navigation
+    // Keys the window keeps for itself rather than forwarding: focus navigation
     // (Tab), cancel (Escape), the Windows / context-menu keys, and Alt-chord menu
     // accelerators (Alt held without Ctrl). Everything else — typing, arrows,
     // Enter, Backspace, function keys, Ctrl-chords — is eligible to forward.

@@ -44,6 +44,12 @@ public partial class App : Application
             };
             desktop.MainWindow = mainWindow;
 
+            // Keep typing directed at the terminal when any OTHER window is
+            // focused — an app-wide class handler covers every window (dialogs +
+            // directly-shown ones); the main window is excluded so its own input
+            // is untouched.
+            FujinTerm.Controls.DialogKeyboardFallthrough.Install(mainWindow);
+
             // DialogService parents every modeless dialog to the main window so
             // closing main tears down its children. FloatingPanelHost owns the
             // floating panel windows with the same parenting story.

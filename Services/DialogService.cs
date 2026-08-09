@@ -58,9 +58,6 @@ public sealed class DialogService
         Window window = factory();
         window.DataContext = viewModel;
         window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        // Keep typing directed at the terminal while this dialog is focused,
-        // unless the user is editing one of its text fields.
-        FujinTerm.Controls.DialogKeyboardFallthrough.Attach(window);
 
         TaskCompletionSource<TResult?> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
