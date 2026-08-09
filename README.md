@@ -6,6 +6,7 @@
 > - Forwarded keys run the terminal's real input path (macros, local line editing, command history, escape-sequence mapping), identical to typing directly in the terminal
 > - New Settings → General toggle "Keep typing directed at the terminal when other windows are open" (on by default)
 > - End Game Trainer quest defs refreshed: base level 65, "Episode"→"Part", slash map/room refs, rewritten advice, a condensed sphere guide + reworked Part 5 level gate (paradigm 75+/stock 66+), and per-realm trainer notes on the Part 4 halls
+> - Shipped quest-guide updates now reach existing installs (the read-only quest seed re-syncs from the bundled copy on launch); your per-set overlay edits still take precedence
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
