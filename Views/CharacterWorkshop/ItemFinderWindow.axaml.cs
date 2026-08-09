@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using FujinTerm.Game.Inventory;
 using FujinTerm.Services;
 using FujinTerm.ViewModels.CharacterWorkshop;
@@ -39,6 +42,18 @@ public partial class ItemFinderWindow : Window
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        // Right-click doesn't select a DataGrid row on its own, so the context menu's
+        // "Trial-Equip this Item" (bound to SelectedItem) would target the wrong row.
+        // Select the row under the cursor first, on the tunnelling pass so it lands
+        // before the menu opens.
+        ItemsGrid.AddHandler(PointerPressedEvent, OnGridPointerPressed, RoutingStrategies.Tunnel);
+    }
+
+    private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(ItemsGrid).Properties.IsRightButtonPressed) return;
+        if ((e.Source as Visual)?.FindAncestorOfType<DataGridRow>(includeSelf: true) is { DataContext: ItemFinderEntry entry })
+            ItemsGrid.SelectedItem = entry;
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)

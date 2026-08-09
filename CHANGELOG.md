@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 2.37.0
+
+- Item Finder: new trial-gearset panel (toggle at the top-right of the results, hidden by default) to plan a loadout — one dropdown per slot listing the currently-filtered items, plus a Hold lock per slot
+- "Import from live" copies your worn set into the trial slots; "Clear" empties them
+- "Find Best" fills every non-held slot with the best equippable item for a chosen stat (Armour Class, damage, HP, mana, each +stat, resists, …) — find-best one stat, Hold the keepers, find-best another, and fill up
+- The panel projects the trial set's worn-item stats (the same readout as the Equipment Manager) and its encumbrance — exact weight and None/Light/Medium/Heavy — over your current
+- Right-click a result row → "Trial-Equip this Item" drops it into its slot
+
 ## 2.36.0
 
 - Main window title now shows the running version — `FujinTerm v<x.y.z> — <profile> — <BBS>`

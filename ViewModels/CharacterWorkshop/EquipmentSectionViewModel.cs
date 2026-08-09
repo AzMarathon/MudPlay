@@ -416,53 +416,11 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         }
 
         EquipmentStatBreakdown b = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
-        EquipmentStatSummary t = b.Totals;
 
         RebuildProjectedAc(worn, b);
 
-        AddDoubleRow(b, "Armour Class", t.PlusAC);
-        AddDoubleRow(b, "Damage Resist", t.PlusDR);
-        AddIntRow(b, "Strength", t.PlusStrength);
-        AddIntRow(b, "Intellect", t.PlusIntellect);
-        AddIntRow(b, "Willpower", t.PlusWillpower);
-        AddIntRow(b, "Agility", t.PlusAgility);
-        AddIntRow(b, "Health", t.PlusHealth);
-        AddIntRow(b, "Charm", t.PlusCharm);
-        AddIntRow(b, "Max HP", t.PlusMaxHp);
-        AddIntRow(b, "Max Mana", t.PlusMaxMana);
-        AddIntRow(b, "HP Regen", t.HpRegenPercent);
-        AddIntRow(b, "Mana Regen", t.MpRegenPercent);
-        AddIntRow(b, "Crits", t.PlusCrits);
-        AddAccuracyRow(b, t);
-        AddIntRow(b, "Max Damage", t.PlusMaxDamage);
-        AddIntRow(b, "Spell Damage", t.SpellDamageBonus);
-        AddIntRow(b, "Hit Magic", t.WeaponHitMagic);
-        AddIntRow(b, "Dodge", t.PlusDodge);
-        AddIntRow(b, "Magic Resist", t.PlusMagicResist);
-        AddIntRow(b, "BS Accuracy", t.PlusBSAccuracy);
-        AddIntRow(b, "BS Min Dmg", t.PlusBSMin);
-        AddIntRow(b, "BS Max Dmg", t.PlusBSMax);
-        AddIntRow(b, "Stealth", t.PlusStealth);
-        AddIntRow(b, "Perception", t.PlusPerception);
-        AddIntRow(b, "Spellcasting", t.PlusSpellcasting);
-        AddIntRow(b, "Encumbrance", t.PlusEncumbrance);
-        AddIntRow(b, "Traps", t.PlusTraps);
-        AddIntRow(b, "Picklocks", t.PlusPicklocks);
-        AddIntRow(b, "Illuminate", t.PlusIlluminate);
-        AddIntRow(b, "Quickness", t.PlusQuickness);
-        AddIntRow(b, "Cold Resist", t.PlusColdResist);
-        AddIntRow(b, "Fire Resist", t.PlusFireResist);
-        AddIntRow(b, "Stone Resist", t.PlusStoneResist);
-        AddIntRow(b, "Lightning Resist", t.PlusLightningResist);
-        AddIntRow(b, "Water Resist", t.PlusWaterResist);
-        AddIntRow(b, "Prot Evil", t.PlusProtEvil);
-        AddIntRow(b, "Prot Good", t.PlusProtGood);
-        AddIntRow(b, "Punch Dmg", t.PlusPunchDmg);
-        AddIntRow(b, "Punch Accy", t.PlusPunchAccy);
-        AddIntRow(b, "Kick Dmg", t.PlusKickDmg);
-        AddIntRow(b, "Kick Accy", t.PlusKickAccy);
-        AddIntRow(b, "JumpKick Dmg", t.PlusJumpKickDmg);
-        AddIntRow(b, "JumpKick Accy", t.PlusJumpKickAccy);
+        foreach (EquipBonusRow r in EquipBonusRowBuilder.Build(b))
+            BonusRows.Add(r);
 
         HasBonuses = BonusRows.Count > 0;
     }
@@ -641,45 +599,6 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         EquipmentSlot.OffHand or EquipmentSlot.AlternateOffHand => "Off-Hand",
         _ => "Worn",
     };
-
-    private void AddIntRow(EquipmentStatBreakdown b, string statKey, int value)
-    {
-        if (value == 0) return;
-        string display = value.ToString("+0;-0", CultureInfo.InvariantCulture);
-        BonusRows.Add(new EquipBonusRow(statKey, display, BuildTooltip(b, statKey)));
-    }
-
-    private void AddDoubleRow(EquipmentStatBreakdown b, string statKey, double value)
-    {
-        if (value == 0) return;
-        string display = value.ToString("+0.#;-0.#", CultureInfo.InvariantCulture);
-        BonusRows.Add(new EquipBonusRow(statKey, display, BuildTooltip(b, statKey)));
-    }
-
-    // Accuracy total combines worn-item Accy fields with the abil-22 sum — the same
-    // number Character Info feeds the accuracy formula. Tooltip lists item sources.
-    private void AddAccuracyRow(EquipmentStatBreakdown b, EquipmentStatSummary t)
-    {
-        int total = t.TotalWornAccy + t.PlusAccuracy;
-        if (total == 0) return;
-        string display = total.ToString("+0;-0", CultureInfo.InvariantCulture);
-        BonusRows.Add(new EquipBonusRow("Accuracy", display, BuildTooltip(b, "Accuracy")));
-    }
-
-    private static string? BuildTooltip(EquipmentStatBreakdown b, string statKey)
-    {
-        if (!b.PerStatSources.TryGetValue(statKey, out var sources) || sources.Count == 0)
-            return null;
-
-        var sb = new StringBuilder();
-        foreach (StatContribution s in sources)
-        {
-            if (sb.Length > 0) sb.Append('\n');
-            sb.Append(s.ItemName).Append("  ").Append(s.DisplayValue);
-            if (!string.IsNullOrEmpty(s.Tag)) sb.Append(' ').Append(s.Tag);
-        }
-        return sb.ToString();
-    }
 
     // ----- service signals ------------------------------------------------
 

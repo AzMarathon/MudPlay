@@ -43,7 +43,7 @@
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
-        <Grid ColumnDefinitions="280,*" ColumnSpacing="12">
+        <Grid ColumnDefinitions="280,*,Auto" ColumnSpacing="12">
 
             <!-- ===== Left: grouped, selectively-applied filters ===== -->
             <Grid Grid.Column="0" RowDefinitions="*,Auto">
@@ -211,10 +211,15 @@
             <!-- ===== Right: the combined item list ===== -->
             <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="8">
 
-                <TextBlock Grid.Row="0" Text="{Binding CountText}"
-                           Foreground="{StaticResource ChromeFgSecBrush}"
-                           FontSize="{StaticResource FontSizeSm}"
-                           VerticalAlignment="Center"/>
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding CountText}"
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeSm}"
+                               VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="Trial set ▸"
+                            Command="{Binding ToggleTrialPanelCommand}"
+                            ToolTip.Tip="Show / hide the trial gearset panel — plan a loadout and see its stats + encumbrance."/>
+                </Grid>
 
                 <!-- ReflectionBinding: the non-generic DataGridCollectionView hides the
                      row item's type from the compiled-binding pass, so columns fall back
@@ -235,6 +240,13 @@
                           VerticalScrollBarVisibility="Auto"
                           DoubleTapped="OnRowDoubleTapped"
                           Sorting="OnGridSorting">
+                    <DataGrid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Trial-Equip this Item"
+                                      Command="{Binding TrialEquipCommand}"
+                                      CommandParameter="{Binding #ItemsGrid.SelectedItem}"/>
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Slot"       Binding="{ReflectionBinding SlotLabel}"      SortMemberPath="SlotOrder"  Width="100"/>
                         <DataGridTextColumn Header="Name"       Binding="{ReflectionBinding Name}"           SortMemberPath="Name"       Width="200"/>
@@ -282,6 +294,78 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>
+
+            <!-- ===== Right flyout: trial gearset (default hidden) ===== -->
+            <Border Grid.Column="2" Classes="Group" Width="340" Margin="0" Padding="10"
+                    IsVisible="{Binding ShowTrialPanel}">
+                <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,*" RowSpacing="0">
+
+                    <StackPanel Grid.Row="0" Spacing="6">
+                        <TextBlock Classes="Group" Text="Trial gearset"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="Import from live" Command="{Binding ImportFromLiveCommand}"
+                                    ToolTip.Tip="Copy your currently-worn gear into the trial slots."/>
+                            <Button Content="Clear" Command="{Binding ClearTrialCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,8,0,6">
+                        <ComboBox ItemsSource="{Binding TrialFilterOptions}"
+                                  SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
+                                  MinWidth="150"/>
+                        <Button Content="Find Best" Command="{Binding FindBestCommand}"
+                                ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat."/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="2" Classes="FieldLabel" Text="Slot · item · hold" Margin="0,0,0,4"/>
+
+                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding TrialSlots}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TrialSlotRow">
+                                    <Grid ColumnDefinitions="70,*,Auto" Margin="0,1" ColumnSpacing="4">
+                                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
+                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                                                  HorizontalAlignment="Stretch" MaxDropDownHeight="320"/>
+                                        <CheckBox Grid.Column="2" IsChecked="{Binding Hold, Mode=TwoWay}"
+                                                  Content="Hold"
+                                                  ToolTip.Tip="Lock this slot so Find Best won't change it."/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <Border Grid.Row="4" Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,8"/>
+
+                    <StackPanel Grid.Row="5" Spacing="2">
+                        <TextBlock Classes="FieldLabel" Text="{Binding CurrentEncumbranceText}"/>
+                        <TextBlock Text="{Binding TrialEncumbranceText}"
+                                   Foreground="{StaticResource AccentAmberBrush}"
+                                   FontSize="{StaticResource FontSizeSm}"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="6" Classes="Group" Text="Projected stats" Margin="0,8,0,4"
+                               IsVisible="{Binding HasTrialBonuses}"/>
+
+                    <ScrollViewer Grid.Row="7" VerticalScrollBarVisibility="Auto"
+                                  IsVisible="{Binding HasTrialBonuses}">
+                        <ItemsControl ItemsSource="{Binding TrialBonusRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:EquipBonusRow">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1">
+                                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Stat}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                                   FontFamily="{StaticResource FontMono}"
+                                                   ToolTip.Tip="{Binding Tooltip}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
         </Grid>
     </Border>
 </Window>
