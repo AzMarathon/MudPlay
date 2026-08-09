@@ -116,6 +116,27 @@ public sealed class SelfHeldResponderTests
     }
 
     [Fact]
+    public void Death_ClearsHeldGateAndChip()
+    {
+        // Regression (report paradigm-20260809-114444): a knockdown latched
+        // MovementPrevented, then the player DIED before "You get back on your
+        // feet." arrived, so the wear-off never came. AppServices wires
+        // Conditions.ClearAll("death") to the death event; that resets the
+        // observation log, whose ActiveFlags edge must drop the self chip and
+        // release the HeldGate — otherwise the walker sits "Paused by: Held"
+        // forever while the character is free to move in-game.
+        using Harness h = new();
+        h.FormParty();
+        h.Knock();
+        Assert.True(h.GateHeld);
+
+        h.Conditions.ClearAll("death");
+
+        Assert.False(h.SelfChip);
+        Assert.False(h.GateHeld);
+    }
+
+    [Fact]
     public void Solo_NoSelfRow_StillHoldsGate()
     {
         using Harness h = new();
