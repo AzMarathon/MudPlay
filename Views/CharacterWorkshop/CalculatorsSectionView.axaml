@@ -579,20 +579,6 @@
                                 <TextBlock Classes="FieldValue"
                                            Foreground="{StaticResource AccentAmberBrush}"
                                            Text="{Binding ManaSampleReadoutText}"/>
-
-                                <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,2"/>
-
-                                <TextBlock Classes="Section" Text="Breakpoints reachable by the roll"/>
-                                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
-                                           Text="Mana tick vs roll — each step up is a breakpoint; the amber line is the roll to reroll for."
-                                           IsVisible="{Binding ManaHasBreakpoints}"/>
-                                <controls:ManaBreakpointStrip Data="{Binding ManaBreakpointStrip}" Height="130"
-                                                              HorizontalAlignment="Stretch"
-                                                              IsVisible="{Binding ManaHasBreakpoints}"/>
-
-                                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
-                                           Foreground="{StaticResource AccentAmberBrush}"
-                                           Text="{Binding ManaRerollAdviceText}"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

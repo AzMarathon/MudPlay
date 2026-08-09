@@ -323,11 +323,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     [ObservableProperty] private string _manaRollRangeText = "—";
     [ObservableProperty] private string _manaWorstTickText = "—";
     [ObservableProperty] private string _manaBestTickText = "—";
-    [ObservableProperty] private string _manaRerollAdviceText = "";
-    // Roll breakpoints as a compact tick-vs-roll step graph (replaces the old table);
-    // ManaHasBreakpoints gates its visibility (false when no step is reachable).
-    [ObservableProperty] private ManaBreakpointStripData? _manaBreakpointStrip;
-    [ObservableProperty] private bool _manaHasBreakpoints;
 
     // "Model a roll" slider: bounds are the spell's min / max roll at the current
     // level; sliding picks a roll value and the readout shows what it is, its
@@ -597,8 +592,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
                         && rollShorts.Contains(s.Short.Trim(), StringComparer.OrdinalIgnoreCase))
             ?? FirstRoll(s => s.Magery == inputs.MageryType);
         ManaHasRollSpell = spell is not null;
-        ManaBreakpointStrip = null;
-        ManaHasBreakpoints = false;
 
         if (spell is not { } roll)
         {
@@ -609,7 +602,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             ManaRollMin = 0;
             ManaRollMax = 0;
             ManaSampleReadoutText = "—";
-            ManaRerollAdviceText = "No mana-regen roll spell for this magery in the active game data.";
             return;
         }
 
@@ -633,25 +625,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             ManaRollSample = clampedSample;   // fires the readout via OnManaRollSampleChanged
         else
             UpdateManaSampleReadout();
-
-        ManaHasBreakpoints = r.Breakpoints.Count > 0;
-        ManaBreakpointStrip = new ManaBreakpointStripData(
-            r.RollMin, r.RollMax, r.WorstTick, r.BestTick, r.RecommendedRollThreshold,
-            r.Breakpoints.Select(b => new ManaBreakpointMark(b.RollValueNeeded, b.Tick)).ToList());
-
-        if (r.Breakpoints.Count == 0)
-        {
-            ManaRerollAdviceText =
-                $"At level {Math.Max(1, ManaLevel)} this spell's roll can't cross a tick breakpoint — " +
-                $"every roll lands {r.WorstTick} MP/tick, so rerolling only burns mana. Raise level / stats / gear to open one.";
-        }
-        else if (r.RecommendedRollThreshold is { } rec)
-        {
-            int tick = r.Breakpoints.First(b => b.RollValueNeeded == rec).Tick;
-            ManaRerollAdviceText =
-                $"Reroll until it rolls ≥ {rec} to reach {tick} MP/tick, then stop — higher rolls don't add a tick until the next breakpoint. " +
-                $"Set Settings → Spells → Mana-Regen Reroll Threshold to {rec}.";
-        }
     }
 
     // Natural tick (no spell) vs level over the [level−1, level+3] window, one
