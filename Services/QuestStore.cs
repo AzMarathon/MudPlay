@@ -1,20 +1,22 @@
 using FujinTerm.Models.Profile;
+using FujinTerm.Models.Settings;
 
 namespace FujinTerm.Services;
 
-// Loads and resolves quest definitions for the active game-data set. Two layers
-// merge per (flag, step) in priority order:
-//   1. the user's per-set overlay {set}/quests.json — display name, show/hide
-//      visibility, edited step markdown;
-//   2. the universal read-only seed QuestDefs.seed.json, keyed by the same
-//      game-data flag numbers (custom realms reuse the numbers), so a curated
-//      default ports across every set;
+// Loads and resolves quest definitions. Two layers merge per (flag, step) in
+// priority order:
+//   1. the user's BBS-tier overlay Data/BBS/{bbs}/quests.json — display name,
+//      show/hide visibility, edited step markdown. A player's edits belong to the
+//      board they play, so the overlay follows the active BBS (BBS wins over the
+//      seed), reloading on ProfileService.BbsPinApplied / ProfileClosed;
+//   2. the universal read-only seed QuestDefs.seed.json in Data/Global, built
+//      from the bundled Defaults seed, keyed by game-data flag numbers (custom
+//      realms reuse the numbers) so a curated default ports across every board;
 //   3. an auto-draft (blank name, shown, no edited steps) for any quest the
 //      crawler discovers that neither layer names yet.
-// The seed is never written; the overlay travels with the set (sibling to
-// triggers.json) and reloads on OnActiveSetChanged. The mechanical data —
-// ordered steps + stat bonuses — is crawled from the set's TBInfo elsewhere;
-// this store owns only the user/seed text layer.
+// The seed is never written. The mechanical data — ordered steps + stat bonuses —
+// is crawled from the active set's TBInfo elsewhere; this store owns only the
+// user/seed text layer.
 //
 // The overlay also holds two user-driven extras: manual quests the crawler
 // never finds (identity in the reserved QuestDefinition.ManualFlagBase flag
@@ -25,29 +27,52 @@ public sealed class QuestStore
 {
     private readonly LogService? _log;
     private readonly string _seedPath;
+    private readonly Func<BbsProfile?>? _activeBbsProvider;
     private readonly Dictionary<(int Flag, int Step), QuestDefinition> _seed = new();
     private readonly Dictionary<(int Flag, int Step), QuestDefinition> _overlay = new();
 
-    // Active set whose overlay is loaded, or null when none.
-    public string? ActiveSet { get; private set; }
+    // Active BBS whose overlay is loaded, or null when none.
+    public string? ActiveBbs { get; private set; }
 
-    // seedPath defaults to AppPaths.DefaultQuestDefsSeedFile; it's parameterized
-    // so tests can point at a scratch seed without touching the shared Global copy.
-    public QuestStore(LogService? log = null, string? seedPath = null)
+    // Raised after the overlay reloads (BBS change / profile close) so consumers
+    // re-resolve their displayed quest text.
+    public event Action? Reloaded;
+
+    // Production ctor: seed from Data/Global; the overlay tracks the active BBS,
+    // reloading on ProfileService.BbsPinApplied / ProfileClosed. profile +
+    // activeBbsProvider are parameterized so tests can drive the store without a
+    // live ProfileService (pass a null provider and call OnActiveBbsChanged
+    // directly). seedPath defaults to AppPaths.DefaultQuestDefsSeedFile so a test
+    // can point at a scratch seed.
+    public QuestStore(ProfileService? profile = null, Func<BbsProfile?>? activeBbsProvider = null,
+                      LogService? log = null, string? seedPath = null)
     {
         _log = log;
+        _activeBbsProvider = activeBbsProvider;
         _seedPath = seedPath ?? AppPaths.DefaultQuestDefsSeedFile;
         LoadInto(_seed, _seedPath, "seed");
+
+        if (profile is not null)
+        {
+            profile.BbsPinApplied += _ => ReloadForActiveBbs();
+            profile.ProfileClosed += ReloadForActiveBbs;
+        }
+        ReloadForActiveBbs();
     }
 
-    // Swap the active set: drop the previous overlay and load {set}/quests.json
-    // (empty when the set has no overlay yet, or when setName is blank).
-    public void OnActiveSetChanged(string? setName)
+    // Reload the overlay for whatever BBS the provider reports as active.
+    private void ReloadForActiveBbs() => OnActiveBbsChanged(_activeBbsProvider?.Invoke()?.Name);
+
+    // Swap the loaded overlay to bbsName's Data/BBS/{bbs}/quests.json (empty when
+    // the BBS has no overlay yet, or bbsName is blank). Public so tests can drive
+    // it directly; production reloads via the BbsPinApplied hook.
+    public void OnActiveBbsChanged(string? bbsName)
     {
         _overlay.Clear();
-        ActiveSet = string.IsNullOrWhiteSpace(setName) ? null : setName;
-        if (ActiveSet is null) return;
-        LoadInto(_overlay, AppPaths.QuestsFile(ActiveSet), "overlay");
+        ActiveBbs = string.IsNullOrWhiteSpace(bbsName) ? null : bbsName;
+        if (ActiveBbs is not null)
+            LoadInto(_overlay, AppPaths.QuestsFileForBbs(ActiveBbs), "overlay");
+        Reloaded?.Invoke();
     }
 
     // Resolve the effective definition for a quest: the user overlay if it names
@@ -61,17 +86,17 @@ public sealed class QuestStore
         return new QuestDefinition(flag, step);
     }
 
-    // Persist the user's edited definitions to the active set's overlay
-    // ({set}/quests.json) and refresh the in-memory layer so later Resolve calls
-    // see the edits immediately. The overlay stays a delta: a definition that
-    // matches what Resolve would return with no overlay (the seed entry, or a
-    // blank auto-draft) is dropped rather than frozen into the file, so a later
-    // seed update still flows through for untouched quests. No-op when no set is
-    // active.
+    // Persist the user's edited definitions to the active BBS overlay
+    // (Data/BBS/{bbs}/quests.json) and refresh the in-memory layer so later
+    // Resolve calls see the edits immediately. The overlay stays a delta: a
+    // definition that matches what Resolve would return with no overlay (the seed
+    // entry, or a blank auto-draft) is dropped rather than frozen into the file,
+    // so a later seed update still flows through for untouched quests. No-op when
+    // no BBS is active.
     public void Save(IEnumerable<QuestDefinition> defs)
     {
         ArgumentNullException.ThrowIfNull(defs);
-        if (ActiveSet is null) return;
+        if (ActiveBbs is null) return;
 
         _overlay.Clear();
         foreach (QuestDefinition raw in defs)
@@ -93,13 +118,13 @@ public sealed class QuestStore
             .ToList();
         try
         {
-            JsonStore.Save(AppPaths.QuestsFile(ActiveSet), list);
+            JsonStore.Save(AppPaths.QuestsFileForBbs(ActiveBbs), list);
         }
         catch (Exception ex)
         {
             // A failed write (permissions, disk) shouldn't crash the editor — the
             // in-memory overlay still reflects the edits for this session.
-            _log?.Warn("Quests", $"Failed to save overlay for '{ActiveSet}': {ex.Message}");
+            _log?.Warn("Quests", $"Failed to save overlay for BBS '{ActiveBbs}': {ex.Message}");
         }
     }
 

@@ -181,8 +181,14 @@ public static class AppPaths
     // number + step. QuestStore resolves it over the universal
     // DefaultQuestDefsSeedFile underlay; the mechanical data (ordered steps +
     // stat bonuses) is crawled from the set's TBInfo at runtime, not stored here.
-    public static string QuestsFile(string setName) =>
-        Path.Combine(GameDataSetDir(setName), "quests.json");
+    // The user's quest-definition overlay, hosted at the BBS tier
+    // (Data/BBS/{bbs}/quests.json). QuestStore resolves it ABOVE the universal
+    // DefaultQuestDefsSeedFile underlay, so a player's edits belong to the board
+    // they're playing, not the imported game-data set. The mechanical data
+    // (ordered steps + stat bonuses) is still crawled from the active set's TBInfo
+    // at runtime, not stored here.
+    public static string QuestsFileForBbs(string bbsName) =>
+        Path.Combine(BbsFolder(bbsName), "quests.json");
 
     // User-writable Messages seed JSON, hosted in the XDG-resolved Data/Global/
     // folder. Shared across every game-data set — the catalogue's message text
@@ -257,11 +263,11 @@ public static class AppPaths
         TryCopySeed(BundledMessagesSeedFile,        DefaultMessagesSeedFile);
         TryCopySeed(BundledMonsterMessagesSeedFile, DefaultMonsterMessagesSeedFile);
         TryCopySeed(BundledTriggersSeedFile,        DefaultTriggersSeedFile);
-        // The quest-defs seed is read-only — user edits live in the per-set overlay
-        // ({set}/quests.json), which resolves ABOVE the seed, so a refreshed seed
-        // never clobbers customization. A first-launch-only copy would freeze
-        // shipped guide updates out of existing installs, so keep it in sync with
-        // the bundled copy instead.
+        // The quest-defs seed is read-only — user edits live in the BBS-tier
+        // overlay (Data/BBS/{bbs}/quests.json), which resolves ABOVE the seed, so a
+        // refreshed seed never clobbers customization. A first-launch-only copy
+        // would freeze shipped guide updates out of existing installs (and reseeds
+        // it if it's ever missing), so keep it in sync with the bundled copy.
         SyncReadOnlySeed(BundledQuestDefsSeedFile,  DefaultQuestDefsSeedFile);
         TryCopySeed(BundledBossDefsSeedFile,        DefaultBossDefsSeedFile);
 

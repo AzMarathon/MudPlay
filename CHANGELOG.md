@@ -8,7 +8,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Forwarded keys run the terminal's real input path (macros, local line editing, command history, escape-sequence mapping), identical to typing directly in the terminal
 - New Settings → General toggle "Keep typing directed at the terminal when other windows are open" (on by default); turn it off for classic focus behaviour
 - End Game Trainer quest defs refreshed: base level 65, "Episode" relabeled "Part", map/room references use a slash (17/2970), rewritten advice for each part, a condensed sphere guide + reworked level gate (paradigm 75+/stock 66+) in Part 5, and per-realm trainer notes on the Part 4 halls
-- Shipped quest-guide updates now reach existing installs: the read-only quest-defs seed re-syncs from the bundled copy on launch (it was frozen at first launch before), so seed edits show up without deleting data files; your per-set overlay edits still take precedence
+- Quest defs now follow the tier model cleanly: the bundled seed builds the read-only Global copy (re-synced on launch, reseeded if missing), and your quest edits are stored at the BBS tier (`Data/BBS/{bbs}/quests.json`) and win over the Global seed — so shipped guide updates reach you without deleting data files, and your edits belong to the board you play (was a per-game-data-set overlay before)
 
 ## 2.38.0
 

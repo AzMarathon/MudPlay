@@ -2283,13 +2283,11 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             RoomGraph.OnActiveSetChanged(GameData.ActiveSet);
 
-        // Quest name / visibility overlay — sibling to the per-set triggers file,
-        // reloaded on every set switch. The mechanical step + bonus data the Quest
+        // Quest name / visibility overlay — a BBS-tier file, reloaded on BBS change
+        // (the store subscribes to Profile.BbsPinApplied / ProfileClosed via the
+        // ResolveActiveBbs provider). The mechanical step + bonus data the Quest
         // Status tab shows is crawled from TBInfo at runtime, not stored here.
-        Quests = new QuestStore(Log);
-        GameData.ActiveSetChanged += Quests.OnActiveSetChanged;
-        if (GameData.ActiveSet is not null)
-            Quests.OnActiveSetChanged(GameData.ActiveSet);
+        Quests = new QuestStore(Profile, ResolveActiveBbs, Log);
 
         // Boss catalog — realm-wide list (seed + per-set overlay); timer values are
         // looked up from game data at runtime. Reloads its overlay on set change.
