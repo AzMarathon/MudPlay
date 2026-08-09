@@ -9,6 +9,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - "Find Best" fills every non-held slot with the best equippable item for a chosen stat (Armour Class, damage, HP, mana, each +stat, resists, …) — find-best one stat, Hold the keepers, find-best another, and fill up
 - The panel projects the trial set's worn-item stats (the same readout as the Equipment Manager) and its encumbrance — exact weight and None/Light/Medium/Heavy — over your current
 - Right-click a result row → "Trial-Equip this Item" drops it into its slot
+- Double-clicking a result now opens that item's record dialog directly instead of jumping to the Game Data Browser
 
 ## 2.36.0
 

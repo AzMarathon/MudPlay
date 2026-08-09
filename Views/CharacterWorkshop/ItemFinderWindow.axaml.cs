@@ -130,13 +130,13 @@ public partial class ItemFinderWindow : Window
                 order[i].DisplayIndex = i;
     }
 
-    // Double-click a result → jump to that item's Game Data record. A double-tap
-    // also selects the row, so SelectedItem is the double-clicked entry. The finder
-    // stays open (modeless) alongside the browser.
+    // Double-click a result → open that item's record (edit dialog) directly. A
+    // double-tap also selects the row, so SelectedItem is the double-clicked entry.
+    // The finder stays open (modeless) alongside the record.
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (ItemsGrid.SelectedItem is ItemFinderEntry entry && entry.Number > 0)
-            AppServices.Current.OpenItemGameData(entry.Number);
+            _ = AppServices.Current.ItemRecord.OpenAsync(entry.Number);
     }
 
     // Take over sorting so numeric stat columns lead with their biggest values.
