@@ -18,6 +18,11 @@ public sealed class AppServices
         ?? throw new InvalidOperationException(
             "AppServices not initialized — call AppServices.Initialize() during app startup.");
 
+    // The active service holder, or null when not yet initialized (e.g. the XAML
+    // previewer attaching a control before app startup). Use where a null result
+    // should be a no-op rather than a throw.
+    public static AppServices? CurrentOrNull => _current;
+
     // Owns Data/Global/global.json — the Global settings tier.
     public SettingsService Settings { get; }
 
@@ -199,6 +204,12 @@ public sealed class AppServices
     // it and read from it for Up / Down recall. App-session lifetime —
     // see CommandHistory.
     public CommandHistory CommandHistory { get; } = new();
+
+    // Routes keyboard input from modeless dialogs back to the terminal, so typing
+    // continues to reach the terminal while another window is focused (unless a
+    // text box owns the keystroke). The TerminalControl registers its input core;
+    // DialogKeyboardFallthrough forwards through it. Enabled gated by a setting.
+    public TerminalInputRouter TerminalInput { get; } = new();
 
     public Game.PartyState PartyState { get; }
 
@@ -6070,6 +6081,7 @@ public sealed class AppServices
             : general.TerminalFontFamily;
         Display.FontSize = general.TerminalFontSize ?? DisplayConfig.DefaultFontSize;
         Display.ScaleToWindow = general.ScaleTerminalToWindow;
+        TerminalInput.Enabled = general.TypeToTerminalFromOtherWindows;
 
         // Game-menu commands are BBS-tier too — HangupHandler consumes
         // ExitCommand synchronously on @hangup; MainMenuEntryAutomation +
