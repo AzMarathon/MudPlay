@@ -510,26 +510,12 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- ===== Natural tick (no spell) ===== -->
-                        <Border Classes="SubBox">
-                            <StackPanel Spacing="10">
-                                <TextBlock Classes="Section" Text="Natural tick (every 30s)"/>
-                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Level + stat" Margin="0,2,16,2"/>
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaBaseTickText}" Margin="0,2"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="+ gear ManaRgn%" Margin="0,2,16,2"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaGearTickText}"
-                                               Foreground="{StaticResource AccentAmberBrush}" Margin="0,2"/>
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-
                         <!-- ===== Tick vs level chart (breakpoints = step-ups) ===== -->
                         <Border Classes="SubBox">
                             <StackPanel Spacing="8">
                                 <TextBlock Classes="Section" Text="Tick vs level"/>
                                 <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
-                                           Text="Natural tick (with gear) across your level −1 to +5, one line per magery-stat value in +5 steps (INT for a mage, WIL for a priest, the (INT+WIL)/2 average for a druid) — a step up is a breakpoint. Lines stop at the highest that stat can be trained. The dashed line marks your level."/>
+                                           Text="Natural tick (with gear) across your level −1 to +3, one line per magery-stat value in +5 steps (INT for a mage, WIL for a priest, the (INT+WIL)/2 average for a druid) — a step up is a breakpoint. Lines stop at the highest that stat can be trained. The circle marks where you are now."/>
                                 <controls:ManaRegenChart Data="{Binding ManaChart}" Height="240" HorizontalAlignment="Stretch"/>
 
                                 <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,4"/>
@@ -544,6 +530,18 @@
                                     <TextBlock Grid.Row="2" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaNextByLevelText}"/>
                                     <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Next tick via ManaRgn%"/>
                                     <TextBlock Grid.Row="3" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaNextByRegenText}"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,4"/>
+
+                                <!-- Natural tick (no spell) — consolidated under the graph. -->
+                                <TextBlock Classes="Section" Text="Natural tick (every 30s)"/>
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Level + stat" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaBaseTickText}" Margin="0,2"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="+ gear ManaRgn%" Margin="0,2,16,2"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaGearTickText}"
+                                               Foreground="{StaticResource AccentAmberBrush}" Margin="0,2"/>
                                 </Grid>
                             </StackPanel>
                         </Border>

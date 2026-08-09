@@ -523,13 +523,17 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         // Auto-resolve THE roll spell for this magery by its cast short — mana flux
         // (mage), profane link (priest), nature tap (druid) — so a same-magery
         // lookalike that also carries a 145 roll (Paradigm's ethereal taint, or the
-        // priests' serenity / pilgrimage / dark flagellation) can't stand in. Fall
-        // back to the first same-magery roll spell only when the short is absent.
-        // KnownSpell is a struct, so project to KnownSpell? for a real null on no match.
+        // priests' serenity / pilgrimage / dark flagellation) can't stand in. The
+        // short match is SCOPED to the class magery: an item-granted regen spell can
+        // share the short at Magery 0 (Paradigm's "bone necklace" is Short=flux), and
+        // those sort ahead of the real class spell. Fall back to the first same-magery
+        // roll spell only when the short is absent. KnownSpell is a struct, so project
+        // to KnownSpell? for a real null on no match.
         KnownSpell? FirstRoll(Func<KnownSpell, bool> match) =>
             _rollSpells.Where(match).Select(s => (KnownSpell?)s).FirstOrDefault();
         KnownSpell? spell =
-            FirstRoll(s => string.Equals(s.Short.Trim(), rollShort, StringComparison.OrdinalIgnoreCase))
+            FirstRoll(s => s.Magery == inputs.MageryType
+                        && string.Equals(s.Short.Trim(), rollShort, StringComparison.OrdinalIgnoreCase))
             ?? FirstRoll(s => s.Magery == inputs.MageryType);
         ManaHasRollSpell = spell is not null;
         ManaBreakpoints.Clear();
@@ -591,7 +595,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         }
     }
 
-    // Natural tick (no spell) vs level over the [level−1, level+5] window, one
+    // Natural tick (no spell) vs level over the [level−1, level+3] window, one
     // series per magery-regen-stat value from the current up in +5 steps — so the
     // breakpoint step-ups across levels AND the gain from allocating stat points
     // are both visible. The stepped stat is the one that actually drives regen (via
@@ -601,7 +605,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private void BuildManaChart(ManaRegenBreakpointCalculator.Inputs inputs)
     {
         int lo = Math.Max(1, ManaLevel - 1);
-        int hi = Math.Max(lo, ManaLevel + 5);
+        int hi = Math.Max(lo, ManaLevel + 3);
 
         string label = MageryStatKind(inputs.MageryType).Label;
         int floor = MageryStatFloor(inputs.MageryType);
