@@ -724,6 +724,18 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   - the character is **teleported to the graveyard room** appropriate to the **map** they died on.
 - Graveyard rooms are **per-map**; two known graveyards are **`1/2189`** (map 1, room 2189) and
   **`16/542`** (map 16, room 542).
+
+**Death fully clears all effects** *([CONFIRMED] 2026-08-09, user)*
+- Death **wipes every ailment, status effect, buff, and debuff** off the character — poison, disease,
+  blindness, confusion, held/knockdown, and every positive buff alike. This holds on **both stock and
+  Paradigm** (realm-independent); the character respawns at the graveyard with a clean effect slate.
+- **Client implication:** `ConditionTracker` is an observation log driven by the server's applied /
+  wear-off lines, and death teleports you out **without emitting those wear-off lines** — so a
+  condition latched at the moment of death (most dangerously *MovementPrevented*, whose stale flag
+  keeps `MovementCoordinator.HeldGate` asserted and strands the walker "Paused by: Held") never
+  auto-clears. Because the game clears *everything* on death, the client mirrors it with a full
+  `ConditionTracker.ClearAll("death")` on `RoomTracker.PlayerDeathObserved` — no per-flag scoping —
+  matching the mechanic exactly (report `paradigm-20260809-114444`, fixed v2.39.1).
 - **[CONFIRMED]** (2026-08-03, user + captures) **The deathpile is a `corpse` object, recovered with
   one `recover corpse <given-name>` command — NOT a per-item `get`.** (This corrects an earlier note
   that said stock drops items loose to the ground; it does not.)
