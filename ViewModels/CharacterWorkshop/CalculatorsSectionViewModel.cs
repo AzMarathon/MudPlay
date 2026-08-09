@@ -317,7 +317,10 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     [ObservableProperty] private string _manaWorstTickText = "—";
     [ObservableProperty] private string _manaBestTickText = "—";
     [ObservableProperty] private string _manaRerollAdviceText = "";
-    public ObservableCollection<ManaBreakpointRow> ManaBreakpoints { get; } = new();
+    // Roll breakpoints as a compact tick-vs-roll step graph (replaces the old table);
+    // ManaHasBreakpoints gates its visibility (false when no step is reachable).
+    [ObservableProperty] private ManaBreakpointStripData? _manaBreakpointStrip;
+    [ObservableProperty] private bool _manaHasBreakpoints;
 
     // "Model a roll" slider: bounds are the spell's min / max roll at the current
     // level; sliding picks a roll value and the readout shows what it is, its
@@ -536,7 +539,8 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
                         && string.Equals(s.Short.Trim(), rollShort, StringComparison.OrdinalIgnoreCase))
             ?? FirstRoll(s => s.Magery == inputs.MageryType);
         ManaHasRollSpell = spell is not null;
-        ManaBreakpoints.Clear();
+        ManaBreakpointStrip = null;
+        ManaHasBreakpoints = false;
 
         if (spell is not { } roll)
         {
@@ -572,13 +576,10 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         else
             UpdateManaSampleReadout();
 
-        foreach (ManaRegenBreakpointCalculator.Breakpoint b in r.Breakpoints)
-            ManaBreakpoints.Add(new ManaBreakpointRow(
-                Tick: $"{b.Tick} MP",
-                Cost: $"+{b.RegenPercentNeeded}% ManaRgn",
-                Roll: $"roll ≥ {b.RollValueNeeded}",
-                RangePct: $"{b.RollFractionOfRange * 100:0}% of range",
-                IsRecommended: r.RecommendedRollThreshold == b.RollValueNeeded));
+        ManaHasBreakpoints = r.Breakpoints.Count > 0;
+        ManaBreakpointStrip = new ManaBreakpointStripData(
+            r.RollMin, r.RollMax, r.WorstTick, r.BestTick, r.RecommendedRollThreshold,
+            r.Breakpoints.Select(b => new ManaBreakpointMark(b.RollValueNeeded, b.Tick)).ToList());
 
         if (r.Breakpoints.Count == 0)
         {

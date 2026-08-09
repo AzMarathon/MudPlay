@@ -577,25 +577,12 @@
                                 <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,2"/>
 
                                 <TextBlock Classes="Section" Text="Breakpoints reachable by the roll"/>
-                                <Grid ColumnDefinitions="70,140,90,Auto" Margin="0,2,0,0">
-                                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Tick"/>
-                                    <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Needs"/>
-                                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Range"/>
-                                </Grid>
-                                <ItemsControl ItemsSource="{Binding ManaBreakpoints}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:ManaBreakpointRow">
-                                            <Grid ColumnDefinitions="70,140,90,Auto" Margin="0,1">
-                                                <TextBlock Grid.Column="0" Classes="FieldValue" Text="{Binding Tick}"/>
-                                                <TextBlock Grid.Column="1" Classes="FieldValue" Text="{Binding Roll}"/>
-                                                <TextBlock Grid.Column="2" Classes="FieldValue" Text="{Binding RangePct}"/>
-                                                <TextBlock Grid.Column="3" Classes="FieldValue" Text="◄ target"
-                                                           Foreground="{StaticResource AccentAmberBrush}"
-                                                           IsVisible="{Binding IsRecommended}" Margin="6,0,0,0"/>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                           Text="Mana tick vs roll — each step up is a breakpoint; the amber line is the roll to reroll for."
+                                           IsVisible="{Binding ManaHasBreakpoints}"/>
+                                <controls:ManaBreakpointStrip Data="{Binding ManaBreakpointStrip}" Height="130"
+                                                              HorizontalAlignment="Stretch"
+                                                              IsVisible="{Binding ManaHasBreakpoints}"/>
 
                                 <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
                                            Foreground="{StaticResource AccentAmberBrush}"
