@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 2.36.0
+
+- Main window title now shows the running version — `FujinTerm v<x.y.z> — <profile> — <BBS>`
+- New Mana Regen calculator (Calculators tab): plan level / stat / gear against mana-regen tick breakpoints for a mage, priest or druid — a natural-tick readout, a tick-vs-level breakpoint chart (capped at each stat's racial trained max), and a roll-spell slider that shows the tick any roll lands so you can find the breakpoints; the class dropdown is limited to those three archetypes, the driving stat follows the class (mage INT, priest WIL, druid INT/WIL average), and priests pick between their two roll spells (serenity / profane link)
+- Loops no longer freeze forever when combat interrupts a move mid-step: a stall watchdog now detects the never-confirmed move and re-establishes position (Paradigm `rm` resync / stock footprint backtrack) so the loop resumes instead of standing still
+- Item-cast buff swap now handles an off-hand buff item (e.g. engraved warhorn) correctly — it restores the off-hand shield instead of the weapon, and when the buff item was left equipped from a prior session it puts the right gear back from your equipment set instead of stranding it
+- bug reports addressed: paradigm-20260807-133143, paradigm-20260808-161554, paradigm-20260808-161643
+
 ## 2.35.3
 
 - Map "Spells: by name" filter no longer tints a spell room near-grey — the palette dropped its neutral swatch, so spell rooms stay visible against normal rooms (was invisible in the icy mountains)

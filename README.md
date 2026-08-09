@@ -1,12 +1,11 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.35.3**
-> - Map "Spells: by name" filter no longer tints a spell room near-grey — the palette dropped its neutral swatch, so spell rooms stay visible against normal rooms (was invisible in the icy mountains)
-> - Program Log now defaults Debug + Combat diagnostics ON, so a fresh character's bug report already carries the decision trail (on-disk log collection and hop-timing stay off)
-> - Fixed a crash on killing a boss (e.g. the mad wizard) when two client instances share one data folder: the boss-timer write no longer races on a shared temp file
-> - Atomic JSON saves now use a unique temp file per write and ride out a concurrent replace, so two instances persisting the same realm-wide file can't collide
-> - Boss-timer persistence failures are now logged instead of crashing the client mid-combat
+> **Version 2.36.0**
+> - Main window title now shows the running version — `FujinTerm v<x.y.z> — <profile> — <BBS>`
+> - New Mana Regen calculator (Calculators tab): plan level / stat / gear against mana-regen tick breakpoints for a mage, priest or druid — a natural-tick readout, a tick-vs-level breakpoint chart (capped at each stat's racial trained max), and a roll-spell slider that shows the tick any roll lands so you can find the breakpoints; the class dropdown is limited to those three archetypes, the driving stat follows the class (mage INT, priest WIL, druid INT/WIL average), and priests pick between their two roll spells (serenity / profane link)
+> - Loops no longer freeze forever when combat interrupts a move mid-step: a stall watchdog now detects the never-confirmed move and re-establishes position (Paradigm `rm` resync / stock footprint backtrack) so the loop resumes instead of standing still
+> - Item-cast buff swap now handles an off-hand buff item (e.g. engraved warhorn) correctly — it restores the off-hand shield instead of the weapon, and when the buff item was left equipped from a prior session it puts the right gear back from your equipment set instead of stranding it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

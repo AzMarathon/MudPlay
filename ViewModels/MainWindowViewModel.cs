@@ -188,17 +188,17 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Window title — "FujinTerm — {profile} — {bbs}". When no profile is
-    // loaded the placeholder {default} stands in; when no BBS is selected
-    // {No BBS} stands in. Both slots always render so the title bar shape
-    // stays consistent.
+    // Window title — "FujinTerm v{version} — {profile} — {bbs}". The version is
+    // the running build's AppInfo.Version. When no profile is loaded the
+    // placeholder {default} stands in; when no BBS is selected {No BBS} stands
+    // in. Both slots always render so the title bar shape stays consistent.
     public string WindowTitle
     {
         get
         {
             string profile = AppServices.Current.Profile.CurrentProfileName ?? "{default}";
             string bbs     = ActiveBbsName ?? "{No BBS}";
-            return $"FujinTerm — {profile} — {bbs}";
+            return $"FujinTerm v{AppInfo.Version} — {profile} — {bbs}";
         }
     }
 

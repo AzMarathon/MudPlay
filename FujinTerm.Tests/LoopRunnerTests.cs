@@ -46,6 +46,11 @@ public sealed class LoopRunnerTests : IDisposable
         public required RoomTracker Tracker { get; init; }
         public required MovementCoordinator Coordinator { get; init; }
         public required LoopRunner Runner { get; init; }
+        // Present only when NewHarness(wireRecovery: true). ResyncReasons records
+        // every reason NoteSuspectedMismatch handed to the (stubbed) Paradigm
+        // resync hook, so a test can assert the stall watchdog escalated.
+        public EngineRecoveryGate? Gate { get; init; }
+        public List<string> ResyncReasons { get; init; } = new();
         public List<byte[]> Sent { get; } = new();
         public List<LoopEvent> Events { get; } = new();
         // Resume-dispatch queue when the harness is built in deferred mode
@@ -67,7 +72,8 @@ public sealed class LoopRunnerTests : IDisposable
     // long-standing tests observe the immediate send they always did. Pass true
     // to capture them in Harness.Posted for manual Drain() — needed to interleave
     // a same-burst gate assert between a resume and its deferred send.
-    private Harness NewHarness(string json = GraphJson, bool deferResume = false)
+    private Harness NewHarness(string json = GraphJson, bool deferResume = false,
+        bool wireRecovery = false)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
@@ -82,11 +88,23 @@ public sealed class LoopRunnerTests : IDisposable
         // runner can't push the first step.
         BfsMapper bfs = new(graph);
         List<Action> posted = new();
-        LoopRunner runner = new(tracker, coord, graph: graph, bfs: bfs,
+        // When requested, wire a real recovery gate with a stubbed resync hook so a
+        // test can observe the stall watchdog escalating through NoteSuspectedMismatch.
+        // Returning true mimics the Paradigm rm-resync fast-path (the gate pauses the
+        // engine awaiting the authoritative reply).
+        List<string> resyncReasons = new();
+        EngineRecoveryGate? gate = null;
+        if (wireRecovery)
+        {
+            gate = new EngineRecoveryGate(graph, tracker);
+            gate.TryResync = reason => { resyncReasons.Add(reason); return true; };
+        }
+        LoopRunner runner = new(tracker, coord, graph: graph, recovery: gate, bfs: bfs,
             postToUi: deferResume ? posted.Add : a => a());
         Harness h = new()
         {
             Tracker = tracker, Coordinator = coord, Runner = runner, Posted = posted,
+            Gate = gate, ResyncReasons = resyncReasons,
         };
         runner.SetWireSender(b => h.Sent.Add(b));
         runner.Event += e => h.Events.Add(e);
@@ -437,6 +455,53 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.StepCompleted);
+    }
+
+    [Fact]
+    public void InFlightStall_ConfirmationNeverArrives_WatchdogEscalatesToRecovery()
+    {
+        // Regression (report paradigm-20260807-133143): a loop move went Pending,
+        // a combat gate paused the loop before it confirmed, and after the kill the
+        // move's confirmation never arrived (the interrupting combat swallowed it; in
+        // a same-named-room zone no Confirmed transition ever fired). The resume path
+        // correctly kept the step in flight "not re-sending" — but then the loop hung
+        // for 5½ minutes with nothing to break the wait. The stall watchdog now
+        // escalates to the recovery gate, which re-establishes position and reroutes.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+
+        // Combat interrupts the in-flight move, then clears — no room ever observed,
+        // so the tracker stays Pending on the move that will never confirm.
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Single(h.Sent);   // not re-sent
+
+        // The wait window elapses with the move still wedged Pending → escalate.
+        h.Runner.FireStallWatchdogForTests();
+
+        Assert.Single(h.ResyncReasons);
+        Assert.Contains("in-flight stall", h.ResyncReasons[0]);
+    }
+
+    [Fact]
+    public void InFlightStall_Watchdog_NoOpAfterLoopStopped()
+    {
+        // The watchdog must not escalate once the loop is no longer running — a
+        // late timer tick after a Stop is a no-op, not a spurious recovery.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.Stop();
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        h.Runner.FireStallWatchdogForTests();
+
+        Assert.Empty(h.ResyncReasons);
     }
 
     [Fact]

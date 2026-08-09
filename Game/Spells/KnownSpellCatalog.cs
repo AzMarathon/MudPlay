@@ -120,6 +120,32 @@ public sealed class KnownSpellCatalog
         return results;
     }
 
+    // Every code-145 mana-regen ROLL spell in the active set (nature tap / mana
+    // flux) — a 145 slot whose stored value is 0, so its magnitude is rolled from
+    // the level-scaled Min/Max range each cast. Not class- or level-gated: the
+    // mana-regen planner lists them by their own Magery so a player can model the
+    // roll for a build they don't hold yet. Sorted by Magery then Name.
+    public IReadOnlyList<KnownSpell> RollSpells()
+    {
+        List<KnownSpell> results = new();
+        JsonDocument? doc = _cache.GetRawTable("Spells");
+        if (doc is null) return results;
+
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            KnownSpell spell = ToKnownSpell(row);
+            if (RegenSpellClassifier.Has(spell.Formula, RegenSpellTraits.ManaRegenRoll))
+                results.Add(spell);
+        }
+
+        results.Sort(static (a, b) =>
+        {
+            int byMagery = a.Magery.CompareTo(b.Magery);
+            return byMagery != 0 ? byMagery : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+        });
+        return results;
+    }
+
     // Look up a single learnable spell by its Short cast-code for the given
     // class. Returns null when no usable spell matches. level 0 ignores the
     // level gate.
@@ -433,15 +459,22 @@ public sealed class KnownSpellCatalog
     }
 
     // The equip slot the cast item occupies, normalized to the inventory's
-    // EquippedItem.Slot labels so the sequencer can look up what it displaces: a
-    // weapon readies into the Weapon Hand; everything else into its Worn slot
-    // (Off-Hand for a shield / warhorn, Neck for an amulet, …). Empty only for an
-    // item that isn't a weapon and has no mapped Worn slot — the equippable filter
-    // above already excludes those, so in practice this always resolves.
-    private static string WearSlotFor(JsonElement row)
+    // EquippedItem.Slot labels so the sequencer can look up what it displaces:
+    // Off-Hand for a shield / warhorn, Neck for an amulet, the Weapon Hand for a
+    // weapon. Prefer the real Worn slot — an item can be flagged a non-weapon
+    // ItemType yet worn in a body slot (an engraved warhorn is ItemType=Armour,
+    // Worn=Off-Hand), and `eq` drops it into that Worn slot; only a true weapon
+    // (Worn 0/Nowhere) rides the weapon hand. Read Worn as an INT — it's a numeric
+    // JSON field, so the string reader hands back null and the slot came back empty
+    // (the bug that mislabeled the warhorn "Weapon Hand"). Empty only when neither
+    // a mapped Worn slot nor a weapon, which the equippable filter already excludes.
+    internal static string WearSlotFor(JsonElement row)
     {
+        int worn = ReadInt(row, "Worn");
+        if (worn is >= FirstWornSlot and <= LastWornSlot)
+            return LookupEnums.FormatWornSlot(worn) ?? WeaponHandSlotLabel;
         if (ReadInt(row, "ItemType") == WeaponItemType) return WeaponHandSlotLabel;
-        return LookupEnums.FormatWornSlot(ReadString(row, "Worn")) ?? string.Empty;
+        return string.Empty;
     }
 
     // One-pass Spells.Number → (Name, ManaCost) map for resolving cast-item

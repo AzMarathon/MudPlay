@@ -14,6 +14,7 @@ using FujinTerm.Game.Calculators;
 using FujinTerm.Game.Inventory;
 using FujinTerm.Game.Leaderboard;
 using FujinTerm.Game.Quests;
+using FujinTerm.Game.Spells;
 using FujinTerm.Models.Profile;
 using FujinTerm.Services;
 using FujinTerm.Views.CharacterWorkshop;
@@ -210,7 +211,19 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // Offense inputs captured on refresh so the weapon picker can re-derive
     // damage / swings / crit without re-running the full stat aggregation.
     private int _str, _agi, _level, _nCombatLevel, _encumCur, _encumMax;
-    private int _intel, _chm;
+    private int _intel, _chm, _wil;
+
+    // Mana-regen calculator: gear/quest +ManaRgn% and the live class's magery,
+    // captured on refresh so the calculator can seed itself only when the loaded
+    // character is a caster (mage / druid).
+    private int _manaGearRegenPct, _liveMageryType, _liveMageryLevel;
+    // Lazily scanned once per set for the roll-spell picker; the sublist matching
+    // the currently-selected magery drives ManaRollSpellNames.
+    private readonly KnownSpellCatalog _spellCatalog;
+    private IReadOnlyList<KnownSpell> _rollSpells = Array.Empty<KnownSpell>();
+    // Suspends RecomputeManaRegen while a multi-input seed / rebuild is in flight,
+    // so the outputs recompute once at the end rather than per property.
+    private bool _suspendManaRecompute;
     private int _plusMaxDamage, _plusCrits;
     private int _equipWeaponMin, _equipWeaponMax, _equipWeaponSpeed, _equipWeaponStrReq;
 
@@ -259,6 +272,446 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private bool _monsterIsEvil;
     private bool _monsterIsGood;
 
+    // ----- Mana-regen breakpoint calculator --------------------------------
+
+    // The pure caster archetypes — Mage, Priest, Druid — as they're named in the
+    // active set. Mana regen splits cleanly by magery type (Mage → INT + mana flux,
+    // Priest → WIL + profane link, Druid → (INT+WIL)/2 + nature tap), so the hybrid
+    // caster classes (Gypsy / Warlock / Ranger) are deliberately left off; the
+    // selected class carries its MageryType + MageryLVL from game data.
+    public ObservableCollection<string> ManaClassOptions { get; } = new();
+    [ObservableProperty] private string? _selectedManaClass;
+    // Which magery stat drives this class's regen — gates the INT / WIL pickers so
+    // only the stat(s) that matter are shown (Mage → INT, Priest → WIL, Druid → both).
+    [ObservableProperty] private bool _manaUsesInt = true;
+    [ObservableProperty] private bool _manaUsesWil;
+
+    // The archetype class names the dropdown is limited to (matched case-insensitively).
+    private static readonly string[] ManaArchetypeClasses = { "Mage", "Priest", "Druid" };
+
+    // When the selected class has more than one mana-regen roll spell (priests get
+    // serenity + profane link), the player picks which to model; single-spell classes
+    // (mage / druid) hide the picker and just show the one spell's name.
+    public ObservableCollection<string> ManaRollSpellOptions { get; } = new();
+    [ObservableProperty] private string? _selectedManaRollSpell;
+    [ObservableProperty] private bool _manaHasSpellChoice;
+
+    // Every input is editable so the calculator doubles as a planner for stat
+    // allocations / level-ups / gear upgrades; it seeds from the live character
+    // only when it's a mage or druid (SeedManaFromActuals).
+    [ObservableProperty] private int _manaLevel = 1;
+    [ObservableProperty] private int _manaIntellect = 1;
+    [ObservableProperty] private int _manaWillpower = 1;
+    [ObservableProperty] private int _manaGearRegenPercent;
+
+    // Racial floors for the INT / WIL pickers — the lowest base value any race can
+    // start with (min mINT / mWIL across the Races table), so a picker opens at a
+    // real minimum instead of 1.
+    [ObservableProperty] private int _manaIntMinimum = 1;
+    [ObservableProperty] private int _manaWilMinimum = 1;
+
+    // Racial trained caps (max xINT / xWIL across races) — the chart never draws a
+    // magery-stat line above these. Default high (effectively uncapped) until scanned.
+    private int _maxRacialInt = 300;
+    private int _maxRacialWil = 300;
+
+    // Outputs.
+    [ObservableProperty] private string _manaBaseTickText = "—";
+    [ObservableProperty] private string _manaGearTickText = "—";
+    [ObservableProperty] private bool _manaHasRollSpell;
+    [ObservableProperty] private string _manaRollSpellText = "—";
+    [ObservableProperty] private string _manaRollRangeText = "—";
+    [ObservableProperty] private string _manaWorstTickText = "—";
+    [ObservableProperty] private string _manaBestTickText = "—";
+
+    // "Model a roll" slider: bounds are the spell's min / max roll at the current
+    // level; sliding picks a roll value and the readout shows what it is, its
+    // position in the range (the 0-100% the player asked for), and the tick it
+    // yields — so an observed roll can be lined up against the breakpoints.
+    [ObservableProperty] private int _manaRollMin;
+    [ObservableProperty] private int _manaRollMax;
+    [ObservableProperty] private double _manaRollSample;
+    [ObservableProperty] private string _manaSampleReadoutText = "—";
+
+    // Natural-tick-vs-level chart (X = level −1..+5, one line per INT value) so the
+    // breakpoint step-ups are visible while planning level-ups / stat points.
+    [ObservableProperty] private ManaRegenChartData? _manaChart;
+
+    // "You are here" + how far the next tick is by stat / level / +ManaRgn%.
+    [ObservableProperty] private string _manaCurrentTickText = "—";
+    [ObservableProperty] private string _manaNextByStatText = "—";
+    [ObservableProperty] private string _manaNextByLevelText = "—";
+    [ObservableProperty] private string _manaNextByRegenText = "—";
+
+    // Distinct line colours (ARGB), reused from the map spell palette's saturated
+    // hues so the series read apart on the panel.
+    private static readonly uint[] ChartPalette =
+        { 0xFFE6194B, 0xFF3CB44B, 0xFF4363D8, 0xFFF58231, 0xFF911EB4 };
+
+    partial void OnManaRollSampleChanged(double value) => UpdateManaSampleReadout();
+
+    partial void OnSelectedManaClassChanged(string? value)
+    {
+        RebuildManaRollSpellOptions();
+        RecomputeManaRegen();
+    }
+    partial void OnSelectedManaRollSpellChanged(string? value) => RecomputeManaRegen();
+    partial void OnManaLevelChanged(int value) => RecomputeManaRegen();
+    partial void OnManaIntellectChanged(int value) => RecomputeManaRegen();
+    partial void OnManaWillpowerChanged(int value) => RecomputeManaRegen();
+    partial void OnManaGearRegenPercentChanged(int value) => RecomputeManaRegen();
+
+    // Populate the roll-spell picker for the selected class's magery: the roll spells
+    // whose short is in the curated set (serenity / profane link for a priest, one
+    // each for mage / druid). The picker only shows when there's a real choice; the
+    // selection is kept across recomputes and defaults to the first when invalidated.
+    private void RebuildManaRollSpellOptions()
+    {
+        (int mageryType, _) = ResolveManaMagery();
+        string[] shorts = RegenShortsFor(mageryType);
+        var names = _rollSpells
+            .Where(s => s.Magery == mageryType
+                     && shorts.Contains(s.Short.Trim(), StringComparer.OrdinalIgnoreCase))
+            .Select(s => s.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!ManaRollSpellOptions.SequenceEqual(names))
+        {
+            ManaRollSpellOptions.Clear();
+            foreach (string n in names) ManaRollSpellOptions.Add(n);
+        }
+        ManaHasSpellChoice = names.Count > 1;
+
+        if (SelectedManaRollSpell is null
+            || !names.Contains(SelectedManaRollSpell, StringComparer.OrdinalIgnoreCase))
+        {
+            bool prev = _suspendManaRecompute;
+            _suspendManaRecompute = true;   // don't recompute mid-rebuild; the caller does
+            try { SelectedManaRollSpell = names.FirstOrDefault(); }
+            finally { _suspendManaRecompute = prev; }
+        }
+    }
+
+    // MageryType (1 mage / 2 priest / 3 druid) and tier for the selected class.
+    private (int Type, int Level) ResolveManaMagery()
+    {
+        if (SelectedManaClass is { } cls && _gameData.FindRowByName("Classes", cls) is JsonElement row)
+            return (GetInt(row, "MageryType"), GetInt(row, "MageryLVL"));
+        return (1, 0);
+    }
+
+    // The stat that drives a magery type's regen (matching CalcManaRegen): its
+    // display label and which of INT / WIL feed it. 1=Mage(INT), 2=Priest(WIL),
+    // 3=Druid((INT+WIL)/2, both).
+    private static (string Label, bool UsesInt, bool UsesWil) MageryStatKind(int mageryType) => mageryType switch
+    {
+        2 => ("WIL", false, true),   // Priest — willpower
+        3 => ("avg", true, true),    // Druid — (INT+WIL)/2
+        _ => ("INT", true, false),   // Mage — intellect
+    };
+
+    // The mana-regen roll spells each magery actually rerolls for, by cast short — a
+    // curated set, because a magery can carry incidental 145-roll spells the class
+    // doesn't use for regen (mage's ethereal taint). Priests have TWO (serenity /
+    // profane link, good vs evil), so the class exposes a picker; mage and druid one.
+    private static string[] RegenShortsFor(int mageryType) => mageryType switch
+    {
+        2 => new[] { "nity", "prfl" },   // Priest — serenity, profane link
+        3 => new[] { "ntap" },           // Druid — nature tap
+        _ => new[] { "flux" },           // Mage — mana flux
+    };
+
+    // The magery stat's value from the current INT / WIL for this type.
+    private static int MageryStatValue(int mageryType, int intel, int wil) => mageryType switch
+    {
+        2 => wil,
+        3 => (intel + wil) / 2,
+        _ => intel,
+    };
+
+    // Inputs with the magery stat forced to statValue — feeds the chart's per-stat
+    // series and the "next tick via stat" search without disturbing the other stat.
+    private static ManaRegenBreakpointCalculator.Inputs WithMageryStat(
+        ManaRegenBreakpointCalculator.Inputs i, int statValue) => i.MageryType switch
+    {
+        2 => i with { Willpower = statValue },
+        3 => i with { Intellect = statValue, Willpower = statValue },
+        _ => i with { Intellect = statValue },
+    };
+
+    // Racial floor / cap for a magery type's driving stat, so the chart seeds at a
+    // real minimum and never draws a line above what any race could train to.
+    private int MageryStatFloor(int mageryType) => mageryType switch
+    {
+        2 => ManaWilMinimum,
+        3 => (ManaIntMinimum + ManaWilMinimum) / 2,
+        _ => ManaIntMinimum,
+    };
+    private int MageryStatCap(int mageryType) => mageryType switch
+    {
+        2 => _maxRacialWil,
+        3 => (_maxRacialInt + _maxRacialWil) / 2,
+        _ => _maxRacialInt,
+    };
+
+    // Seed from the live character only when it's a caster this tool models (mage
+    // type 1, druid type 3): select that class and adopt its level / stats / gear.
+    // A non-caster falls back to the first caster class and the racial stat floors
+    // so the tool still opens as a from-scratch planner. Batched under the suspend
+    // guard so the assignments recompute once.
+    private void SeedManaFromActuals()
+    {
+        _suspendManaRecompute = true;
+        try
+        {
+            _rollSpells = _spellCatalog.RollSpells();
+            ComputeStatFloors();
+            RebuildManaClassOptions();
+
+            if (_liveMageryType is 1 or 2 or 3 && !string.IsNullOrEmpty(_stats.Class)
+                && ManaClassOptions.Contains(_stats.Class))
+            {
+                SelectedManaClass = _stats.Class;
+                ManaLevel = _level;
+                ManaIntellect = _intel;
+                ManaWillpower = _wil;
+                ManaGearRegenPercent = _manaGearRegenPct;
+            }
+            else
+            {
+                // Not one of the archetype classes (a hybrid caster or a non-caster):
+                // open on the archetype matching the live magery type, else the first.
+                string want = _liveMageryType switch { 2 => "Priest", 3 => "Druid", _ => "Mage" };
+                SelectedManaClass = ManaClassOptions.FirstOrDefault(c => c.Equals(want, StringComparison.OrdinalIgnoreCase))
+                    ?? ManaClassOptions.FirstOrDefault();
+                ManaLevel = Math.Max(1, ManaLevel);
+                ManaIntellect = ManaIntMinimum;
+                ManaWillpower = ManaWilMinimum;
+                ManaGearRegenPercent = 0;
+            }
+        }
+        finally
+        {
+            _suspendManaRecompute = false;
+        }
+        RebuildManaRollSpellOptions();   // ensure the picker matches the seeded class
+        RecomputeManaRegen();
+    }
+
+    // Racial INT / WIL bounds across all races: the min base (mINT / mWIL) is the
+    // floor the pickers seed and clamp to; the max trained cap (xINT / xWIL) bounds
+    // the chart so it never draws a magery-stat line above what a race could reach.
+    // Falls back to sane values when the set has no Races table.
+    private void ComputeStatFloors()
+    {
+        int minInt = int.MaxValue, minWil = int.MaxValue, maxInt = 0, maxWil = 0;
+        if (_gameData.GetRawTable("Races") is { } doc)
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                minInt = Math.Min(minInt, GetInt(row, "mINT"));
+                minWil = Math.Min(minWil, GetInt(row, "mWIL"));
+                maxInt = Math.Max(maxInt, GetInt(row, "xINT"));
+                maxWil = Math.Max(maxWil, GetInt(row, "xWIL"));
+            }
+        ManaIntMinimum = minInt is int.MaxValue or <= 0 ? 1 : minInt;
+        ManaWilMinimum = minWil is int.MaxValue or <= 0 ? 1 : minWil;
+        _maxRacialInt = maxInt > 0 ? maxInt : 300;
+        _maxRacialWil = maxWil > 0 ? maxWil : 300;
+    }
+
+    // The active set's pure caster archetypes (Mage / Priest / Druid by name), sorted.
+    // Restricted to those three class names on purpose — the hybrid casters that
+    // share their magery types (Gypsy / Warlock / Ranger) are left off.
+    private void RebuildManaClassOptions()
+    {
+        var names = new List<string>();
+        if (_gameData.GetRawTable("Classes") is { } doc)
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                if (GetInt(row, "MageryType") is not (1 or 2 or 3)) continue;
+                if (row.TryGetProperty("Name", out JsonElement nameEl)
+                    && nameEl.GetString() is { Length: > 0 } n
+                    && ManaArchetypeClasses.Contains(n, StringComparer.OrdinalIgnoreCase))
+                    names.Add(n);
+            }
+        names.Sort(StringComparer.OrdinalIgnoreCase);
+        if (ManaClassOptions.SequenceEqual(names)) return;
+
+        string? keep = SelectedManaClass;
+        ManaClassOptions.Clear();
+        foreach (string n in names) ManaClassOptions.Add(n);
+        if (keep is not null && names.Contains(keep, StringComparer.OrdinalIgnoreCase))
+            SelectedManaClass = keep;
+    }
+
+    // Resolve the current inputs from the editable fields + the selected class's
+    // magery (shared by the full recompute and the slider readout).
+    private ManaRegenBreakpointCalculator.Inputs BuildManaInputs()
+    {
+        (int mageryType, int mageryLevel) = ResolveManaMagery();
+        return new ManaRegenBreakpointCalculator.Inputs(
+            Level: Math.Max(1, ManaLevel),
+            MageryType: mageryType,
+            Intellect: ManaIntellect,
+            Willpower: ManaWillpower,
+            MageryLevel: mageryLevel,
+            GearRegenPercent: ManaGearRegenPercent,
+            Realm: _realm);
+    }
+
+    private void RecomputeManaRegen()
+    {
+        if (_suspendManaRecompute) return;
+
+        ManaRegenBreakpointCalculator.Inputs inputs = BuildManaInputs();
+        (_, bool usesInt, bool usesWil) = MageryStatKind(inputs.MageryType);
+        ManaUsesInt = usesInt;
+        ManaUsesWil = usesWil;
+
+        ManaBaseTickText = TickText(ManaRegenBreakpointCalculator.Tick(inputs with { GearRegenPercent = 0 }, 0));
+        ManaGearTickText = TickText(ManaRegenBreakpointCalculator.Tick(inputs, 0));
+        BuildManaChart(inputs);
+        ComputeManaDistances(inputs);
+
+        // Use the roll spell the player picked (ManaRollSpellOptions holds only this
+        // magery's curated regen spells — serenity / profane link for a priest, mana
+        // flux / nature tap for the others; a same-magery lookalike like ethereal
+        // taint, or the Magery-0 item-granted "bone necklace", is never in the list).
+        // Fall back to the first curated short, then any same-magery roll spell. All
+        // matches are magery-scoped. KnownSpell is a struct → project to KnownSpell?
+        // for a real null on no match.
+        string[] rollShorts = RegenShortsFor(inputs.MageryType);
+        KnownSpell? FirstRoll(Func<KnownSpell, bool> match) =>
+            _rollSpells.Where(match).Select(s => (KnownSpell?)s).FirstOrDefault();
+        KnownSpell? spell =
+            FirstRoll(s => s.Magery == inputs.MageryType
+                        && string.Equals(s.Name, SelectedManaRollSpell, StringComparison.OrdinalIgnoreCase))
+            ?? FirstRoll(s => s.Magery == inputs.MageryType
+                        && rollShorts.Contains(s.Short.Trim(), StringComparer.OrdinalIgnoreCase))
+            ?? FirstRoll(s => s.Magery == inputs.MageryType);
+        ManaHasRollSpell = spell is not null;
+
+        if (spell is not { } roll)
+        {
+            ManaRollSpellText = "—";
+            ManaRollRangeText = "—";
+            ManaWorstTickText = "—";
+            ManaBestTickText = "—";
+            ManaRollMin = 0;
+            ManaRollMax = 0;
+            ManaSampleReadoutText = "—";
+            return;
+        }
+
+        ManaRollSpellText = roll.Name;
+        (long rmin, long rmax) = SpellCalculator.AffectMagnitude(roll.Formula, Math.Max(1, ManaLevel));
+        ManaRegenBreakpointCalculator.Result r =
+            ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
+
+        ManaRollRangeText = $"{r.RollMin}–{r.RollMax} %ManaRgn at level {Math.Max(1, ManaLevel)}";
+        ManaWorstTickText = TickText(r.WorstTick);
+        ManaBestTickText = TickText(r.BestTick);
+
+        // Slider bounds follow the level-scaled range; keep the sample inside it,
+        // defaulting to the best roll when the range shifted out from under it.
+        ManaRollMin = r.RollMin;
+        ManaRollMax = r.RollMax;
+        double clampedSample = ManaRollSample < r.RollMin || ManaRollSample > r.RollMax
+            ? r.RollMax
+            : ManaRollSample;
+        if (Math.Abs(clampedSample - ManaRollSample) > double.Epsilon)
+            ManaRollSample = clampedSample;   // fires the readout via OnManaRollSampleChanged
+        else
+            UpdateManaSampleReadout();
+    }
+
+    // Natural tick (no spell) vs level over the [level−1, level+3] window, one
+    // series per magery-regen-stat value from the current up in +5 steps — so the
+    // breakpoint step-ups across levels AND the gain from allocating stat points
+    // are both visible. The stepped stat is the one that actually drives regen (via
+    // WithMageryStat): INT for a mage, WIL for a priest, the (INT+WIL)/2 average for
+    // a druid — the druid series feeds INT=WIL=value, which yields exactly that
+    // average. Series stop at MageryStatCap so no line exceeds the racial trained max.
+    private void BuildManaChart(ManaRegenBreakpointCalculator.Inputs inputs)
+    {
+        int lo = Math.Max(1, ManaLevel - 1);
+        int hi = Math.Max(lo, ManaLevel + 3);
+
+        string label = MageryStatKind(inputs.MageryType).Label;
+        int floor = MageryStatFloor(inputs.MageryType);
+        int cap = MageryStatCap(inputs.MageryType);
+        int baseStat = Math.Max(floor, MageryStatValue(inputs.MageryType, ManaIntellect, ManaWillpower));
+
+        var series = new List<ManaRegenChartSeries>();
+        for (int k = 0; k < ChartPalette.Length; k++)
+        {
+            int sv = baseStat + k * 5;
+            // Never draw a magery-stat line past what any race could train to (but
+            // always keep the base line, even if it's already at/over the cap).
+            if (k > 0 && sv > cap) break;
+            var ticks = new int[hi - lo + 1];
+            for (int lv = lo; lv <= hi; lv++)
+                ticks[lv - lo] = ManaRegenBreakpointCalculator.Tick(WithMageryStat(inputs with { Level = lv }, sv), 0);
+            series.Add(new ManaRegenChartSeries($"{label} {sv}", ChartPalette[k], ticks));
+        }
+        int currentTick = ManaRegenBreakpointCalculator.Tick(inputs, 0);
+        ManaChart = new ManaRegenChartData(lo, hi, Math.Clamp(ManaLevel, lo, hi), currentTick, series);
+    }
+
+    // "You are here" + how far the NEXT whole-MP tick is, measured three
+    // independent ways from the current level / stat / gear: magery stat points,
+    // levels, and +ManaRgn%. Each search raises one axis until the tick steps up.
+    private void ComputeManaDistances(ManaRegenBreakpointCalculator.Inputs inputs)
+    {
+        int cur = ManaRegenBreakpointCalculator.Tick(inputs, 0);
+        int target = cur + 1;
+        bool druid = inputs.MageryType == 3;
+        string label = MageryStatKind(inputs.MageryType).Label;
+        int curStat = MageryStatValue(inputs.MageryType, inputs.Intellect, inputs.Willpower);
+        ManaCurrentTickText = $"{cur} MP/tick  •  level {inputs.Level}  •  {label} {curStat}";
+
+        int? statDelta = null;
+        for (int d = 1; d <= 300; d++)
+            if (ManaRegenBreakpointCalculator.Tick(WithMageryStat(inputs, curStat + d), 0) >= target) { statDelta = d; break; }
+        ManaNextByStatText = statDelta is { } sd
+            ? (druid ? $"+{sd} magery stat  (raise INT+WIL so the avg climbs {sd})" : $"+{sd} {label}")
+            : "> 300";
+
+        int? lvlDelta = null;
+        for (int d = 1; d <= 300; d++)
+            if (ManaRegenBreakpointCalculator.Tick(inputs with { Level = inputs.Level + d }, 0) >= target)
+            { lvlDelta = d; break; }
+        ManaNextByLevelText = lvlDelta is { } ld ? $"+{ld} level{(ld == 1 ? "" : "s")}" : "> 300";
+
+        int? regenDelta = null;
+        for (int d = 1; d <= 500; d++)
+            if (ManaRegenBreakpointCalculator.Tick(inputs, d) >= target) { regenDelta = d; break; }
+        ManaNextByRegenText = regenDelta is { } rd ? $"+{rd}% ManaRgn (gear or roll)" : "> 500";
+    }
+
+    // Live readout for the "model a roll" slider: the picked roll value, where it
+    // sits in the range (0-100%), and the tick it produces.
+    private void UpdateManaSampleReadout()
+    {
+        if (!ManaHasRollSpell || ManaRollMax <= 0)
+        {
+            ManaSampleReadoutText = "—";
+            return;
+        }
+        int roll = (int)Math.Round(ManaRollSample);
+        roll = Math.Clamp(roll, ManaRollMin, ManaRollMax);
+        double frac = ManaRollMax > ManaRollMin
+            ? (double)(roll - ManaRollMin) / (ManaRollMax - ManaRollMin)
+            : 0;
+        int tick = ManaRegenBreakpointCalculator.Tick(BuildManaInputs(), roll);
+        ManaSampleReadoutText = $"roll {roll}  •  {frac * 100:0}% of range  •  {tick} MP/tick";
+    }
+
+    private static string TickText(int tick)
+        => $"{tick} MP / {ManaRegenBreakpointCalculator.PassiveTickSeconds}s  (~{tick * 60 / ManaRegenBreakpointCalculator.PassiveTickSeconds} MP/min)";
+
     public CalculatorsSectionViewModel(PlayerStats stats, GameDataCache gameData, InventoryManager inventory, QuestBonusState questBonuses, ProfileService profile, LeaderboardSnapshotStore leaderboards)
     {
         ArgumentNullException.ThrowIfNull(stats);
@@ -269,6 +722,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         ArgumentNullException.ThrowIfNull(leaderboards);
         _stats = stats;
         _gameData = gameData;
+        _spellCatalog = new KnownSpellCatalog(gameData);
         _inventory = inventory;
         _questBonuses = questBonuses;
         _profile = profile;
@@ -342,6 +796,13 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             _agi = _stats.Agility;
             _intel = _stats.Intellect;
             _chm = _stats.Charm;
+            _wil = _stats.Willpower;
+
+            // Mana-regen inputs: the summed +ManaRgn% (gear + race/class + quests)
+            // and the loaded class's magery type/tier drive the calculator's seed.
+            _manaGearRegenPct = t.MpRegenPercent;
+            _liveMageryType = GetInt(classRow, "MageryType");
+            _liveMageryLevel = GetInt(classRow, "MageryLVL");
             EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
             _encumCur = encum.CurrentWeight;
             _encumMax = encum.MaxWeight;
@@ -434,6 +895,8 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         SelectedBackstabWeaponName = _backstabDefaultWeaponLabel;
         ResolveBackstabWeapon();
         RecomputeBackstab();
+
+        SeedManaFromActuals();
     }
 
     // Accuracy for a given attack type from the captured inputs. Normal / Bash /

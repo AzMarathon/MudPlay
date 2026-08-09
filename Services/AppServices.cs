@@ -3469,7 +3469,7 @@ public sealed class AppServices
         // weapon (read from Inventory's last `i` dump). Duration drives the
         // recast clock. Wire-sender bound in MainWindowViewModel.
         ItemCast = new Game.Spells.ItemCastSequencer(
-            () => Spellbook.GetCastItems(), () => Inventory.Snapshot, Log);
+            () => Spellbook.GetCastItems(), () => Inventory.Snapshot, Log, DesiredEquipSlotItem);
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
 
@@ -4836,6 +4836,21 @@ public sealed class AppServices
                 out Game.Spells.ClassCastItem item)
             ? item.ManaCost
             : null;
+
+    // The item the equipment manager's Default set wants worn in the given inventory
+    // slot label (e.g. "Off-Hand"), or null. The item-cast buff swap uses this as its
+    // restore fallback: when the buff item is still equipped in its own slot (left
+    // there from a prior session), the live inventory can't say what belongs there, so
+    // the swap consults the configured loadout instead of stranding the buff item.
+    private string? DesiredEquipSlotItem(string slotLabel)
+    {
+        if (Profile.Current?.Equipment is not { } eq) return null;
+        if (Game.Inventory.EquipmentSlotMap.FromWornString(slotLabel) is not { } slot) return null;
+        string? name = eq.Sets
+            .FirstOrDefault(s => s.Trigger == Models.Profile.EquipTriggerType.Default)?.Slots
+            .FirstOrDefault(e => e.Slot == slot && !string.IsNullOrWhiteSpace(e.ItemName))?.ItemName;
+        return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+    }
 
     private (string Caster, long DurationSec)? BuffInfoByShort(string castCode)
     {

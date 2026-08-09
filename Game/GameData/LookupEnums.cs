@@ -39,6 +39,12 @@ public static class LookupEnums
     // Items.Worn → equip slot label.
     public static string? FormatWornSlot(string? raw) => Map(raw, WornNames);
 
+    // Items.Worn as an int → equip slot label; null when the code isn't mapped.
+    // The JSON stores Worn as a number, so callers that read it with an int reader
+    // use this rather than round-tripping through the string form.
+    public static string? FormatWornSlot(int worn) =>
+        WornNames.TryGetValue(worn, out string? label) ? label : null;
+
     private static readonly FrozenDictionary<int, string> WeaponTypeNames = new Dictionary<int, string>
     {
         [0] = "1H Blunt", [1] = "2H Blunt", [2] = "1H Sharp", [3] = "2H Sharp",

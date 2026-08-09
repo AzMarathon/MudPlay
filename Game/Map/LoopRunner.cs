@@ -158,6 +158,22 @@ public sealed class LoopRunner : IRecoverableEngine
     private TimeSpan _delayRemaining;
     private long _delayStartTimestamp;
 
+    // In-flight stall watchdog. A move can be sent, go Pending, then be interrupted
+    // by a combat gate before it confirms; on resume the runner keeps the step in
+    // flight "awaiting confirmation, not re-sending" (see OnPauseChanged resume),
+    // which is correct WHEN the confirmation is merely delayed — but when the move
+    // was swallowed by the interrupting combat (the player never left the room) that
+    // confirmation never arrives, and in a same-named-room zone no Confirmed-at-
+    // source/target transition ever fires to break the wait, so the loop hangs
+    // forever (report paradigm-20260807-133143: 5½ min standing in "Cleared Fields").
+    // This timer bounds that wait: armed when a resume leaves the step in flight,
+    // disarmed on advance / pause / recovery / stop. On expiry — still Running, still
+    // Pending — it escalates to the recovery gate, which re-establishes position
+    // (Paradigm `rm` resync / stock footprint backtrack) and reroutes, re-sending the
+    // interrupted move without risking an overshoot. Lazily constructed like _delayTimer.
+    private DispatcherTimer? _stallWatchdog;
+    private static readonly TimeSpan StallWatchdogInterval = TimeSpan.FromSeconds(10);
+
     public LoopState State { get; private set; } = LoopState.Idle;
 
     public Loop? CurrentLoop => _loop;
@@ -1130,6 +1146,43 @@ public sealed class LoopRunner : IRecoverableEngine
     // Test seam — pretend the custom-command delay just elapsed.
     internal void FireDelayForTests() => OnDelayElapsed();
 
+    private void ArmStallWatchdog(string why)
+    {
+        _stallWatchdog ??= new DispatcherTimer();
+        _stallWatchdog.Tick -= OnStallWatchdogTick;
+        _stallWatchdog.Tick += OnStallWatchdogTick;
+        _stallWatchdog.Interval = StallWatchdogInterval;
+        _stallWatchdog.Stop();
+        _stallWatchdog.Start();
+        _log?.Debug("LoopRunner",
+            $"stall watchdog armed ({StallWatchdogInterval.TotalSeconds:F0}s): {why}");
+    }
+
+    private void DisarmStallWatchdog() => _stallWatchdog?.Stop();
+
+    private void OnStallWatchdogTick(object? sender, EventArgs e) => OnStallWatchdogElapsed();
+
+    private void OnStallWatchdogElapsed()
+    {
+        _stallWatchdog?.Stop();
+        // Only act if we're genuinely still wedged: Running, a step in flight, and
+        // the tracker still Pending. A move that confirmed normally already advanced
+        // us (AdvanceStep disarms); a re-pause disarmed us too. Escalate to the
+        // recovery gate — on Paradigm it fires `rm` for the authoritative position,
+        // on stock it runs the footprint backtrack; either way ResumeAfterRecovery
+        // then advances (if we really arrived) or reroutes and re-sends (if we're
+        // still at the source), so the interrupted move resumes without an overshoot.
+        if (State != LoopState.Running || !_stepInFlight) return;
+        if (_tracker.State.Confidence != RoomConfidence.Pending) return;
+        _log?.Warn("LoopRunner",
+            $"step {_index + 1} in-flight stall: move Pending, unconfirmed for {StallWatchdogInterval.TotalSeconds:F0}s — escalating to recovery");
+        _recovery?.NoteSuspectedMismatch(
+            $"loop step {_index + 1} in-flight stall (move interrupted, never confirmed)");
+    }
+
+    // Test seam — pretend the in-flight stall watchdog just elapsed.
+    internal void FireStallWatchdogForTests() => OnStallWatchdogElapsed();
+
     private void Write(byte[] bytes, string reason)
     {
         _sent.Add(bytes);
@@ -1253,6 +1306,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // eventually surfaces as Failed instead of looping forever.
     private void EnterRecovery(string reason)
     {
+        // Recovery owns position resolution now — the in-flight stall wait is over.
+        DisarmStallWatchdog();
         if (_loop is null)
         {
             RaiseAfterReset(new LoopEvent(LoopEventKind.Failed, reason));
@@ -1325,6 +1380,7 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         // Forward progress → refresh the recovery budget so an unrelated block
         // later in the lap gets the full retry allowance again.
+        DisarmStallWatchdog();
         _recoverAttempts = 0;
         _index++;
         Raise(new LoopEvent(LoopEventKind.StepCompleted, $"{_index}/{_expandedSteps.Count}"));
@@ -1344,6 +1400,10 @@ public sealed class LoopRunner : IRecoverableEngine
                 // the coordinator — resume picks up from the remaining
                 // time, not the full duration.
                 PauseDelayTimer();
+                // Don't count paused time against the in-flight stall watchdog — a
+                // long combat legitimately holds the move. Resume re-arms it if the
+                // step is still in flight.
+                DisarmStallWatchdog();
                 Raise(new LoopEvent(LoopEventKind.Paused, "coordinator paused"));
             }
             else if (State == LoopState.Approaching)
@@ -1460,6 +1520,10 @@ public sealed class LoopRunner : IRecoverableEngine
             {
                 _log?.Info("LoopRunner",
                     $"resume: step {_index + 1} still in flight (tracker Pending); awaiting confirmation, not re-sending");
+                // Bound the wait: if the interrupting combat swallowed the move, this
+                // confirmation never arrives and the loop would hang forever. The
+                // watchdog escalates to recovery once the wait exceeds the window.
+                ArmStallWatchdog($"resume with step {_index + 1} still in flight (Pending)");
                 return;
             }
             // Defer the send so a same-burst re-pause (a party @wait telepath
@@ -1492,6 +1556,7 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         _recovery?.Detach();
         StopDelayTimer();
+        DisarmStallWatchdog();
         // Drain a door FSM that was opening on our behalf — otherwise its
         // internal state sticks and the next run's enqueue sits in the queue
         // forever (DoorOpenManager.TryStartNext bails on non-Idle state).
