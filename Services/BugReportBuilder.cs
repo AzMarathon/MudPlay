@@ -205,6 +205,7 @@ public static class BugReportBuilder
         // for me" report needs both.
         Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember ?? "(none in flight)");
         Kv(sb, "Recovery reach (rooms)", svc.PartyComeback.ReturnDistanceRooms.ToString());
+        Kv(sb, "Probe stats on partying (@level/@version)", svc.PartyProbe.Enabled ? "on" : "off");
 
         sb.Append("\n**Members** (").Append(party.Members.Count).Append(")\n\n");
         if (party.Members.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
@@ -232,7 +233,12 @@ public static class BugReportBuilder
             // "party routed the wrong way around a gate" report shows what the
             // gate check actually saw.
             if (!m.IsSelf && !string.IsNullOrWhiteSpace(m.Name))
+            {
                 sb.Append("  {lvl: ").Append(MemberLevelNote(svc, m.Name)).Append('}');
+                // Client version recorded by the party stats probe (@version), when known.
+                if (svc.Players.Find(m.Name)?.Version is { Length: > 0 } ver)
+                    sb.Append("  {ver: ").Append(ver).Append('}');
+            }
             sb.Append('\n');
         }
 
@@ -245,8 +251,9 @@ public static class BugReportBuilder
     }
 
     // One member's level as the party level-gate check sees it: the exact level
-    // (with how long ago it was learned, since a reading older than 24h is
-    // re-probed) when known, else the title-derived band, else unknown.
+    // (with how long ago it was learned, since a reading not from the current day
+    // is re-probed on a level-gated route) when known, else the title-derived
+    // band, else unknown.
     private static string MemberLevelNote(AppServices svc, string name)
     {
         Models.GameData.PlayerRecord? rec = svc.Players.Find(name);

@@ -302,6 +302,93 @@ public sealed class PlayerDatabase
         ObservationRecorded?.Invoke(given);
     }
 
+    // Record one player's client version, as learned from an @version probe reply
+    // (e.g. "FujinTerm 2.37.0", "MegaMud 1.03u"). Mirrors RecordLevel: keyed on
+    // given name, creates a minimal row when unknown (we only get a version reply
+    // from someone we asked), otherwise updates Version/VersionAt and bumps
+    // LastSeenUtc (answering a telepath proves presence). Saves the BBS file.
+    public void RecordVersion(string name, string version, DateTime nowUtc)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (string.IsNullOrWhiteSpace(version)) return;
+        string trimmed = version.Trim();
+        (string given, string family) = PlayerObservation.SplitName(name);
+        if (string.IsNullOrEmpty(given)) return;
+
+        if (_observations.TryGetValue(given, out PlayerObservation? existing))
+        {
+            _observations[given] = existing with { Version = trimmed, VersionAt = nowUtc, LastSeenUtc = nowUtc };
+        }
+        else
+        {
+            _observations[given] = new PlayerObservation(
+                GivenName:    given,
+                FamilyName:   family,
+                Class:        null,
+                Race:         null,
+                Alignment:    null,
+                Title:        null,
+                Gang:         null,
+                Role:         null,
+                FirstSeenUtc: nowUtc,
+                LastSeenUtc:  nowUtc,
+                Version:      trimmed,
+                VersionAt:    nowUtc);
+        }
+
+        Rebuild();
+        SaveObservations();
+        ObservationRecorded?.Invoke(given);
+    }
+
+    // ----- Party-day tracking (BBS tier) --------------------------------
+
+    // When we last started partying with this player (UTC), or null if never.
+    // The party stats probe compares this against the local-calendar day to
+    // enforce "send @level / @version at most once per day per player".
+    public DateTime? GetLastPartiedUtc(string givenName)
+    {
+        if (string.IsNullOrWhiteSpace(givenName)) return null;
+        (string given, _) = PlayerObservation.SplitName(givenName);
+        if (string.IsNullOrEmpty(given)) return null;
+        return _observations.TryGetValue(given, out PlayerObservation? o) ? o.LastPartiedUtc : null;
+    }
+
+    // Stamp the "last partied with" time for one player. Mirrors RecordGreeted:
+    // creates a minimal row when unknown (we're partying with them, so they're
+    // real), otherwise updates LastPartiedUtc in place — partying isn't a
+    // who/look observation, so it must not overwrite class / race / LastSeen.
+    // Saves the BBS observation file.
+    public void RecordPartied(string name, DateTime whenUtc)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        (string given, string family) = PlayerObservation.SplitName(name);
+        if (string.IsNullOrEmpty(given)) return;
+
+        if (_observations.TryGetValue(given, out PlayerObservation? existing))
+        {
+            _observations[given] = existing with { LastPartiedUtc = whenUtc };
+        }
+        else
+        {
+            _observations[given] = new PlayerObservation(
+                GivenName:      given,
+                FamilyName:     family,
+                Class:          null,
+                Race:           null,
+                Alignment:      null,
+                Title:          null,
+                Gang:           null,
+                Role:           null,
+                FirstSeenUtc:   whenUtc,
+                LastSeenUtc:    whenUtc,
+                LastPartiedUtc: whenUtc);
+        }
+
+        Rebuild();
+        SaveObservations();
+    }
+
     // Replace the customization slice for one player. Triggered by the player
     // edit dialog Save path; persists via ProfileService.Save. Defaults aren't
     // stored: a pristine "everything off / no notes" customization removes any
@@ -547,14 +634,19 @@ public sealed class PlayerDatabase
             // whichever Level won, so the staleness stamp stays paired with it.
             Level        = newer.Level ?? older.Level,
             LevelAt      = newer.Level is not null ? newer.LevelAt : older.LevelAt,
-            // Greet time isn't ordered by LastSeen — keep the later of
-            // the two so a duplicate-row collapse never re-opens a greet
-            // we already sent today.
-            LastGreetedUtc = LaterGreet(newer.LastGreetedUtc, older.LastGreetedUtc),
+            // Version: same as Level — a probed version survives a later
+            // observation that carried none, and VersionAt rides with it.
+            Version      = newer.Version ?? older.Version,
+            VersionAt    = newer.Version is not null ? newer.VersionAt : older.VersionAt,
+            // Greet + last-partied times aren't ordered by LastSeen — keep the
+            // later of the two so a duplicate-row collapse never re-opens a
+            // greet / party-probe we already did today.
+            LastGreetedUtc = LaterUtc(newer.LastGreetedUtc, older.LastGreetedUtc),
+            LastPartiedUtc = LaterUtc(newer.LastPartiedUtc, older.LastPartiedUtc),
         };
     }
 
-    private static DateTime? LaterGreet(DateTime? a, DateTime? b)
+    private static DateTime? LaterUtc(DateTime? a, DateTime? b)
     {
         if (a is null) return b;
         if (b is null) return a;

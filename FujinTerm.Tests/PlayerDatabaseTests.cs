@@ -349,6 +349,80 @@ public sealed class PlayerDatabaseTests
         Assert.Empty(db.Players);
     }
 
+    // ===== RecordVersion — client version from an @version probe reply =====
+
+    [Fact]
+    public void RecordVersion_CreatesRecord_WhenPlayerUnknown()
+    {
+        PlayerDatabase db = new();
+        DateTime now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        db.RecordVersion("Bob", "FujinTerm 2.37.0", now);
+
+        PlayerRecord r = Assert.Single(db.Players);
+        Assert.Equal("Bob", r.GivenName);
+        Assert.Equal("FujinTerm 2.37.0", r.Version);
+        Assert.Equal(now, r.VersionAt);
+        Assert.Equal(now, r.LastSeenUtc);
+    }
+
+    [Fact]
+    public void RecordVersion_UpdatesVersion_KeepingOtherFields()
+    {
+        PlayerDatabase db = new();
+        DateTime first = new(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        DateTime later = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        db.RecordObservation("Bob", "Mage", "Elf", "Good", "Wizard", "Guild", null, first);
+        db.RecordVersion("Bob", "MegaMud 1.03u", later);
+
+        PlayerRecord r = Assert.Single(db.Players);
+        Assert.Equal("MegaMud 1.03u", r.Version);
+        Assert.Equal("Mage", r.Class);
+        Assert.Equal("Wizard", r.Title);
+        Assert.Equal(first, r.FirstSeenUtc);
+        Assert.Equal(later, r.LastSeenUtc);
+    }
+
+    [Fact]
+    public void RecordVersion_Blank_NoOp()
+    {
+        PlayerDatabase db = new();
+        db.RecordVersion("Bob", "", DateTime.UtcNow);
+        db.RecordVersion("Bob", "   ", DateTime.UtcNow);
+        Assert.Empty(db.Players);
+    }
+
+    // ===== Party-day tracking (first party of the local day) =====
+
+    [Fact]
+    public void RecordPartied_RoundTripsLastPartiedUtc()
+    {
+        PlayerDatabase db = new();
+        DateTime now = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        Assert.Null(db.GetLastPartiedUtc("Bob"));   // never partied
+        db.RecordPartied("Bob Ironhelm", now);       // keys on given name
+        Assert.Equal(now, db.GetLastPartiedUtc("Bob"));
+    }
+
+    [Fact]
+    public void RecordPartied_LeavesOtherFieldsIntact()
+    {
+        PlayerDatabase db = new();
+        DateTime first = new(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        DateTime party = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        db.RecordObservation("Bob", "Mage", null, null, "Wizard", null, null, first);
+        db.RecordPartied("Bob", party);
+
+        PlayerRecord r = Assert.Single(db.Players);
+        Assert.Equal(party, r.LastPartiedUtc);
+        Assert.Equal("Mage", r.Class);
+        Assert.Equal("Wizard", r.Title);
+        Assert.Equal(first, r.FirstSeenUtc);
+    }
+
     [Fact]
     public void RecordObservation_AfterLevel_PreservesLevel()
     {

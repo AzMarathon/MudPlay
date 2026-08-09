@@ -110,7 +110,7 @@
                     <StackPanel Spacing="6">
                         <TextBlock Classes="SectionHeader" Text="Observed"/>
                         <Grid ColumnDefinitions="90,*" RowSpacing="3"
-                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                             <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Class"/>
                             <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ClassText, TargetNullValue='—'}"
                                        Foreground="{StaticResource ChromeFgBrush}" FontSize="11"
@@ -141,6 +141,13 @@
                                        Foreground="{StaticResource ChromeFgBrush}" FontSize="11"/>
                             <TextBlock Grid.Row="8" Grid.Column="0" Classes="FieldLabel" Text="Last seen"/>
                             <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding LastSeenText}"
+                                       Foreground="{StaticResource ChromeFgBrush}" FontSize="11"/>
+                            <TextBlock Grid.Row="9" Grid.Column="0" Classes="FieldLabel" Text="Version"/>
+                            <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding VersionText, TargetNullValue='—'}"
+                                       Foreground="{StaticResource ChromeFgBrush}" FontSize="11"
+                                       ToolTip.Tip="The player's client + version, recorded from an @version party probe."/>
+                            <TextBlock Grid.Row="10" Grid.Column="0" Classes="FieldLabel" Text="Last partied"/>
+                            <TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding LastPartiedText, TargetNullValue='—'}"
                                        Foreground="{StaticResource ChromeFgBrush}" FontSize="11"/>
                         </Grid>
 

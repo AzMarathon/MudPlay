@@ -1928,13 +1928,42 @@ an encumbrance-adjusted one, since it's a planning aid without a fixed load assu
     leading a party". A member's exact level comes from an `@level` reply; **until they answer,
     their `who` title's level band is used with the LOW end as the conservative floor** (they
     could be as low as the band's minimum, so a `MinLevel` gate clears only if even that floor
-    clears it). Every client answers `@level` — formats vary by client, parsed leniently. An
-    exact reading is stamped with the time it was learned (`PlayerObservation.LevelAt`) and treated
-    as **stale after 24h** — a member could have levelled since — so `PartyLevelTracker.WarmStaleLevels`
-    re-fires `@level` for any unknown / aged member when a walk's planned route actually crosses a
-    level gate. That freshness poll is route-scoped and debounced the same way the `@wealth` toll
-    poll is: fired from `MovementFilter.WarmForRoute` only when the levels-permitted shortest route
-    genuinely uses a level gate, so an off-path level edge in the BFS frontier never triggers it.)
+    clears it). Every client answers `@level` — formats vary by client, parsed leniently (the
+    parser also tolerates the `{ }` wrap another FujinTerm client adds to its reply). An exact
+    reading is stamped with the time it was learned (`PlayerObservation.LevelAt`) and counts as
+    **fresh only for the current local day** — a member could have levelled since — so
+    `PartyLevelTracker.WarmStaleLevels` re-fires `@level` for any unknown member, or one whose
+    reading isn't from today, when a walk's planned route actually crosses a level gate. That
+    freshness poll is route-scoped and debounced the same way the `@wealth` toll poll is: fired
+    from `MovementFilter.WarmForRoute` only when the levels-permitted shortest route genuinely uses
+    a level gate. The ordinary keep-warm refresh is the once-a-day party probe below, not a
+    roster-change poll.)
+
+### Party intel probe — `@level` / `@version` on partying *([CONFIRMED] 2026-08-08, user design)*
+
+When we start partying with a player (`PartyProbeManager`, leadership-agnostic, gated by
+Settings → Party "probe stats on partying", default on), the client telepaths them intel probes:
+
+- **`@health`** fires on **every** join (this is `PartyPoller`, for the live party-window HP/MA
+  vitals — unchanged).
+- **`@level` + `@version`** fire only the **first time we party with that player on a given local
+  day**, gated by `PlayerObservation.LastPartiedUtc` the same once-per-calendar-day way
+  `GreetManager` rate-limits auto-greets. The `@level` reply is recorded by `PartyLevelProbe` (the
+  sole `@level` recorder); the `@version` reply is recorded onto the player record
+  (`PlayerObservation.Version` / `VersionAt`).
+- **`@version` reply shape:** the answering client returns its name + version, brace-wrapped —
+  `{FujinTerm 2.37.0}`, `{MegaMud 1.03u}`. Recorded verbatim. (Correlated to the member we just
+  probed within a short window; a brace-wrapped, letter-led payload carrying a digit — which
+  rejects denial / chat lines and the `@level`/`@health` replies that share the window.)
+
+**Exact-vs-title-band reconciliation** (`PartyLevelEstimate`): a recorded **exact** level supersedes
+the title-derived band — **UNLESS** the band's floor has risen **above** the exact reading
+(`TitleRange.Min > exact`), which means the player has clearly trained since we last asked (their
+`who` title moved up to a band starting above our recorded level). In that case the **title band
+wins** until we re-learn an exact level at or above the band's floor. A lower or overlapping band
+never overrides a valid exact — only a band whose floor has passed it does. (Example: recorded
+level 9, title band now 10-14 → the band wins, so the member reads 10-14, not a stale 9, until a
+fresh `@level` lands ≥ 10.)
 - **[CONFIRMED]** The **keyword** the client keys policy/value on is the denomination-defining
   first word (`copper`/`silver`/`gold`/`platinum`/`runic`); the second word is the flavour coin
   noun (`farthings`/`nobles`/`crowns`/`pieces`/`coins`). Some lines carry only the keyword,

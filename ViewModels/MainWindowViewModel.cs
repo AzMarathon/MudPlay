@@ -858,6 +858,8 @@ public partial class MainWindowViewModel : ObservableObject
         // Poller needs the same wire-sender to send @health round-trip
         // requests and the periodic par poll.
         AppServices.Current.PartyPoller.SetWireSender(engineSend);
+        // Once-a-day party stats probe sends @level + @version on the same path.
+        AppServices.Current.PartyProbe.SetWireSender(engineSend);
         // Ally-drop rescue sends `aid <name>` + `/<given> @health` on the same
         // gate-wrapped path (held while WE are mortally wounded, like every engine).
         AppServices.Current.AllyDropped.SetWireSender(engineSend);
@@ -2490,6 +2492,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // re-entry, derailing the menu nav (report stock-20260731-004105).
                 // They resume on the first in-game prompt after we're back.
                 AppServices.Current.PartyPoller.NotifyDisconnected();
+                AppServices.Current.PartyProbe.NotifyDisconnected();
 
                 // Drop per-session condition + buff-duration state so a
                 // fresh login starts clean: any non-auto-clearing

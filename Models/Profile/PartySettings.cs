@@ -85,6 +85,14 @@ public sealed class PartySettings
     // Game.PartyPoller.HealthNagEnabled.
     public bool SendHealthToMembers { get; set; } = true;
 
+    // Master enable for the once-a-day party stats probe. When true (default),
+    // the first time we party with a given player on a local day the client
+    // telepaths them /given @level and /given @version, recording their exact
+    // level and client version onto their player record. Off suppresses both
+    // sends. Gates Game.Remote.PartyProbeManager.Enabled. (Distinct from the
+    // @health round-trip above, which fires on every join for live vitals.)
+    public bool ProbeStatsOnPartyJoin { get; set; } = true;
+
     // ----- Party-cast spell pickers (CastingDirector) ---------------
     // Each Minor / Major slot owns BOTH a single-target spell and an AOE / group
     // spell. CastingDirector picks single vs AOE at cast time based on how many

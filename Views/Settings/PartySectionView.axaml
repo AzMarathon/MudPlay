@@ -253,6 +253,9 @@
                 <CheckBox Content="send @health nags to party members"
                           IsChecked="{Binding SendHealthToMembers, Mode=TwoWay}"
                           ToolTip.Tip="On (default): when a member joins, telepath `/given @health` to capture their HP/MP baseline, retried per the shared nag cadence until real values arrive. Off: never send @health to party members."/>
+                <CheckBox Content="probe party members' level &amp; version on the first party of the day"
+                          IsChecked="{Binding ProbeStatsOnPartyJoin, Mode=TwoWay}"
+                          ToolTip.Tip="On (default): the first time you party with a player on a given day, telepath them `/given @level` and `/given @version`, recording their exact level and client version onto their player record. Off: never send @level / @version on partying."/>
             </StackPanel>
 
             <!-- ============ Capacity + cadence ============ -->
