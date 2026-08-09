@@ -354,7 +354,7 @@
     "Step": 0,
     "Name": "End Game Trainer Part 6",
     "Visible": true,
-    "Steps": "Part 6, Smooth Sailing (Quick Training)\nNote: So, you beat the final Nahr and you have been flagged with Rune(152). Do you still need to kill the other bosses or the class specific bosses to train? No, not until you reach level 85. If you have not killed the final Nahr bosses and gotten to Spacelord, then this section does not apply to you.\n\nStart from the entrance of the Ancient Fort, Jail Cell (12/2368)\n   - Pro Tip: You may also start at (17/2982) \u003CGrand Hallway\u003E, then simply walk E\n1. From (12/2368), Travel N (Bash/Pick), E, N (Bash/Pick), go portal, E\n2. You may now train at the Adventurer\u2019s Guild, Universal Trainer. This trainer will train you from Level 76-85.\n3. When you reach level 86\u002B, you will need to train at the Spacelord (12/2381)",
+    "Steps": "Part 6, Quick Training (Paradigm Only)\nNote: You\u0027ve already beaten Sphere and Final Nahr and have been Runed (abil 152). You can now use the skip below to avoid having to do all that work to get to the trainer room. If you have not killed Sphere/Final Nahr and seen the Spacelord, this will not work for you.\n\n1. From (12/2368), Travel N (Bash/Pick), E, N (Bash/Pick), go portal\n2. If you go east, you\u0027ll be at the Adventurer\u0027s Guild Trainer which will train you from Level 75-85\n3. When you reach level 85\u002B, you have to train at the Spacelord (12/2381), which means killing Sphere/Final Nahr if he is alive.",
     "Rewards": null,
     "RequiredLevel": 65,
     "Blocked": false
