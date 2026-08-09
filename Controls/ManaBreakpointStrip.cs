@@ -53,8 +53,13 @@ public sealed class ManaBreakpointStrip : Control
         double XForRoll(int r) => plot.X + (double)(Math.Clamp(r, rollMin, rollMax) - rollMin) / (rollMax - rollMin) * plot.Width;
         double YForTick(int t) => plot.Bottom - (double)(t - yMin) / (yMax - yMin) * plot.Height;
 
-        // Y gridlines + MP labels — one per integer tick (the reachable set is small).
-        for (int t = yMin; t <= yMax; t++)
+        // Y gridlines + MP labels — only at the actual step levels (worst tick + each
+        // breakpoint's tick), not every integer MP. The tick range can span dozens of
+        // values while only a handful are real steps, so labeling all of them clutters
+        // the axis into noise.
+        var levels = new SortedSet<int> { yMin };
+        foreach (ManaBreakpointMark m in d.Marks) levels.Add(m.Tick);
+        foreach (int t in levels)
         {
             double y = YForTick(t);
             ctx.DrawLine(GridPen, new Point(plot.X, y), new Point(plot.Right, y));

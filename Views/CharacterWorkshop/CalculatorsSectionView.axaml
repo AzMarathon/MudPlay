@@ -552,7 +552,13 @@
                                 <TextBlock Classes="Section" Text="Mana regen spell"/>
                                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Spell" Margin="0,2,16,2"/>
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaRollSpellText}" Margin="0,2"/>
+                                    <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding ManaRollSpellOptions}"
+                                              SelectedItem="{Binding SelectedManaRollSpell, Mode=TwoWay}"
+                                              MinWidth="180" Margin="0,2"
+                                              IsVisible="{Binding ManaHasSpellChoice}"
+                                              ToolTip.Tip="This class has more than one mana-regen roll spell — pick which to model."/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaRollSpellText}" Margin="0,2"
+                                               IsVisible="{Binding !ManaHasSpellChoice}"/>
                                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Roll range" Margin="0,2,16,2"/>
                                     <TextBlock Grid.Row="1" Grid.Column="1" Classes="FieldValue" Text="{Binding ManaRollRangeText}" Margin="0,2"/>
                                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Worst roll (0%)" Margin="0,2,16,2"/>

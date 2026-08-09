@@ -289,6 +289,13 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // The archetype class names the dropdown is limited to (matched case-insensitively).
     private static readonly string[] ManaArchetypeClasses = { "Mage", "Priest", "Druid" };
 
+    // When the selected class has more than one mana-regen roll spell (priests get
+    // serenity + profane link), the player picks which to model; single-spell classes
+    // (mage / druid) hide the picker and just show the one spell's name.
+    public ObservableCollection<string> ManaRollSpellOptions { get; } = new();
+    [ObservableProperty] private string? _selectedManaRollSpell;
+    [ObservableProperty] private bool _manaHasSpellChoice;
+
     // Every input is editable so the calculator doubles as a planner for stat
     // allocations / level-ups / gear upgrades; it seeds from the live character
     // only when it's a mage or druid (SeedManaFromActuals).
@@ -348,11 +355,49 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     partial void OnManaRollSampleChanged(double value) => UpdateManaSampleReadout();
 
-    partial void OnSelectedManaClassChanged(string? value) => RecomputeManaRegen();
+    partial void OnSelectedManaClassChanged(string? value)
+    {
+        RebuildManaRollSpellOptions();
+        RecomputeManaRegen();
+    }
+    partial void OnSelectedManaRollSpellChanged(string? value) => RecomputeManaRegen();
     partial void OnManaLevelChanged(int value) => RecomputeManaRegen();
     partial void OnManaIntellectChanged(int value) => RecomputeManaRegen();
     partial void OnManaWillpowerChanged(int value) => RecomputeManaRegen();
     partial void OnManaGearRegenPercentChanged(int value) => RecomputeManaRegen();
+
+    // Populate the roll-spell picker for the selected class's magery: the roll spells
+    // whose short is in the curated set (serenity / profane link for a priest, one
+    // each for mage / druid). The picker only shows when there's a real choice; the
+    // selection is kept across recomputes and defaults to the first when invalidated.
+    private void RebuildManaRollSpellOptions()
+    {
+        (int mageryType, _) = ResolveManaMagery();
+        string[] shorts = RegenShortsFor(mageryType);
+        var names = _rollSpells
+            .Where(s => s.Magery == mageryType
+                     && shorts.Contains(s.Short.Trim(), StringComparer.OrdinalIgnoreCase))
+            .Select(s => s.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!ManaRollSpellOptions.SequenceEqual(names))
+        {
+            ManaRollSpellOptions.Clear();
+            foreach (string n in names) ManaRollSpellOptions.Add(n);
+        }
+        ManaHasSpellChoice = names.Count > 1;
+
+        if (SelectedManaRollSpell is null
+            || !names.Contains(SelectedManaRollSpell, StringComparer.OrdinalIgnoreCase))
+        {
+            bool prev = _suspendManaRecompute;
+            _suspendManaRecompute = true;   // don't recompute mid-rebuild; the caller does
+            try { SelectedManaRollSpell = names.FirstOrDefault(); }
+            finally { _suspendManaRecompute = prev; }
+        }
+    }
 
     // MageryType (1 mage / 2 priest / 3 druid) and tier for the selected class.
     private (int Type, int Level) ResolveManaMagery()
@@ -364,12 +409,23 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     // The stat that drives a magery type's regen (matching CalcManaRegen): its
     // display label and which of INT / WIL feed it. 1=Mage(INT), 2=Priest(WIL),
-    // 3=Druid((INT+WIL)/2, both). The roll-spell cast short goes with it.
-    private static (string Label, bool UsesInt, bool UsesWil, string RollShort) MageryStatKind(int mageryType) => mageryType switch
+    // 3=Druid((INT+WIL)/2, both).
+    private static (string Label, bool UsesInt, bool UsesWil) MageryStatKind(int mageryType) => mageryType switch
     {
-        2 => ("WIL", false, true, "prfl"),   // Priest — willpower, profane link
-        3 => ("avg", true, true, "ntap"),    // Druid — (INT+WIL)/2, nature tap
-        _ => ("INT", true, false, "flux"),   // Mage — intellect, mana flux
+        2 => ("WIL", false, true),   // Priest — willpower
+        3 => ("avg", true, true),    // Druid — (INT+WIL)/2
+        _ => ("INT", true, false),   // Mage — intellect
+    };
+
+    // The mana-regen roll spells each magery actually rerolls for, by cast short — a
+    // curated set, because a magery can carry incidental 145-roll spells the class
+    // doesn't use for regen (mage's ethereal taint). Priests have TWO (serenity /
+    // profane link, good vs evil), so the class exposes a picker; mage and druid one.
+    private static string[] RegenShortsFor(int mageryType) => mageryType switch
+    {
+        2 => new[] { "nity", "prfl" },   // Priest — serenity, profane link
+        3 => new[] { "ntap" },           // Druid — nature tap
+        _ => new[] { "flux" },           // Mage — mana flux
     };
 
     // The magery stat's value from the current INT / WIL for this type.
@@ -445,6 +501,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         {
             _suspendManaRecompute = false;
         }
+        RebuildManaRollSpellOptions();   // ensure the picker matches the seeded class
         RecomputeManaRegen();
     }
 
@@ -514,7 +571,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         if (_suspendManaRecompute) return;
 
         ManaRegenBreakpointCalculator.Inputs inputs = BuildManaInputs();
-        (_, bool usesInt, bool usesWil, string rollShort) = MageryStatKind(inputs.MageryType);
+        (_, bool usesInt, bool usesWil) = MageryStatKind(inputs.MageryType);
         ManaUsesInt = usesInt;
         ManaUsesWil = usesWil;
 
@@ -523,20 +580,21 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         BuildManaChart(inputs);
         ComputeManaDistances(inputs);
 
-        // Auto-resolve THE roll spell for this magery by its cast short — mana flux
-        // (mage), profane link (priest), nature tap (druid) — so a same-magery
-        // lookalike that also carries a 145 roll (Paradigm's ethereal taint, or the
-        // priests' serenity / pilgrimage / dark flagellation) can't stand in. The
-        // short match is SCOPED to the class magery: an item-granted regen spell can
-        // share the short at Magery 0 (Paradigm's "bone necklace" is Short=flux), and
-        // those sort ahead of the real class spell. Fall back to the first same-magery
-        // roll spell only when the short is absent. KnownSpell is a struct, so project
-        // to KnownSpell? for a real null on no match.
+        // Use the roll spell the player picked (ManaRollSpellOptions holds only this
+        // magery's curated regen spells — serenity / profane link for a priest, mana
+        // flux / nature tap for the others; a same-magery lookalike like ethereal
+        // taint, or the Magery-0 item-granted "bone necklace", is never in the list).
+        // Fall back to the first curated short, then any same-magery roll spell. All
+        // matches are magery-scoped. KnownSpell is a struct → project to KnownSpell?
+        // for a real null on no match.
+        string[] rollShorts = RegenShortsFor(inputs.MageryType);
         KnownSpell? FirstRoll(Func<KnownSpell, bool> match) =>
             _rollSpells.Where(match).Select(s => (KnownSpell?)s).FirstOrDefault();
         KnownSpell? spell =
             FirstRoll(s => s.Magery == inputs.MageryType
-                        && string.Equals(s.Short.Trim(), rollShort, StringComparison.OrdinalIgnoreCase))
+                        && string.Equals(s.Name, SelectedManaRollSpell, StringComparison.OrdinalIgnoreCase))
+            ?? FirstRoll(s => s.Magery == inputs.MageryType
+                        && rollShorts.Contains(s.Short.Trim(), StringComparer.OrdinalIgnoreCase))
             ?? FirstRoll(s => s.Magery == inputs.MageryType);
         ManaHasRollSpell = spell is not null;
         ManaBreakpointStrip = null;
