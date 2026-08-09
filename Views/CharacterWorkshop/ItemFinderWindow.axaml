@@ -349,24 +349,24 @@
                         </ItemsControl>
                     </ScrollViewer>
 
-                    <GridSplitter Grid.Row="4" Height="6" ResizeDirection="Rows"
-                                  HorizontalAlignment="Stretch" Background="Transparent"
+                    <GridSplitter Grid.Row="4" Height="6" Margin="0,6"
+                                  HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                  ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                                  Background="{StaticResource ChromeBorderBrush}" ShowsPreview="False"
                                   ToolTip.Tip="Drag to resize the slots vs. the stats readout."/>
 
-                    <Grid Grid.Row="5" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="0">
-                        <Border Grid.Row="0" Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,8"/>
-
-                        <StackPanel Grid.Row="1" Spacing="2">
+                    <Grid Grid.Row="5" RowDefinitions="Auto,Auto,*" RowSpacing="0">
+                        <StackPanel Grid.Row="0" Spacing="2">
                             <TextBlock Classes="FieldLabel" Text="{Binding CurrentEncumbranceText}"/>
                             <TextBlock Text="{Binding TrialEncumbranceText}"
                                        Foreground="{StaticResource AccentAmberBrush}"
                                        FontSize="{StaticResource FontSizeSm}"/>
                         </StackPanel>
 
-                        <TextBlock Grid.Row="2" Classes="Group" Text="Projected stats" Margin="0,8,0,4"
+                        <TextBlock Grid.Row="1" Classes="Group" Text="Projected stats" Margin="0,8,0,4"
                                    IsVisible="{Binding HasTrialBonuses}"/>
 
-                        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto"
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
                                       IsVisible="{Binding HasTrialBonuses}">
                             <ItemsControl ItemsSource="{Binding TrialBonusRows}">
                                 <ItemsControl.ItemTemplate>
