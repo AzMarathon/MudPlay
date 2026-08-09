@@ -53,20 +53,26 @@ public sealed partial class TrialSlotRow : ObservableObject
         finally { _suppress = false; }
     }
 
-    // Replace the dropdown options (Empty sentinel + the given names) while keeping
-    // the current pick selected and present, so a filter refresh never silently
-    // clears a trialled slot. Suppressed so the reset doesn't fire the callback.
+    // Reconcile the dropdown options to (Empty sentinel + the given names + the
+    // current pick) IN PLACE — never Clear(), because clearing an ObservableCollection
+    // bound to a ComboBox nulls its SelectedItem and the pick renders blank until the
+    // next redraw. The current pick is always kept in the desired set, so it's never
+    // removed and the selection is undisturbed. Suppressed so the reconcile doesn't
+    // fire the change callback.
     public void RebuildOptions(IReadOnlyList<string> names)
     {
-        string? keep = SelectedItem;
         _suppress = true;
         try
         {
-            Options.Clear();
-            Options.Add(Empty);
-            foreach (string n in names) Options.Add(n);
-            if (keep is not null && keep != Empty && !Options.Contains(keep)) Options.Add(keep);
-            SelectedItem = keep is not null && Options.Contains(keep) ? keep : Empty;
+            var desired = new List<string>(names.Count + 2) { Empty };
+            desired.AddRange(names);
+            string? sel = SelectedItem;
+            if (!string.IsNullOrEmpty(sel) && sel != Empty && !desired.Contains(sel)) desired.Add(sel);
+
+            for (int i = Options.Count - 1; i >= 0; i--)
+                if (!desired.Contains(Options[i])) Options.RemoveAt(i);
+            foreach (string d in desired)
+                if (!Options.Contains(d)) Options.Add(d);
         }
         finally { _suppress = false; }
     }

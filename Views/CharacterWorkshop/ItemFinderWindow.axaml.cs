@@ -56,13 +56,29 @@ public partial class ItemFinderWindow : Window
             ItemsGrid.SelectedItem = entry;
     }
 
+    // Width the window grows/shrinks by when the trial flyout shows/hides — the
+    // panel (340) plus the grid's column spacing (12) — so the results table keeps
+    // its width instead of the panel eating into it.
+    private const double TrialPanelWidth = 352;
+
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_vm is not null) _vm.ColumnLayoutChanged -= ApplyColumnLayout;
+        if (_vm is not null)
+        {
+            _vm.ColumnLayoutChanged -= ApplyColumnLayout;
+            _vm.PropertyChanged -= OnVmPropertyChanged;
+        }
         _vm = DataContext as ItemFinderViewModel;
         if (_vm is null) return;
         _vm.ColumnLayoutChanged += ApplyColumnLayout;
+        _vm.PropertyChanged += OnVmPropertyChanged;
         ApplyColumnLayout();
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ItemFinderViewModel.ShowTrialPanel) && _vm is not null)
+            Width += _vm.ShowTrialPanel ? TrialPanelWidth : -TrialPanelWidth;
     }
 
     // Map each column to its layout key once — the Tag for the stat columns, and the

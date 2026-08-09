@@ -58,19 +58,23 @@ public static class TrialGearFinder
         ISet<EquipmentSlot> heldSlots,
         IReadOnlyDictionary<EquipmentSlot, string?> current,
         Func<ItemFinderEntry, double> score,
-        int level, ClassEquipProfile cls, AlignmentBucket? alignment)
+        int level, ClassEquipProfile cls, AlignmentBucket? alignment,
+        Func<ItemFinderEntry, bool>? extraFilter = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(targetSlots);
         ArgumentNullException.ThrowIfNull(score);
 
         // Positive-scoring, equippable candidates grouped by catalog slot, best first.
+        // extraFilter carries the finder's own requirement gates (level / strength req)
+        // so Find Best obeys the same left-panel restrictions the results list does.
         var bySlot = new Dictionary<EquipmentSlot, List<(ItemFinderEntry E, double S)>>();
         foreach (ItemFinderEntry e in catalog)
         {
             if (e.IsSynthetic) continue;
             double s = score(e);
             if (s <= 0) continue;
+            if (extraFilter is not null && !extraFilter(e)) continue;
             if (!ItemEquipFilter.CanEquip(e.Row, level, cls, alignment)) continue;
             if (!bySlot.TryGetValue(e.Slot, out var list)) bySlot[e.Slot] = list = new();
             list.Add((e, s));

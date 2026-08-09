@@ -652,8 +652,13 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         var current = TrialSlots.ToDictionary(r => r.Slot, r => r.ItemName);
         var targets = TrialSlots.Select(r => r.Slot).ToList();
 
+        // Honor the finder's requirement gates too (class / alignment / usable-at-level
+        // ride CanEquip via the args above; the level- and strength-req ceilings are
+        // finder-only filters, so they come in as an extra predicate).
         Dictionary<EquipmentSlot, string> best = TrialGearFinder.FindBest(
-            _all, targets, held, current, filter.Score, UsableLevel, _activeClass, _activeAlignment);
+            _all, targets, held, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
+            e => (MaxLevelReq <= 0 || e.LevelReq <= MaxLevelReq)
+              && (MaxStrReq <= 0 || e.StrReq <= MaxStrReq));
 
         foreach (TrialSlotRow row in TrialSlots)
         {

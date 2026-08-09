@@ -76,6 +76,12 @@
                                                    ToolTip.Tip="Show only items a character of this level can wear (0 = any)."/>
                                     <TextBlock Classes="FieldLabel" Text="Usable at level"/>
                                 </DockPanel>
+                                <DockPanel>
+                                    <NumericUpDown DockPanel.Dock="Right" Classes="filter"
+                                                   Maximum="200" Value="{Binding MaxLevelReq, Mode=TwoWay}"
+                                                   ToolTip.Tip="Show items whose required level is this or lower (0 = off)."/>
+                                    <TextBlock Classes="FieldLabel" Text="Level req"/>
+                                </DockPanel>
                                 <StackPanel Spacing="2">
                                     <TextBlock Classes="FieldLabel" Text="Attack type"/>
                                     <ComboBox ItemsSource="{Binding AttackTypeOptions}"
@@ -190,12 +196,6 @@
                                                    Maximum="200" Value="{Binding MaxStrReq, Mode=TwoWay}"
                                                    ToolTip.Tip="Show items whose required strength is this or lower (0 = off)."/>
                                     <TextBlock Classes="FieldLabel" Text="Strength req"/>
-                                </DockPanel>
-                                <DockPanel>
-                                    <NumericUpDown DockPanel.Dock="Right" Classes="filter"
-                                                   Maximum="200" Value="{Binding MaxLevelReq, Mode=TwoWay}"
-                                                   ToolTip.Tip="Show items whose required level is this or lower (0 = off)."/>
-                                    <TextBlock Classes="FieldLabel" Text="Level req"/>
                                 </DockPanel>
                             </StackPanel>
                         </Border>
@@ -317,20 +317,24 @@
                                 ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat."/>
                     </StackPanel>
 
-                    <TextBlock Grid.Row="2" Classes="FieldLabel" Text="Slot · item · hold" Margin="0,0,0,4"/>
+                    <Grid Grid.Row="2" ColumnDefinitions="44,72,*" Margin="0,0,0,4" ColumnSpacing="4">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Hold"/>
+                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Slot"/>
+                        <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Item"/>
+                    </Grid>
 
                     <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding TrialSlots}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:TrialSlotRow">
-                                    <Grid ColumnDefinitions="70,*,Auto" Margin="0,1" ColumnSpacing="4">
-                                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
-                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                    <Grid ColumnDefinitions="44,72,*" Margin="0,1" ColumnSpacing="4">
+                                        <CheckBox Grid.Column="0" IsChecked="{Binding Hold, Mode=TwoWay}"
+                                                  VerticalAlignment="Center" Margin="8,0,0,0"
+                                                  ToolTip.Tip="Lock this slot so Find Best won't change it."/>
+                                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
+                                        <ComboBox Grid.Column="2" ItemsSource="{Binding Options}"
                                                   SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
                                                   HorizontalAlignment="Stretch" MaxDropDownHeight="320"/>
-                                        <CheckBox Grid.Column="2" IsChecked="{Binding Hold, Mode=TwoWay}"
-                                                  Content="Hold"
-                                                  ToolTip.Tip="Lock this slot so Find Best won't change it."/>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
