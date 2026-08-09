@@ -35,6 +35,14 @@ public sealed class GeneralSettings
     // absurdly large. Char-tier; surfaced in Settings → General.
     public bool ScaleTerminalToWindow { get; set; }
 
+    // When on (the default), typing while another (modeless) window is focused
+    // falls through to the terminal — so you can keep sending commands with a
+    // dialog open — UNLESS a text field in that window owns the keystroke, or the
+    // key is one the dialog needs (Tab / Escape / menu chords). Off restores the
+    // classic behaviour where keys go only to the focused window. Gates
+    // TerminalInputRouter.Enabled; surfaced in Settings → General.
+    public bool TypeToTerminalFromOtherWindows { get; set; } = true;
+
     // Terminal canvas font family as an avares:// URI. Null = the bundled MX437
     // CP437 bitmap font (the default). Char-tier — the font choice follows the
     // character, not the board it happens to be connected to.

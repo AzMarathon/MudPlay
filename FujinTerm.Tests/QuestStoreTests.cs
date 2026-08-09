@@ -8,21 +8,21 @@ using Xunit;
 namespace FujinTerm.Tests;
 
 /// <summary>
-/// PR 10.10 — QuestStore resolution precedence: per-set overlay wins over the
-/// universal seed, which wins over a blank auto-draft. Also exercises the
-/// (flag, step) identity, the visibility default, and the load fall-throughs
-/// (missing / malformed overlay). Uses a unique scratch set under the shared
-/// AppPaths.DataRoot plus a temp seed file so runs don't collide with real
-/// user data or the shared Global seed.
+/// QuestStore resolution precedence: the BBS-tier overlay wins over the universal
+/// seed, which wins over a blank auto-draft. Also exercises the (flag, step)
+/// identity, the visibility default, and the load fall-throughs (missing /
+/// malformed overlay). Uses a unique scratch BBS under the shared AppPaths.DataRoot
+/// plus a temp seed file so runs don't collide with real user data or the shared
+/// Global seed.
 /// </summary>
 public sealed class QuestStoreTests : IDisposable
 {
-    private readonly string _scratchSet;
+    private readonly string _scratchBbs;
     private readonly string _seedPath;
 
     public QuestStoreTests()
     {
-        _scratchSet = "quest-test-" + Path.GetRandomFileName();
+        _scratchBbs = "quest-test-" + Path.GetRandomFileName();
         _seedPath = Path.Combine(Path.GetTempPath(), "questseed-" + Path.GetRandomFileName() + ".json");
     }
 
@@ -30,7 +30,7 @@ public sealed class QuestStoreTests : IDisposable
     {
         try
         {
-            string folder = AppPaths.GameDataSetDir(_scratchSet);
+            string folder = AppPaths.BbsFolder(_scratchBbs);
             if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
         }
         catch { /* best-effort */ }
@@ -44,13 +44,13 @@ public sealed class QuestStoreTests : IDisposable
         JsonStore.Save(_seedPath, defs.ToList());
 
     private void WriteOverlay(params QuestDefinition[] defs) =>
-        JsonStore.Save(AppPaths.QuestsFile(_scratchSet), defs.ToList());
+        JsonStore.Save(AppPaths.QuestsFileForBbs(_scratchBbs), defs.ToList());
 
     [Fact]
     public void Resolve_UnknownQuest_ReturnsBlankDraft()
     {
         QuestStore store = new(seedPath: _seedPath);   // no seed file on disk
-        store.OnActiveSetChanged(_scratchSet);         // no overlay file either
+        store.OnActiveBbsChanged(_scratchBbs);         // no overlay file either
 
         QuestDefinition q = store.Resolve(126, 4);
 
@@ -66,7 +66,7 @@ public sealed class QuestStoreTests : IDisposable
     {
         WriteSeed(new QuestDefinition(50, 1, "Newbie Quest", steps: "Go talk to the elder"));
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         QuestDefinition q = store.Resolve(50, 1);
 
@@ -80,7 +80,7 @@ public sealed class QuestStoreTests : IDisposable
         WriteSeed(new QuestDefinition(50, 1, "Seed Name", steps: "seed steps"));
         WriteOverlay(new QuestDefinition(50, 1, "User Name", steps: "user steps"));
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         QuestDefinition q = store.Resolve(50, 1);
 
@@ -89,40 +89,40 @@ public sealed class QuestStoreTests : IDisposable
     }
 
     [Fact]
-    public void OnActiveSetChanged_Null_DropsOverlay_FallsBackToSeed()
+    public void OnActiveBbsChanged_Null_DropsOverlay_FallsBackToSeed()
     {
         WriteSeed(new QuestDefinition(50, 1, "Seed Name"));
         WriteOverlay(new QuestDefinition(50, 1, "User Name"));
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
         Assert.Equal("User Name", store.Resolve(50, 1).Name);
 
-        store.OnActiveSetChanged(null);
+        store.OnActiveBbsChanged(null);
 
-        Assert.Null(store.ActiveSet);
+        Assert.Null(store.ActiveBbs);
         Assert.Equal("Seed Name", store.Resolve(50, 1).Name);
     }
 
     [Fact]
-    public void OnActiveSetChanged_MissingOverlayFile_FallsToSeed()
+    public void OnActiveBbsChanged_MissingOverlayFile_FallsToSeed()
     {
         WriteSeed(new QuestDefinition(50, 1, "Seed Name"));
         QuestStore store = new(seedPath: _seedPath);
 
-        store.OnActiveSetChanged(_scratchSet);   // set has no quests.json yet
+        store.OnActiveBbsChanged(_scratchBbs);   // set has no quests.json yet
 
         Assert.Equal("Seed Name", store.Resolve(50, 1).Name);
     }
 
     [Fact]
-    public void OnActiveSetChanged_MalformedOverlay_LeavesOverlayEmpty()
+    public void OnActiveBbsChanged_MalformedOverlay_LeavesOverlayEmpty()
     {
         WriteSeed(new QuestDefinition(50, 1, "Seed Name"));
-        Directory.CreateDirectory(AppPaths.GameDataSetDir(_scratchSet));
-        File.WriteAllText(AppPaths.QuestsFile(_scratchSet), "{ not valid json ]");
+        Directory.CreateDirectory(AppPaths.BbsFolder(_scratchBbs));
+        File.WriteAllText(AppPaths.QuestsFileForBbs(_scratchBbs), "{ not valid json ]");
 
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);   // must not throw
+        store.OnActiveBbsChanged(_scratchBbs);   // must not throw
 
         Assert.Equal("Seed Name", store.Resolve(50, 1).Name);
     }
@@ -134,7 +134,7 @@ public sealed class QuestStoreTests : IDisposable
         // should leave it shown rather than defaulting bool to false.
         File.WriteAllText(_seedPath, "[{\"Flag\":50,\"Step\":1,\"Name\":\"NoVisible\"}]");
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         QuestDefinition q = store.Resolve(50, 1);
 
@@ -149,7 +149,7 @@ public sealed class QuestStoreTests : IDisposable
             new QuestDefinition(126, 4, "1st Good Alignment"),
             new QuestDefinition(126, 7, "2nd Good Alignment"));
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         Assert.Equal("1st Good Alignment", store.Resolve(126, 4).Name);
         Assert.Equal("2nd Good Alignment", store.Resolve(126, 7).Name);
@@ -162,7 +162,7 @@ public sealed class QuestStoreTests : IDisposable
         WriteSeed(new QuestDefinition(50, 1, "Seed Name", visible: true));
         WriteOverlay(new QuestDefinition(50, 1, "User Name", visible: false));
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         Assert.False(store.Resolve(50, 1).Visible);
     }
@@ -173,13 +173,13 @@ public sealed class QuestStoreTests : IDisposable
     public void Save_PersistsUserDelta_AndSurvivesReload()
     {
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         store.Save([new QuestDefinition(50, 1, "User Name", steps: "user steps")]);
 
         // A fresh store reading the written overlay sees the edit.
         QuestStore reloaded = new(seedPath: _seedPath);
-        reloaded.OnActiveSetChanged(_scratchSet);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
         QuestDefinition q = reloaded.Resolve(50, 1);
         Assert.Equal("User Name", q.Name);
         Assert.Equal("user steps", q.Steps);
@@ -189,13 +189,13 @@ public sealed class QuestStoreTests : IDisposable
     public void Save_DropsBlankDraft_KeepingOverlayDelta()
     {
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         // A pure default (no name, visible, no steps) is redundant — not frozen in.
         store.Save([new QuestDefinition(126, 4)]);
 
-        Assert.False(File.Exists(AppPaths.QuestsFile(_scratchSet)) &&
-                     JsonStore.Load<List<QuestDefinition>>(AppPaths.QuestsFile(_scratchSet))!.Count > 0);
+        Assert.False(File.Exists(AppPaths.QuestsFileForBbs(_scratchBbs)) &&
+                     JsonStore.Load<List<QuestDefinition>>(AppPaths.QuestsFileForBbs(_scratchBbs))!.Count > 0);
         Assert.Equal(string.Empty, store.Resolve(126, 4).Name);
     }
 
@@ -204,7 +204,7 @@ public sealed class QuestStoreTests : IDisposable
     {
         WriteSeed(new QuestDefinition(50, 1, "Seed Name", steps: "seed steps"));
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         // Re-save the seed value unchanged: must not freeze it into the overlay.
         store.Save([store.Resolve(50, 1)]);
@@ -213,7 +213,7 @@ public sealed class QuestStoreTests : IDisposable
         // proving the overlay didn't shadow it.
         WriteSeed(new QuestDefinition(50, 1, "Updated Seed", steps: "new steps"));
         QuestStore reloaded = new(seedPath: _seedPath);
-        reloaded.OnActiveSetChanged(_scratchSet);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
         Assert.Equal("Updated Seed", reloaded.Resolve(50, 1).Name);
     }
 
@@ -222,12 +222,12 @@ public sealed class QuestStoreTests : IDisposable
     {
         WriteSeed(new QuestDefinition(50, 1, "Seed Name", visible: true));
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         store.Save([new QuestDefinition(50, 1, "Seed Name", visible: false)]);
 
         QuestStore reloaded = new(seedPath: _seedPath);
-        reloaded.OnActiveSetChanged(_scratchSet);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
         Assert.False(reloaded.Resolve(50, 1).Visible);
     }
 
@@ -235,7 +235,7 @@ public sealed class QuestStoreTests : IDisposable
     public void Save_NormalizesNameAndBlankSteps()
     {
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         store.Save([new QuestDefinition(50, 1, "  Trimmed  ", steps: "   ")]);
 
@@ -245,27 +245,27 @@ public sealed class QuestStoreTests : IDisposable
     }
 
     [Fact]
-    public void Save_NoActiveSet_IsNoOp()
+    public void Save_NoActiveBbs_IsNoOp()
     {
-        QuestStore store = new(seedPath: _seedPath);   // never OnActiveSetChanged
+        QuestStore store = new(seedPath: _seedPath);   // never OnActiveBbsChanged
 
         store.Save([new QuestDefinition(50, 1, "User Name")]);   // must not throw
 
-        Assert.Null(store.ActiveSet);
+        Assert.Null(store.ActiveBbs);
     }
 
     [Fact]
     public void Save_PersistsRewardOverride_AndSurvivesReload()
     {
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         // A reward the give-chain crawl can't see (5th-tier alignment weapon) — the
         // user corrects it in the editor and it must round-trip through the overlay.
         store.Save([new QuestDefinition(128, 5, rewards: "Darkbone Staff")]);
 
         QuestStore reloaded = new(seedPath: _seedPath);
-        reloaded.OnActiveSetChanged(_scratchSet);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
         Assert.Equal("Darkbone Staff", reloaded.Resolve(128, 5).Rewards);
     }
 
@@ -273,7 +273,7 @@ public sealed class QuestStoreTests : IDisposable
     public void Save_NormalizesBlankRewards_ToNull()
     {
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         store.Save([new QuestDefinition(50, 1, "Name", rewards: "   ")]);
 
@@ -284,7 +284,7 @@ public sealed class QuestStoreTests : IDisposable
     public void Save_PersistsRequiredLevelOverride_AndSurvivesReload()
     {
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         // A level gate the give-chain crawl misses (the DaoLord sunstone-wristband
         // quest's level-20 requirement) — the user supplies it in the editor and it must
@@ -292,7 +292,7 @@ public sealed class QuestStoreTests : IDisposable
         store.Save([new QuestDefinition(50, 1, requiredLevel: 20)]);
 
         QuestStore reloaded = new(seedPath: _seedPath);
-        reloaded.OnActiveSetChanged(_scratchSet);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
         Assert.Equal(20, reloaded.Resolve(50, 1).RequiredLevel);
     }
 
@@ -304,13 +304,13 @@ public sealed class QuestStoreTests : IDisposable
         // flows through (the delta-only contract, mirrored from name/steps/rewards).
         WriteSeed(new QuestDefinition(50, 1, "Seed Name", requiredLevel: 20));
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         store.Save([store.Resolve(50, 1)]);   // re-save the seed value unchanged
 
         WriteSeed(new QuestDefinition(50, 1, "Seed Name", requiredLevel: 25));
         QuestStore reloaded = new(seedPath: _seedPath);
-        reloaded.OnActiveSetChanged(_scratchSet);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
         Assert.Equal(25, reloaded.Resolve(50, 1).RequiredLevel);
     }
 
@@ -320,7 +320,7 @@ public sealed class QuestStoreTests : IDisposable
     public void Save_ManualQuest_PersistsVerbatim_AndIsListedByManualQuests()
     {
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         // A user-added quest the crawl never produces — no seed/crawl baseline, so it must
         // persist verbatim (not be delta-dropped) and be enumerable for the journal/editor.
@@ -329,7 +329,7 @@ public sealed class QuestStoreTests : IDisposable
             steps: "[] do the thing", rewards: "a cookie", requiredLevel: 12)]);
 
         QuestStore reloaded = new(seedPath: _seedPath);
-        reloaded.OnActiveSetChanged(_scratchSet);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
 
         QuestDefinition q = Assert.Single(reloaded.ManualQuests());
         Assert.Equal(flag, q.Flag);
@@ -343,7 +343,7 @@ public sealed class QuestStoreTests : IDisposable
     public void Save_WhollyBlankManualQuest_IsDropped()
     {
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         // An "Add Quest" row the user never filled in carries nothing worth keeping.
         store.Save([new QuestDefinition(QuestDefinition.ManualFlagBase, 0)]);
@@ -355,19 +355,19 @@ public sealed class QuestStoreTests : IDisposable
     public void Save_BlockedCrawledQuest_PersistsAndUnblockingDrops()
     {
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         // Blocking a (default-baseline) crawled quest is a real delta — it must be written.
         store.Save([new QuestDefinition(32, 0, blocked: true)]);
 
         QuestStore reloaded = new(seedPath: _seedPath);
-        reloaded.OnActiveSetChanged(_scratchSet);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
         Assert.True(reloaded.Resolve(32, 0).Blocked);
 
         // Un-blocking returns the quest to its baseline, so the row drops back out.
         reloaded.Save([new QuestDefinition(32, 0, blocked: false)]);
         QuestStore again = new(seedPath: _seedPath);
-        again.OnActiveSetChanged(_scratchSet);
+        again.OnActiveBbsChanged(_scratchBbs);
         Assert.False(again.Resolve(32, 0).Blocked);
     }
 
@@ -378,7 +378,7 @@ public sealed class QuestStoreTests : IDisposable
         // manual quest — ManualQuests must not return it.
         WriteOverlay(new QuestDefinition(50, 1, "Crawled Override"));
         QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveSetChanged(_scratchSet);
+        store.OnActiveBbsChanged(_scratchBbs);
 
         Assert.Empty(store.ManualQuests());
     }

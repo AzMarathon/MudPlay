@@ -91,6 +91,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _autoConnect;
     [ObservableProperty] private bool _backupOnSave;
     [ObservableProperty] private bool _scaleTerminalToWindow;
+    [ObservableProperty] private bool _typeToTerminalFromOtherWindows = true;
 
     // PlayerCleanupDays moved to Settings → Other per user direction.
     // GlobalSettings.PlayerCleanupDays remains the canonical store —
@@ -253,6 +254,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             AutoConnect = AutoConnect,
             BackupOnSave = BackupOnSave,
             ScaleTerminalToWindow = ScaleTerminalToWindow,
+            TypeToTerminalFromOtherWindows = TypeToTerminalFromOtherWindows,
             // Store null when the default is selected so the delta stays clean
             // and follows the app default if it ever changes (the picker label
             // literally reads "{default}").
@@ -297,6 +299,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // the AppServices seed path won't run; this is what makes the change
         // reach the live canvas on Apply.
         AppServices.Current.Display.ScaleToWindow = ScaleTerminalToWindow;
+        AppServices.Current.TerminalInput.Enabled = TypeToTerminalFromOtherWindows;
         AppServices.Current.Display.FontFamily =
             SelectedFontFamily?.Uri ?? DisplayConfig.DefaultFontFamily;
         AppServices.Current.Display.FontSize =
@@ -343,6 +346,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         AutoConnect          = dto.AutoConnect;
         BackupOnSave         = dto.BackupOnSave;
         ScaleTerminalToWindow = dto.ScaleTerminalToWindow;
+        TypeToTerminalFromOtherWindows = dto.TypeToTerminalFromOtherWindows;
 
         SelectedFontFamily = FontFamilyOptions.FirstOrDefault(o => o.Uri == dto.TerminalFontFamily)
                              ?? FontFamilyOptions[0];
@@ -465,6 +469,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnAutoConnectChanged(bool value)            => Dirty();
     partial void OnBackupOnSaveChanged(bool value)           => Dirty();
     partial void OnScaleTerminalToWindowChanged(bool value)  => Dirty();
+    partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();
     partial void OnSelectedFontFamilyChanged(FontFamilyOption? value) => Dirty();
     partial void OnSelectedFontSizeChanged(FontSizeOption? value)     => Dirty();
     partial void OnAmAutoCombatChanged(bool value)           => Dirty();

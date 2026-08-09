@@ -181,8 +181,14 @@ public static class AppPaths
     // number + step. QuestStore resolves it over the universal
     // DefaultQuestDefsSeedFile underlay; the mechanical data (ordered steps +
     // stat bonuses) is crawled from the set's TBInfo at runtime, not stored here.
-    public static string QuestsFile(string setName) =>
-        Path.Combine(GameDataSetDir(setName), "quests.json");
+    // The user's quest-definition overlay, hosted at the BBS tier
+    // (Data/BBS/{bbs}/quests.json). QuestStore resolves it ABOVE the universal
+    // DefaultQuestDefsSeedFile underlay, so a player's edits belong to the board
+    // they're playing, not the imported game-data set. The mechanical data
+    // (ordered steps + stat bonuses) is still crawled from the active set's TBInfo
+    // at runtime, not stored here.
+    public static string QuestsFileForBbs(string bbsName) =>
+        Path.Combine(BbsFolder(bbsName), "quests.json");
 
     // User-writable Messages seed JSON, hosted in the XDG-resolved Data/Global/
     // folder. Shared across every game-data set — the catalogue's message text
@@ -257,7 +263,12 @@ public static class AppPaths
         TryCopySeed(BundledMessagesSeedFile,        DefaultMessagesSeedFile);
         TryCopySeed(BundledMonsterMessagesSeedFile, DefaultMonsterMessagesSeedFile);
         TryCopySeed(BundledTriggersSeedFile,        DefaultTriggersSeedFile);
-        TryCopySeed(BundledQuestDefsSeedFile,       DefaultQuestDefsSeedFile);
+        // The quest-defs seed is read-only — user edits live in the BBS-tier
+        // overlay (Data/BBS/{bbs}/quests.json), which resolves ABOVE the seed, so a
+        // refreshed seed never clobbers customization. A first-launch-only copy
+        // would freeze shipped guide updates out of existing installs (and reseeds
+        // it if it's ever missing), so keep it in sync with the bundled copy.
+        SyncReadOnlySeed(BundledQuestDefsSeedFile,  DefaultQuestDefsSeedFile);
         TryCopySeed(BundledBossDefsSeedFile,        DefaultBossDefsSeedFile);
 
         // MonsterOverlay + ItemOverlay seeds are realm-flavored —
@@ -280,6 +291,24 @@ public static class AppPaths
         if (!File.Exists(source)) return;  // dev builds may lack the bundled file — just skip.
         try { File.Copy(source, destination); }
         catch { /* best-effort; if the copy fails the store falls through to an empty seed */ }
+    }
+
+    // Like TryCopySeed, but for a read-only seed the app never writes back: keep the
+    // Global copy identical to the bundled source, refreshing it whenever the two
+    // differ (e.g. after an app update ships new seed content). Safe only for seeds
+    // whose user customization lives in a separate overlay that resolves above the
+    // seed — otherwise this would overwrite the user's edits.
+    private static void SyncReadOnlySeed(string source, string destination)
+    {
+        if (!File.Exists(source)) return;  // dev builds may lack the bundled file — just skip.
+        try
+        {
+            if (File.Exists(destination) &&
+                File.ReadAllBytes(source).AsSpan().SequenceEqual(File.ReadAllBytes(destination)))
+                return;  // already current
+            File.Copy(source, destination, overwrite: true);
+        }
+        catch { /* best-effort; a stale copy is better than a failed launch */ }
     }
 
     // Path to a single imported game-data set's directory.

@@ -1,12 +1,12 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.38.0**
-> - Party stats probe: the first time you party with a player each day, the client asks them `@level` and `@version` and records their exact level + client version onto their player record (Game Data → Players); `@health` still fires on every join for live vitals. New Party setting (on by default)
-> - `@version` replies (e.g. `{FujinTerm 2.38.0}`, `{MegaMud 1.03u}`) are captured per player; the player edit dialog shows Version + Last partied
-> - Level display reconciles exact vs. title: a recorded exact wins, unless the player's title band has climbed above it (they trained since we last asked) — then the title range shows until we re-learn an exact at or above the band's floor
-> - Route level-gating treats a recorded level as fresh for the current day (was 24h) and re-learns it via the daily probe or any manual `@level`; the old leader-only roster-change poll is retired
-> - Peer `@level` replies from other FujinTerm clients (brace-wrapped) now record correctly
+> **Version 2.39.0**
+> - Keep typing at the terminal while other windows are open: keystrokes typed with a settings/editor window focused fall through to the terminal, so you can keep sending commands without clicking back — unless you're editing a text field in that window, or the key is one the window needs (Tab, Escape, menu shortcuts)
+> - Forwarded keys run the terminal's real input path (macros, local line editing, command history, escape-sequence mapping), identical to typing directly in the terminal
+> - New Settings → General toggle "Keep typing directed at the terminal when other windows are open" (on by default)
+> - End Game Trainer quest defs refreshed: base level 65, "Episode"→"Part", slash map/room refs, rewritten advice, a condensed sphere guide + reworked Part 5 level gate (paradigm 75+/stock 66+), and per-realm trainer notes on the Part 4 halls
+> - Quest defs follow the tier model: bundled seed → read-only Global copy (re-synced on launch, reseeded if missing); your quest edits live at the BBS tier and win over the seed (was a per-game-data-set overlay), so shipped guide updates reach you without deleting data files
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

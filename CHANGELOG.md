@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 2.39.0
+
+- Keep typing at the terminal while other windows are open: keystrokes typed with a settings/editor window focused now fall through to the terminal, so you can keep sending commands without clicking back — unless you're editing a text field in that window, or the key is one the window needs (Tab, Escape, menu shortcuts)
+- Forwarded keys run the terminal's real input path (macros, local line editing, command history, escape-sequence mapping), identical to typing directly in the terminal
+- New Settings → General toggle "Keep typing directed at the terminal when other windows are open" (on by default); turn it off for classic focus behaviour
+- End Game Trainer quest defs refreshed: base level 65, "Episode" relabeled "Part", map/room references normalized to a slash and bracketed so they all render as clickable walk-to links, rewritten advice for each part, a condensed sphere guide + reworked level gate (paradigm 75+/stock 66+) in Part 5, and per-realm trainer notes on the Part 4 halls
+- Quest defs now follow the tier model cleanly: the bundled seed builds the read-only Global copy (re-synced on launch, reseeded if missing), and your quest edits are stored at the BBS tier (`Data/BBS/{bbs}/quests.json`) and win over the Global seed — so shipped guide updates reach you without deleting data files, and your edits belong to the board you play (was a per-game-data-set overlay before)
+
 ## 2.38.0
 
 - Party stats probe: the first time you party with a player each day, the client asks them `@level` and `@version` and records their exact level + client version onto their player record (shown in Game Data → Players); `@health` still fires on every join for live vitals. New Party setting "probe party members' level & version on the first party of the day" (on by default)

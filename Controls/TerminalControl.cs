@@ -224,6 +224,10 @@ public sealed class TerminalControl : Control
             _onBufferChanged = () => Dispatcher.UIThread.Post(InvalidateVisual);
             buf.Changed += _onBufferChanged;
         }
+        // Register the input core so keystrokes typed while a modeless dialog is
+        // focused can be forwarded here (DialogKeyboardFallthrough → the router).
+        FujinTerm.Services.AppServices.CurrentOrNull?.TerminalInput
+            .RegisterTerminal(HandleKeyCore, HandleTextCore);
         Focus();
     }
 
@@ -239,6 +243,7 @@ public sealed class TerminalControl : Control
             buf.Changed -= _onBufferChanged;
             _onBufferChanged = null;
         }
+        FujinTerm.Services.AppServices.CurrentOrNull?.TerminalInput.UnregisterTerminal();
     }
 
     // Rebuild the native cell metrics at FontSize, then re-fit the window zoom.
@@ -586,6 +591,21 @@ public sealed class TerminalControl : Control
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (HandleKeyCore(e.Key, e.KeyModifiers))
+        {
+            e.Handled = true;
+            return;
+        }
+        base.OnKeyDown(e);
+    }
+
+    // The terminal's key-handling core, callable both from OnKeyDown and from a
+    // keystroke forwarded by another window (TerminalInputRouter). Returns true
+    // when the key was consumed — a macro fired, the local line-editor handled it,
+    // or it mapped to an escape sequence — and false for printable / unmapped keys
+    // (those arrive as text via HandleTextCore instead).
+    internal bool HandleKeyCore(Key key, KeyModifiers modifiers)
+    {
         // Macro first — if the chord matches a user-defined keybind,
         // fire it via the dispatcher and consume the event so neither
         // MapKey nor OnTextInput see the keystroke. The dispatcher
@@ -593,10 +613,9 @@ public sealed class TerminalControl : Control
         // yet (pre-telnet-connection), letting us fall through to the
         // regular terminal path.
         if (FujinTerm.Services.AppServices.Current.MacroDispatcher
-                .TryHandleKey(e.Key, e.KeyModifiers))
+                .TryHandleKey(key, modifiers))
         {
-            e.Handled = true;
-            return;
+            return true;
         }
 
         // Local-line-edit intercept. Enter flushes the buffer + CR;
@@ -613,7 +632,7 @@ public sealed class TerminalControl : Control
         // MapKey so the server's form reads each keystroke as it lands.
         if (InputBuffer is { CharacterMode: false } buf)
         {
-            if (e.Key == Key.Enter)
+            if (key == Key.Enter)
             {
                 // Capture what we're flushing + where it's drawn so the
                 // pending-overlay path can keep it visible until the
@@ -643,14 +662,12 @@ public sealed class TerminalControl : Control
                 foreach (string wireLine in FujinTerm.Services.MacroStore.SplitTypedInput(typedLine))
                     UserInput?.Invoke(System.Text.Encoding.Latin1.GetBytes(wireLine + "\r"));
                 InvalidateVisual();
-                e.Handled = true;
-                return;
+                return true;
             }
-            if (e.Key == Key.Back)
+            if (key == Key.Back)
             {
                 buf.Backspace();
-                e.Handled = true;
-                return;
+                return true;
             }
             // Up / Down recall a previously-sent command into the buffer.
             // History navigation is reserved for line-mode; full-screen
@@ -658,9 +675,9 @@ public sealed class TerminalControl : Control
             // CSI arrows still flow through MapKey below. Consumed even
             // with empty history so the arrow never leaks to the wire
             // mid-compose.
-            if (e.Key == Key.Up || e.Key == Key.Down)
+            if (key == Key.Up || key == Key.Down)
             {
-                string? recalled = e.Key == Key.Up
+                string? recalled = key == Key.Up
                     ? HistoryNav.Previous(buf.Text)
                     : HistoryNav.Next();
                 if (recalled is not null)
@@ -668,25 +685,34 @@ public sealed class TerminalControl : Control
                     buf.Set(recalled);
                     InvalidateVisual();
                 }
-                e.Handled = true;
-                return;
+                return true;
             }
         }
 
         // Map special keys to escape sequences first; printable text is
         // delivered through OnTextInput instead.
-        var bytes = MapKey(e);
+        var bytes = MapKey(key, modifiers);
         if (bytes is not null)
         {
             UserInput?.Invoke(bytes);
-            e.Handled = true;
+            return true;
         }
-        base.OnKeyDown(e);
+        return false;
     }
 
     protected override void OnTextInput(TextInputEventArgs e)
     {
-        if (string.IsNullOrEmpty(e.Text)) return;
+        if (HandleTextCore(e.Text))
+            e.Handled = true;
+    }
+
+    // The terminal's typed-text core, callable both from OnTextInput and from a
+    // character forwarded by another window (TerminalInputRouter). Returns true
+    // when the text was consumed (buffered in line-mode, or sent in char-mode);
+    // false for empty text.
+    internal bool HandleTextCore(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
         // Line-mode: route the typed chars into the local buffer
         // instead of straight to the wire. The render overlay paints
         // the buffer at the cursor on the next invalidation. Capped
@@ -696,28 +722,27 @@ public sealed class TerminalControl : Control
         // path so the server echoes each char itself.
         if (InputBuffer is { CharacterMode: false } buf)
         {
-            buf.Append(e.Text);
+            buf.Append(text);
             // Typing a fresh char abandons history browsing — the next Up
             // starts again from the newest entry.
             HistoryNav.Reset();
-            e.Handled = true;
-            return;
+            return true;
         }
         // Char-mode path (no buffer bound, OR LocalInputBuffer suspended
         // for a full-screen form). BBSes expect Latin-1 / 8-bit bytes,
         // not UTF-8. Encoding here keeps accented characters legible to
         // older servers.
-        var bytes = System.Text.Encoding.Latin1.GetBytes(e.Text);
+        var bytes = System.Text.Encoding.Latin1.GetBytes(text);
         UserInput?.Invoke(bytes);
-        e.Handled = true;
+        return true;
     }
 
     // Translate non-text key presses into the byte sequence a real terminal
     // would emit. Returns null for keys we don't handle; OnTextInput will pick
     // up regular characters.
-    private static byte[]? MapKey(KeyEventArgs e)
+    private static byte[]? MapKey(Key key, KeyModifiers modifiers)
     {
-        switch (e.Key)
+        switch (key)
         {
             case Key.Enter: return new byte[] { 0x0D };
             case Key.Back: return new byte[] { 0x08 };
@@ -742,10 +767,10 @@ public sealed class TerminalControl : Control
 
         // Ctrl+A..Z → control bytes 0x01..0x1A, the classic terminal
         // "control character" mapping.
-        if ((e.KeyModifiers & KeyModifiers.Control) != 0)
+        if ((modifiers & KeyModifiers.Control) != 0)
         {
-            if (e.Key >= Key.A && e.Key <= Key.Z)
-                return new byte[] { (byte)((int)e.Key - (int)Key.A + 1) };
+            if (key >= Key.A && key <= Key.Z)
+                return new byte[] { (byte)((int)key - (int)Key.A + 1) };
         }
 
         return null;

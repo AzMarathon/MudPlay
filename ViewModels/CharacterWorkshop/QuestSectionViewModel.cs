@@ -92,6 +92,9 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         _stats.PropertyChanged += OnStatsChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
         _gameData.ActiveSetChanged += OnActiveSetChanged;
+        // The overlay is BBS-tier now, so re-resolve the displayed text when it
+        // reloads (BBS change) — a set switch alone no longer implies an overlay swap.
+        _quests.Reloaded += Rebuild;
     }
 
     // ----- build ----------------------------------------------------------
@@ -446,5 +449,6 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         _stats.PropertyChanged -= OnStatsChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
         _gameData.ActiveSetChanged -= OnActiveSetChanged;
+        _quests.Reloaded -= Rebuild;
     }
 }

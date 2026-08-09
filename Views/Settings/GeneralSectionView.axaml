@@ -118,6 +118,11 @@
                           Content="Scale terminal output to fill the window"
                           ToolTip.Tip="When checked, the terminal font grows to fill the window while keeping the fixed 80×25 (or configured) cell grid — no extra rows or columns, just a larger, still-crisp picture. Capped so it never becomes absurdly large. When unchecked, the grid renders at its configured font size and sits centred with empty margin in a larger window."/>
 
+                <CheckBox Margin="0,2,0,0"
+                          IsChecked="{Binding TypeToTerminalFromOtherWindows, Mode=TwoWay}"
+                          Content="Keep typing directed at the terminal when other windows are open"
+                          ToolTip.Tip="When checked (default), keystrokes typed while another window (settings, editors, etc.) is focused fall through to the terminal — so you can keep sending commands with a window open — UNLESS you're editing a text field in that window, or the key is one the window needs (Tab, Escape, menu shortcuts). When unchecked, keys go only to the focused window (classic behaviour)."/>
+
                 <TextBlock Classes="SectionHeader" Text="Initial"/>
 
                 <Grid ColumnDefinitions="120,*">
