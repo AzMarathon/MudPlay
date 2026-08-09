@@ -10,6 +10,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - The panel projects the trial set's worn-item stats (the same readout as the Equipment Manager) and its encumbrance — exact weight and None/Light/Medium/Heavy — over your current
 - Right-click a result row → "Trial-Equip this Item" drops it into its slot
 - Double-clicking a result now opens that item's record dialog directly instead of jumping to the Game Data Browser
+- Find Best "Max/Min Damage" now counts the +damage gear bonus too (not just a weapon's base damage), so it fills damage-bonus armour/jewellery slots, not only the weapon
+- bug reports addressed: paradigm-20260808-203733
 
 ## 2.36.0
 

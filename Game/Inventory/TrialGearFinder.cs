@@ -25,7 +25,11 @@ public static class TrialGearFinder
     {
         new TrialFindFilter("Armour Class",     e => e.Ac),
         new TrialFindFilter("Damage Resist",    e => e.Dr),
-        new TrialFindFilter("Max Damage",       e => e.MaxDmg),
+        // Total max-damage contribution: a weapon's base Max plus any item's +Max
+        // Damage bonus — so armour / jewellery that carries +damage fills too, not
+        // just the weapon slot (base Max is a weapon-only field).
+        new TrialFindFilter("Max Damage",       e => e.MaxDmg + e.MaxDamageBonus),
+        new TrialFindFilter("Min Damage",       e => e.MinDmg + e.MinDamageBonus),
         new TrialFindFilter("Accuracy",         e => e.Accuracy),
         new TrialFindFilter("Crits",            e => e.Crits),
         new TrialFindFilter("Hit Points",       e => e.Hp),
