@@ -358,7 +358,8 @@
                         <ItemsControl ItemsSource="{Binding TrialBonusRows}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:EquipBonusRow">
-                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1">
+                                    <!-- Right margin keeps the value clear of the scrollbar. -->
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,1,16,1">
                                         <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Stat}"/>
                                         <TextBlock Grid.Column="1" Text="{Binding Value}"
                                                    FontFamily="{StaticResource FontMono}"
