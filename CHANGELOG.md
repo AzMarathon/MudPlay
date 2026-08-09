@@ -7,6 +7,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Keep typing at the terminal while other windows are open: keystrokes typed with a settings/editor window focused now fall through to the terminal, so you can keep sending commands without clicking back — unless you're editing a text field in that window, or the key is one the window needs (Tab, Escape, menu shortcuts)
 - Forwarded keys run the terminal's real input path (macros, local line editing, command history, escape-sequence mapping), identical to typing directly in the terminal
 - New Settings → General toggle "Keep typing directed at the terminal when other windows are open" (on by default); turn it off for classic focus behaviour
+- End Game Trainer quest defs refreshed: base level 65, "Episode" relabeled "Part", map/room references use a slash (17/2970), rewritten advice for each part, a condensed sphere guide + reworked level gate (paradigm 75+/stock 66+) in Part 5, and per-realm trainer notes on the Part 4 halls
 
 ## 2.38.0
 
