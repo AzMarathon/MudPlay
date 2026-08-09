@@ -24,6 +24,7 @@ public static class TrialGearFinder
     public static readonly IReadOnlyList<TrialFindFilter> Filters = new[]
     {
         new TrialFindFilter("Armour Class",     e => e.Ac),
+        new TrialFindFilter("AC Blur",          e => e.AcBlur),
         new TrialFindFilter("Damage Resist",    e => e.Dr),
         // Total max-damage contribution: a weapon's base Max plus any item's +Max
         // Damage bonus — so armour / jewellery that carries +damage fills too, not

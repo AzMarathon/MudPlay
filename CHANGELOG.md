@@ -13,6 +13,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Right-click a result row → "Trial-Equip this Item" drops it into its slot
 - Double-clicking a result now opens that item's record dialog directly instead of jumping to the Game Data Browser
 - Find Best "Max/Min Damage" now counts the +damage gear bonus too (not just a weapon's base damage), so it fills damage-bonus armour/jewellery slots, not only the weapon
+- A trial slot's hover tooltip now shows a weapon's base damage, swing speed and any proc-cast (e.g. "Casts (85%/swing): mana flare — Dmg 240-350"), not just its worn-stat bonuses
+- AC Blur is now shown as its own stat everywhere — trial tooltip, projected-stats readout, a new results column and a Find Best filter — instead of being mislabeled as flat Armour Class (blur AC scales inversely with encumbrance, so it isn't the same thing)
 - bug reports addressed: paradigm-20260808-203733
 
 ## 2.36.0

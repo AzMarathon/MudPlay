@@ -8,7 +8,12 @@ namespace FujinTerm.Game.Calculators;
 public sealed class EquipmentStatSummary
 {
     // AC / DR (item base ArmourClass + Abil 2 + Abil 10 [Blur]; item base DamageResist + Abil 7).
+    // PlusAC is the inclusive total (used by the combat / projected-AC formulas). PlusAcBlur
+    // tracks the Abil-10 "blur" portion SEPARATELY for display: blur AC is fundamentally
+    // different from worn AC — it scales inversely with carried encumbrance (0 at 100% heavy,
+    // full value at 0% load) — so readouts split it out rather than showing it as flat AC.
     public double PlusAC { get; set; }
+    public double PlusAcBlur { get; set; }
     public double PlusDR { get; set; }
 
     // Core attribute bonuses.

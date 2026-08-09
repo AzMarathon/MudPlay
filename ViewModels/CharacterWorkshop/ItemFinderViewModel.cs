@@ -13,6 +13,7 @@ using FujinTerm.Game.Calculators;
 using FujinTerm.Game.Inventory;
 using FujinTerm.Models.Profile;
 using FujinTerm.Services;
+using FujinTerm.ViewModels.GameData.Edit;
 
 namespace FujinTerm.ViewModels.CharacterWorkshop;
 
@@ -74,6 +75,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ("BsAccuracyText", static e => e.BsAccuracyText),
         ("BsDamageText",   static e => e.BsDamageText),
         ("AcText",         static e => e.AcText),
+        ("AcBlurText",     static e => e.AcBlurText),
         ("DrText",         static e => e.DrText),
         ("HpText",         static e => e.HpText),
         ("HpRegenText",    static e => e.HpRegenText),
@@ -121,6 +123,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
 
     private readonly GameDataCache _gameData;
     private readonly InventoryManager _inventory;
+    // Renders a weapon's base damage / speed / proc-cast rows for the slot tooltip —
+    // the same record view the item edit dialog shows. Charm only affects shop pricing
+    // (unused here), so a snapshot at open is fine.
+    private readonly ItemMdbViewBuilder _mdbBuilder;
     // Rebuilt whenever the attack type changes (Swings are recomputed per type), so
     // not readonly. The option lists are still derived once from the first build.
     private IReadOnlyList<ItemFinderEntry> _all;
@@ -253,6 +259,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ArgumentNullException.ThrowIfNull(inventory);
         _gameData = gameData;
         _inventory = inventory;
+        _mdbBuilder = new ItemMdbViewBuilder(gameData, stats.Charm);
         // Snapshot the live character's swing inputs once at open — the finder is a
         // static browse aid, so the Swings column reflects the character as they are
         // when it's opened rather than tracking mid-browse stat changes.
@@ -749,16 +756,43 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     };
 
     // A single item's stat lines for the slot's hover tooltip — the same per-stat
-    // readout the panel shows, aggregated for just this item.
+    // readout the panel shows, aggregated for just this item. For a weapon the worn-stat
+    // bonuses don't cover its attack profile, so its base damage / speed / proc-casts are
+    // prepended from the item's record view.
     private string BuildItemTooltip(string name, EquipmentSlot slot)
     {
         EquipmentStatBreakdown b = CharacterCalculator.AggregateEquipmentStats(
             new[] { new EquippedItem(name, SlotTag(slot)) }, _gameData);
-        IReadOnlyList<EquipBonusRow> rows = EquipBonusRowBuilder.Build(b);
-        return rows.Count == 0
-            ? name
-            : name + "\n" + string.Join("\n", rows.Select(r => $"{r.Stat}  {r.Value}"));
+
+        var lines = new List<string>();
+        if (_entryByName.TryGetValue(name, out ItemFinderEntry? e) && e.WeaponType >= 0)
+            lines.AddRange(WeaponTooltipLines(e));
+        lines.AddRange(EquipBonusRowBuilder.Build(b).Select(r => $"{r.Stat}  {r.Value}"));
+
+        return lines.Count == 0 ? name : name + "\n" + string.Join("\n", lines);
     }
+
+    // Weapon-only tooltip lines: base damage and swing speed from the catalog entry,
+    // plus any proc / use-cast rows ("Casts (85%/swing): mana flare" and its "Effect:
+    // Dmg 240-350") pulled from the item's MDB record so they match the record dialog.
+    private IEnumerable<string> WeaponTooltipLines(ItemFinderEntry e)
+    {
+        var lines = new List<string>();
+        if (e.MinDmg != 0 || e.MaxDmg != 0) lines.Add($"Damage  {e.MinDmg}-{e.MaxDmg}");
+        if (e.WeaponSpeed > 0) lines.Add($"Speed  {e.WeaponSpeed}");
+        if (e.Number > 0)
+            foreach (KeyValuePair<string, string> kv in
+                     _mdbBuilder.Build(e.Number.ToString(CultureInfo.InvariantCulture)).OtherInfo)
+                if (IsWeaponCastLine(kv.Key))
+                    lines.Add($"{kv.Key.Trim()}: {kv.Value}");
+        return lines;
+    }
+
+    // The MDB "Other Info" rows that describe a weapon's proc / use-cast: the "Casts
+    // (…)" spell row and its indented "  Effect" damage sub-row.
+    private static bool IsWeaponCastLine(string key)
+        => key.StartsWith("Casts", StringComparison.Ordinal)
+        || key.Trim().Equals("Effect", StringComparison.Ordinal);
 
     // Close the finder (read-only — no result to commit).
     [RelayCommand]

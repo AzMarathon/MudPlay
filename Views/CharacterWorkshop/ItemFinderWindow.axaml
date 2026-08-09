@@ -266,6 +266,7 @@
                         <DataGridTextColumn Header="BS Acc"     Binding="{ReflectionBinding BsAccuracyText}" SortMemberPath="BsAccuracy" Width="78"  Tag="BsAccuracyText"/>
                         <DataGridTextColumn Header="BS Min-Max" Binding="{ReflectionBinding BsDamageText}"   SortMemberPath="BsMax"      Width="106" Tag="BsDamageText"/>
                         <DataGridTextColumn Header="AC"         Binding="{ReflectionBinding AcText}"         SortMemberPath="Ac"         Width="56"  Tag="AcText"/>
+                        <DataGridTextColumn Header="AC Blur"    Binding="{ReflectionBinding AcBlurText}"     SortMemberPath="AcBlur"     Width="72"  Tag="AcBlurText"/>
                         <DataGridTextColumn Header="DR"         Binding="{ReflectionBinding DrText}"         SortMemberPath="Dr"         Width="56"  Tag="DrText"/>
                         <DataGridTextColumn Header="HP"         Binding="{ReflectionBinding HpText}"         SortMemberPath="Hp"         Width="62"  Tag="HpText"/>
                         <DataGridTextColumn Header="HP Regen"   Binding="{ReflectionBinding HpRegenText}"    SortMemberPath="HpRegen"    Width="92"  Tag="HpRegenText"/>

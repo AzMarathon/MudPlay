@@ -98,8 +98,12 @@ public sealed record ItemFinderEntry
     // Backstab maximum-damage bonus (Abil-118).
     public int BsMax { get; init; }
 
-    // Total armour class (base ArmourClass/10 + Abil-2/10).
+    // Flat worn armour class (base ArmourClass/10 + Abil-2), EXCLUDING blur AC.
     public double Ac { get; init; }
+
+    // Blur AC (Abil-10) — kept apart from Ac because it's encumbrance-scaled (0 at
+    // 100% heavy, full value at 0% load), not the flat armour the Ac column shows.
+    public double AcBlur { get; init; }
 
     // Total damage resist (base DamageResist/10 + Abil-7/10).
     public double Dr { get; init; }
@@ -194,6 +198,7 @@ public sealed record ItemFinderEntry
     public string BsAccuracyText => Signed(BsAccuracy);
     public string BsDamageText => BsMin != 0 || BsMax != 0 ? $"{BsMin}-{BsMax}" : string.Empty;
     public string AcText => Decimal(Ac);
+    public string AcBlurText => Decimal(AcBlur);
     public string DrText => Decimal(Dr);
     public string HpText => Signed(Hp);
     public string HpRegenText => Signed(HpRegen);
@@ -320,7 +325,8 @@ public sealed record ItemFinderEntry
                 BsAccuracy = t.PlusBSAccuracy,
                 BsMin = t.PlusBSMin,
                 BsMax = t.PlusBSMax,
-                Ac = t.PlusAC,
+                Ac = t.PlusAC - t.PlusAcBlur,
+                AcBlur = t.PlusAcBlur,
                 Dr = t.PlusDR,
                 Hp = t.PlusMaxHp,
                 HpRegen = t.HpRegenPercent,

@@ -9,6 +9,7 @@
 > - Drag the divider between the trial slots and the stats readout to rebalance them; the split is remembered per profile
 > - Right-click a result row → "Trial-Equip this Item" drops it into its slot
 > - Double-clicking a result now opens that item's record dialog directly instead of jumping to the Game Data Browser
+> - A trial slot's tooltip shows a weapon's base damage, swing speed and proc-casts; AC Blur is shown as its own stat (tooltip, readout, results column, Find Best filter) rather than mislabeled as flat Armour Class
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
