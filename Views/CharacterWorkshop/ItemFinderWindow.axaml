@@ -211,12 +211,16 @@
             <!-- ===== Right: the combined item list ===== -->
             <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="8">
 
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
                     <TextBlock Grid.Column="0" Text="{Binding CountText}"
                                Foreground="{StaticResource ChromeFgSecBrush}"
                                FontSize="{StaticResource FontSizeSm}"
                                VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Content="Trial set ▸"
+                    <TextBox Grid.Column="1" Text="{Binding NameFilter, Mode=TwoWay}"
+                             PlaceholderText="Filter by name…" Width="240" HorizontalAlignment="Left"
+                             VerticalAlignment="Center"
+                             ToolTip.Tip="Show only items whose name contains this text."/>
+                    <Button Grid.Column="2" Content="Trial set ▸"
                             Command="{Binding ToggleTrialPanelCommand}"
                             ToolTip.Tip="Show / hide the trial gearset panel — plan a loadout and see its stats + encumbrance."/>
                 </Grid>
@@ -298,7 +302,9 @@
             <!-- ===== Right flyout: trial gearset (default hidden) ===== -->
             <Border Grid.Column="2" Classes="Group" Width="340" Margin="0" Padding="10"
                     IsVisible="{Binding ShowTrialPanel}">
-                <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,*" RowSpacing="0">
+                <!-- Slots size to content (row 3 Auto) so they never scroll; the stats
+                     readout (row 7 *) takes the remaining height and scrolls instead. -->
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*" RowSpacing="0">
 
                     <StackPanel Grid.Row="0" Spacing="6">
                         <TextBlock Classes="Group" Text="Trial gearset"/>
@@ -323,23 +329,22 @@
                         <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Item"/>
                     </Grid>
 
-                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding TrialSlots}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:TrialSlotRow">
-                                    <Grid ColumnDefinitions="44,72,*" Margin="0,1" ColumnSpacing="4">
-                                        <CheckBox Grid.Column="0" IsChecked="{Binding Hold, Mode=TwoWay}"
-                                                  VerticalAlignment="Center" Margin="8,0,0,0"
-                                                  ToolTip.Tip="Lock this slot so Find Best won't change it."/>
-                                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
-                                        <ComboBox Grid.Column="2" ItemsSource="{Binding Options}"
-                                                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-                                                  HorizontalAlignment="Stretch" MaxDropDownHeight="320"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                    <ItemsControl Grid.Row="3" ItemsSource="{Binding TrialSlots}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:TrialSlotRow">
+                                <Grid ColumnDefinitions="44,72,*" Margin="0,1" ColumnSpacing="4">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding Hold, Mode=TwoWay}"
+                                              VerticalAlignment="Center" Margin="8,0,0,0"
+                                              ToolTip.Tip="Lock this slot so Find Best won't change it."/>
+                                    <TextBlock Grid.Column="1" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
+                                    <ComboBox Grid.Column="2" ItemsSource="{Binding Options}"
+                                              SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                                              HorizontalAlignment="Stretch" MaxDropDownHeight="320"
+                                              ToolTip.Tip="{Binding ItemTooltip}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
                     <Border Grid.Row="4" Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,8"/>
 

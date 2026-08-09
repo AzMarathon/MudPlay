@@ -6,7 +6,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Item Finder: new trial-gearset panel (toggle at the top-right of the results, hidden by default) to plan a loadout — one dropdown per slot listing the currently-filtered items, plus a Hold lock per slot
 - "Import from live" copies your worn set into the trial slots; "Clear" empties them
-- "Find Best" fills every non-held slot with the best equippable item for a chosen stat (Armour Class, damage, HP, mana, each +stat, resists, …) — find-best one stat, Hold the keepers, find-best another, and fill up
+- "Find Best" clears every non-held slot then fills it with the best equippable item for a chosen stat (Armour Class, damage, HP, mana, each +stat, resists, …), honouring the finder's class / alignment / level filters — find-best one stat, Hold the keepers, find-best another, and fill up
+- Quick "filter by name" box at the top of the results, and hovering a trial slot shows the placed item's stats
 - The panel projects the trial set's worn-item stats (the same readout as the Equipment Manager) and its encumbrance — exact weight and None/Light/Medium/Heavy — over your current
 - Right-click a result row → "Trial-Equip this Item" drops it into its slot
 - Double-clicking a result now opens that item's record dialog directly instead of jumping to the Game Data Browser

@@ -188,6 +188,9 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
 
     [ObservableProperty] private string _countText = string.Empty;
 
+    // Quick name filter (top of the results). Empty = off; substring, case-insensitive.
+    [ObservableProperty] private string _nameFilter = string.Empty;
+
     // ----- Character group -----
     [ObservableProperty] private string? _selectedClass = AnyClass;
     [ObservableProperty] private int _usableLevel;
@@ -378,6 +381,12 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         {
             case nameof(CountText):
             case nameof(RowsView):
+            // Trial-panel state isn't a results filter — don't re-run the predicate.
+            case nameof(ShowTrialPanel):
+            case nameof(SelectedTrialFilter):
+            case nameof(CurrentEncumbranceText):
+            case nameof(TrialEncumbranceText):
+            case nameof(HasTrialBonuses):
                 return;
             // The Swings column is recomputed per attack type, so a change there
             // rebuilds the catalog rather than just re-running the row predicate.
@@ -503,6 +512,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         // gear, so it ignores every filter and always shows under its attack type.
         if (e.IsSynthetic) return true;
 
+        if (!string.IsNullOrWhiteSpace(NameFilter)
+            && e.Name.IndexOf(NameFilter.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
+            return false;
+
         // "(All slots)" keeps every non-weapon item — weapons drop out.
         if (_activeArmourOnly && e.Slot == EquipmentSlot.Weapon) return false;
         if (_activeSlot is { } slot && e.Slot != slot) return false;
@@ -543,6 +556,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     private void Reset()
     {
         _filterSuspended = true;
+        NameFilter = string.Empty;
         SelectedClass = AnyClass;
         UsableLevel = 0;
         SelectedAlignment = AnyAlign;
@@ -660,12 +674,12 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
             e => (MaxLevelReq <= 0 || e.LevelReq <= MaxLevelReq)
               && (MaxStrReq <= 0 || e.StrReq <= MaxStrReq));
 
+        // Every non-held slot is cleared, then filled with this filter's best (null
+        // when it found nothing). Hold the keepers, run another filter, and repeat.
         foreach (TrialSlotRow row in TrialSlots)
         {
             if (row.Hold) continue;
-            // Leave a slot's existing pick when this filter finds nothing for it — so
-            // successive Find-Best passes with Holds accumulate a mixed loadout.
-            if (best.TryGetValue(row.Slot, out string? name)) row.SetItemQuiet(name);
+            row.SetItemQuiet(best.TryGetValue(row.Slot, out string? name) ? name : null);
         }
         RecomputeTrial();
     }
@@ -688,9 +702,14 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         int trialWeight = 0;
         foreach (TrialSlotRow row in TrialSlots)
         {
-            if (row.ItemName is not { } name) continue;
+            if (row.ItemName is not { } name)
+            {
+                row.ItemTooltip = null;
+                continue;
+            }
             items.Add(new EquippedItem(name, SlotTag(row.Slot)));
             if (_entryByName.TryGetValue(name, out ItemFinderEntry? e)) trialWeight += e.Encum;
+            row.ItemTooltip = BuildItemTooltip(name, row.Slot);
         }
 
         EquipmentStatBreakdown b = CharacterCalculator.AggregateEquipmentStats(items, _gameData);
@@ -728,6 +747,18 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         EquipmentSlot.OffHand => "Off-Hand",
         _ => "Worn",
     };
+
+    // A single item's stat lines for the slot's hover tooltip — the same per-stat
+    // readout the panel shows, aggregated for just this item.
+    private string BuildItemTooltip(string name, EquipmentSlot slot)
+    {
+        EquipmentStatBreakdown b = CharacterCalculator.AggregateEquipmentStats(
+            new[] { new EquippedItem(name, SlotTag(slot)) }, _gameData);
+        IReadOnlyList<EquipBonusRow> rows = EquipBonusRowBuilder.Build(b);
+        return rows.Count == 0
+            ? name
+            : name + "\n" + string.Join("\n", rows.Select(r => $"{r.Stat}  {r.Value}"));
+    }
 
     // Close the finder (read-only — no result to commit).
     [RelayCommand]

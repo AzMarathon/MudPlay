@@ -27,6 +27,8 @@ public sealed partial class TrialSlotRow : ObservableObject
     [ObservableProperty] private string? _selectedItem = Empty;
     // Locks this slot against Find Best.
     [ObservableProperty] private bool _hold;
+    // Hover tooltip for the slot: the current item's stat lines (null when empty).
+    [ObservableProperty] private string? _itemTooltip;
 
     public TrialSlotRow(EquipmentSlot slot, string slotLabel, Action onChanged)
     {
