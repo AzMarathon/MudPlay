@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // How confident the room tracker is in its current room. Drives the
 // status-strip badge color on the Navigation window (green / orange / yellow /

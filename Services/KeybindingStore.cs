@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Input;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-character store for built-in-action keybindings — toolbar + menu
 // shortcuts. Each BuiltInAction maps to one KeyChord; the dictionary is

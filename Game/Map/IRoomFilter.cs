@@ -1,6 +1,6 @@
 using System;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // The gate kinds that can make an exit non-traversable, as a bitset so a
 // single exit (or a whole route) can carry more than one reason. Lets a

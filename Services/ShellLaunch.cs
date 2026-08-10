@@ -1,11 +1,11 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Cross-platform "hand this off to the OS" launcher. Used to open log folders,
 // docs, URLs, and similar bystander targets that don't belong inside a
-// FujinTerm window. Each method swallows launcher failures and returns false
+// MudPlay window. Each method swallows launcher failures and returns false
 // rather than throwing — callers usually surface a status-bar message on
 // failure.
 public static class ShellLaunch

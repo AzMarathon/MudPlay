@@ -1,9 +1,9 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Writes a single learned-name update back to the active set's Rooms.json file.
 // Matches the row by ("Map Number", "Room Number") and mutates its "Name" field

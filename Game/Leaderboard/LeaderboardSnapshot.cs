@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
 
-namespace FujinTerm.Game.Leaderboard;
+namespace MudPlay.Game.Leaderboard;
 
 // One captured "top N" listing: when it was seen, how many rows the player asked
 // for (the N in "top N"), and the ranked entries the server actually returned.

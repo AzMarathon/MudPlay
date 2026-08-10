@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // A MessageRouter consumer. Subscribes to the chat / realm-event patterns in
 // KnownPatterns, classifies each match into a ChatChannel, and emits

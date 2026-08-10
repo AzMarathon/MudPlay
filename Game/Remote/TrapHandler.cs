@@ -1,7 +1,7 @@
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Consumer of RemoteCommandManager for @trap <direction> and @trap stop. The
 // actual search → disarm state machine lives in TrapDisarmManager; this handler

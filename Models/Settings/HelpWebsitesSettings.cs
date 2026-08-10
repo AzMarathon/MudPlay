@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Settings;
+namespace MudPlay.Models.Settings;
 
 // Global-tier DTO for the user-editable Help-menu website list. Persisted in
 // GlobalSettings.Settings["HelpWebsites"] and surfaced two ways: the Help menu

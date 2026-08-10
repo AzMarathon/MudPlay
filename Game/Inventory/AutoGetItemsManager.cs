@@ -1,8 +1,8 @@
 using System.Text;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Auto-get items engine. Parses the room "You notice <list> here." survey
 // line, resolves each entry against game data, and sends get <item name> for

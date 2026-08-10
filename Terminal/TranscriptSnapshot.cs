@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // Snapshots the tail of the terminal transcript — the rows that have scrolled off
 // the top plus the live screen — as timestamped text lines. Shared by the

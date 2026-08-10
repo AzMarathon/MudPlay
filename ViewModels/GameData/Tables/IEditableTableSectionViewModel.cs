@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Implemented by section view-models that surface a per-row edit dialog. The shared
 // GameDataTableSectionView wires the DataGrid's row double-tap to OpenEditCommand, passing the

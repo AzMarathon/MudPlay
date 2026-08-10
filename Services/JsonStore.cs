@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Shared System.Text.Json plumbing used by every settings/profile service so
 // the on-disk JSON looks identical no matter who wrote it: indented for

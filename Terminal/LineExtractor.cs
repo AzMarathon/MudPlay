@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // Watches a TerminalEmulator and emits one EmittedLine per completed screen
 // row. Every subsystem that reasons about "what did the server just say"

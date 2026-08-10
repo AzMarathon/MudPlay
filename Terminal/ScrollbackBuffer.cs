@@ -1,4 +1,4 @@
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // Capacity-tunable ring of rows that have scrolled off the top of the
 // TerminalScreen. Each row preserves both its cells (so ANSI colours survive)

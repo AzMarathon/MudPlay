@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Samples the process's memory footprint to its own rolling on-disk file so an
 // all-night session leaves a trail of how memory moved over time. That trail is

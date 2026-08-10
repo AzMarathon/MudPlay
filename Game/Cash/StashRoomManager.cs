@@ -1,10 +1,10 @@
 using System.Text;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Cash;
+namespace MudPlay.Game.Cash;
 
 // Stash dispatch for user-marked stash rooms. Decomposes the coin held above
 // the single raw CashSettings.KeepOnHandWealth floor into one `hide N <coin>`

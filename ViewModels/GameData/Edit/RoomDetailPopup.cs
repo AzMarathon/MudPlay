@@ -1,7 +1,7 @@
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // Shared opener for the interactive "everything attached to this room" popup —
 // used by the Rooms tab (row double-click) and the Monsters tab's clickable

@@ -1,8 +1,8 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One entry in the Equipment Manager's left-hand list: a fixed trigger-purposed
 // EquipmentSet (Default / Backstab / Pre-rest HP / Pre-rest Mana). Exposes the

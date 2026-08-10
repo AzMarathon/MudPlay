@@ -2,13 +2,13 @@ using System.Collections.ObjectModel;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.Profile;
-using FujinTerm.Models.Settings;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.Profile;
-using FujinTerm.Views.Settings;
+using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
+using MudPlay.Services;
+using MudPlay.ViewModels.Profile;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "BBS" tab. Owns the list of saved BBS records (globally shared across every
 // character) and the field-editor for whichever one is selected. Per-character

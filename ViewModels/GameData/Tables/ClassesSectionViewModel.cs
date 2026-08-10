@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Game.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Classes tab. Static MDB class definitions — drives the Workshop
 // CharacterPlanner ability previews, the Spells tab's class filtering, and CastingDirector's

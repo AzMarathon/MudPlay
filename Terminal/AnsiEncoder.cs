@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // Re-emits a Cell[] row as plain text plus inline ANSI SGR escapes, so a
 // captured log file rendered through less -R, a modern terminal, or any

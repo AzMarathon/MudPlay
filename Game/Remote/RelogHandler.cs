@@ -1,8 +1,8 @@
 using System.Text;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Consumer of RemoteCommandManager for the @relog command (HangupDisconnect
 // permission category). Performs a graceful relog: arms RelogSignal and then

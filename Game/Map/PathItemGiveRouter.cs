@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One resolved way to be handed an item on demand: a room to stand in, the
 // verbatim command to type there, and the giver's display name for the log.

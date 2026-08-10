@@ -1,7 +1,7 @@
 using Avalonia.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Holds the movement stack for a brief settle window after each dead-reckoned
 // advance into a too-dark room, giving the game engine a beat to reveal the

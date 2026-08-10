@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using FujinTerm.Game.Spells;
-using FujinTerm.Services;
+using MudPlay.Game.Spells;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Resolves a TBInfo CMD chain whose keyword fires a teleport via a spell cast (a
 // cast <spell> directive) into the keyword plus the set of rooms the player can

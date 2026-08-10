@@ -1,10 +1,10 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Bridges party-member HP% observations onto the
 // MovementCoordinator.PartyVitalsGate. While any other observed party

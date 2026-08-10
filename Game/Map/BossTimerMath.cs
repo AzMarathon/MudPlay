@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Snapshot of a live boss timer at a moment in time: how long until the
 // guaranteed (100%) respawn, and the next un-passed early window.

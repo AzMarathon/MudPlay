@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Live mirror of the per-BBS game-menu commands configured on the Settings → BBS
 // tab. Engines (HangupHandler, future cleanup-flow automation) read from here

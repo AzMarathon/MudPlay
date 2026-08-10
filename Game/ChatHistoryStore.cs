@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // App-singleton chat / realm-event history. Subscribes to
 // ChatRouter.EntryClassified and appends every classified entry into Entries

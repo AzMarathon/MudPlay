@@ -1,8 +1,8 @@
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Pitches in on a door the party leader is forcing. When we observe "You
 // see <name> attempt to bash the door to the <dir>." and the actor is our

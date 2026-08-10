@@ -1,10 +1,10 @@
 using System.Text;
-using FujinTerm.Game.Combat;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Combat;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Reactive `look <player>` automation — two independent Settings → Talk toggles,
 // both off by default:

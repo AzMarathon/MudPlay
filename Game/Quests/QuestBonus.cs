@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Quests;
+namespace MudPlay.Game.Quests;
 
 // One permanent stat bonus a quest grants, crawled from a reward chain's
 // `addability <abilityId> <value>` directive. AbilityId is the same ability-id

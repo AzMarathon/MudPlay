@@ -1,7 +1,7 @@
 using System;
 using CommunityToolkit.Mvvm.Input;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One inline run of a quest step row: either plain prose (WalkCommand null) or a
 // clickable (map/room) coordinate whose WalkCommand starts a walk-to that room. The

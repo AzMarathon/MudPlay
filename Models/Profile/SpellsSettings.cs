@@ -1,6 +1,6 @@
-using FujinTerm.Game;
+using MudPlay.Game;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "Spells" settings — drives Game.Spells.CastingDirector's
 // self-cast decisions: which spell to use for heal / regen / cure / buff slots,
@@ -169,7 +169,7 @@ public sealed class SpellsSettings
     public bool IgnoreDiseased  { get; set; }
 
     // The four "do not announce" gates suppress the say-channel broadcast
-    // (".@poisoned" etc.) AilmentSyncEngine emits so other FujinTerm clients
+    // (".@poisoned" etc.) AilmentSyncEngine emits so other MudPlay clients
     // in the room can mirror our state. Independent of the Ignore* flags —
     // a party may want the leader to pause but not broadcast on say, or
     // vice-versa. Default UNCHECKED = announce.

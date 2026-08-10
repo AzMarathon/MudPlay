@@ -1,10 +1,10 @@
 using System;
 using System.ComponentModel;
 using System.Linq;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Watches the live character posture / combat state and auto-swaps the
 // trigger-purposed gear sets at the moments the Equipment Manager arms. It is a

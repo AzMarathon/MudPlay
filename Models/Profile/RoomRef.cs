@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // JSON-friendly representation of a Game.Map.RoomKey for per-character storage
 // (avoided rooms, stash rooms, future favorites bookmarks). Plain mutable POCO

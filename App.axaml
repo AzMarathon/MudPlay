@@ -1,7 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="using:FujinTerm.Controls"
-             x:Class="FujinTerm.App"
+             xmlns:controls="using:MudPlay.Controls"
+             x:Class="MudPlay.App"
              RequestedThemeVariant="Dark">
     <!-- Dark variant matches the skeleton's chrome palette. -->
 
@@ -11,10 +11,10 @@
                 <!-- Skeleton-derived design tokens. See docs/UI-design-spec.md
                      and docs/skeleton/main-shell.jsx for the source values.
                      Issue #4 tracks moving these into user preferences. -->
-                <ResourceInclude Source="avares://FujinTerm/Themes/Palette.axaml"/>
-                <ResourceInclude Source="avares://FujinTerm/Themes/Typography.axaml"/>
-                <ResourceInclude Source="avares://FujinTerm/Themes/Density.axaml"/>
-                <ResourceInclude Source="avares://FujinTerm/Themes/Icons.axaml"/>
+                <ResourceInclude Source="avares://MudPlay/Themes/Palette.axaml"/>
+                <ResourceInclude Source="avares://MudPlay/Themes/Typography.axaml"/>
+                <ResourceInclude Source="avares://MudPlay/Themes/Density.axaml"/>
+                <ResourceInclude Source="avares://MudPlay/Themes/Icons.axaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
@@ -22,7 +22,7 @@
     <Application.Styles>
         <!-- Fluent theme styles the standard chrome (buttons, text boxes,
              scrollbars). The terminal area itself is rendered manually and
-             ignores these styles. The FujinTerm overrides in Controls.axaml
+             ignores these styles. The MudPlay overrides in Controls.axaml
              layer on top — they only touch chrome surfaces tagged with style
              classes (Menu.Chrome, Border.Toolbar, Button.ToolbarBtn, etc.) so
              unscoped controls keep the Fluent baseline. -->
@@ -49,7 +49,7 @@
                 </DataTemplate>
             </Setter>
         </Style>
-        <StyleInclude Source="avares://FujinTerm/Themes/Controls.axaml"/>
+        <StyleInclude Source="avares://MudPlay/Themes/Controls.axaml"/>
         <!-- Click any modeless tool window to raise it above its siblings — owned
              windows don't auto-raise on click on several Linux WMs. See
              WindowBehaviors.RaiseToFrontOnClick. -->

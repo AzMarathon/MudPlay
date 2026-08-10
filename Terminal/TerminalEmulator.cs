@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // A small ANSI / VT100-ish terminal emulator. Bytes received from the network
 // are fed in via Feed; the emulator interprets the stream — printable

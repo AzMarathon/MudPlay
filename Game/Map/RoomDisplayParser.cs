@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Wire-side observation parser feeding RoomTracker. Subscribes to
 // LineExtractor.LineEmitted, anchors on the "Obvious exits:" line that closes

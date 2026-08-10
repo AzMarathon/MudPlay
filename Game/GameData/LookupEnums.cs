@@ -1,7 +1,7 @@
 using System.Collections.Frozen;
 using System.Globalization;
 
-namespace FujinTerm.Game.GameData;
+namespace MudPlay.Game.GameData;
 
 // Lookup tables that translate raw integer codes inside MajorMUD game-data tables
 // (Items / Monsters / Spells / Shops / Classes / Races / Rooms) into human-readable

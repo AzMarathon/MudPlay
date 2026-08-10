@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // One "Messages/Responses" entry — a parser-pattern bundle paired with
 // the engine reaction that fires when any of its lines match.

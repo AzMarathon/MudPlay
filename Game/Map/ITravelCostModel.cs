@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Converts a raw BFS hop count to an estimated wall-clock duration the
 // AutoLairScheduler uses for travel-time scoring. Pulled out as an

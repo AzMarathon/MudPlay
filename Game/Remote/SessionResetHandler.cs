@@ -1,8 +1,8 @@
-using FujinTerm.Game.Combat;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.Combat;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Consumer of RemoteCommandManager for the @reset command — a party member
 // zeroes our live session-stats trackers, the same wipe the Session Stats

@@ -1,6 +1,6 @@
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // One row in the Navigation goto-button history dropdown: a recent walk-to
 // destination, its resolved display label, and the RoomKey the select command arms.

@@ -1,7 +1,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Bridges the party leader's rest / meditate posture onto a callback so a
 // follower's HealthManager can opportunistically rest during the leader's

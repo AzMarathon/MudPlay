@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // ObservableCollection that can be refilled in one shot. A bulk (re)load done as
 // Clear + N Add fires N+1 CollectionChanged events, and every index-rebuilding

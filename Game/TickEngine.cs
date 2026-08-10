@@ -1,9 +1,9 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // The combat-cycle heartbeat. Every automation engine (HealthManager,
 // CastingDirector, CombatManager) subscribes to CombatTickElapsed or one of

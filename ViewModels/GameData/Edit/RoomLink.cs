@@ -1,9 +1,9 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // One clickable "map/room" chip in a monster record's spawn/placed/summoned room
 // lists. Clicking opens the shared room-detail popup for that room, so the

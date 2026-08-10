@@ -1,8 +1,8 @@
-using FujinTerm.Game;
-using FujinTerm.Game.Cash;
-using FujinTerm.Models.Profile;
+using MudPlay.Game;
+using MudPlay.Game.Cash;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Persists the Conversation window and the Transaction-history ledger to
 // per-character rolling files under Data/Logs, so both survive restarts and the

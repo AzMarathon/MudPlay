@@ -1,8 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
-using FujinTerm.ViewModels;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Modeless Spell Book window. Bound to SpellBookViewModel;
 // code-behind only attaches the persisted window-layout, wires the
@@ -13,7 +13,7 @@ public partial class SpellBookWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "spellbook");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "spellbook");
         Closed += OnClosed;
     }
 

@@ -1,9 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using FujinTerm.ViewModels.CharacterWorkshop;
+using MudPlay.ViewModels.CharacterWorkshop;
 
-namespace FujinTerm.Views.CharacterWorkshop;
+namespace MudPlay.Views.CharacterWorkshop;
 
 public partial class CharacterWorkshopWindow : Window
 {
@@ -18,7 +18,7 @@ public partial class CharacterWorkshopWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "workshop");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "workshop");
 
         // Tabs differ a lot in how much width they want — the Bosses grid needs
         // far more than a form-style tab like Character Info. Snap the window to

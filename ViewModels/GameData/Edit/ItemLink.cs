@@ -1,8 +1,8 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // One clickable item chip in a monster record's item-drops list. Clicking jumps
 // the Game Data browser's Items tab to that item, so the monster pane doubles as

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // One equipped item's contribution to a single derived stat, used to build the
 // per-stat tooltip breakdown in the Character Workshop (e.g. hovering the Armour

@@ -1,9 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using FujinTerm.ViewModels.Navigation;
+using MudPlay.ViewModels.Navigation;
 
-namespace FujinTerm.Views.Navigation;
+namespace MudPlay.Views.Navigation;
 
 // Modeless editor for a saved Models.Profile.LairSetup. Spawned by
 // NavigationViewModel.EditSetup or the Manage dialog's New Lair / Edit Lair buttons.

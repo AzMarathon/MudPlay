@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Immutable snapshot of the session's observed combat performance, produced by
 // CombatSessionTracker.Snapshot for the Session Stats panel. Carries raw counts

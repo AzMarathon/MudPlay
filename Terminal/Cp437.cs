@@ -1,4 +1,4 @@
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // Lookup table that maps each of the 256 IBM PC code-page-437 byte values to
 // its modern Unicode equivalent.

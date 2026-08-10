@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.Combat;
-using FujinTerm.Services;
+using MudPlay.Game.Combat;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Live player state for the connected character — HP / mana / position /
 // mana type. Updated by PromptParser on every status-line match; consumed

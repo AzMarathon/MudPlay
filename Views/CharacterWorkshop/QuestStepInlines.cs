@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
-using FujinTerm.ViewModels.CharacterWorkshop;
+using MudPlay.ViewModels.CharacterWorkshop;
 
-namespace FujinTerm.Views.CharacterWorkshop;
+namespace MudPlay.Views.CharacterWorkshop;
 
 // Attached behaviour that renders a quest step's QuestStepSegmentViewModel list
 // into a TextBlock's inline runs: plain segments become text Runs (so the line

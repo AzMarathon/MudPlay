@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Observes mid-room departure lines and removes the departing monster from
 // RoomEntityClassifier.Current. "<name> walks out of the room to <dir>." and

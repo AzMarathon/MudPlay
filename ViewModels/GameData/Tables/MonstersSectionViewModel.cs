@@ -3,13 +3,13 @@ using System.Linq;
 using System.Text.Json;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.GameData.Edit;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Edit;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Monsters tab. Renders the imported MajorMUD Monsters table — the static
 // MDB table that drives Auto-Lair respawn timers (via RegenTime), CombatManager's per-monster

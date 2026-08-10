@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Static expansion of a saved Loop's persistent LoopWaypoint list into the
 // flat runtime LoopStep sequence the runner executes. BFS-fills the move

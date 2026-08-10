@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Assembles the per-level rows the Workshop Level Projection grid shows,
 // composing ExperienceTableCalculator and CharacterCalculator for a given race /

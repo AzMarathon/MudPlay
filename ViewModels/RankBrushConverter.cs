@@ -2,9 +2,9 @@ using System.Globalization;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // XAML converter that returns a saturated accent brush tinted to the
 // PartyRank value, so the PartyWindow's per-row rank chip can render Front /

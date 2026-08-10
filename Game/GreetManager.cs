@@ -1,9 +1,9 @@
 using System.Text;
-using FujinTerm.Game.Combat;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.Combat;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Auto-greets newly-encountered players. Subscribes to
 // RoomEntityClassifier.EntitiesObserved — the single consolidated hook that

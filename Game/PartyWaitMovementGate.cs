@@ -1,8 +1,8 @@
-using FujinTerm.Game.Map;
-using FujinTerm.Game.Remote;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Game.Remote;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Bridges inbound @wait / .@held signals from other party members onto the
 // MovementCoordinator.PartyWaitGate. PartyEssentialHandlers records each member

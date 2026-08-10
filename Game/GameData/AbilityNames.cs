@@ -1,7 +1,7 @@
 using System.Collections.Frozen;
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.GameData;
+namespace MudPlay.Game.GameData;
 
 // Static lookup for MajorMUD ability ids → human-readable names. The MDB-imported
 // Items / Spells / Monsters tables encode ability effects as a sequence of Abil-N /
@@ -238,7 +238,7 @@ public static class AbilityNames
     // party-delegation check, so "can I disarm" and "can a party member disarm"
     // share one signal. gameData resolves the Classes / Races rows.
     public static bool ClassOrRaceGrantsTraps(
-        FujinTerm.Services.GameDataCache gameData, string? className, string? race)
+        MudPlay.Services.GameDataCache gameData, string? className, string? race)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         if (!string.IsNullOrWhiteSpace(className)

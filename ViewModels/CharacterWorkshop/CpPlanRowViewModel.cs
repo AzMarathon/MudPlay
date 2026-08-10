@@ -1,9 +1,9 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Models.Profile;
+using MudPlay.Game.Calculators;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One editable row in the CP Allocation grid — a planned level's target stat
 // values (user-editable) plus the computed CP accounting columns (written back

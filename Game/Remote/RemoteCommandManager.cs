@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using System.Text;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Extensible engine for MajorMUD @-commands. Subscribes to
 // ChatRouter.EntryClassified, identifies @-prefixed messages, resolves the

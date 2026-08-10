@@ -2,9 +2,9 @@ using System;
 using System.Globalization;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
-using FujinTerm.Game.Leaderboard;
+using MudPlay.Game.Leaderboard;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One display row of the "top N" XP/HR table — the domain LeaderboardRankRow with
 // its numbers pre-formatted for the grid (thousands separators; an em dash when a

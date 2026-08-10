@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // Resolves the illumination a configured "room-light spell" contributes, so the
 // auto-light engine can count it toward coverage alongside worn +illu gear.

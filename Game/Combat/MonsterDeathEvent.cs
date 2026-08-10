@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // One identity in a MonsterDeathEvent.Candidates list. Some monsters share the
 // same death-line wording in stock MajorMUD data (e.g. multiple variant rats may

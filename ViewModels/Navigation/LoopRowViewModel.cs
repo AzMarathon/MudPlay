@@ -1,6 +1,6 @@
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // Display-only wrapper around a Loop for the Navigation right-rail LOOPS
 // section. Carries the human-friendly labels the list template binds to plus

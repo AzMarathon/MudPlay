@@ -1,8 +1,8 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One editable quest in the QuestEditorViewModel master list. Holds the user-owned
 // overlay fields — Name, Visible, Steps — as live two-way state, both pre-filled

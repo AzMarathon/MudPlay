@@ -1,6 +1,6 @@
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Per-round combat-spell decision unit. Pure decision + room-scoped cast
 // bookkeeping; holds NO wire state. The owning CombatManager calls Choose once

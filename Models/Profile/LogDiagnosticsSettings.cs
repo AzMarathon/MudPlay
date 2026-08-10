@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character log-diagnostic switches. Persisted as the "LogDiagnostics"
 // entry in CharacterProfile.Settings.

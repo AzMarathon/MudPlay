@@ -1,6 +1,6 @@
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // Display-only wrapper around a saved LairSetup for the Navigation
 // right-rail "Loops + Auto-Lairs" section. Mirrors LoopRowViewModel so the

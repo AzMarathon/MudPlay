@@ -1,6 +1,6 @@
-using FujinTerm.Game.Spells;
+using MudPlay.Game.Spells;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // One immutable row in the SpellBookViewModel table: a single KnownSpell
 // from the class's learnable list, paired with whether the character has

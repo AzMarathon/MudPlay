@@ -1,9 +1,9 @@
 using System.Text;
-using FujinTerm.Game.Cash;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Models.GameData;
+using MudPlay.Game.Cash;
+using MudPlay.Game.Inventory;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Read-only handler for the QueryInventory commands that report held wealth /
 // carry weight / possession / room loot without touching the wire:

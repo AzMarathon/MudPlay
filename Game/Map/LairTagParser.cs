@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Parses the Rooms.Lair cell into the structured fields the Auto-Lair
 // scheduler needs. The MDB stores two shapes:

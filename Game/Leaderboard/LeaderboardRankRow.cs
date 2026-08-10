@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Leaderboard;
+namespace MudPlay.Game.Leaderboard;
 
 // One computed row of the XP/HR table: the latest capture's ranked entry plus the
 // experience-per-hour derived against this character's most recent prior reading.

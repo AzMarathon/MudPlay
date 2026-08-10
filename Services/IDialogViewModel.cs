@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Contract every dialog ViewModel implements so DialogService can wait for its
 // result. The VM raises CloseRequested when the user commits (OK / Save / Apply →

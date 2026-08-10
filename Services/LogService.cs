@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Application-wide log ring buffer with severity tags. Producers call Log
 // (or one of the per-severity shorthands); consumers subscribe to EntryAdded

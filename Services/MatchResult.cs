@@ -1,6 +1,6 @@
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Payload handed to a MessageRouter subscriber when its pattern matches a
 // line. Carries the original emitted line, the pattern id that fired (for

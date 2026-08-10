@@ -1,8 +1,8 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // One "bought / sold" entry in an item's read-only MDB info: the shop's host
 // room (name + map/room locator, plus any SELL / NO GEN flag) and the charm-

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Cash;
+namespace MudPlay.Game.Cash;
 
 // Runtime source-of-truth for the per-BBS runic-currency name. Some realms
 // relabel the top ("runic") denomination to a board-specific word — which

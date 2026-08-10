@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Sniffs outbound user commands for a manually-typed spell cast so the combat
 // engine reacts to a hand-cast the same way it reacts to its own between-round

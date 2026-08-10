@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // One step in the per-character menu-navigation sequence that runs after the BBS
 // connect completes. The LoginAutomator walks the list in order: wait for

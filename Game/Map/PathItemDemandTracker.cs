@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Globalization;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Bridges the walker's planned-route item requirements to the NeedsRegistry as
 // NeedKind.PathItem needs, and resolves them when the required item enters

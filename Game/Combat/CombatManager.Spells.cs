@@ -1,9 +1,9 @@
-using FujinTerm.Game.Spells;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Spells;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Combat-spell round economy — the opt-in half of CombatManager that turns the
 // pure CombatSpellChooser decisions into casts on the wire. Split out of

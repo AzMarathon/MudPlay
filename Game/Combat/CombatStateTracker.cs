@@ -1,10 +1,10 @@
 using System.Text;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Owns PlayerState.InCombat and the Combat gate on MovementCoordinator.
 // Subscribes to RoomEntityClassifier.EntitiesObserved for the gate's room-clear

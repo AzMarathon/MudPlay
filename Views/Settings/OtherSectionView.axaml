@@ -1,10 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:FujinTerm.ViewModels.Settings"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="720" d:DesignHeight="760"
-             x:Class="FujinTerm.Views.Settings.OtherSectionView"
+             x:Class="MudPlay.Views.Settings.OtherSectionView"
              x:DataType="vm:OtherSectionViewModel">
 
     <UserControl.Styles>
@@ -134,7 +134,7 @@
             <CheckBox Content="Search rooms if item needed"
                       IsChecked="{Binding SearchRoomsIfItemNeeded, Mode=TwoWay}"
                       Margin="0,12,0,0"
-                      ToolTip.Tip="When checked: if the walker plans a route through an exit that requires an item you're not carrying (a boat for the Silver River, a rope-and-grapple for a climb, a ticket, etc.), FujinTerm searches every room you enter (`sea`) to reveal the missing item, and stops once it's found. Works even when the Auto-Search master toggle is off. Applies only for this character."/>
+                      ToolTip.Tip="When checked: if the walker plans a route through an exit that requires an item you're not carrying (a boat for the Silver River, a rope-and-grapple for a climb, a ticket, etc.), MudPlay searches every room you enter (`sea`) to reveal the missing item, and stops once it's found. Works even when the Auto-Search master toggle is off. Applies only for this character."/>
 
             <!-- Auto-discard offload verb. When checked, the auto-discard
                  engine conceals each excess flagged item with hide <item>
@@ -183,7 +183,7 @@
             <CheckBox Content="Auto-request @comeback when left behind"
                       IsChecked="{Binding AutoRequestComebackWhenLeftBehind, Mode=TwoWay}"
                       Margin="0,8,0,0"
-                      ToolTip.Tip="When checked: if a movement-blocking condition (a prevents-movement gamedata flag or over-encumbrance) strands you as your party leader walks off, FujinTerm telepaths @comeback &lt;your room&gt; to the leader so their recovery flow picks you back up. When unchecked, the strand is detected but no request is sent — you handle it manually. Applies only for this character."/>
+                      ToolTip.Tip="When checked: if a movement-blocking condition (a prevents-movement gamedata flag or over-encumbrance) strands you as your party leader walks off, MudPlay telepaths @comeback &lt;your room&gt; to the leader so their recovery flow picks you back up. When unchecked, the strand is detected but no request is sent — you handle it manually. Applies only for this character."/>
 
             <!-- Navigation puzzle-solver master toggles (Global tier — one switch
                  per install). Off → a walk-to that would hand off to the solver

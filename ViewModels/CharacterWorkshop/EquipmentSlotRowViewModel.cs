@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One row in the Equipment Manager's slot grid: a slot's wanted ItemName (empty =
 // {no change}, the slot is skipped on apply) and the live-filtered AvailableItems

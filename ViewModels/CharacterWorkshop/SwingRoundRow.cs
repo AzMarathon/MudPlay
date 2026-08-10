@@ -1,4 +1,4 @@
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One round in the Swing calculator's 10-round breakdown: the swings landed that
 // round (Swings) and the energy carried into the next (EnergyCarried) — the

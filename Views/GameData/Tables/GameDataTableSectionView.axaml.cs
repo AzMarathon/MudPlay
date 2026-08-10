@@ -3,9 +3,9 @@ using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Threading;
-using FujinTerm.ViewModels.GameData.Tables;
+using MudPlay.ViewModels.GameData.Tables;
 
-namespace FujinTerm.Views.GameData.Tables;
+namespace MudPlay.Views.GameData.Tables;
 
 // Populates the DataGrid's columns from the bound view-model's Columns list —
 // each VM supplies a different ordered list, so the columns can't be authored in

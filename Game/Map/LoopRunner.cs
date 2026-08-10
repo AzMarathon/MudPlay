@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using Avalonia.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Executes a saved Loop against the wire. Sibling of AutoWalkManager — shares the
 // same MovementCoordinator for pause gates, the same RoomTracker for move

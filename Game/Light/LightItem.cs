@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // One light-source item (ItemType 6) from the active game-data set: its projected
 // illumination and burn budget. Produced by LightItemIndex and used by the

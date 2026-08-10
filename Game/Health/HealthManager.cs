@@ -1,10 +1,10 @@
 using System.ComponentModel;
 using System.Text;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Health;
+namespace MudPlay.Game.Health;
 
 // Passive HP/MA threshold behavior. Asserts and clears
 // MovementCoordinator.HealthRecoveryGate + ManaRecoveryGate on configured

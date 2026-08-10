@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Resolves a room's death-summon cascade for the exp estimator: seed the room with
 // its base spawn, then walk it tier by tier — each monster that dies fires its

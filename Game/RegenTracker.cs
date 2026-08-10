@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Watches PlayerState and runs four independent regen cycles whose anchors
 // and intervals reflect what the MajorMUD server actually does:

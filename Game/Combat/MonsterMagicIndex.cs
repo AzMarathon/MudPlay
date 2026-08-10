@@ -1,7 +1,7 @@
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Fast lookup of a monster's magic-hit requirement (Magical, MajorMUD ability
 // code 28) and spell immunity (SpellImmu, code 139) by monster Number in the

@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // glibc malloc tuning for the Linux native-memory floor.
 //

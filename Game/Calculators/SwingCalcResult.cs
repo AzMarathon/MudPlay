@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Energy per swing plus a 10-round simulation of swings landed and energy
 // carried, since the round remainder rolls into the next round and produces a

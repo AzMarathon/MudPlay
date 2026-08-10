@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // One-to-many @-command sender. Telepaths an @-command to every non-self
 // PartyMember in PartyState.Members. Provides the BroadcastExpReset sugar method

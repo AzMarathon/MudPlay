@@ -1,9 +1,9 @@
 using System.Text;
 using Avalonia.Threading;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Paradigm-only authoritative position re-sync. On a ParaMud realm the game
 // answers `rm` with a "Location: <map>,<room>" line reporting the player's own

@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Tees the in-memory program log (LogService) to a rolling on-disk file so a
 // hard lockup or a kill -9 — where no clean crash handler ever runs — still

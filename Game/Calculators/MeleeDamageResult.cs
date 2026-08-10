@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Per-hit damage range for a Normal / Bash / Smash weapon attack (no defender
 // mitigation applied): lower and upper damage bounds.

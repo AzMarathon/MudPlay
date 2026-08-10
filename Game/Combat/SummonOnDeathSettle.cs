@@ -1,10 +1,10 @@
 using System;
 using System.Text;
 using Avalonia.Threading;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Holds the movement loop for a brief settle when the auto-combat engine kills a
 // monster that summons another on death, sending a bare CR to re-scan the room

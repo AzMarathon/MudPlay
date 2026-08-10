@@ -4,9 +4,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Layout;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Attached behaviour that renders a conversation message into a TextBlock's inline
 // runs with clickable web links: plain spans stay text Runs (so the line still

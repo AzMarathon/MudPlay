@@ -1,8 +1,8 @@
 using System.Collections;
 using System.Globalization;
-using FujinTerm.ViewModels.GameData.Tables;
+using MudPlay.ViewModels.GameData.Tables;
 
-namespace FujinTerm.Views.GameData.Tables;
+namespace MudPlay.Views.GameData.Tables;
 
 // Per-column IComparer for the Game Data Browser DataGrid. Avalonia's
 // DataGridColumn.CustomSortComparer receives full row items (GameDataRow) — this

@@ -6,9 +6,9 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
-using FujinTerm.ViewModels;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Modeless system-event log pane. Bound to LogPaneViewModel;
 // code-behind handles two concerns XAML can't express cleanly: scrolling
@@ -22,7 +22,7 @@ public partial class LogPaneWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "logpane");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "logpane");
         Opened += OnOpened;
         Closed += OnClosed;
         // Double-click a row → look up a detail handler by Source and
@@ -109,8 +109,8 @@ public partial class LogPaneWindow : Window
                 // RoomClassifier's entry-aware handler use different
                 // sources today, but a future producer could register
                 // both for the same Source without losing either.
-                FujinTerm.Services.LogService logSvc =
-                    FujinTerm.Services.AppServices.Current.Log;
+                MudPlay.Services.LogService logSvc =
+                    MudPlay.Services.AppServices.Current.Log;
                 logSvc.TryInvokeDetailHandler(row.Entry.Source);
                 logSvc.TryInvokeDetailHandler(row.Entry);
                 return;
@@ -129,7 +129,7 @@ public partial class LogPaneWindow : Window
         TopLevel? top = TopLevel.GetTopLevel(this);
         if (top?.Clipboard is not { } cb)
         {
-            FujinTerm.Services.AppServices.Current.Log.Warn("LogPane",
+            MudPlay.Services.AppServices.Current.Log.Warn("LogPane",
                 "Clipboard unavailable; context not copied.");
             return;
         }
@@ -141,12 +141,12 @@ public partial class LogPaneWindow : Window
         try
         {
             await cb.SetTextAsync(text).ConfigureAwait(false);
-            FujinTerm.Services.AppServices.Current.Log.Info("LogPane",
+            MudPlay.Services.AppServices.Current.Log.Info("LogPane",
                 "Copied context to clipboard.");
         }
         catch (Exception ex)
         {
-            FujinTerm.Services.AppServices.Current.Log.Warn("LogPane",
+            MudPlay.Services.AppServices.Current.Log.Warn("LogPane",
                 $"Clipboard copy failed: {ex.Message}");
         }
     }

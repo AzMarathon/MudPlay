@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // One level's projected progression numbers — the pure output of
 // LevelProjectionCalculator that the Workshop Level Projection grid formats into

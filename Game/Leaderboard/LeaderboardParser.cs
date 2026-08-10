@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Game.Leaderboard;
+namespace MudPlay.Game.Leaderboard;
 
 // Parses the MajorMUD "Top Heroes of the Realm" (top N) listing. The block shape:
 //

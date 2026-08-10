@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // One axis of regen tracking — e.g. "HP regen while standing", "MA regen
 // while meditating". Holds the seed interval, the running EWMA estimates for

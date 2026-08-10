@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Immutable per-step HP/MA min–max–avg profile for the Session Stats "HP/MA
 // History" graph, published by HpMaHistoryTracker. Each array is indexed by loop

@@ -1,9 +1,9 @@
 using Avalonia.Threading;
-using FujinTerm.Game.Combat;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Combat;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Full-stops every movement engine when the local player dies, so we sit in the
 // graveyard we respawn into instead of a still-running loop / walk-to / Auto-Lair

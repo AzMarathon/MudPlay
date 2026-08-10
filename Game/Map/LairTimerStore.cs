@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Per-session lair-arrival tracker + per-room respawn-timer resolver. Two
 // responsibilities, kept in one service because they share the game-data

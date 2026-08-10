@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // Observation-only fields for one player — what the server told us via
 // who / look. Lives at the BBS tier: every player observed on a given BBS
@@ -68,7 +68,7 @@ public sealed record PlayerObservation(
     // (account name equals the in-game name, the common case).
     string? AccountName = null,
     // The player's client + version string from an @version probe reply — e.g.
-    // "FujinTerm 2.37.0", "MegaMud 1.03u" — recorded verbatim from whatever their
+    // "MudPlay 2.37.0", "MegaMud 1.03u" — recorded verbatim from whatever their
     // client answered. null until they answer one. VersionAt stamps when it was
     // learned (null whenever Version is null).
     string? Version = null,

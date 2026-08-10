@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Persisted size + screen position for one top-level window. Lives in
 // CharacterProfile.WindowBounds keyed by a stable window id ("main",

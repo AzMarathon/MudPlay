@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory index of Items.json for the active game-data set, mapping the
 // MDB Number field to its Name. Walker / handler code resolves an item id

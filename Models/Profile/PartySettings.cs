@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "Party" settings — drives the party services
 // (Game.PartyPoller, Game.PartyManager, Game.Remote.PartyBroadcaster). Stored as

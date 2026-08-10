@@ -1,8 +1,8 @@
 using System.ComponentModel;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Follower-side reconnect auto-rejoin. When we drop out of a party (a crash, a
 // carrier loss, or any disconnect) and later re-enter the game, this telepaths
@@ -121,8 +121,8 @@ public sealed class PartyRejoinCoordinator : IDisposable
     // Force-accept predicate for AutoPartyManager: true when name is the leader
     // we're remembering across a reconnect, so their re-invite is auto-followed
     // even without a per-player join-if-invited grant. Compares on given name so
-    // a long-form invite line ("Fujin WuzHere") matches a short-form remembered
-    // leader ("Fujin").
+    // a long-form invite line ("MudPlay WuzHere") matches a short-form remembered
+    // leader ("MudPlay").
     public bool IsRememberedLeader(string name)
     {
         if (_rememberedLeader is null || string.IsNullOrEmpty(name)) return false;
@@ -217,8 +217,8 @@ public sealed class PartyRejoinCoordinator : IDisposable
     }
 
     // First whitespace-delimited token — mirrors PartyManager.GivenNameOf so a
-    // long-form room-entry name ("Fujin WuzHere") matches a short-form
-    // remembered leader ("Fujin").
+    // long-form room-entry name ("MudPlay WuzHere") matches a short-form
+    // remembered leader ("MudPlay").
     private static string GivenNameOf(string name)
     {
         if (string.IsNullOrEmpty(name)) return string.Empty;

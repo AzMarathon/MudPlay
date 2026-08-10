@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Position / posture the status line reports between parens
 // ([HP=… (Resting)]: etc.). Drives both UI hints (status bar shows

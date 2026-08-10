@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Trust-by-default room-tracking FSM. Maintains RoomState from the four signals
 // every player session produces: outgoing move commands, observed room

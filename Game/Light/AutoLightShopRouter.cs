@@ -1,8 +1,8 @@
 using System.Threading;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // Active provisioning detour for the auto-light engine — the shop-buying
 // counterpart to AutoLightProvisioner's ready-a-carried-light path. When the

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Per-invocation context handed to each RemoteCommandManager handler. Carries
 // the sender / parsed args / channel + a Reply callback that routes back through

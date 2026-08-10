@@ -1,6 +1,6 @@
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Contract every MessageRouter-registered pattern implements. A pattern decides
 // whether a given LineExtractor.EmittedLine is a "yes for me" line and, when it

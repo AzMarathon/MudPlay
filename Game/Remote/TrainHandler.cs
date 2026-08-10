@@ -1,7 +1,7 @@
 using System;
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Consumer of RemoteCommandManager for @train — a permitted party member asks us
 // to train. Unlike the local Train Now / armed auto-train, this never walks: it

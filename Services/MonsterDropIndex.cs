@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory index of Monsters.json for the active game-data set, answering
 // two questions the monster-drop reroute needs: which monsters drop a given

@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // One entry in a BBS's room-blacklist side-file. Hides the targeted room from
 // the navigation map render and the search box (typical for ganghouse /

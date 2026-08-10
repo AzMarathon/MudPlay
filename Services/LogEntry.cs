@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // One row in the LogService ring buffer.
 //   Timestamp — wall-clock time the entry was recorded.

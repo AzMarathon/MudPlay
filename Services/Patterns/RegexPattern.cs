@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Services.Patterns;
+namespace MudPlay.Services.Patterns;
 
 // Full Regex match against the line's text. The regex is compiled in the
 // constructor; capture groups from index 1 onward are returned to the handler

@@ -1,7 +1,7 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Marks an [ObservableProperty]-backed field as having exactly one writer
-// outside its declaring type. The FujinTerm.Tests single-writer invariant
+// outside its declaring type. The MudPlay.Tests single-writer invariant
 // test scans the compiled assembly's IL and fails CI if any class other than
 // Owner or the field's declaring type writes the field via stfld.
 //

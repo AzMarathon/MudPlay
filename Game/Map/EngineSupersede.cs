@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Which of the three concurrent movement engines is about to take over
 // the wire — the others get stopped so the chosen one owns the command

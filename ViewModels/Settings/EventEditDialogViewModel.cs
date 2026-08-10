@@ -4,13 +4,13 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.Navigation;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.ViewModels.Navigation;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // Modeless editor for one ScheduledEvent. WHEN (trigger) and WHAT (action) split
 // into two separate radio groups so the user isn't picking from a single mixed

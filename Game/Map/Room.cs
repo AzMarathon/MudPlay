@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One room in the active game-data set's static graph. Built once at
 // set-switch time by RoomGraphManager and shared by reference to every

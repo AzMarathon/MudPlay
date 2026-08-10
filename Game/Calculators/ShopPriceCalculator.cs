@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Pure MajorMUD shop price formulas: item base value → copper, per-shop BUY
 // (shop markup + charm) and vendor SELL (charm only; markup-independent, so

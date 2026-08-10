@@ -1,9 +1,9 @@
 using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
-using FujinTerm.ViewModels;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Modeless Session Stats → Players Seen window. Bound to PlayersSeenViewModel;
 // code-behind only disposes the VM on close (unsubscribing it from the tracker)
@@ -14,7 +14,7 @@ public partial class PlayersSeenWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "playersseen");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "playersseen");
         Closed += OnClosed;
     }
 

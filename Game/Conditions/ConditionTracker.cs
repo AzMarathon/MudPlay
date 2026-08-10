@@ -1,10 +1,10 @@
 using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Conditions;
+namespace MudPlay.Game.Conditions;
 
 // Tracks active conditions on the local character by matching inbound lines
 // against MessageRecord.AppliedMessage / MessageRecord.AppliedEndsWith pairs in

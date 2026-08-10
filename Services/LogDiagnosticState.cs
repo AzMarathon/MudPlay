@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Live per-character diagnostic switches. Two gate in-memory generation of the
 // Debug and Combat log channels; the third gates whether the on-disk

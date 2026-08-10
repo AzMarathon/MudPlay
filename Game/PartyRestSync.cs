@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Emit side of the @wait / @ok protocol. Engines call RequestWait / RequestOk
 // when their own logic decides the party leader should pause / resume — e.g.

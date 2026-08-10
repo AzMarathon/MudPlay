@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // How the Navigation map paints lair rooms. The Lairs chip cycles through
 // these in order: Uniform -> Heat -> Count -> Heat+Count -> Off -> Uniform.

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Aggregated equipment stat bonuses summed across every equipped item (and any
 // race / class / quest ability bonuses folded in). Field-to-ability-ID mapping

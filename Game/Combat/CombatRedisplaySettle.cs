@@ -1,8 +1,8 @@
 using Avalonia.Threading;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Holds the movement loop for a brief settle window when a combat line arrives in
 // a LIT room our view shows empty — the lit-room twin of DarkRoomMovementSettle.

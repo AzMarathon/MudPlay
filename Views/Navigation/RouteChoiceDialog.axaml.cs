@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace FujinTerm.Views.Navigation;
+namespace MudPlay.Views.Navigation;
 
 // Modeless free-vs-direct route picker. Shown when a user-initiated walk found a
 // shorter route through an acquirable gate. See

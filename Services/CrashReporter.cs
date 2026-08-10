@@ -2,7 +2,7 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Last-ditch crash capture. A fatal error during play (the combat-time crash
 // that prompted this) otherwise vanishes without a trace: the process dies
@@ -120,7 +120,7 @@ public static class CrashReporter
     internal static string Build(Exception? ex, string source)
     {
         StringBuilder sb = new(capacity: 16 * 1024);
-        sb.Append("# FujinTerm crash report\n\n");
+        sb.Append("# MudPlay crash report\n\n");
         sb.Append("_Captured ").Append(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")).Append("_\n\n");
 
         sb.Append("## Fault\n\n");

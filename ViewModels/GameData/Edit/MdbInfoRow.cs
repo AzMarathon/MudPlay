@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // One label/value row in a monster's read-only "Other Info (from MDB)" pane.
 // Most rows are plain text; a row backed by a TBInfo textblock (currently the

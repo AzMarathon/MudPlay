@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Leader-side reconnect party reform — the mirror of PartyRejoinCoordinator. That
 // one rejoins a leader we were FOLLOWING; this re-collects the followers we were

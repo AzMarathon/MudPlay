@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Game.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Races tab. Static MDB race definitions — drives Workshop
 // CharacterPlanner ability-score previews and new-character roll math.

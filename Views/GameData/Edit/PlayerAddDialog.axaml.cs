@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace FujinTerm.Views.GameData.Edit;
+namespace MudPlay.Views.GameData.Edit;
 
 public partial class PlayerAddDialog : Window
 {

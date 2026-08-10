@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map.MpFile;
+namespace MudPlay.Game.Map.MpFile;
 
 // Parsed-but-unresolved representation of a single .mp loop file. Geometry only:
 // no RoomKeys are assigned at this stage because the file doesn't carry

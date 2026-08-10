@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // The 21 equipment slots an EquipmentSet can control, in the Workshop's display
 // order. The order mirrors what a player sees when looking at someone in game —

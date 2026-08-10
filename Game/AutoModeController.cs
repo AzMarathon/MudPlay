@@ -1,8 +1,8 @@
 using System.Text.Json;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Master kill-switch for every wired auto-engine. One press flips all
 // currently-engaged engines off (after snapshotting which were on); the next

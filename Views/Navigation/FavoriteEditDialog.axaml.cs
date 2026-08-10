@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace FujinTerm.Views.Navigation;
+namespace MudPlay.Views.Navigation;
 
 public sealed partial class FavoriteEditDialog : Window
 {

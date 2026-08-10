@@ -1,6 +1,6 @@
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // One row in the CURRENT NAV section's list. Has the same shape for
 // walking, looping, and auto-lair so the right rail can bind to a single

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One sailing a sea-captain dock offers: typing Keyword at the dock room
 // CMD-teleports the caster onto a ship and, several buff-locked transit rooms

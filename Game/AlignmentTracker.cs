@@ -1,8 +1,8 @@
 using System;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Tracks whether the local character's last-observed alignment is stale.
 // MajorMUD prints "A dark cloud passes over you" whenever the character's

@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Quests;
+namespace MudPlay.Game.Quests;
 
 // Drafts an ordered, followable step checklist for a single quest flag by walking
 // the active set's TBInfo chains — the auto baseline behind QuestDefinition.Steps

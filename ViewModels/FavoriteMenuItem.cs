@@ -1,7 +1,7 @@
 using System.Windows.Input;
 using Avalonia.Media;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // One entry in the terminal right-click Favorites flyout. Carries a numbered
 // prefix ("1)", rendered in the default menu colour) and a name rendered in a

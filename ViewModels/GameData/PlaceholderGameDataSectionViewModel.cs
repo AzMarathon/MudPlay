@@ -1,7 +1,7 @@
 using Avalonia.Controls;
-using FujinTerm.Views.GameData;
+using MudPlay.Views.GameData;
 
-namespace FujinTerm.ViewModels.GameData;
+namespace MudPlay.ViewModels.GameData;
 
 // Stub section rendered where the real editor isn't wired yet. Carries the section's
 // title + phase tag + description so the user sees the full sidebar and hovering each

@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Persisted snapshot of the most recent Game.PlayerStats capture — written by
 // Game.StatParser each time it closes a successful scan window, rehydrated into

@@ -1,7 +1,7 @@
 using System.Globalization;
-using FujinTerm.Game.Calculators;
+using MudPlay.Game.Calculators;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One display row in the Level Projection grid — formats a LevelProjection into
 // the grid's string columns and carries the IsCurrentLevel flag the view uses to

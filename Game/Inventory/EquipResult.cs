@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Outcome of an @equip-<set> / set-apply request, so callers (EquipHandler) can
 // craft the right reply.

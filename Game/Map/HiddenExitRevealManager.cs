@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Drives the walker's sea <dir> retry loop for searchable-hidden exits.
 // Mirrors DoorOpenManager's shape — one request in flight, FIFO queue,

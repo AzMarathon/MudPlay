@@ -3,7 +3,7 @@
   <!-- Windows-only manifest. Required by Avalonia for proper window
        transparency and embedded-control behavior on Windows; ignored on
        Linux/macOS but kept for cross-platform builds. -->
-  <assemblyIdentity version="1.0.0.0" name="FujinTerm.Desktop"/>
+  <assemblyIdentity version="1.0.0.0" name="MudPlay.Desktop"/>
 
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>

@@ -1,8 +1,8 @@
 using System.Text;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Detects the brief excursion into the in-game trainer stats menu so
 // downstream subscribers can react when the user returns to the realm —

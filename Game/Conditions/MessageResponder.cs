@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Text;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Conditions;
+namespace MudPlay.Game.Conditions;
 
 // Sends a game-data message's Response command when its CasterMessage appears on
 // the wire. A Messages record can carry a Response — the command to fire when the

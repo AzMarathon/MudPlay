@@ -1,8 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Input;
-using FujinTerm.ViewModels.Settings;
+using MudPlay.ViewModels.Settings;
 
-namespace FujinTerm.Views.Settings;
+namespace MudPlay.Views.Settings;
 
 public sealed partial class EventsSectionView : UserControl
 {

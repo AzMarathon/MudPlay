@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Numeric carry-weight reading parsed from the game's
 // "Encumbrance:  <cur>/<max>  -  <Category>  [<pct>%]" line. The bracket

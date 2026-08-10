@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character statline configuration. Wraps the argument we send after
 // set statline so the game prints prompts in the format the client knows how to
@@ -11,7 +11,7 @@ namespace FujinTerm.Models.Profile;
 // wildcard string after set statline too.
 //
 // This one string is the single source of truth for the statline: it's both
-// what we send to the BBS and what FujinTerm.Game.StatlinePromptRegexBuilder
+// what we send to the BBS and what MudPlay.Game.StatlinePromptRegexBuilder
 // compiles the prompt parser from, so the editor and the on-wire prompt can't
 // drift.
 public sealed class StatlineSettings

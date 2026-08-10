@@ -1,6 +1,6 @@
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // ITravelCostModel driven by the live PlayerState.Encumbrance reading.
 // Each query reads the player's current encumbrance bucket, looks up that

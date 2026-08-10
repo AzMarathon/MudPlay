@@ -6,13 +6,13 @@ using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.GameData;
-using FujinTerm.Services;
-using FujinTerm.Views.CharacterWorkshop;
+using MudPlay.Game;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.GameData;
+using MudPlay.Services;
+using MudPlay.Views.CharacterWorkshop;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // LEVEL PROJECTION section — a per-level grid of XP-to-next / total XP, the HP
 // roll bracket + per-tick HP regen, and (for casters) max Mana/Kai + MP regen,

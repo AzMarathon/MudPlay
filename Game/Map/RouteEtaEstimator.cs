@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Projects the wall-clock arrival time over a walk's REMAINING route: the
 // sum of per-hop travel estimates plus, when auto-combat is on, a dwell

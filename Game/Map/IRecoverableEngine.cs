@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Contract every "active-step engine" (walker, loop runner, auto-lair
 // scheduler) implements so the shared EngineRecoveryGate can drive tier-2

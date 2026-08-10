@@ -2,7 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Reusable read-only modeless dialog for "show this text and a Close
 // button" affordances — About, License, Keyboard shortcuts, anything that

@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "Other" settings — the misc bucket. Stored as the "Other" entry
 // in CharacterProfile.Settings.

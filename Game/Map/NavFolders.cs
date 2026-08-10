@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Path helpers shared by the three navigation organisers that group their
 // entries into folders: GOTO favourites (FavoritesStore), saved loops

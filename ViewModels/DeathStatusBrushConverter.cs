@@ -2,9 +2,9 @@ using System.Globalization;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // XAML converter mapping a DeathRecoveryStatus to a stoplight brush for the
 // Workshop DEATH grid: Active → red, Partial → amber, Recovered → green,

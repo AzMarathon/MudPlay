@@ -1,10 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:FujinTerm.ViewModels.GameData"
+             xmlns:vm="using:MudPlay.ViewModels.GameData"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="360"
-             x:Class="FujinTerm.Views.GameData.PlaceholderGameDataSectionView"
+             x:Class="MudPlay.Views.GameData.PlaceholderGameDataSectionView"
              x:DataType="vm:PlaceholderGameDataSectionViewModel">
 
     <Border Padding="22" Background="{StaticResource ChromeBgSunkenBrush}">

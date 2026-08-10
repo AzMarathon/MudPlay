@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // The class-derived inputs ItemEquipFilter.CanEquip needs beyond the item row:
 // the class id (for ClassRest / ClassOk matching), the class's weapon and armour

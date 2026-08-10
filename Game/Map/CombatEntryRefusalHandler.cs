@@ -1,10 +1,10 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Handles the MajorMUD combat-gated-entry refusal. The server rejects a move
 // into a room you may not enter while fighting — "You may not enter that room

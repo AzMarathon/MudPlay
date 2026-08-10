@@ -1,11 +1,11 @@
 using System;
 using System.Text.Json;
 using Avalonia.Threading;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Runs the character's Settings → General "Default task" once per game entry.
 // DoNothing is the historical behaviour (leave the client idle); BeginLoop and

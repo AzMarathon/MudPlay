@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character Auto-Trainer settings — the "AutoTrainer" entry in
 // CharacterProfile.Settings. Surfaced by the Settings → Auto-Trainer tab.

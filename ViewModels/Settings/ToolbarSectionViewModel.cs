@@ -3,12 +3,12 @@ using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.Profile;
-using FujinTerm.Models.Settings;
-using FujinTerm.Services;
-using FujinTerm.Views.Settings;
+using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
+using MudPlay.Services;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "Toolbar" tab — list editor for the per-character toolbar layout.
 // Top-to-bottom here maps to left-to-right on the live toolbar. Each row is

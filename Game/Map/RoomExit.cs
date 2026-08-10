@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One outgoing exit from a room: the target RoomKey plus a parsed RoomExitHint
 // and the raw parenthetical text from the MDB cell (preserved so an unknown

@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // AES-GCM encrypt / decrypt for short secrets (BBS passwords). The ciphertext
 // is stored inline on the owning record — e.g.

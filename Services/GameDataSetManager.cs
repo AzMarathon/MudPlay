@@ -1,7 +1,7 @@
 using System.IO;
 using System.Linq;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Game-data set lifecycle operations exposed by the Game Data → "Manage Sets…"
 // dialog: copy or move a set's nav-library between sets, and delete a set

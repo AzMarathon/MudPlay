@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Writes party-membership and per-member state into PartyState from observed
 // server lines. Sole writer of every observable field on PartyState and
@@ -78,7 +78,7 @@ public sealed partial class PartyManager : IDisposable
     internal Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.UtcNow;
 
     // Locally-connected character's given name (matches the profile name; e.g.
-    // "Fujin" / "Raijin"). Used to detect PartyMember.IsSelf when parsing par
+    // "MudPlay" / "Raijin"). Used to detect PartyMember.IsSelf when parsing par
     // rows whose name field is "Given Family". null when no profile is loaded;
     // in that case the par parser can't tell which row is us and IsSelf stays
     // false on every row. AppServices sets this from ProfileService.ProfileLoaded
@@ -126,8 +126,8 @@ public sealed partial class PartyManager : IDisposable
     // par row regex — anchored on the real MajorMUD format:
     //
     //   Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Midrank
-    //   Fujin WuzHere                   (Mystic)        [K: 60%] [H: 96%]   - Frontrank
-    //   Fujin WuzHere                   (Mystic)                  [H: 96%]   - Frontrank
+    //   MudPlay WuzHere                   (Mystic)        [K: 60%] [H: 96%]   - Frontrank
+    //   MudPlay WuzHere                   (Mystic)                  [H: 96%]   - Frontrank
     //   Raijin WuzHere                  (Priest)        [M:100%] [H: 85%]   - Backrank
     //
     // Name is given + (optional) family. Class is in parens and can contain
@@ -564,7 +564,7 @@ public sealed partial class PartyManager : IDisposable
         // prompt, so _parState stays in ReadingRows). The line that
         // follows "You are not in a party at the present time." is the
         // local character's own row in par's "solo" format
-        // ("Fujin WuzHere ..."), which would otherwise match ParRow,
+        // ("MudPlay WuzHere ..."), which would otherwise match ParRow,
         // re-add us to Members, flip IsInParty back to true, and keep
         // the par poller alive even though the server just told us
         // we're alone.
@@ -1201,9 +1201,9 @@ public sealed partial class PartyManager : IDisposable
         // (the loaded profile name often includes family because that's
         // what the user picked at character creation). Without the
         // given-from-both extraction the compare would mismatch
-        // ("Fujin" vs "Fujin WuzHere"), IsSelf would stay false on
+        // ("MudPlay" vs "MudPlay WuzHere"), IsSelf would stay false on
         // OUR OWN row, and PartyPoller.OnMembersChanged would telepath
-        // /Fujin @health to us — the exact spam the screenshot showed.
+        // /MudPlay @health to us — the exact spam the screenshot showed.
         bool isSelf = false;
         if (!string.IsNullOrEmpty(LocalCharacterName))
         {
@@ -1300,7 +1300,7 @@ public sealed partial class PartyManager : IDisposable
     // (PartyPoller's on-join @health round-trip in particular) sees the right
     // value at the moment the Add fires. Without this, par parsing the local
     // character's row for the first time would race the IsSelf assignment and
-    // PartyPoller would telepath /Fujin @health to ourselves — the server
+    // PartyPoller would telepath /MudPlay @health to ourselves — the server
     // replies "Why are you telepathing to yourself?" and the noise lands in chat.
     private PartyMember AddOrTouchMember(string name, bool isSelf = false, bool isInvited = false)
     {

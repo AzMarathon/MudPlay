@@ -4,9 +4,9 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
-using FujinTerm.ViewModels;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Modeless Session Stats window. Bound to SessionStatsViewModel;
 // code-behind attaches the persisted window-layout, wires the global-hotkeys
@@ -19,7 +19,7 @@ public partial class SessionStatsWindow : Window
     // In-process carrier for the dragged panel's Tag id. Avalonia 12's
     // DataTransfer surface replaced the legacy string-keyed DataObject.
     private static readonly DataFormat<string> PanelFormat =
-        DataFormat.CreateInProcessFormat<string>("fujin-session-stats-panel");
+        DataFormat.CreateInProcessFormat<string>("mudplay-session-stats-panel");
 
     // Thin accent line slotted between panels during a drag to preview the drop
     // position. Non-hit-testable so it never intercepts the drag's hit-testing.
@@ -52,7 +52,7 @@ public partial class SessionStatsWindow : Window
         GlobalHotkeys.Attach(this);
         // autoHeight: the window sizes its height to its visible content
         // (SizeToContent="Height"), so the layout store must not pin a saved height.
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "session-stats", autoHeight: true);
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "session-stats", autoHeight: true);
         Closed += OnClosed;
 
         _dropIndicator.Background =

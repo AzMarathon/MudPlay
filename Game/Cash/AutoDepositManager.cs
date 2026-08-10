@@ -1,12 +1,12 @@
 using System.Text;
 using System.Threading;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Game.Light;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Light;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Cash;
+namespace MudPlay.Game.Cash;
 
 // Auto-deposit reroute. When CashManager.AutoDepositRequested fires (a wealth /
 // coin-count gate crossed with a bank / stash location configured), this manager

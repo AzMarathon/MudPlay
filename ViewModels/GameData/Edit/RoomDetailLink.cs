@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // One clickable row in the room-detail popup — a monster name (click opens the
 // monster's Game Data record) or an exit destination (click centres the

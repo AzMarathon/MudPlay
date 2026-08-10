@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Parsed multi-action prerequisite data attached to a
 // RoomExitHint.MultiActionHidden exit. Populated by RoomGraphManager's

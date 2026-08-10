@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // Cadence unit for an EventTriggerType.Every-style trigger. Pairs with
 // ScheduledEvent.EveryAmount to produce the firing interval.

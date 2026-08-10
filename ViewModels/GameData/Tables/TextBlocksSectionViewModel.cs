@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → TextBlocks tab. Reads MajorMUD's TBInfo table — the per-textblock
 // metadata index (link target / action / callsite). The full text body lives in a separate Jet

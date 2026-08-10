@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
-using FujinTerm.Game.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Quests;
+namespace MudPlay.Game.Quests;
 
 // How a TBInfo Action directive relates the block to a quest flag.
 public enum QuestFlagRelation { Grants, Advances, Requires, Tests, Gate, Clears }

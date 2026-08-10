@@ -1,11 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:FujinTerm.ViewModels.Settings"
-             xmlns:svc="using:FujinTerm.Services"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
+             xmlns:svc="using:MudPlay.Services"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="620"
-             x:Class="FujinTerm.Views.Settings.ToolbarSectionView"
+             x:Class="MudPlay.Views.Settings.ToolbarSectionView"
              x:DataType="vm:ToolbarSectionViewModel">
 
     <UserControl.Styles>

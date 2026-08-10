@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Import;
+using MudPlay.Models.Import;
 
-namespace FujinTerm.ViewModels.Import;
+namespace MudPlay.ViewModels.Import;
 
 // One row in the import-conflict dialog's left rail. Wraps a single ImportConflict
 // with the per-row mutable state (chosen action, rename text) and a pre-computed list

@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // One row of the item dialog's chest-contents table: the item a container can
 // yield and the chance (already formatted, e.g. "42%") that a single `open`

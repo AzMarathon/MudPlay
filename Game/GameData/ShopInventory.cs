@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Services;
+using MudPlay.Game.Calculators;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.GameData;
+namespace MudPlay.Game.GameData;
 
 // One stock slot of a shop, resolved against Items.json. BaseCopper is the item's
 // MDB Price folded through its Currency (via ShopPriceCalculator.ToCopper) so the

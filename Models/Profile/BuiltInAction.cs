@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Every keybindable built-in app action. One entry per command the menu or
 // toolbar can invoke; KeybindingStore maps each to a KeyChord. New built-in

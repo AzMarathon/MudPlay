@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Game;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Spells;
-using FujinTerm.Services;
+using MudPlay.Game;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Spells;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // Builds the read-only "MDB view" the item edit dialog renders from the active set's Items.json
 // row: a curated "Other Info" key/value list for the right pane plus the Details-section derived

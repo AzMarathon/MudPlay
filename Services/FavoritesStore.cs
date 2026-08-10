@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-game-data-set favourite-room bookmarks for the Navigation GOTO pane. Keyed
 // on the active game-data set (the realm's MDB) rather than the character, so

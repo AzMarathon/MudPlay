@@ -1,6 +1,6 @@
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // One row in the Navigation GOTO pane — a saved favourite room with the
 // user's chosen label (or the graph display name when no label was

@@ -1,8 +1,8 @@
 using System.Text;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // The @do <command> passthrough — the highest-trust verb in the @-command
 // catalogue. The sender's args are joined back into the original command string

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Movement time per step in milliseconds, whether it clears the 1-second cap,
 // and the quickness distance to the cap (spare when above it, still-needed when

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One point in a saved Loop's ordered cycle. Carries the room the user
 // clicked plus an optional in-room command to send after arrival (with a

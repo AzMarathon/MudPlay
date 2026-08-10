@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // On-demand party-level probe. Asks the whole party "what level are you?" by
 // broadcasting @level to every non-self member and aggregating the replies into a
@@ -84,7 +84,7 @@ public sealed partial class PartyLevelProbe : IDisposable
     // so a member's chatter that happens to start "Level 5, …" can't be
     // misread as a level reply while a probe is open. The optional leading `{`
     // tolerates the brace-wrap the engine adds at SendReply time, so a reply
-    // from another FujinTerm client ("{Level 12, …}") parses too — without it a
+    // from another MudPlay client ("{Level 12, …}") parses too — without it a
     // peer-to-peer @level round-trip never recorded.
     [GeneratedRegex(@"^\{?Level (\d+), [\d,]+ exp\b",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]

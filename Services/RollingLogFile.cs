@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // A line-capped append log persisted to a single file. Retains only the last
 // MaxLines lines on disk — the tail rolls forward as new lines arrive, so a

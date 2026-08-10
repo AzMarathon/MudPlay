@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Compact per-hour rate formatting shared by the Session Stats window and the
 // main-window looping chip: large figures abbreviate to k / M so they fit a

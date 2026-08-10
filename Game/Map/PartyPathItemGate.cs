@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text;
-using FujinTerm.Game.Remote;
-using FujinTerm.Services;
+using MudPlay.Game.Remote;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Party-first stage of the path-item demand pipeline. Sits between the walker's
 // walk-start item announcer and PathItemDemandTracker: when a planned route

@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Severity tags carried by every LogEntry. The values are ordered loosely by
 // "urgency" but consumers should not rely on the numeric comparison

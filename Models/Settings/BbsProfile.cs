@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace FujinTerm.Models.Settings;
+namespace MudPlay.Models.Settings;
 
 // Root DTO for Data/BBS/{bbs-name}.json — the BBS tier of the settings
 // hierarchy. Connection info plus deltas the user pinned to "only for this

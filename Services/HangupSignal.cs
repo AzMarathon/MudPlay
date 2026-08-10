@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Two one-shot flags coordinating "we deliberately hung up" intent across the
 // engines that need to react to it. Set by every path that intentionally drops

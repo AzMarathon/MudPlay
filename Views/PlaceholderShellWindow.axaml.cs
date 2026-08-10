@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Reusable placeholder window for panels not yet wired to real data. The
 // skeleton's actual per-window layout (tabs, sections, lists, canvases)

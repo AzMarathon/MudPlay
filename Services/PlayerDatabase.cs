@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Models.Settings;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Two-layer store of player records — the BBS-tier observation list (one row
 // per player ever seen on the active BBS) merged with the loaded character's
@@ -303,7 +303,7 @@ public sealed class PlayerDatabase
     }
 
     // Record one player's client version, as learned from an @version probe reply
-    // (e.g. "FujinTerm 2.37.0", "MegaMud 1.03u"). Mirrors RecordLevel: keyed on
+    // (e.g. "MudPlay 2.37.0", "MegaMud 1.03u"). Mirrors RecordLevel: keyed on
     // given name, creates a minimal row when unknown (we only get a version reply
     // from someone we asked), otherwise updates Version/VersionAt and bumps
     // LastSeenUtc (answering a telepath proves presence). Saves the BBS file.

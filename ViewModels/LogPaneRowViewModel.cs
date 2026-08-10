@@ -1,7 +1,7 @@
 using Avalonia.Media;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // One row in the LogPaneViewModel's displayed list. Wraps a LogEntry with
 // the formatted display strings the XAML binds to, plus the

@@ -1,10 +1,10 @@
 using System.Collections.Generic;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Serves the party level-gate for path planning. Bounds() gives the party's
 // most-constraining (Low, High) level window that MovementFilter reads at BFS

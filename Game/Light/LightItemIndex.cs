@@ -1,7 +1,7 @@
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // Catalogue of every light-source item (ItemType 6) in the active game-data set,
 // keyed by name, for the auto-light provisioning logic: it answers a light's

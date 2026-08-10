@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Sends the configured GameCommands.EntryCommand (default `E`) when the
 // MajorMUD main-menu screen is recognised at the tail of the automated

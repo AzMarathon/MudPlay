@@ -1,9 +1,9 @@
 using System.Text.Json;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Per-set ceiling for "what is the highest Strength any build can reach on
 // this game-data set?" — the number the door FSM (DoorPolicy) uses to

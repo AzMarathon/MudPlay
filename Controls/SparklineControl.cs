@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace FujinTerm.Controls;
+namespace MudPlay.Controls;
 
 // A minimal hand-drawn line chart for the Session Stats panel's kills/hour
 // readout. Takes a numeric series via Samples (oldest → newest, left → right)

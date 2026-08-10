@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text;
 using Avalonia.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Auto-open containers engine. When a container item (ItemType == Container)
 // flagged ItemOverlay.AutoOpen newly enters the pack, sends open <item name>

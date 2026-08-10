@@ -2,12 +2,12 @@ using System.Collections.Generic;
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
-using FujinTerm.Models.Settings;
-using FujinTerm.Services;
-using FujinTerm.Views.Settings;
+using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
+using MudPlay.Services;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "Other" tab — the misc bucket. Fields land on OtherSettings and wire
 // through ApplyToServices; the inline stub catalog (StubGroups) holds the

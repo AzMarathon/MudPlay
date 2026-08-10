@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // MajorMUD's room-visibility model. A room's visibility is a function of the
 // single combined value V = charIllu + roomLight, where charIllu is the player's

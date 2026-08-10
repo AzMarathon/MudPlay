@@ -3,11 +3,11 @@ using System.Globalization;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.GameData;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // View-model for the Game Data Browser → Items tab's per-record edit dialog. Surfaces
 // the editable overlay fields (Use-tier, Name, the 11 Options checkboxes, Min/Max carry
@@ -64,7 +64,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     [ObservableProperty] private bool _mustHaveMinimum;
     [ObservableProperty] private bool _loyalItem;
 
-    // ----- Navigation path provisioning (FujinTerm) -----
+    // ----- Navigation path provisioning (MudPlay) -----
     // Single opt-in. When a planned route needs this item to cross a gate or
     // survive a hazard and we lack it, CHECKED means "go get it (every method:
     // party redistribute, shop buy, bank withdraw, or drop reroute), then walk";

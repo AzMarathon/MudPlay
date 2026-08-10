@@ -1,7 +1,7 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // XAML converter for the Show-password ToggleButton — feeds the right
 // PasswordChar into the TextBox: '\0' (no masking) when the toggle is on,

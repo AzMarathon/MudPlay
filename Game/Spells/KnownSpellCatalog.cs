@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using FujinTerm.Game.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Builds the per-class learnable-spell list from the active game-data set's
 // Spells + Classes tables. The eligibility filter applies MajorMUD's own

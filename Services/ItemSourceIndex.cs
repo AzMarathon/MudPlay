@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Map;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // One container that can yield an item — the reverse of ChestContentsReader:
 // which chest an item drops from, and the per-open chance that a single `open`

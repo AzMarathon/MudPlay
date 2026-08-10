@@ -7,9 +7,9 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Controls;
+namespace MudPlay.Controls;
 
 // Custom Avalonia control that draws the terminal grid and forwards keyboard
 // input back out to the view-model.
@@ -35,7 +35,7 @@ public sealed class TerminalControl : Control
     public static readonly StyledProperty<FontFamily> FontFamilyProperty =
         AvaloniaProperty.Register<TerminalControl, FontFamily>(
             nameof(FontFamily),
-            new FontFamily("avares://FujinTerm/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16"));
+            new FontFamily("avares://MudPlay/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16"));
 
     public static readonly StyledProperty<double> FontSizeProperty =
         AvaloniaProperty.Register<TerminalControl, double>(nameof(FontSize), 16.0);
@@ -139,9 +139,9 @@ public sealed class TerminalControl : Control
     // Per-control cursor over the shared command-recall history. Built
     // lazily on first keystroke (AppServices.Current is live by then; it
     // may not be at design-time construction).
-    private FujinTerm.Services.CommandHistoryNavigator? _historyNav;
-    private FujinTerm.Services.CommandHistoryNavigator HistoryNav =>
-        _historyNav ??= new(FujinTerm.Services.AppServices.Current.CommandHistory);
+    private MudPlay.Services.CommandHistoryNavigator? _historyNav;
+    private MudPlay.Services.CommandHistoryNavigator HistoryNav =>
+        _historyNav ??= new(MudPlay.Services.AppServices.Current.CommandHistory);
 
     public TerminalControl()
     {
@@ -226,7 +226,7 @@ public sealed class TerminalControl : Control
         }
         // Register the input core so keystrokes typed while a modeless dialog is
         // focused can be forwarded here (DialogKeyboardFallthrough → the router).
-        FujinTerm.Services.AppServices.CurrentOrNull?.TerminalInput
+        MudPlay.Services.AppServices.CurrentOrNull?.TerminalInput
             .RegisterTerminal(HandleKeyCore, HandleTextCore);
         Focus();
     }
@@ -243,7 +243,7 @@ public sealed class TerminalControl : Control
             buf.Changed -= _onBufferChanged;
             _onBufferChanged = null;
         }
-        FujinTerm.Services.AppServices.CurrentOrNull?.TerminalInput.UnregisterTerminal();
+        MudPlay.Services.AppServices.CurrentOrNull?.TerminalInput.UnregisterTerminal();
     }
 
     // Rebuild the native cell metrics at FontSize, then re-fit the window zoom.
@@ -612,7 +612,7 @@ public sealed class TerminalControl : Control
         // returns false when no macro matches OR no sender is bound
         // yet (pre-telnet-connection), letting us fall through to the
         // regular terminal path.
-        if (FujinTerm.Services.AppServices.Current.MacroDispatcher
+        if (MudPlay.Services.AppServices.Current.MacroDispatcher
                 .TryHandleKey(key, modifiers))
         {
             return true;
@@ -648,7 +648,7 @@ public sealed class TerminalControl : Control
                 // Record the typed line for Up/Down recall before the
                 // flush clears the buffer; blank lines are dropped by
                 // CommandHistory.Record itself.
-                FujinTerm.Services.AppServices.Current.CommandHistory.Record(buf.Text);
+                MudPlay.Services.AppServices.Current.CommandHistory.Record(buf.Text);
                 HistoryNav.Reset();
                 // Rapid-fire multi-command: a typed line carrying the macro
                 // separators (';' / '^M') fans out into several wire lines the
@@ -659,7 +659,7 @@ public sealed class TerminalControl : Control
                 // line as its own CR-terminated wire send.
                 string typedLine = buf.Text;
                 _ = buf.FlushBytes();
-                foreach (string wireLine in FujinTerm.Services.MacroStore.SplitTypedInput(typedLine))
+                foreach (string wireLine in MudPlay.Services.MacroStore.SplitTypedInput(typedLine))
                     UserInput?.Invoke(System.Text.Encoding.Latin1.GetBytes(wireLine + "\r"));
                 InvalidateVisual();
                 return true;

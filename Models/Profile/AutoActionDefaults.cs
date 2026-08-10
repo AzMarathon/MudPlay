@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Initial state for every Action-menu auto-toggle when the character
 // logs in. Lives on GeneralSettings twice — once per Manual-Mode column

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Flattens a BFS shortest-path direction list into the linear WalkStep
 // sequence the walker actually executes. Inserts CommandStep entries for

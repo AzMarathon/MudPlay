@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Leaderboard;
+namespace MudPlay.Game.Leaderboard;
 
 // The computed view over the capture history: the latest listing's rows with
 // their XP/HR, plus the context needed to describe the capture (when, how many

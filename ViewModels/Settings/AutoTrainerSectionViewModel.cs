@@ -5,13 +5,13 @@ using System.Linq;
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game;
-using FujinTerm.Game.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.Settings;
+using MudPlay.Game;
+using MudPlay.Game.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // Settings → Auto-Trainer tab. Holds the master AutoTrain + cascading
 // AutoTrainStats toggles, and a table of every training shop discovered in the

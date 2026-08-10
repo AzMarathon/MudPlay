@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Persisted Auto-Lair "setup" — a named bundle of marked lair rooms the
 // scheduler cycles through. Mirrors Game.Map.Loop's role for loops: storage

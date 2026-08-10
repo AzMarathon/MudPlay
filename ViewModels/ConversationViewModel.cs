@@ -4,11 +4,11 @@ using Avalonia;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // View-model behind the Conversation window. Mirrors entries from
 // ChatHistoryStore.Entries through a channel + search filter into Rows, owns

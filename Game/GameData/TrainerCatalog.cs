@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.GameData;
+namespace MudPlay.Game.GameData;
 
 // One training-shop room discovered in the active set's Shops table. Number is
 // Shops.Number; Name is the shop name (usually the trainer / role label, e.g.

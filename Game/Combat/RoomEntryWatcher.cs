@@ -1,8 +1,8 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Observes mid-room arrival lines and appends the new entity to
 // RoomEntityClassifier.Current. "<name> <verb> into the room from <dir>." fires

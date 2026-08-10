@@ -1,9 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
-using FujinTerm.ViewModels.CharacterWorkshop;
+using MudPlay.ViewModels.CharacterWorkshop;
 
-namespace FujinTerm.Views.CharacterWorkshop;
+namespace MudPlay.Views.CharacterWorkshop;
 
 public partial class DeathSectionView : UserControl
 {

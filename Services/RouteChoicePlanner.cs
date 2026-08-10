@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // The kind of acquirable gate a direct route crosses. Drives the requirement
 // phrasing in the route picker (a raft to carry, a ticket, a door key, a hazard

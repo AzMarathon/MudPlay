@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
-using FujinTerm.Game.Spells;
-using FujinTerm.Services;
+using MudPlay.Game.Spells;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Discovers the sailings a sea-captain dock offers by decoding its CMD TBInfo
 // `secure passage to <place>` lines into BoatPassage records. Sibling to

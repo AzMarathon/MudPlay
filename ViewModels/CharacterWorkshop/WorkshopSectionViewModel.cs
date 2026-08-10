@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Base for one tab in the CharacterWorkshopViewModel's flat tab strip: Character
 // Info / Death Recovery / Level Projection / CP Allocation / Quest Status /

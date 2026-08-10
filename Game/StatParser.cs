@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Parses the in-game stat screen and writes every field onto PlayerStats.
 // Drives RemoteCommandManager.LivesProvider so the @suicide hard-block has a
@@ -390,7 +390,7 @@ public sealed partial class StatParser : IDisposable
 
         // String-valued fields are caught first — they have the
         // non-greedy "up to two spaces" cutoff so multi-word values
-        // like "Dark-Elf" / "Fujin WuzHere" capture fully without
+        // like "Dark-Elf" / "MudPlay WuzHere" capture fully without
         // bleeding into the next label.
         TryString(text, NameRx(),  "Name",  v => Stats.Name  = v);
         TryString(text, RaceRx(),  "Race",  v => Stats.Race  = v);
@@ -575,8 +575,8 @@ public sealed partial class StatParser : IDisposable
     // ----- Regexes -------------------------------------------------------
     // Source-generated for hot-path efficiency. String labels use the
     // `(?=\s{2,}|$)` lookahead to stop the value at two-space gutters
-    // between row columns (so "Name: Fujin WuzHere    Lives/CP: ..." captures
-    // just "Fujin WuzHere"). Numeric labels capture digits only.
+    // between row columns (so "Name: MudPlay WuzHere    Lives/CP: ..." captures
+    // just "MudPlay WuzHere"). Numeric labels capture digits only.
 
     [GeneratedRegex(@"\bName:\s+(\S[\w '\-]*?)(?=\s{2,}|$)",      RegexOptions.CultureInvariant)] private static partial Regex NameRx();
     [GeneratedRegex(@"\bRace:\s+(\S[\w '\-]*?)(?=\s{2,}|$)",      RegexOptions.CultureInvariant)] private static partial Regex RaceRx();

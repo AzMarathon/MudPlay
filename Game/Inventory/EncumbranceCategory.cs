@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Single source of truth for mapping a carry-weight percentage to its encumbrance
 // band. Used both by the live parse (InventoryManager) and by what-if overlays

@@ -18,7 +18,7 @@ package reference.
 
 ## Local patches
 
-Search for `[FUJINTERM PATCH]` in the source to find every modification.
+Search for `[MUDPLAY PATCH]` in the source to find every modification.
 
 1. **`Core/AccessReader.cs`** — disable the `hdr[0x62] & 0x03` encryption
    flag check. Jet4 page-0 bytes 0x18–0x97 are XOR-obfuscated against a
@@ -32,11 +32,11 @@ Search for `[FUJINTERM PATCH]` in the source to find every modification.
 
 - Every file is prefixed with `#nullable disable` + `#pragma warning disable`
   so the vendored source (authored for `Nullable=disable` / `LangVersion=7.3`)
-  compiles cleanly under FujinTerm's `Nullable=enable` /
+  compiles cleanly under MudPlay's `Nullable=enable` /
   `TreatWarningsAsErrors=true` settings without diff-noise from inserting
   modern annotations.
 - Files auto-include via the .NET SDK's default Compile glob — no explicit
-  `<Compile Include>` needed in `FujinTerm.csproj`.
+  `<Compile Include>` needed in `MudPlay.csproj`.
 - Adds one transitive package: `System.Text.Encoding.CodePages` (registered
   for code-page resolution in `AccessReader`'s static ctor).
 
@@ -44,5 +44,5 @@ Search for `[FUJINTERM PATCH]` in the source to find every modification.
 
 1. `git clone --depth 1 https://github.com/diegoripera/JetDatabaseReader.git /tmp/jdr`
 2. Diff `/tmp/jdr/JetDatabaseReader/**/*.cs` against this folder.
-3. Re-apply the `[FUJINTERM PATCH]` blocks above.
+3. Re-apply the `[MUDPLAY PATCH]` blocks above.
 4. Bump the version above.

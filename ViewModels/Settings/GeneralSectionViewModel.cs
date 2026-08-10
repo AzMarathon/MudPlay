@@ -3,12 +3,12 @@ using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.Settings;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "General" tab. Per-character: default startup task, auto-connect, and the
 // boot-up state of every Action-menu auto-toggle in both Manual-Mode and
@@ -133,7 +133,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         {
             new FontFamilyOption("MX437 IBM VGA {default}", DisplayConfig.DefaultFontFamily),
             new FontFamilyOption("JetBrains Mono",
-                "avares://FujinTerm/Assets/Fonts/JetBrainsMono-Regular.ttf#JetBrains Mono"),
+                "avares://MudPlay/Assets/Fonts/JetBrainsMono-Regular.ttf#JetBrains Mono"),
         };
 
         // Then every installed monospace font, skipping any that duplicates a

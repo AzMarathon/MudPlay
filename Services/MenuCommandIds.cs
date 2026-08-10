@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Stable identifiers for every menu-bar / context-menu command. The main
 // menu and the terminal right-click context menu both reference these IDs;

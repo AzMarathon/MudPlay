@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace FujinTerm.Game.Leaderboard;
+namespace MudPlay.Game.Leaderboard;
 
 // One row of a captured "Top Heroes of the Realm" (top N) listing: the player's
 // rank, full name, class, gang/guild affiliation, and total experience.

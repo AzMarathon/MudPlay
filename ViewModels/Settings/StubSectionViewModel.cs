@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Controls;
-using FujinTerm.Views.Settings;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // Base class for the not-yet-wired "stub" settings tabs — disabled controls
 // with per-field tooltips describing what each will do. Persistence and control

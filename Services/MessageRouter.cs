@@ -1,6 +1,6 @@
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Central pattern-bus that every line-aware subsystem subscribes to.
 // Producers call Dispatch with an emitted line; the router evaluates every

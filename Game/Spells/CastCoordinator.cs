@@ -1,8 +1,8 @@
 using System.Text;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Low-level spell-send layer. Builds the <cast-code> [target] wire command (the
 // 4-letter cast-code is typed directly — NOT prefixed with the c cast verb), gates

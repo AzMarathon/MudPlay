@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using FujinTerm.Game.Quests;
+using MudPlay.Game.Quests;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Live quest-reward state shared between the Quest Status tab (writer) and the
 // Character Info tab (reader), so completing a quest folds its permanent stat

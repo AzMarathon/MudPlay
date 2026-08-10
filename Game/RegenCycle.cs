@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // One regen cycle — anchored at a moment in wall-clock time and firing at
 // fixed Interval steps thereafter, until stopped. The natural HP / MP cycles

@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace FujinTerm.Views.Settings;
+namespace MudPlay.Views.Settings;
 
 public partial class GeneralSectionView : UserControl
 {

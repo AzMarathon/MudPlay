@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Avalonia.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Deterministic Auto-Lair session controller. Holds the marked-rooms
 // set + per-marker respawn overrides, then drives the walker through

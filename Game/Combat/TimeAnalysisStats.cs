@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Immutable snapshot of how the session's wall-clock time divided across the
 // player's activities, produced by TimeAnalysisTracker.Snapshot for the Time

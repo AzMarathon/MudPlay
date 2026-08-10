@@ -5,9 +5,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media;
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Controls;
+namespace MudPlay.Controls;
 
 // Virtualized, canvas-drawn transcript for the Backscroll window. Replaces the
 // single SelectableTextBlock that rendered every captured row (up to the full

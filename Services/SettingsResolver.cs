@@ -1,10 +1,10 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using FujinTerm.Models.Profile;
-using FujinTerm.Models.Settings;
+using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Single read / write API for the 4-tier settings + game-data override
 // hierarchy. Resolution order at read time: Character → BBS → Global → Defaults

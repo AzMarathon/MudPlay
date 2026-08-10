@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Marks powers obtained the moment they're learned at training. When a
 // character trains to a new level the server lists any newly learned abilities

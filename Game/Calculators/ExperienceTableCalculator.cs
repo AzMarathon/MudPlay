@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // MajorMUD experience-curve formulas. Produces the per-class/race exp chart
 // percentage and the cumulative exp required to reach a level, with separate

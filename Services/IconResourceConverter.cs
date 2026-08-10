@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // XAML value converter — looks up a string resource key (e.g. "IconPlug") in the
 // application's resource dictionary and returns the matching StreamGeometry. Used

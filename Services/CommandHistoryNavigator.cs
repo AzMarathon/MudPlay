@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-input-field cursor over a shared CommandHistory. Tracks where the user is
 // while cycling Up / Down and stashes the in-progress line so Down past the

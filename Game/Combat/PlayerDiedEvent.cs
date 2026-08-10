@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Payload of DeathLineWatcher.PlayerDied. Carries the killer's name as observed
 // on the wire + the timestamp of the line — DeathRecoveryManager uses both to

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // The buff-slot token scheme for casting a spell from an item. A normal spell slot
 // holds a 4-letter cast-code (e.g. mihe) that's typed straight to the wire; an

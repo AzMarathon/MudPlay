@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // A trigger-purposed loadout — the per-slot items a character wants worn when
 // this set's Trigger moment fires. The Equipment Manager keeps one set per

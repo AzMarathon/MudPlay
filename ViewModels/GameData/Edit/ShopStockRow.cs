@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // One row of the room-detail popup's shop table — modelled on MMUD Explorer's
 // Shops readout (Name | Max | Regen | Cost) with the single Cost split into Buy

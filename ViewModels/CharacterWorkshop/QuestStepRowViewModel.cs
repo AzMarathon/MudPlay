@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One row in a quest's followable checklist parsed from its step markdown. An
 // IsCheckable row is a tickable step (a []-marked line); a non-checkable row is a

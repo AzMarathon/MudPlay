@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // One Abil-N / AbilVal-N pair off a Spells-table row. Code is the MajorMUD
 // ability code (decoded by AbilityNames); Value is the paired magnitude. A spell

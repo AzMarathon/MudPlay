@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Calculators;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Broadcasts "I can now train to level: N" on a chosen chat channel the moment a
 // live experience gain pushes a Level-Projection row's "Exp to level" to 0 — the

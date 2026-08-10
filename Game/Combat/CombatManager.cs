@@ -1,11 +1,11 @@
 using System.Text;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Auto-attack engine. Subscribes to RoomEntityClassifier.EntitiesObserved and
 // (for re-fire pacing) to KnownPatterns.PartyAttackAnnounce. Picks a target per
@@ -1291,7 +1291,7 @@ public sealed partial class CombatManager : IDisposable
     // OR this spell form, so attack-last coordination must treat them as equivalent
     // per-member announce signals or it misses every spellcaster. This drives ONLY
     // the WHEN (Attack-Order re-fire) knob, never target-follow: a heal/buff names a
-    // *player* ("... upon Fujin"), and following onto that name would swing us at a
+    // *player* ("... upon MudPlay"), and following onto that name would swing us at a
     // teammate. HandleAttackOrderRefire's "must equal our current target" guard
     // makes a non-mob cast a safe no-op; an offensive cast on our mob re-fires.
     private void OnCastAnnounce(MatchResult match)

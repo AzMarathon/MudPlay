@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // What control kind to render for a StubField in the shared StubSectionView.
 // Each kind maps to a disabled Avalonia primitive with the field's label +

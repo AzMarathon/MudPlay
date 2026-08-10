@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // The four layers of the settings hierarchy, ordered lowest priority (Defaults)
 // to highest (Character). Higher tiers override lower ones at read time, per

@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Snapshot of the in-game stat screen. Updated by StatParser; consumed by
 // feature engines that need data the live statline prompt doesn't carry —

@@ -2,7 +2,7 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Modeless Party window. Bound to ViewModels.PartyViewModel;
 // code-behind only attaches the persisted window-layout and wires the
@@ -14,7 +14,7 @@ public partial class PartyWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "party");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "party");
         Closed += OnClosed;
     }
 

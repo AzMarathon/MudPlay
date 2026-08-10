@@ -1,9 +1,8 @@
-# FujinTerm
+# MudPlay
 
 <!-- current-version:start -->
-> **Version 2.39.6**
-> - "All auto off" now also parks navigation: engaging it suspends any in-flight walk / loop / auto-lair, and toggling it back on resumes exactly where it left off (a manual pause/stop you make in between is respected)
-> - Equipment Manager and Item Finder trial gear slots now list in the in-game "look" order — worn slots top-to-bottom, then Off-Hand / Weapon at the bottom, alternates after
+> **Version 3.0.0**
+> - Officially named the program MudPlay
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -34,8 +33,8 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 ### Build & run
 
 ```bash
-git clone https://github.com/Tehshortbus/FujinTerm.git
-cd FujinTerm
+git clone https://github.com/Tehshortbus/MudPlay.git
+cd MudPlay
 dotnet build      # compile check
 dotnet run        # launch
 ```
@@ -52,19 +51,19 @@ If local state ever gets weird, `dotnet clean` and rebuild.
 
 Everything is stored under a single `Data/` root, resolved per platform:
 
-- **Linux** — `~/.local/share/FujinTerm/Data/`
-- **Windows** — `%AppData%\FujinTerm\Data\`
-- **macOS** — `~/Library/Application Support/FujinTerm/Data/`
+- **Linux** — `~/.local/share/MudPlay/Data/`
+- **Windows** — `%AppData%\MudPlay\Data\`
+- **macOS** — `~/Library/Application Support/MudPlay/Data/`
 
 Profiles, per-BBS settings, global settings, imported game data, and logs each live in their own subfolder. Settings files store only deltas from the tier beneath them, so they stay small and easy to back up.
 
 ## Reporting a bug
 
-FujinTerm has a **built-in bug reporter** that snapshots the client's state at the moment of the problem — far more useful than describing it from memory. Please use it when filing an issue:
+MudPlay has a **built-in bug reporter** that snapshots the client's state at the moment of the problem — far more useful than describing it from memory. Please use it when filing an issue:
 
 1. **Capture** — click the **Bug Report** button in the menu bar (or right-click the terminal → **Bug report…**). Type a short description of what went wrong and confirm.
-2. FujinTerm writes a Markdown report to your **Desktop**, named `<realm>-<timestamp>.md`. It contains your player/inventory state, movement-engine status, relevant settings, the program log, and recent scrollback — with time-sensitive data frozen at click time.
-3. **File the issue** — open a new issue at **https://github.com/Tehshortbus/FujinTerm/issues/new**, describe the problem, and **attach the generated `.md` file**.
+2. MudPlay writes a Markdown report to your **Desktop**, named `<realm>-<timestamp>.md`. It contains your player/inventory state, movement-engine status, relevant settings, the program log, and recent scrollback — with time-sensitive data frozen at click time.
+3. **File the issue** — open a new issue at **https://github.com/Tehshortbus/MudPlay/issues/new**, describe the problem, and **attach the generated `.md` file**.
 
 The more of that capture you include, the faster a fix lands. Review the file before attaching if you'd like to redact anything.
 

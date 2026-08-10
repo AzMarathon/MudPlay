@@ -1,13 +1,13 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game;
-using FujinTerm.Game.Map;
-using FujinTerm.Game.Quests;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.GameData.Tables;
+using MudPlay.Game;
+using MudPlay.Game.Map;
+using MudPlay.Game.Quests;
+using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Tables;
 
-namespace FujinTerm.ViewModels.GameData;
+namespace MudPlay.ViewModels.GameData;
 
 // Shell view-model for the Game Data Browser window. Holds two sidebar groups
 // (engine-backed tabs on top in EngineSections, MDB-derived JSON tables below in

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Resolves a teleport-style exit (room Room.Cmd > 0 + exit modifier (Item: N))
 // into the verbatim command the walker types to traverse it.

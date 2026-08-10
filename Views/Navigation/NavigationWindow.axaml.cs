@@ -6,10 +6,10 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using FujinTerm.Controls;
-using FujinTerm.ViewModels.Navigation;
+using MudPlay.Controls;
+using MudPlay.ViewModels.Navigation;
 
-namespace FujinTerm.Views.Navigation;
+namespace MudPlay.Views.Navigation;
 
 // Modeless Navigation window. Bound to
 // ViewModels.Navigation.NavigationViewModel: status strip + mode bar, the
@@ -21,7 +21,7 @@ public partial class NavigationWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "navigation");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "navigation");
 
         // Route the map's right-click events into the VM so the context menu
         // items target the clicked room. The ContextMenu itself is wired
@@ -125,7 +125,7 @@ public partial class NavigationWindow : Window
             return;
         }
 
-        Services.AppServices svc = FujinTerm.Services.AppServices.Current;
+        Services.AppServices svc = MudPlay.Services.AppServices.Current;
         if (svc.RoomGraph.GetRoom(k) is not { } room)
         {
             popup.IsVisible = false;
@@ -288,7 +288,7 @@ public partial class NavigationWindow : Window
     // 12's DataTransfer surface replaced the legacy string-keyed
     // DataObject.
     private static readonly DataFormat<object> RowFormat =
-        DataFormat.CreateInProcessFormat<object>("fujin-nav-rail-row");
+        DataFormat.CreateInProcessFormat<object>("mudplay-nav-rail-row");
 
     // The leaf row under the press point, captured on pointer-down and
     // promoted to a drag once the pointer moves past the threshold.

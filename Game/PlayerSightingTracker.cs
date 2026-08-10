@@ -1,11 +1,11 @@
 using System.Linq;
-using FujinTerm.Game.Combat;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Combat;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Per-character log of players seen in the world, surfaced by the Session Stats
 // → Players Seen window. A sighting is recorded two ways, matching how the user

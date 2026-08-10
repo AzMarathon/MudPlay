@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Encumbrance bracket the server reports on the `enc` line — drives the
 // Auto-Lair scheduler's per-hop travel-cost lookup and the hop-timing

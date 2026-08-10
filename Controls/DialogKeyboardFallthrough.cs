@@ -2,9 +2,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Controls;
+namespace MudPlay.Controls;
 
 // Makes every window OTHER than the main terminal window "leak" its keystrokes
 // back to the terminal, so you can keep typing at the game while another window

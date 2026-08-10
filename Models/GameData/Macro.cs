@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // One user-defined keybind. When the user presses Ctrl / Shift / Alt +
 // Key while focus is on the terminal canvas or the Conversation window's

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace FujinTerm.Game.GameData;
+namespace MudPlay.Game.GameData;
 
 // Parses a Shops row's `Assigned To` free-text room list (e.g. "Room 1/297, Room
 // 6/1334") into (map, room) pairs: split on ',' and read each "Room M/R" token.

@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Drives the two party-health cadences:
 //

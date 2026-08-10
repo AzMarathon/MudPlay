@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // On-demand party-inventory probe. Asks the whole party "do you have this item,
 // and how many?" by broadcasting @have <item> to every non-self member and

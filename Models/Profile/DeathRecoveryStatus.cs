@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Recovery state of a DeathRecord's deathpile, surfaced in the Workshop DEATH
 // section with a stoplight tint.

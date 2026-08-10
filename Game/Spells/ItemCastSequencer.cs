@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Issues the wire sequence that casts a spell from an item: the item must be
 // equipped to use it, so the engine equips the cast item, uses it, then re-equips

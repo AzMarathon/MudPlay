@@ -1,6 +1,6 @@
-using FujinTerm.Game;
+using MudPlay.Game;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Persisted snapshot of the character's last-observed carry weight — written on
 // ProfileSaving from Game.Inventory.InventoryManager and rehydrated on

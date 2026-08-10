@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One editable boss entry in the Manage Bosses dialog. All fields are editable; a
 // new row starts blank (visible on whichever realm the dialog was opened for).

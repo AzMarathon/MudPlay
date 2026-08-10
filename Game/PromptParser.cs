@@ -1,6 +1,6 @@
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Writes observed status-line values from WirePromptScanner into
 // PlayerState. Sole writer of HP / MA / mana-type / position fields (the

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // One entry in a Settings spell-picker typeahead: the 4-letter Short cast-code
 // the game actually recognises, paired with the full Name for readability.

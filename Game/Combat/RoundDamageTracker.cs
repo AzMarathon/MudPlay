@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Aggregates combat-line observations into RoundSummary records, one per
 // 5-second MajorMUD combat round. Keeps a ring buffer of the last 50 rounds and

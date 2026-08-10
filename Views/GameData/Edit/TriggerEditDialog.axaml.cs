@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace FujinTerm.Views.GameData.Edit;
+namespace MudPlay.Views.GameData.Edit;
 
 public partial class TriggerEditDialog : Window
 {

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // A boat-inclusive route: walk the land leg to the dock, take one `secure
 // passage` sailing, then walk the land leg from the arrival port to the goal.

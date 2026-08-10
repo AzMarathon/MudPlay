@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Reasons an engine can ask the party leader to pause via
 // PartyRestSync.RequestWait. The on-the-wire @wait signal carries no reason

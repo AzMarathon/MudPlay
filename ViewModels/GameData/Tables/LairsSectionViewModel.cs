@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Lairs tab. Static MDB lair-aggregate table — one row per GroupIndex
 // with the pre-computed averages (delay / walk / exp / dmg / HP / AC / DR / MR / dodge) across

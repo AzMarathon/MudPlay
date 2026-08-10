@@ -1,8 +1,8 @@
 using Avalonia.Threading;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Shared driver for MovementCoordinator.AcquisitionGate. Both the item engine
 // (AutoGetItemsManager) and the cash engine (CashManager) feed this one

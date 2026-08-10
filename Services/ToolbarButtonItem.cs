@@ -1,8 +1,8 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-row view-model that the main window's dynamic toolbar ItemsControl binds
 // to. Built by MainWindowViewModel from ToolbarConfig.Layout via

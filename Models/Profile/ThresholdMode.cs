@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // How a numeric threshold field is interpreted at engine time. Percentage reads
 // the value as a 0–100 percentage of the live max (HP, MA, mana per cast).

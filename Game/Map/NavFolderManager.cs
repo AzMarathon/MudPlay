@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Folder CRUD over the shared per-set Loops directory
 // (AppPaths.GameDataSetLoopsFolder), which holds BOTH navigation loops

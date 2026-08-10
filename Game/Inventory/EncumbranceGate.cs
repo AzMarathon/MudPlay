@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Shared encumbrance-bracket gate math for the ground-collect engines — coins
 // in Game.Cash.CashManager and items in AutoGetItemsManager. Given the

@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Profile;
+namespace MudPlay.ViewModels.Profile;
 
 // File → Save profile as dialog. Prompts the user for a profile name (which becomes the
 // per-character folder under Data/profiles/). Inline validates the name against

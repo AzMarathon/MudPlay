@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Auto-discard items engine. When the pack holds an item flagged
 // ItemOverlay.AutoDiscard above its keep floor, offloads the excess with

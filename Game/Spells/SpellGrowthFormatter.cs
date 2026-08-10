@@ -1,7 +1,7 @@
 using System.Globalization;
-using FujinTerm.Game.GameData;
+using MudPlay.Game.GameData;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Human-readable, level-scaled summary of a spell's magnitude and per-level
 // growth — the Game Data Browser's spell-detail "LVL Cap" / "LVL Increases"

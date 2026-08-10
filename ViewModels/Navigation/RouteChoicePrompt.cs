@@ -1,9 +1,9 @@
 using System.Linq;
 using System.Threading.Tasks;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // Shared entry point for user-initiated walks that should offer a route choice.
 // Automated walks (event scripts, death recovery, loops, deposits, party

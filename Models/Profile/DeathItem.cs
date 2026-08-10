@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // One item dropped into a deathpile, captured on a DeathRecord at the moment of
 // death. Split across the record's two lists: items worn at death

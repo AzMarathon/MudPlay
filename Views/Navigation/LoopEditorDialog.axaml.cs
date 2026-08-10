@@ -1,9 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using FujinTerm.ViewModels.Navigation;
+using MudPlay.ViewModels.Navigation;
 
-namespace FujinTerm.Views.Navigation;
+namespace MudPlay.Views.Navigation;
 
 // Modeless edit dialog for an existing Game.Map.Loop. Hosted by
 // Services.DialogService; surfaced from the Navigation pane's per-loop

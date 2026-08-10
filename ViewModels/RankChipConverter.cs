@@ -1,8 +1,8 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // XAML converter that renders a PartyRank as the short one-letter chip label
 // the PartyWindow draws on the self row (Front → "F", Mid → "M", Back →

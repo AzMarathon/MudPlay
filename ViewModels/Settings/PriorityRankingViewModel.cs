@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // A reorderable priority list rendered as fixed rows with Up / Down arrows.
 // The list is always kept in priority order top-to-bottom, so each row's rank

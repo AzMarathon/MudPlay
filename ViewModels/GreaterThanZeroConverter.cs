@@ -1,7 +1,7 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // XAML converter that returns true when the bound numeric is strictly
 // greater than zero. Used to hide the MA bar / numeric on the PartyWindow's

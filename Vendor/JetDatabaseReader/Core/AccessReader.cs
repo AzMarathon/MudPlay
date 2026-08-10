@@ -157,7 +157,7 @@ namespace JetDatabaseReader
             try { _ansiEncoding = Encoding.GetEncoding(_codePage); }
             catch { _ansiEncoding = Encoding.UTF8; _codePage = 65001; }
 
-            // [FUJINTERM PATCH] Skip the upstream encryption-flag check at
+            // [MUDPLAY PATCH] Skip the upstream encryption-flag check at
             // hdr[0x62] & 0x03. In Jet4, bytes 0x18-0x97 of page 0 are
             // XOR-obfuscated against a per-file salt; reading byte 0x62
             // raw misinterprets ordinary data as an encryption flag and

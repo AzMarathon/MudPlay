@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Which mana-pool flavour the local character runs on. The status line emits
 // one of these tags between brackets (MA=... for mana-using classes, KAI=...

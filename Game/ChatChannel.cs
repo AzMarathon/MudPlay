@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Channels recognised by ChatRouter. Drives the ConversationWindow filter
 // toggles and the Trigger UI's "scope" dropdown (chat-only / specific channel).

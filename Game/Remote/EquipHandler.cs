@@ -1,9 +1,9 @@
 using System;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
+using MudPlay.Game.Inventory;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // @equip-<setname> — a permitted party member asks us to swap to one of our
 // saved gear sets. The set keyword is the suffix after @equip- (e.g.

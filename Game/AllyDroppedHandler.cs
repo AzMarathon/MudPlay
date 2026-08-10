@@ -4,12 +4,12 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Party reaction to an ALLY dropping to the ground (hitting 0 HP — mortally
 // wounded, bleeding out, not yet dead). Distinct from PlayerDroppedGate, which
@@ -36,7 +36,7 @@ namespace FujinTerm.Game;
 //
 // Recognition gap this handler closes: in the reported failure the ally that
 // dropped was the LEADER, and a leader-disconnect dissolves the party — so by the
-// time "Fujin drops to the ground!" arrived, Fujin was already off our roster AND
+// time "MudPlay drops to the ground!" arrived, MudPlay was already off our roster AND
 // absent from PartyManager's disconnect grace map (a follower never stamps its own
 // leader there). We therefore keep our OWN recent-leader memory: when LeaderName
 // clears we snapshot the departing leader's given name with a timestamp, and a

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // The six trainable character stats, in CP-grid column order.
 public enum CpStat { Strength, Intellect, Willpower, Agility, Health, Charm }

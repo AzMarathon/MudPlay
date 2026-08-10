@@ -1,10 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:FujinTerm.ViewModels.Settings"
+        xmlns:vm="using:MudPlay.ViewModels.Settings"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="340"
-        x:Class="FujinTerm.Views.Settings.DataDirectoryRelocateDialog"
+        x:Class="MudPlay.Views.Settings.DataDirectoryRelocateDialog"
         x:DataType="vm:DataDirectoryRelocateDialogViewModel"
         Title="Change data directory"
         Width="540" Height="340"
@@ -27,7 +27,7 @@
         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" RowSpacing="10">
 
             <TextBlock Grid.Row="0"
-                       Text="Move FujinTerm's data folder to a new location."
+                       Text="Move MudPlay's data folder to a new location."
                        Foreground="{StaticResource ChromeFgBrush}"
                        FontSize="12" FontWeight="SemiBold"/>
 

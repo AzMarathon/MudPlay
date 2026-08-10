@@ -2,11 +2,11 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.ViewModels;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Adds the app-wide window-toggle hotkeys (now sourced from
 // KeybindingStore) to a child window so re-pressing the hotkey closes

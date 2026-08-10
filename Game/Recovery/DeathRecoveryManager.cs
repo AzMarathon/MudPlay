@@ -2,14 +2,14 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.Combat;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Game.Combat;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Recovery;
+namespace MudPlay.Game.Recovery;
 
 // Death observation aggregator. Composes DeathLineWatcher.PlayerDied and the
 // per-character CharacterProfile.DeathHistory into a live observable shape that

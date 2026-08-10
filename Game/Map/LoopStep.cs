@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One unit of work in a saved navigation loop. Mirrors WalkStep shape so
 // the loop runner can share the walker's execution path, but adds a

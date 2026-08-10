@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Text;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Gathers party members' intel by probing them when we start partying. On every
 // join (a fresh row in PartyState.Members, or an invited row flipping to joined)
@@ -182,7 +182,7 @@ public sealed class PartyProbeManager : IDisposable
     }
 
     // A version reply is the brace-wrapped, letter-led payload the client returns
-    // to @version (e.g. "{FujinTerm 2.37.0}", "{MegaMud 1.03u}"). Requiring the
+    // to @version (e.g. "{MudPlay 2.37.0}", "{MegaMud 1.03u}"). Requiring the
     // braces (every @-command reply is wrapped at SendReply) rejects ordinary
     // chat; requiring a leading letter + an embedded digit rejects @level /
     // @health / denial lines that also ride the wrap.

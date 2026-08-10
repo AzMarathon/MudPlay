@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Compiles a game-data "caster message" template — the line YOU see when YOU cast
 // a spell, e.g. You cast {s} on {s}! — into a regex and matches it against an

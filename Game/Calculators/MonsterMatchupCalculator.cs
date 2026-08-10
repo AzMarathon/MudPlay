@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Composes a both-directions combat preview between the player and one monster,
 // on top of CombatCalculator.CalculateHitChance:

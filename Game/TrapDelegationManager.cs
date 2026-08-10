@@ -1,9 +1,9 @@
 using System.Linq;
-using FujinTerm.Game.GameData;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.GameData;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Party-member trap delegation. When the walker hits a trapped exit and the
 // LOCAL character can't disarm it, but a party member can, this manager

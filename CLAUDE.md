@@ -1,11 +1,11 @@
-# FujinTerm — Claude Code Instructions
+# MudPlay — Claude Code Instructions
 
 > C# / .NET 10 / Avalonia 12 BBS terminal client. Linux primary, cross-platform via Avalonia.
 > This file is **workflow guidance**, not architecture documentation. Subsystem invariants live in code comments next to the code they constrain. If a rule here conflicts with what the code actually does, the code wins and this file gets updated.
 
 ## Project at a glance
 
-FujinTerm is a Telnet-based BBS terminal client. It speaks Telnet (RFC 854/855 with NAWS and TERM-TYPE), parses VT100/ANSI escape sequences in `Terminal/TerminalEmulator.cs`, renders a CP437 cell grid with a custom Avalonia control in `Controls/TerminalControl.cs`, and uses MVVM (CommunityToolkit.Mvvm source generators — `[ObservableProperty]`, `[RelayCommand]`).
+MudPlay is a Telnet-based BBS terminal client. It speaks Telnet (RFC 854/855 with NAWS and TERM-TYPE), parses VT100/ANSI escape sequences in `Terminal/TerminalEmulator.cs`, renders a CP437 cell grid with a custom Avalonia control in `Controls/TerminalControl.cs`, and uses MVVM (CommunityToolkit.Mvvm source generators — `[ObservableProperty]`, `[RelayCommand]`).
 
 What it is **not**: not a PTY wrapper, not a generic SSH client, not a curses-style application terminal. All ANSI parsing is explicit; we don't rely on a host TTY.
 
@@ -15,14 +15,14 @@ The phased implementation plan is **complete** — the app is at **1.0.0** and i
 
 - **PR cadence**: one open PR at a time; the next doesn't begin until the current merges. **Bug reports dropped together all land on the same open PR** — a batch shares one branch + PR (consolidated changelog entry, PATCH counting the reports per the versioning rule below). The exception is a report that needs **more than a fix to resolve** — a significant feature-scale design change or new implementation: **suggest breaking that onto its own PR and let the user decide** (they'll agree, or tell you to fold it into the current open PR). Keep each PR focused (see PR-size discipline under Scope discipline). The user merges the PR when it looks good to them; after the merge, wait for whatever comes next.
 - **Auto-commit + push when a batch is done — don't wait to be asked.** The default "never commit unless explicitly asked" holds *mid-work*, but the moment a batch of fixes/feature is genuinely finished — `dotnet build` clean, full `dotnet test` green, and the version-history trio (csproj `<Version>`, CHANGELOG top entry, README current-version block) updated — commit it (with the `Co-Authored-By` trailer) and push to the PR on your own. If the branch has no PR yet, open one; if a PR already exists, confirm it's still open first (`gh pr view <n> --json state`) and push to it. Never auto-commit a red build / failing tests / half-finished work — this is the *closing* move on a completed batch, not a running habit.
-- **Versioning (semver, post-1.0)**: the version lives once in `FujinTerm.csproj` `<Version>` (`AppInfo.Version` reads it back for the `@version` reply). Bump it by **change type, not PR size**:
+- **Versioning (semver, post-1.0)**: the version lives once in `MudPlay.csproj` `<Version>` (`AppInfo.Version` reads it back for the `@version` reply). Bump it by **change type, not PR size**:
   - **MAJOR** — a whole-program refactor or other sweeping/breaking overhaul. Rare.
   - **MINOR** — a **brand-new feature** (a capability that didn't exist before), **or a large rewrite / expansion of an existing feature** (roughly **1000+ lines net**). One bump per such change, and it resets PATCH to 0 (e.g. 1.5.11 + a new feature → 1.6.0).
   - **PATCH** — bug fixes **and ordinary enhancements to existing features** (a changed default, a tweak, a smaller improvement — anything under the ~1000-line MINOR bar). **Increments by the number of bug reports handled plus the number of enhancements** — one report or one enhancement on 1.5.11 lands 1.5.12; a batch of five handed over together advances 1.5.11 → 1.5.16. An ordinary enhancement counts exactly like a bug report: it moves the third number, never the minor.
 
   A PR that mixes types takes the highest (a new feature or a 1000+-line expansion plus fixes/enhancements is a MINOR; fixes plus ordinary enhancements stays a PATCH). The version counts the reports + enhancements, but the changelog does **not** need one entry per item: a batch shares a single consolidated `## <final-version>` entry whose bullets cover all the changes.
 - **Every PR updates the version history.** `CHANGELOG.md` is the running record, newest entry first. On each PR, in the same branch:
-  1. Bump `<Version>` in `FujinTerm.csproj` per the semver policy above.
+  1. Bump `<Version>` in `MudPlay.csproj` per the semver policy above.
   2. Prepend a new `## <version>` section to `CHANGELOG.md` (above the previous entry) — **no summary paragraph, no Added/Changed/Fixed/Removed subheads**, just a short bullet list, one terse line per change. Short, sweet, to the point: describe the *effect*, not the diff, in a handful of words. A couple of bullets, not a prose write-up. (Example: `## 1.5.11` → `- Party-wide toll gate checkbox removed, now always on` / `- Navigation engine verifies party's cash before using a toll en-route`.) **When the entry closes one or more bug reports, its LAST bullet is `- bug reports addressed: <name>, <name>` naming the report file(s)** (e.g. `stock-20260707-203503`, `Crash-20260707-210804`) — so confirming a report shipped is a grep of CHANGELOG, not an investigation. Omit the line for a pure feature/enhancement entry with no report behind it.
   3. Replace the current-version block at the top of `README.md` (between the `<!-- current-version:start -->` / `<!-- current-version:end -->` markers) so it mirrors the new top CHANGELOG entry — a `> **Version <x.y.z>**` header line, then the same terse bullets. The `- bug reports addressed:` line is a bookkeeping tail for the CHANGELOG; leave it out of the README mirror.
 
@@ -57,7 +57,7 @@ Top-level folders, each with one responsibility (no catch-all `Util/` / `Common/
 
 ### Data layout (single `Data/` root)
 
-All app data lives under one `Data/` root, resolved per-platform by `AppPaths` (Linux `~/.local/share/FujinTerm/Data/`, Windows `%AppData%\FujinTerm\Data\`, macOS `~/Library/Application Support/FujinTerm/`). Files store **deltas only**, stacked per the 4-tier hierarchy:
+All app data lives under one `Data/` root, resolved per-platform by `AppPaths` (Linux `~/.local/share/MudPlay/Data/`, Windows `%AppData%\MudPlay\Data\`, macOS `~/Library/Application Support/MudPlay/`). Files store **deltas only**, stacked per the 4-tier hierarchy:
 
 - `Data/game data/{set}/*.json` — imported MDB tables (Defaults tier, read-only base).
 - `Data/Global/global.json` — Global-tier setting + game-data deltas, default active set.
@@ -97,14 +97,14 @@ dotnet clean      # if state gets weird
 ```
 
 - The SDK is pinned in `global.json`. Don't pass `--framework`, `--runtime`, or `-c` overrides unless the user asks — the `.csproj` already knows what to produce.
-- **Zero-warning policy.** `FujinTerm.csproj` has `TreatWarningsAsErrors=true` and `EnforceCodeStyleInBuild=true`. A build that emits warnings is a failed build. Fix the warning rather than suppressing it; if a `#pragma warning disable` is genuinely necessary, leave a one-line comment explaining why on the line above.
+- **Zero-warning policy.** `MudPlay.csproj` has `TreatWarningsAsErrors=true` and `EnforceCodeStyleInBuild=true`. A build that emits warnings is a failed build. Fix the warning rather than suppressing it; if a `#pragma warning disable` is genuinely necessary, leave a one-line comment explaining why on the line above.
 - **XAML bindings are compile-checked.** `AvaloniaUseCompiledBindingsByDefault=true` means a typo in a `{Binding ...}` is a build error, not a silent runtime no-op. Treat XAML compile errors with the same seriousness as C# ones.
 
 ## Tool invocation rules
 
 These exist to keep permission prompts from interrupting the session. Apply them in every Bash call — including from sub-agents (review, explore, plan, fixer).
 
-- **Don't prefix Bash with `cd "<project-path>" &&`.** The working directory is already set to the project root. The `cd <cwd>` prefix turns auto-allowed commands (`grep`, `git`, `dotnet build`, etc.) into compound commands that miss the allowlist and force a fresh permission prompt every time. Run the command directly. Sub-agents may use absolute paths in *arguments* (e.g. `git diff /home/fujin/Desktop/Projects/FujinTerm/Foo.cs`), but must not prefix the invocation with `cd`.
+- **Don't prefix Bash with `cd "<project-path>" &&`.** The working directory is already set to the project root. The `cd <cwd>` prefix turns auto-allowed commands (`grep`, `git`, `dotnet build`, etc.) into compound commands that miss the allowlist and force a fresh permission prompt every time. Run the command directly. Sub-agents may use absolute paths in *arguments* (e.g. `git diff /home/fujin/Desktop/Projects/MudPlay/Foo.cs`), but must not prefix the invocation with `cd`.
 - **Use the Read tool, not `cat`/`head`/`tail`/`sed -n`.** Read returns numbered lines and supports offset/limit.
 - **Use the Edit / Write tools, not `sed -i` / `echo > file`.** Edits render as diffs the user can review.
 - **Use the Grep / Glob tools, not Bash `grep`/`find`** for searches. Reach for shell `grep` only when piping through other shell filters in a way Grep can't express.
@@ -115,7 +115,7 @@ We are on Linux with fish. There are no PowerShell or `cmd.exe` rules to worry a
 
 This is descriptive, not aspirational. Match what's there:
 
-- **File-scoped namespaces** (`namespace FujinTerm.Terminal;`).
+- **File-scoped namespaces** (`namespace MudPlay.Terminal;`).
 - **`sealed class` by default.** Un-seal only when something actually needs to inherit, and say why.
 - **`readonly record struct`** for value types like `Cell` and `CellAttributes`. Update with `with` expressions, not mutation.
 - **Naming**: `_camelCase` private fields, `PascalCase` for everything public (types, methods, properties, events).
@@ -171,7 +171,7 @@ Before reporting a change as complete:
 
 ## Tests
 
-`FujinTerm.Tests` is an xUnit project in a sibling folder so `dotnet build` at the repo root builds both. It covers parsers (input → state correctness), structural invariants, and critical decision logic. The cross-cutting single-writer invariant test (Mono.Cecil scans IL for writes to `[Owner(typeof(...))]`-marked fields and fails the build if a non-owner writes) enforces the single-writer rule.
+`MudPlay.Tests` is an xUnit project in a sibling folder so `dotnet build` at the repo root builds both. It covers parsers (input → state correctness), structural invariants, and critical decision logic. The cross-cutting single-writer invariant test (Mono.Cecil scans IL for writes to `[Owner(typeof(...))]`-marked fields and fails the build if a non-owner writes) enforces the single-writer rule.
 
 Test scope philosophy:
 - Test where compile-time can't catch the concern: parsers (input → state correctness), structural invariants (single-writer, no-cycles), critical decision logic (CastingDirector tier resolution).

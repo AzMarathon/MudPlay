@@ -1,16 +1,16 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
-// Resolves and exposes every directory and file path FujinTerm reads or writes.
+// Resolves and exposes every directory and file path MudPlay reads or writes.
 // Centralizes platform-specific conventions (XDG on Linux, %LocalAppData% on
 // Windows, ~/Library/Application Support on macOS) so the rest of the app never
 // concatenates raw paths.
 //
 // Everything user-writable sits under a single Data/ root for ease of backup and
-// inspection. Setting the FUJINTERM_DATA_ROOT environment variable overrides the
+// inspection. Setting the MUDPLAY_DATA_ROOT environment variable overrides the
 // platform default; useful for tests, portable installs, and sandboxed dev runs.
 public static class AppPaths
 {
-    private const string AppFolderName = "FujinTerm";
+    private const string AppFolderName = "MudPlay";
     private const string DataSubfolder = "Data";
 
     // Single root containing all user-writable app data.
@@ -18,8 +18,8 @@ public static class AppPaths
 
     // Tiny one-line text file that overrides DataRoot with a user-chosen
     // absolute path. Lives at the platform-config equivalent
-    // (Linux: ~/.config/FujinTerm/, Windows: %LocalAppData%\FujinTerm\,
-    // macOS: ~/Library/Preferences/FujinTerm/) — the only file FujinTerm writes
+    // (Linux: ~/.config/MudPlay/, Windows: %LocalAppData%\MudPlay\,
+    // macOS: ~/Library/Preferences/MudPlay/) — the only file MudPlay writes
     // outside DataRoot. Absent on a fresh install; created by the Settings →
     // General "Change data directory" migration flow. DataRootRelocator writes
     // it; this type only reads it at static-init.
@@ -65,9 +65,9 @@ public static class AppPaths
         PointerFile = Path.Combine(configDir, AppFolderName, "data-location.txt");
 
         // Resolution order: env var → pointer file → platform default.
-        // FUJINTERM_DATA_ROOT wins for tests and CI; pointer file wins for
+        // MUDPLAY_DATA_ROOT wins for tests and CI; pointer file wins for
         // user-relocated installs; otherwise the OS standard data location.
-        string? envOverride = Environment.GetEnvironmentVariable("FUJINTERM_DATA_ROOT");
+        string? envOverride = Environment.GetEnvironmentVariable("MUDPLAY_DATA_ROOT");
         if (!string.IsNullOrWhiteSpace(envOverride))
         {
             DataRoot             = Path.GetFullPath(envOverride);
@@ -483,6 +483,6 @@ public enum DataRootSource
     // User-relocated; AppPaths.PointerFile points here.
     PointerFile,
 
-    // FUJINTERM_DATA_ROOT env var override (tests / CI).
+    // MUDPLAY_DATA_ROOT env var override (tests / CI).
     EnvironmentVariable,
 }

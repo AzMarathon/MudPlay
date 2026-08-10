@@ -1,9 +1,9 @@
 using System.Linq;
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Watches for the canonical MajorMUD "your move didn't happen" lines and
 // notifies RoomTracker so a Pending move reverts to Located at the previous

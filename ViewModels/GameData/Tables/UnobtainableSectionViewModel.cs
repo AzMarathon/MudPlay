@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Game.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Unobtainable tab. Lists the Items rows the game marks out of play
 // ("In Game" == 0) — sysop-only, unimplemented, or duplicate test items ("bow of silver",

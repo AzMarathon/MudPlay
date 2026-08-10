@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Immutable point-in-time view of the player's currency and carry weight,
 // published by InventoryManager. Consumers (the cash engine) read this instead

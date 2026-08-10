@@ -1,9 +1,9 @@
 using System.Text.Json;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // The @auto-* family. A party member's @auto-combat off flips our
 // AutoActionDefaults.AutoCombat flag, persists the profile, and replies with the

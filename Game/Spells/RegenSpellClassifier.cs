@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // The sustained-recovery roles a spell can fill, derived from its Abil-N /
 // AbilVal-N slots. A spell can carry several at once (chaos surge is a mana HoT

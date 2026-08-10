@@ -1,7 +1,7 @@
 using Avalonia.Controls;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Views.GameData.Edit;
+namespace MudPlay.Views.GameData.Edit;
 
 public partial class MonsterEditDialog : Window
 {

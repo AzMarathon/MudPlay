@@ -4,9 +4,9 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using FujinTerm.ViewModels;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Modeless Conversation panel. Bound to ConversationViewModel;
 // code-behind handles Enter-to-send in the input field and scroll-to-newest
@@ -20,7 +20,7 @@ public partial class ConversationWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "conversation");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "conversation");
         Opened += OnOpened;
         Closed += OnClosed;
     }
@@ -124,7 +124,7 @@ public partial class ConversationWindow : Window
         // uses, so a user-bound chord (F1, numpad direction, Ctrl+letter)
         // fires its command at the wire instead of typing characters
         // into this input field.
-        if (FujinTerm.Services.AppServices.Current.MacroDispatcher
+        if (MudPlay.Services.AppServices.Current.MacroDispatcher
                 .TryHandleKey(e.Key, e.KeyModifiers))
         {
             e.Handled = true;

@@ -1,6 +1,6 @@
-using FujinTerm.Game.GameData;
+using MudPlay.Game.GameData;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Renders a spell's level-scaled effect string ("Dmg 14–22 · Heal 30–45 ·
 // 24 seconds · AC +10 · Removes poison") from its SpellFormulaInput, reproducing

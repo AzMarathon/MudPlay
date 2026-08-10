@@ -1,9 +1,9 @@
-using FujinTerm.Game.Spells;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
-using FujinTerm.Terminal;
+using MudPlay.Game.Spells;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Aggregates the session's combat lines into the CombatSessionStats the Session
 // Stats panel displays: the player's swing accuracy (hit / miss / crit),

@@ -1,8 +1,8 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.GameData;
+using MudPlay.Game.GameData;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // One discovered trainer room in the Settings → Auto-Trainer table: a room+shop
 // label, host map/room, served level range, and the per-row Use? toggle that

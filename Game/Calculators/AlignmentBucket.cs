@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Three-way reduction of MajorMUD's fine-grained who alignment titles, used by
 // equip-time item filtering. Items carry alignment restrictions as

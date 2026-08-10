@@ -1,6 +1,6 @@
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Services.Patterns;
+namespace MudPlay.Services.Patterns;
 
 // Matches when the line's text starts with a fixed prefix. Faster than
 // RegexPattern for the common "line begins with X" classification cases; emits

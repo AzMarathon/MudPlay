@@ -1,8 +1,8 @@
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Stealth;
+namespace MudPlay.Game.Stealth;
 
 // Stealth state tracker. Owns PlayerState.IsSneaking and PlayerState.IsHidden.
 // Other engines (CombatManager's pre-attack suppression, CastingDirector's buff

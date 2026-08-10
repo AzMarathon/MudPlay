@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One move command in flight — sent to the server, awaiting the room
 // observation that confirms or refutes the landing. The tracker queues these so

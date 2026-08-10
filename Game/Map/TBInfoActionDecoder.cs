@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
-using FujinTerm.Game.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One decoded line in a monster-greet breakdown. Text is the display string
 // (already resolved to names); Depth is the indent level — 0 is the player

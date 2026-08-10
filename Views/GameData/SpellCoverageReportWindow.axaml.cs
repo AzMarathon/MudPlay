@@ -4,10 +4,10 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.GameData;
+using MudPlay.Services;
+using MudPlay.ViewModels.GameData;
 
-namespace FujinTerm.Views.GameData;
+namespace MudPlay.Views.GameData;
 
 public partial class SpellCoverageReportWindow : Window
 {

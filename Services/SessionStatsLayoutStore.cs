@@ -1,6 +1,6 @@
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-character memory of the Session Stats window's panel order + hidden set.
 // The SessionStatsViewModel reads Resolve when the window opens and pushes

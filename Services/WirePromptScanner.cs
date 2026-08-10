@@ -1,8 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using FujinTerm.Game;
+using MudPlay.Game;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Streaming scanner that watches the post-IAC byte stream from the live Telnet
 // connection for MajorMUD status-line prompts and fires one PromptObserved event

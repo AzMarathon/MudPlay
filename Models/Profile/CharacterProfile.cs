@@ -1,7 +1,7 @@
 using System.Text.Json;
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Root DTO for Data/profiles/{char-name}.json — the Character tier of the
 // settings hierarchy. Per-character workspace: auth info, settings deltas,
@@ -9,7 +9,7 @@ namespace FujinTerm.Models.Profile;
 // quest state / etc.
 //
 // The profile filename (sans .json) is the character's identifier inside
-// FujinTerm. The in-game character name may differ — see Name.
+// MudPlay. The in-game character name may differ — see Name.
 public sealed class CharacterProfile
 {
     // The schema version a freshly-authored (fully-migrated) profile carries.

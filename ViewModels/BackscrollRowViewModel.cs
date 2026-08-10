@@ -1,6 +1,6 @@
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // One row in the BackscrollViewModel's displayed list. Carries the
 // timestamp prefix string and the raw Cell[] the row was captured at;
