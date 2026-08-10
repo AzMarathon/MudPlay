@@ -55,15 +55,15 @@ Top-level folders, each with one responsibility (no catch-all `Util/` / `Common/
 | **Server → game state** | `TerminalScreen` → `LineExtractor` → `MessageRouter` (fan-out) → subsystems → observable game-state → ViewModels → Views |
 | **User → server** | `TerminalControl` key → `MainWindowViewModel.SendUserInput` → `TelnetClient.SendAsync` |
 
-### Data layout (single `Data/` root)
+### Data layout (single app-folder root)
 
-All app data lives under one `Data/` root, resolved per-platform by `AppPaths` (Linux `~/.local/share/MudPlay/Data/`, Windows `%AppData%\MudPlay\Data\`, macOS `~/Library/Application Support/MudPlay/`). Files store **deltas only**, stacked per the 4-tier hierarchy:
+All app data lives directly under the app folder, resolved per-platform by `AppPaths` (Linux `~/.local/share/MudPlay/`, Windows `%AppData%\MudPlay\`, macOS `~/Library/Application Support/MudPlay/`) — no nested `Data/` level (older installs are lifted out of it on first launch by `FlattenDataSubfolder`). Files store **deltas only**, stacked per the 4-tier hierarchy:
 
-- `Data/game data/{set}/*.json` — imported MDB tables (Defaults tier, read-only base).
-- `Data/Global/global.json` — Global-tier setting + game-data deltas, default active set.
-- `Data/BBS/{bbs}.json` — BBS-tier deltas + connection info (host / port / accounts).
-- `Data/profiles/{char}.json` — character workspace + Char-tier deltas (auth, macros / triggers / events, equipment sets, favorites, quest state, death history, statline).
-- `Data/Logs/` — debug logs.
+- `game data/{set}/*.json` — imported MDB tables (Defaults tier, read-only base).
+- `Global/global.json` — Global-tier setting + game-data deltas, default active set.
+- `BBS/{bbs}.json` — BBS-tier deltas + connection info (host / port / accounts).
+- `profiles/{char}.json` — character workspace + Char-tier deltas (auth, macros / triggers / events, equipment sets, favorites, quest state, death history, statline).
+- `Logs/` — debug logs.
 
 Merge order, first hit wins: `profiles/{char}` → `BBS/{bbs}` → `Global/global` → app Defaults → game-data Defaults.
 

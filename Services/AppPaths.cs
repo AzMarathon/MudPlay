@@ -5,9 +5,10 @@ namespace MudPlay.Services;
 // Windows, ~/Library/Application Support on macOS) so the rest of the app never
 // concatenates raw paths.
 //
-// Everything user-writable sits under a single Data/ root for ease of backup and
-// inspection. Setting the MUDPLAY_DATA_ROOT environment variable overrides the
-// platform default; useful for tests, portable installs, and sandboxed dev runs.
+// Everything user-writable sits under a single data root — the app folder itself
+// (e.g. ~/.local/share/MudPlay/) — for ease of backup and inspection. Setting the
+// MUDPLAY_DATA_ROOT environment variable overrides the platform default; useful
+// for tests, portable installs, and sandboxed dev runs.
 public static class AppPaths
 {
     private const string AppFolderName = "MudPlay";
@@ -16,6 +17,11 @@ public static class AppPaths
     // one-time), so updating from a 2.x build doesn't appear to lose profiles /
     // settings / BBS data. See MigrateLegacyData.
     private const string LegacyAppFolderName = "FujinTerm";
+    // Older installs nested everything under an extra "Data/" level (<app>/Data/…).
+    // We now use the app folder itself as the data root and lift that subfolder's
+    // contents up on first launch (see FlattenDataSubfolder). The name is still
+    // needed to locate the old subfolder — both the earlier MudPlay one and the
+    // pre-3.0 FujinTerm one.
     private const string DataSubfolder = "Data";
 
     // One-line summary of any legacy migration performed at static-init, for the
@@ -102,16 +108,23 @@ public static class AppPaths
         }
         else
         {
-            DataRoot             = Path.Combine(baseDir, AppFolderName, DataSubfolder);
+            // The app folder itself is the data root now — no nested Data/ level.
+            DataRoot             = Path.Combine(baseDir, AppFolderName);
             DataRootResolvedFrom = DataRootSource.PlatformDefault;
         }
 
-        // On the default location, carry a pre-3.0 user's data out of the old
-        // "FujinTerm" folder into MudPlay (non-destructive, one-time). Relocated
-        // installs (env / pointer) already point at the user's real data, so
-        // there's nothing at the default path to migrate.
+        // Default-location migrations, oldest layout last so each backfills what the
+        // previous didn't cover. Relocated installs (env / pointer) already point at
+        // the user's real, already-flat data, so nothing here runs for them.
         if (DataRootResolvedFrom == DataRootSource.PlatformDefault)
+        {
+            // Older installs stored everything one level down in <app>/Data/. Lift
+            // it up into the app folder and drop the now-redundant Data/ level.
+            FlattenDataSubfolder(Path.Combine(DataRoot, DataSubfolder), DataRoot);
+            // Pre-3.0 "FujinTerm" installs: backfill from the old FujinTerm/Data
+            // folder (non-destructive, one-time; now lands flat). See MigrateLegacyData.
             MigrateLegacyData(Path.Combine(baseDir, LegacyAppFolderName, DataSubfolder), DataRoot);
+        }
 
         GameDataRoot       = Path.Combine(DataRoot, "game data");
         GlobalSettingsFile = Path.Combine(DataRoot, "Global", "global.json");
@@ -130,6 +143,54 @@ public static class AppPaths
         Directory.CreateDirectory(Path.GetDirectoryName(GlobalSettingsFile)!);
         Directory.CreateDirectory(BbsDir);
         Directory.CreateDirectory(LogsDir);
+    }
+
+    // One-time lift of an older install's data out of the nested "Data/" subfolder
+    // (the data root used to be <app>/Data) up into the app folder itself, then
+    // removes the emptied Data/. Runs only on the platform-default root; relocated
+    // installs (env / pointer) already point straight at the user's flat data.
+    //
+    // Fast path renames each top-level entry up a level (a same-volume move — near
+    // instant, no copy); a destination that already exists (a prior partial run, or
+    // the empty dirs the ctor pre-creates) falls back to a non-destructive
+    // copy-merge so newer flat data is never clobbered. Best-effort: on any error
+    // the Data/ folder is left intact and the next launch retries — the app reads
+    // nothing until the lift completes, exactly like the FujinTerm migration below.
+    internal static void FlattenDataSubfolder(string dataSubfolder, string dataRoot)
+    {
+        try
+        {
+            if (!Directory.Exists(dataSubfolder)) return;   // fresh install / already flattened
+
+            foreach (string dir in Directory.GetDirectories(dataSubfolder))
+            {
+                string dest = Path.Combine(dataRoot, Path.GetFileName(dir));
+                if (Directory.Exists(dest))
+                {
+                    CopyMissing(dir, dest);
+                    Directory.Delete(dir, recursive: true);
+                }
+                else
+                {
+                    Directory.Move(dir, dest);
+                }
+            }
+            foreach (string file in Directory.GetFiles(dataSubfolder))
+            {
+                string dest = Path.Combine(dataRoot, Path.GetFileName(file));
+                if (File.Exists(dest)) File.Delete(file);   // a newer flat copy already won
+                else File.Move(file, dest);
+            }
+
+            Directory.Delete(dataSubfolder, recursive: true);   // now empty
+            MigrationNote = $"Moved your data out of the old '{DataSubfolder}' subfolder " +
+                $"up into the '{AppFolderName}' folder.";
+        }
+        catch
+        {
+            // Permission / disk / lock error — leave Data/ intact so the next launch
+            // retries; nothing is deleted before its contents are safely relocated.
+        }
     }
 
     // Non-destructive, one-time migration of a pre-3.0 "FujinTerm" data root into
@@ -197,7 +258,7 @@ public static class AppPaths
 
     // Per-set Messages catalogue file, scoped INSIDE the game-data set's folder
     // so the catalogue travels with the set. Replaces the older
-    // Data/Global/Messages/{set}.json location — pairing the file with the MDB
+    // Global/Messages/{set}.json location — pairing the file with the MDB
     // tables keeps a curated realm together (back it up, copy it to another
     // machine, etc.).
     public static string MessagesFile(string setName) =>
@@ -211,7 +272,7 @@ public static class AppPaths
         Path.Combine(GameDataSetDir(setName), "monster-messages.json");
 
     // User-writable MonsterMessages seed JSON, hosted in the XDG-resolved
-    // Data/Global/ folder. Acts as the fallback when the per-set
+    // Global/ folder. Acts as the fallback when the per-set
     // MonsterMessagesFile doesn't exist yet for a set. Bootstrapped from
     // BundledMonsterMessagesSeedFile on first app launch if missing; the user
     // can hand-edit it (or delete it to re-bootstrap from the bundled copy).
@@ -223,7 +284,7 @@ public static class AppPaths
         Path.Combine(AppContext.BaseDirectory, "Defaults", "MonsterMessages.seed.json");
 
     // User-writable MonsterOverlay seed JSON for the given realm flavor, hosted
-    // in the XDG-resolved Data/Global/ folder. Holds the Defaults-tier baseline
+    // in the XDG-resolved Global/ folder. Holds the Defaults-tier baseline
     // for relationship / priority / DontBackstab — decoded from
     // the realm's stock MegaMUD Monsters.md. The active game-data set's
     // Info.json[0].Legit picks which realm seed to apply (0/1 = stock, 2 =
@@ -267,7 +328,7 @@ public static class AppPaths
     // DefaultQuestDefsSeedFile underlay; the mechanical data (ordered steps +
     // stat bonuses) is crawled from the set's TBInfo at runtime, not stored here.
     // The user's quest-definition overlay, hosted at the BBS tier
-    // (Data/BBS/{bbs}/quests.json). QuestStore resolves it ABOVE the universal
+    // (BBS/{bbs}/quests.json). QuestStore resolves it ABOVE the universal
     // DefaultQuestDefsSeedFile underlay, so a player's edits belong to the board
     // they're playing, not the imported game-data set. The mechanical data
     // (ordered steps + stat bonuses) is still crawled from the active set's TBInfo
@@ -275,7 +336,7 @@ public static class AppPaths
     public static string QuestsFileForBbs(string bbsName) =>
         Path.Combine(BbsFolder(bbsName), "quests.json");
 
-    // User-writable Messages seed JSON, hosted in the XDG-resolved Data/Global/
+    // User-writable Messages seed JSON, hosted in the XDG-resolved Global/
     // folder. Shared across every game-data set — the catalogue's message text
     // (e.g. "You feel lucky") is universal across MajorMUD realms. MessageStore
     // falls back to this when the user's per-set MessagesFile doesn't exist for
@@ -289,7 +350,7 @@ public static class AppPaths
     public static string BundledMessagesSeedFile { get; } =
         Path.Combine(AppContext.BaseDirectory, "Defaults", "Messages.seed.json");
 
-    // User-writable Triggers seed JSON, hosted in the XDG-resolved Data/Global/
+    // User-writable Triggers seed JSON, hosted in the XDG-resolved Global/
     // folder. TriggerEngine falls back to this when a set has no per-set
     // TriggersFile. Bootstrapped from BundledTriggersSeedFile on first app
     // launch if missing.
@@ -301,7 +362,7 @@ public static class AppPaths
         Path.Combine(AppContext.BaseDirectory, "Defaults", "Triggers.seed.json");
 
     // User-writable Quest definitions seed JSON, hosted in the XDG-resolved
-    // Data/Global/ folder. Universal across every game-data set — keyed by
+    // Global/ folder. Universal across every game-data set — keyed by
     // quest-flag number + step, which custom realms reuse for the same quests,
     // so a curated set of names + step write-ups ports everywhere. QuestStore
     // falls back to this when the active set's per-set QuestsFile doesn't name a
@@ -326,7 +387,7 @@ public static class AppPaths
     public static string BossTimersFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "boss-timers.json");
 
-    // User-writable boss-catalog seed JSON in Data/Global/ — the curated default
+    // User-writable boss-catalog seed JSON in Global/ — the curated default
     // boss list (name, rooms, realm flags, respawn type); timer values are looked up
     // from game data at runtime. BossStore falls back to this when the active set has
     // no per-set overlay. Bootstrapped from BundledBossDefsSeedFile on first launch.
@@ -337,7 +398,7 @@ public static class AppPaths
     public static string BundledBossDefsSeedFile { get; } =
         Path.Combine(AppContext.BaseDirectory, "Defaults", "BossDefs.seed.json");
 
-    // Bootstrap missing seed files in Data/Global/ by copying from the bundled
+    // Bootstrap missing seed files in Global/ by copying from the bundled
     // Defaults/ next to the executable. Called once during app startup.
     // Pre-existing user-edited Global seeds are never overwritten — to reset a
     // seed, delete the Global copy and the next launch re-bootstraps from the
@@ -349,7 +410,7 @@ public static class AppPaths
         TryCopySeed(BundledMonsterMessagesSeedFile, DefaultMonsterMessagesSeedFile);
         TryCopySeed(BundledTriggersSeedFile,        DefaultTriggersSeedFile);
         // The quest-defs seed is read-only — user edits live in the BBS-tier
-        // overlay (Data/BBS/{bbs}/quests.json), which resolves ABOVE the seed, so a
+        // overlay (BBS/{bbs}/quests.json), which resolves ABOVE the seed, so a
         // refreshed seed never clobbers customization. A first-launch-only copy
         // would freeze shipped guide updates out of existing installs (and reseeds
         // it if it's ever missing), so keep it in sync with the bundled copy.

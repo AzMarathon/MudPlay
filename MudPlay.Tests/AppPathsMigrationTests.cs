@@ -58,4 +58,60 @@ public sealed class AppPathsMigrationTests : IDisposable
         Assert.Equal("new", File.ReadAllText(Path.Combine(Dst, "global.json")));   // untouched
         Assert.Equal("carry", File.ReadAllText(Path.Combine(Dst, "profile.json")));
     }
+
+    // ----- Data/ subfolder flattening (3.0–3.2 → app-folder root) --------
+
+    // The data root is the app folder itself; a "Data" subfolder sits inside it.
+    private string DataRoot => Path.Combine(_root, "MudPlay");
+    private string DataSub => Path.Combine(DataRoot, "Data");
+
+    [Fact]
+    public void Flatten_LiftsSubfolderContentsUp_AndRemovesData()
+    {
+        Directory.CreateDirectory(Path.Combine(DataSub, "BBS", "Paradigm"));
+        Directory.CreateDirectory(Path.Combine(DataSub, "Global"));
+        File.WriteAllText(Path.Combine(DataSub, "Global", "global.json"), "g");
+        File.WriteAllText(Path.Combine(DataSub, "BBS", "Paradigm", "bbs.json"), "b");
+        File.WriteAllText(Path.Combine(DataSub, ".migrated-from-fujinterm"), "marker");
+
+        AppPaths.FlattenDataSubfolder(DataSub, DataRoot);
+
+        // Contents lifted a level up; the Data/ subfolder is gone.
+        Assert.False(Directory.Exists(DataSub));
+        Assert.Equal("g", File.ReadAllText(Path.Combine(DataRoot, "Global", "global.json")));
+        Assert.Equal("b", File.ReadAllText(Path.Combine(DataRoot, "BBS", "Paradigm", "bbs.json")));
+        // Loose files (e.g. the migration marker) come up too.
+        Assert.True(File.Exists(Path.Combine(DataRoot, ".migrated-from-fujinterm")));
+    }
+
+    [Fact]
+    public void Flatten_NoDataSubfolder_IsNoOp()
+    {
+        Directory.CreateDirectory(DataRoot);
+        File.WriteAllText(Path.Combine(DataRoot, "global.json"), "already-flat");
+
+        AppPaths.FlattenDataSubfolder(DataSub, DataRoot);
+
+        // Nothing to lift — the already-flat data is untouched.
+        Assert.Equal("already-flat", File.ReadAllText(Path.Combine(DataRoot, "global.json")));
+    }
+
+    [Fact]
+    public void Flatten_DestinationDirExists_MergesWithoutClobberingNewer()
+    {
+        // A prior partial run (or the ctor's pre-created empty dirs) left a
+        // destination folder in place. The merge must keep the newer flat copy and
+        // only backfill what's missing — then still remove the Data/ subfolder.
+        Directory.CreateDirectory(Path.Combine(DataSub, "Global"));
+        File.WriteAllText(Path.Combine(DataSub, "Global", "global.json"), "old");   // in Data/
+        File.WriteAllText(Path.Combine(DataSub, "Global", "extra.json"), "carry");   // only in Data/
+        Directory.CreateDirectory(Path.Combine(DataRoot, "Global"));
+        File.WriteAllText(Path.Combine(DataRoot, "Global", "global.json"), "new");   // already flat
+
+        AppPaths.FlattenDataSubfolder(DataSub, DataRoot);
+
+        Assert.False(Directory.Exists(DataSub));
+        Assert.Equal("new", File.ReadAllText(Path.Combine(DataRoot, "Global", "global.json")));   // newer kept
+        Assert.Equal("carry", File.ReadAllText(Path.Combine(DataRoot, "Global", "extra.json")));  // backfilled
+    }
 }

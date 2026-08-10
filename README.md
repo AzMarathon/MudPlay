@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.2.2**
-> - Per-slot "recast within N seconds of expiry" picker on every self-bless slot (Spells tab) and every party-bless slot (Party tab)
-> - Still defaults to 15s; set a slot to 0 to hold its recast until the buff actually expires (a wear-off message or the tracked timer running out)
+> **Version 3.2.3**
+> - App data now lives directly in the MudPlay app folder (e.g. `~/.local/share/MudPlay/`) instead of a nested `Data/` subfolder
+> - First launch after updating automatically lifts your existing data up and removes the empty `Data/` folder
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -49,13 +49,13 @@ If local state ever gets weird, `dotnet clean` and rebuild.
 
 ### Where your data lives
 
-Everything is stored under a single `Data/` root, resolved per platform:
+Everything is stored under a single app-data folder, resolved per platform:
 
-- **Linux** — `~/.local/share/MudPlay/Data/`
-- **Windows** — `%AppData%\MudPlay\Data\`
-- **macOS** — `~/Library/Application Support/MudPlay/Data/`
+- **Linux** — `~/.local/share/MudPlay/`
+- **Windows** — `%AppData%\MudPlay\`
+- **macOS** — `~/Library/Application Support/MudPlay/`
 
-Profiles, per-BBS settings, global settings, imported game data, and logs each live in their own subfolder. Settings files store only deltas from the tier beneath them, so they stay small and easy to back up.
+Profiles, per-BBS settings, global settings, imported game data, and logs each live in their own subfolder. Settings files store only deltas from the tier beneath them, so they stay small and easy to back up. (Updating from an older build automatically lifts your data out of the previous nested `Data/` subfolder on first launch.)
 
 ## Reporting a bug
 
