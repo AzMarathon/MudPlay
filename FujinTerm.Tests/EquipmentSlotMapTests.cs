@@ -51,4 +51,39 @@ public sealed class EquipmentSlotMapTests
     {
         Assert.Null(EquipmentSlotMap.InventorySlotForWornCode(worn));
     }
+
+    [Fact]
+    public void DisplayOrder_MatchesInGameLook_WeaponBlockLast_AlternatesAfterPrimaries()
+    {
+        // The Equipment Manager rows and the Item Finder trial slots both render in
+        // DisplayOrder, so this pins the in-game "look" ordering the user asked for:
+        // worn slots top-to-bottom, then Off-Hand / Weapon at the bottom, with the
+        // alternates mirroring that pairing right after.
+        EquipmentSlot[] expected =
+        {
+            EquipmentSlot.Head, EquipmentSlot.Ears, EquipmentSlot.Eyes, EquipmentSlot.Face,
+            EquipmentSlot.Neck, EquipmentSlot.Back, EquipmentSlot.Torso, EquipmentSlot.Arms,
+            EquipmentSlot.Wrist1, EquipmentSlot.Wrist2, EquipmentSlot.Hands,
+            EquipmentSlot.Finger1, EquipmentSlot.Finger2, EquipmentSlot.Waist,
+            EquipmentSlot.Legs, EquipmentSlot.Feet, EquipmentSlot.Worn,
+            EquipmentSlot.OffHand, EquipmentSlot.Weapon,
+            EquipmentSlot.AlternateOffHand, EquipmentSlot.AlternateWeapon,
+        };
+
+        Assert.Equal(expected, EquipmentSlotMap.DisplayOrder);
+    }
+
+    [Fact]
+    public void DisplayOrder_KeepsPrimaryBeforePairMate()
+    {
+        // SlotForItem / InventorySlotForWornCode resolve a paired code to the first
+        // matching slot in DisplayOrder, so each primary must precede its pair-mate.
+        var order = EquipmentSlotMap.DisplayOrder;
+        int Index(EquipmentSlot s) => order.ToList().IndexOf(s);
+
+        Assert.True(Index(EquipmentSlot.Wrist1)   < Index(EquipmentSlot.Wrist2));
+        Assert.True(Index(EquipmentSlot.Finger1)  < Index(EquipmentSlot.Finger2));
+        Assert.True(Index(EquipmentSlot.OffHand)  < Index(EquipmentSlot.AlternateOffHand));
+        Assert.True(Index(EquipmentSlot.Weapon)   < Index(EquipmentSlot.AlternateWeapon));
+    }
 }

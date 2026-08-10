@@ -1,8 +1,9 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.39.5**
+> **Version 2.39.6**
 > - "All auto off" now also parks navigation: engaging it suspends any in-flight walk / loop / auto-lair, and toggling it back on resumes exactly where it left off (a manual pause/stop you make in between is respected)
+> - Equipment Manager and Item Finder trial gear slots now list in the in-game "look" order — worn slots top-to-bottom, then Off-Hand / Weapon at the bottom, alternates after
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
