@@ -165,10 +165,15 @@
             <TextBlock Classes="SectionHeader" Text="Party bless (10 slots)" Margin="0,28,0,2"/>
             <TextBlock Classes="FieldLabel" Text="Pick a spell, then tick the classes that receive it. Row order is cast priority."
                        Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,0,0,6"/>
+            <!-- Column header: label the recast-lead picker once, above the rows. -->
+            <Grid ColumnDefinitions="26,110,Auto,*" ColumnSpacing="10" Margin="0,0,0,2">
+                <TextBlock Grid.Column="2" Text="recast within (s)"
+                           Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
+            </Grid>
             <ItemsControl ItemsSource="{Binding BlessSlots}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PartyBlessSlotViewModel">
-                        <Grid ColumnDefinitions="26,220,Auto,*" ColumnSpacing="10" Margin="0,0,0,4">
+                        <Grid ColumnDefinitions="26,110,Auto,*" ColumnSpacing="10" Margin="0,0,0,4">
                             <Border Grid.Column="0" Width="26" Height="26"
                                     Background="{StaticResource ChromeBgElevBrush}"
                                     CornerRadius="3" VerticalAlignment="Center"
@@ -179,25 +184,20 @@
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>
-                            <AutoCompleteBox Grid.Column="1" Width="220" HorizontalAlignment="Left"
+                            <AutoCompleteBox Grid.Column="1" Width="110" HorizontalAlignment="Left"
                                              VerticalAlignment="Center"
                                              Text="{Binding Spell, Mode=TwoWay}"
                                              ItemsSource="{Binding $parent[ItemsControl].((vm:PartySectionViewModel)DataContext).SpellSuggestions}"
                                              ValueMemberBinding="{ReflectionBinding Short}"
                                              ItemFilter="{Binding $parent[ItemsControl].((vm:PartySectionViewModel)DataContext).SpellSuggestionFilter}"
                                              ItemTemplate="{StaticResource SpellPickItem}"
-                                             PlaceholderText="Type code or name…"
+                                             PlaceholderText="Code or name…"
                                              ToolTip.Tip="Beneficial spell cast on party members whose class is ticked to the right. Cast as `&lt;code&gt; &lt;member-name&gt;`."/>
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4"
-                                        VerticalAlignment="Center"
-                                        IsVisible="{Binding Spell, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                <TextBlock Classes="FieldLabel" Text="recast within" VerticalAlignment="Center"/>
-                                <NumericUpDown Value="{Binding RecastMarginSec, Mode=TwoWay}"
-                                               Minimum="0" Maximum="999" FormatString="0" Increment="1"
-                                               Width="110" VerticalAlignment="Center"
-                                               ToolTip.Tip="Recast this buff when it's within this many seconds of expiring. 0 = don't recast until it actually expires (a wear-off message or the tracked timer running out)."/>
-                                <TextBlock Classes="FieldLabel" Text="s of expiry" VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <NumericUpDown Grid.Column="2" Value="{Binding RecastMarginSec, Mode=TwoWay}"
+                                           Minimum="0" Maximum="999" FormatString="0" Increment="1"
+                                           Width="110" VerticalAlignment="Center"
+                                           IsVisible="{Binding Spell, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           ToolTip.Tip="Recast this buff when it's within this many seconds of expiring. 0 = don't recast until it actually expires (a wear-off message or the tracked timer running out)."/>
                             <ItemsControl Grid.Column="3" ItemsSource="{Binding Classes}"
                                           VerticalAlignment="Center"
                                           IsVisible="{Binding Spell, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
