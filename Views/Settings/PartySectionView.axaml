@@ -166,7 +166,7 @@
             <TextBlock Classes="FieldLabel" Text="Pick a spell, then tick the classes that receive it. Row order is cast priority."
                        Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,0,0,6"/>
             <!-- Column header: label the spell + recast-lead columns once, above the rows. -->
-            <Grid ColumnDefinitions="26,110,Auto,*" ColumnSpacing="10" Margin="0,0,0,2">
+            <Grid ColumnDefinitions="26,180,Auto,*" ColumnSpacing="10" Margin="0,0,0,2">
                 <TextBlock Grid.Column="1" Text="bless"
                            Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
                 <TextBlock Grid.Column="2" Text="recast within (s)"
@@ -179,7 +179,7 @@
                              belonging to that slot, not the one below. -->
                         <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                 BorderThickness="0,0,0,1" Padding="0,3,0,7" Margin="0,0,0,3">
-                        <Grid ColumnDefinitions="26,110,Auto,*" ColumnSpacing="10">
+                        <Grid ColumnDefinitions="26,180,Auto,*" ColumnSpacing="10">
                             <Border Grid.Column="0" Width="26" Height="26"
                                     Background="{StaticResource ChromeBgElevBrush}"
                                     CornerRadius="3" VerticalAlignment="Center"
@@ -190,7 +190,7 @@
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>
-                            <AutoCompleteBox Grid.Column="1" Width="110" HorizontalAlignment="Left"
+                            <AutoCompleteBox Grid.Column="1" Width="180" HorizontalAlignment="Left"
                                              VerticalAlignment="Center"
                                              Text="{Binding Spell, Mode=TwoWay}"
                                              ItemsSource="{Binding $parent[ItemsControl].((vm:PartySectionViewModel)DataContext).SpellSuggestions}"

@@ -235,14 +235,14 @@
                      are preserved (stashed off-screen), not lost. -->
                 <TextBlock Classes="SectionHeader" Text="Bless spells"/>
                 <!-- Column header: label the recast-lead picker once, above the rows. -->
-                <Grid ColumnDefinitions="80,130,Auto" Margin="0,0,0,2">
+                <Grid ColumnDefinitions="80,180,Auto" Margin="0,0,0,2">
                     <TextBlock Grid.Column="2" Text="recast within (s)" Margin="8,0,0,0"
                                Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
                 </Grid>
                 <ItemsControl ItemsSource="{Binding BlessSlots}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SelfBlessSlotViewModel">
-                            <Grid ColumnDefinitions="80,130,Auto" Margin="0,0,0,4">
+                            <Grid ColumnDefinitions="80,180,Auto" Margin="0,0,0,4">
                                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"/>
                                 <AutoCompleteBox Grid.Column="1"
                                                  Text="{Binding Spell, Mode=TwoWay}"
@@ -251,7 +251,7 @@
                                                  ItemFilter="{Binding $parent[ItemsControl].((vm:SpellsSectionViewModel)DataContext).SpellSuggestionFilter}"
                                                  ItemTemplate="{StaticResource SpellPickItem}"
                                                  PlaceholderText="Spell or #item…"
-                                                 Width="130" HorizontalAlignment="Left"/>
+                                                 Width="180" HorizontalAlignment="Left"/>
                                 <NumericUpDown Grid.Column="2" Value="{Binding RecastMarginSec, Mode=TwoWay}"
                                                Minimum="0" Maximum="999" FormatString="0" Increment="1"
                                                Width="110" Margin="8,0,0,0" VerticalAlignment="Center"
