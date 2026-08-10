@@ -610,4 +610,72 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("blast acid slime", h.LastSent);
         Assert.DoesNotContain("a acid slime", h.AllSent);
     }
+
+    // ----- Alternating action orders: every-round command driving -------
+    // The Alternate* orders can't lean on the server auto-repeat — the desired
+    // action flips each round, so the engine re-issues a command every round. The
+    // heartbeat drives the flip in BOTH the spell-phase and (critically) the
+    // weapon-phase rounds, where the fixed-order heartbeat would return early.
+
+    [Fact]
+    public void AlternateSpellPhysical_OpensOnSpell_ThenFlipsEachRound()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.AlternateSpellPhysical;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        // Engage — round 0 = spell phase.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("harm giant rat", h.LastSent);
+
+        // Round 1 — physical (the weapon-phase flip the fixed heartbeat can't do).
+        h.Tick();
+        Assert.Equal("a giant rat", h.LastSent);
+
+        // Round 2 — back to the spell.
+        h.Tick();
+        Assert.Equal("harm giant rat", h.LastSent);
+
+        // Round 3 — physical again.
+        h.Tick();
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    [Fact]
+    public void AlternatePhysicalSpell_OpensOnSwing_ThenFlipsEachRound()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.AlternatePhysicalSpell;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        // Engage — round 0 = physical phase.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+
+        // Round 1 — spell.
+        h.Tick();
+        Assert.Equal("harm giant rat", h.LastSent);
+
+        // Round 2 — physical again.
+        h.Tick();
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    [Fact]
+    public void AlternateSpellPhysical_SpellPhaseUnaffordable_SwingsThatRound()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.AlternateSpellPhysical;
+        h.Settings.SpellManaThresholdMode = ThresholdMode.Absolute;
+        h.Settings.NormalAttackSpell =
+            new CombatSpellSlot { SpellName = "harm", MinEnemies = 1, MinManaPerCast = 30 };
+        h.Ma = 10;                                   // below the spell's reserve
+        h.AddMonster(1, "giant rat");
+
+        // Engage on a spell phase, but mana is too low — fall back to the swing.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+    }
 }

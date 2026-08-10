@@ -191,6 +191,13 @@ public sealed partial class CombatManager : IDisposable
     // CombatManager.Spells.cs.
     private string? _castingSpellTarget;
 
+    // Round counter for the alternating action orders (CombatActionOrder.Alternate*),
+    // driving the per-round spell-vs-physical phase. 0 at engage / room-clear /
+    // target change, then advanced once per round by the OnCombatTick alternation
+    // branch. Even rounds are the first phase (spell for AlternateSpellPhysical,
+    // physical for AlternatePhysicalSpell). Unused by the fixed orders.
+    private int _alternationRound;
+
     private string? _lastAttackCommand;
     private DateTimeOffset _lastRoomRefreshAt = DateTimeOffset.MinValue;
     private bool _disposed;
@@ -466,13 +473,14 @@ public sealed partial class CombatManager : IDisposable
         bool UsingAlternateWeapon,
         bool AwaitingBackstabResolution,
         string? PendingBackstabSpecies,
-        string? GuardBlockedTarget);
+        string? GuardBlockedTarget,
+        int AlternationRound);
 
     // UI-thread only (router handlers + the capture both run there), so no lock.
     public DebugState Snapshot() => new(
         _currentTarget, _usingAlternateWeapon,
         _awaitingBackstabResolution, _pendingBackstabSpecies,
-        _guardBlockedTarget);
+        _guardBlockedTarget, _alternationRound);
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
     // holds any stealth that opens a backstab — sneaking OR (optimistically) hidden
@@ -1032,6 +1040,7 @@ public sealed partial class CombatManager : IDisposable
         // start fresh next room.
         _castingSpellTarget = null;
         _lastCastAction = null;
+        _alternationRound = 0;
         _attackSpellImmuneSpecies.Clear();
         _spellChooser.ResetForNewRoom();
 

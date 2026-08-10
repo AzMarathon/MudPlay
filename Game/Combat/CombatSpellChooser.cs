@@ -128,8 +128,16 @@ public sealed class CombatSpellChooser
         // casts handled by ChooseDebuff / CastingDirector (ranked against heals &
         // buffs by the Spells tab), so they land alongside the round's action
         // regardless of this choice.
-        bool preferSpell = settings.ActionOrder == CombatActionOrder.SpellsFirst
-                           || ctx.WeaponIneffective;
+        //
+        // The alternating orders resolve their spell-vs-physical preference per
+        // round from the parity of an engine-owned round counter and pass it in
+        // via ctx.AlternationPreferSpell (null for the fixed orders). A spell-phase
+        // round then behaves exactly like SpellsFirst and a physical-phase round
+        // like PhysicalFirst — the fallback-to-the-other-type is the same cascade
+        // path both fixed orders already take.
+        bool preferSpell =
+            (ctx.AlternationPreferSpell ?? (settings.ActionOrder == CombatActionOrder.SpellsFirst))
+            || ctx.WeaponIneffective;
 
         // The per-target weapon latch suppresses the single-target attack cascade —
         // but never when the weapon can't hit this target (there we still need the
@@ -413,7 +421,11 @@ public readonly record struct CombatSpellDecision(CombatSpellAction Action, stri
 // working alternate — proven by game-data HitMagic or a "no effect" line this
 // room); it only matters for PhysicalFirst, where it flips the round from a
 // useless swing to the attack-spell cascade. Defaults false so SpellsFirst and
-// unwired callers / tests behave as before.
+// unwired callers / tests behave as before. AlternationPreferSpell forces this
+// round's spell-vs-physical preference for the alternating action orders (true =
+// treat the round as SpellsFirst, false = as PhysicalFirst); null — the default —
+// leaves the choice to settings.ActionOrder, so the fixed orders and unwired
+// callers / tests behave as before.
 //
 // The four Override* fields carry the current target's per-monster spell
 // overrides (game-data Monster overlay), already resolved from Spell.Number to
@@ -441,4 +453,5 @@ public readonly record struct CombatSpellContext(
     int? OverrideAttackMaxCasts = null,
     string? OverridePreAttackSpell = null,
     int? OverridePreAttackMaxCasts = null,
-    bool WeaponIneffective = false);
+    bool WeaponIneffective = false,
+    bool? AlternationPreferSpell = null);

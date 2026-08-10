@@ -323,6 +323,10 @@ public static class BugReportBuilder
         Kv(sb, "Worn weapon", WornSlot(inv, "Weapon Hand") ?? "(none)");
         Kv(sb, "Worn off-hand", WornSlot(inv, "Off-Hand") ?? "(none)");
         Kv(sb, "Using alternate weapon", combat.UsingAlternateWeapon.ToString());
+        // Alternating action-order phase — pairs with the resolved Combat "ActionOrder"
+        // setting below to explain why an alternate-order character is casting or
+        // swinging this round (even rounds open on the mode's first phase).
+        Kv(sb, "Alternation round", combat.AlternationRound.ToString());
         Kv(sb, "Awaiting backstab resolution", combat.AwaitingBackstabResolution
             ? $"yes (target={combat.PendingBackstabSpecies ?? "(none)"})"
             : "no");

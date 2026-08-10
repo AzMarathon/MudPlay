@@ -211,6 +211,21 @@ public enum CombatActionOrder
     // path is proven ineffective against the target (normal can't damage it and
     // there's no working alternate).
     PhysicalFirst,
+
+    // Alternate the round's action every round, starting on the spell: cast an
+    // attack spell one round, swing the next, cast, swing… The two alternating
+    // modes each behave like the fixed order matching THIS round's phase — a
+    // spell-phase round is SpellsFirst (falls to the swing when no spell can
+    // fire), a physical-phase round is PhysicalFirst (falls to the cascade only
+    // when the weapon is proven ineffective) — so a phase that can't act still
+    // does something rather than stalling the round. Unlike the fixed orders the
+    // engine cannot lean on the server's auto-repeat here: the desired action
+    // flips each round, so it re-issues a command every round.
+    AlternateSpellPhysical,
+
+    // Same per-round alternation, starting on the swing: physical, spell,
+    // physical…
+    AlternatePhysicalSpell,
 }
 
 // Direction strategy for the auto-flee path.

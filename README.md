@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.2.0**
-> - New Help → About window: program name + version, a clickable link to the repo, a tab per bundled license (MudPlay, Avalonia, JetDatabaseReader, and the bundled fonts), and a thank-you to the MajorMUD community and its tools (MegaMUD, Nightmare Redux, MajorMUD Explorer)
-> - New animated mud-throw startup splash on the terminal (toggle in Settings → General); the title/byline stay either way, and it never touches the backscroll
-> - Updating from a 2.x build now migrates your existing data (profiles, BBS, settings, game data) from the old FujinTerm folder into MudPlay — fixes profiles appearing missing after the 3.0 rename
+> **Version 3.2.1**
+> - Two new Combat "Action order" modes: alternate the round's action every round — "spell, then physical" and "physical, then spell"
+> - On its off phase each mode falls back to the other action type (no castable spell → swing; weapon can't hit → cast) so the round never stalls
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
