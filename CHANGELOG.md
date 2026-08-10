@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.3.0
+
+- The startup splash is now a rotating collection of animated ANSI scenes — a random one plays each loop, drawn from a shuffle-bag so every scene shows once before any repeats, swapping seamlessly on a clear lens
+- Scenes: the original mud-throw plus a monster truck, mountain mudslide, mud pie, pig wallow, mud geyser, mud rain, windshield wiper, swamp monster, sinking goblin, and the "Mud!" seagulls
+- Settings → General "show startup animation" still gates all of them (the title/byline header stays either way)
+
 ## 3.2.6
 
 - `@loop <name>` matches a saved loop by a close-enough 1-of-1 name — every typed word, any order (e.g. `@loop godfrey bank` starts "Bank of Godfrey Loop")
