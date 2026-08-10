@@ -252,13 +252,19 @@ public sealed partial class StatParser : IDisposable
         if (bytes.IsEmpty || bytes.Length > 16) return;
         string raw = Encoding.Latin1.GetString(bytes);
         string cmd = raw.TrimEnd('\r', '\n', '\0').Trim().ToLowerInvariant();
-        // `stat` — opens scan for the full stat-screen output.
+        // `stat` and its abbreviations (`st` / `sta`) all open the full
+        // stat-screen output — MajorMUD accepts every prefix of the command, just
+        // like `exp` below, and the screen is identical however you spell it. Arm
+        // on any prefix of "stat" from 2 chars up so the Player Workshop updates
+        // whether the user typed `st` or `stat`. (Arming is harmless for a stray
+        // `st`: with no stat lines the window just closes empty.)
         // any prefix of "experience" from 3 chars up — opens scan for
         // the single-line exp output. MajorMUD accepts every prefix
         // from `exp` through `experience` (3..10 chars) as the same
         // command; 2-char `ex` falls through to the `say "ex"` no-op
         // which the gate correctly ignores.
-        bool isStat = cmd == "stat";
+        bool isStat = cmd.Length is >= 2 and <= 4
+                      && "stat".StartsWith(cmd, StringComparison.Ordinal);
         bool isExp  = cmd.Length >= 3 && cmd.Length <= 10
                       && "experience".StartsWith(cmd, StringComparison.Ordinal);
         if (!isStat && !isExp) return;

@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.3.1
+
+- Stat collection now arms on the `stat` abbreviations too (`st` / `sta`), not just the full word — the Player Workshop updates however you spell it
+- bug reports addressed: paradigm-20260810-093510
+
 ## 3.3.0
 
 - The startup splash is now a rotating collection of animated ANSI scenes — a random one plays each loop, drawn from a shuffle-bag so every scene shows once before any repeats, swapping seamlessly on a clear lens
