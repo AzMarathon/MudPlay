@@ -39,6 +39,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     // re-surface when a wider one is loaded.
     private readonly Dictionary<int, string> _overflowBlessSlots = new();
 
+    // Recast leads for out-of-range bless slots, held aside for the same reason
+    // as _overflowBlessSlots so a narrower realm doesn't drop them.
+    private readonly Dictionary<int, int> _overflowBlessMargins = new();
+
     public override string Id => "spells";
     // Display header only — the persistence key stays "Spells" (TabKey / Id)
     // so renaming the tab never orphans saved settings. The tab owns the
@@ -297,6 +301,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
             RoomLightSpell     = NullIfBlank(RoomLightSpell),
 
             BlessSlots = CollectBlessSlots(),
+            BlessSlotRecastMargins = CollectBlessMargins(),
 
             SelfBlessWhileResting = SelfBlessWhileResting,
             SelfBlessDuringCombat = SelfBlessDuringCombat,
@@ -383,7 +388,9 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         CureBlindnessSpell = dto.CureBlindnessSpell;
         RoomLightSpell     = dto.RoomLightSpell;
 
-        RebuildBlessSlots(dto.BlessSlots ?? new Dictionary<int, string>());
+        RebuildBlessSlots(
+            dto.BlessSlots ?? new Dictionary<int, string>(),
+            dto.BlessSlotRecastMargins ?? new Dictionary<int, int>());
 
         SelfBlessWhileResting = dto.SelfBlessWhileResting;
         SelfBlessDuringCombat = dto.SelfBlessDuringCombat;
@@ -422,14 +429,15 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     // count. Rebuilds from the current full map so in-progress edits (and the
     // dirty flag) survive; only which slots are visible changes.
     private void OnRealmChanged(string? _)
-        => Dispatcher.UIThread.Post(() => RebuildBlessSlots(CollectBlessSlots()));
+        => Dispatcher.UIThread.Post(() => RebuildBlessSlots(CollectBlessSlots(), CollectBlessMargins()));
 
     // Build the visible slot rows for the active realm (Stock 10 / ParaMud 15)
-    // from the full sparse map. Picks beyond the visible count are stashed in
-    // _overflowBlessSlots so a wider-realm profile round-trips its extra slots
-    // rather than losing them. Row construction is self-suppressed, so this
-    // never marks the tab dirty.
-    private void RebuildBlessSlots(IReadOnlyDictionary<int, string> full)
+    // from the full sparse maps. Picks and recast leads beyond the visible count
+    // are stashed in the overflow maps so a wider-realm profile round-trips its
+    // extra slots rather than losing them. Row construction is self-suppressed, so
+    // this never marks the tab dirty.
+    private void RebuildBlessSlots(
+        IReadOnlyDictionary<int, string> full, IReadOnlyDictionary<int, int> margins)
     {
         int count = SpellsSettings.BlessSlotCountFor(_gameData.ActiveRealm);
 
@@ -437,10 +445,17 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         foreach (KeyValuePair<int, string> kv in full)
             if (kv.Key > count) _overflowBlessSlots[kv.Key] = kv.Value;
 
+        _overflowBlessMargins.Clear();
+        foreach (KeyValuePair<int, int> kv in margins)
+            if (kv.Key > count) _overflowBlessMargins[kv.Key] = kv.Value;
+
         BlessSlots.Clear();
         for (int i = 1; i <= count; i++)
             BlessSlots.Add(new SelfBlessSlotViewModel(
-                i, full.TryGetValue(i, out string? code) ? code : null, MarkDirty));
+                i,
+                full.TryGetValue(i, out string? code) ? code : null,
+                margins.TryGetValue(i, out int m) ? m : SpellsSettings.DefaultBlessRecastMarginSec,
+                MarkDirty));
     }
 
     // Merge the visible rows with the preserved out-of-range slots into the
@@ -451,6 +466,20 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         Dictionary<int, string> map = new(_overflowBlessSlots);
         foreach (SelfBlessSlotViewModel slot in BlessSlots)
             if (NullIfBlank(slot.Spell) is { } code) map[slot.Index] = code;
+        return map;
+    }
+
+    // Recast leads for the full slot set. Delta-clean: only a filled slot with a
+    // non-default lead persists (an absent key means the shared default), so a
+    // profile that never touches the pickers writes nothing here. Overflow leads
+    // survive the same way BlessSlots' overflow does.
+    private Dictionary<int, int> CollectBlessMargins()
+    {
+        Dictionary<int, int> map = new(_overflowBlessMargins);
+        foreach (SelfBlessSlotViewModel slot in BlessSlots)
+            if (NullIfBlank(slot.Spell) is not null
+                && slot.RecastMarginSec != SpellsSettings.DefaultBlessRecastMarginSec)
+                map[slot.Index] = slot.RecastMarginSec;   // visible keys never collide with overflow (> count)
         return map;
     }
 

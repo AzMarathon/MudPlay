@@ -48,8 +48,10 @@ public sealed class SpellsSettingsTests
         Assert.Null(dto.RoomLightSpell);
 
         // Bless slots start empty — the sparse map has no entries until the
-        // user fills a slot, so a fresh profile serialises no bless data.
+        // user fills a slot, so a fresh profile serialises no bless data. The
+        // per-slot recast leads are likewise absent until one is set off default.
         Assert.Empty(dto.BlessSlots);
+        Assert.Empty(dto.BlessSlotRecastMargins);
 
         // Ailment-coordination toggles default UNCHECKED — most parties want
         // to pause (@wait) and broadcast (.@poisoned) on every ailment.
@@ -120,6 +122,13 @@ public sealed class SpellsSettingsTests
                 [10] = "guardian",    [13] = "sanctuary", // a sparse gap + a beyond-10 slot
             },
 
+            BlessSlotRecastMargins = new()
+            {
+                [1] = 30,      // custom lead
+                [2] = 0,       // wait-for-expiry
+                [13] = 45,     // a beyond-10 slot's lead round-trips too
+            },
+
             IgnorePoison           = true,
             IgnoreBlindness        = true,
             IgnoreConfusion        = true,
@@ -160,6 +169,7 @@ public sealed class SpellsSettingsTests
         Assert.Equal(dto.RoomLightSpell,     round.RoomLightSpell);
 
         Assert.Equal(dto.BlessSlots, round.BlessSlots);
+        Assert.Equal(dto.BlessSlotRecastMargins, round.BlessSlotRecastMargins);
 
         Assert.Equal(dto.IgnorePoison,           round.IgnorePoison);
         Assert.Equal(dto.IgnoreBlindness,        round.IgnoreBlindness);

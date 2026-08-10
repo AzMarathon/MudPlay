@@ -131,6 +131,8 @@ public sealed class PartySectionViewModelTests
         {
             Assert.Null(s.Spell);
             Assert.Empty(s.ClassNumbers);
+            // A fresh slot carries the shared default recast lead.
+            Assert.Equal(SpellsSettings.DefaultBlessRecastMarginSec, s.RecastMarginSec);
         });
     }
 
@@ -140,8 +142,10 @@ public sealed class PartySectionViewModelTests
         PartySettings src = new();
         src.BlessSlots[0].Spell = "bles";
         src.BlessSlots[0].ClassNumbers = new() { 1, 4, 9 };
+        src.BlessSlots[0].RecastMarginSec = 25;
         src.BlessSlots[3].Spell = "shie";
         src.BlessSlots[3].ClassNumbers = new() { 2 };
+        src.BlessSlots[3].RecastMarginSec = 0;   // wait-for-expiry
 
         string json = JsonSerializer.Serialize(src);
         PartySettings? back = JsonSerializer.Deserialize<PartySettings>(json);
@@ -150,10 +154,13 @@ public sealed class PartySectionViewModelTests
         Assert.Equal(10, back!.BlessSlots.Count);
         Assert.Equal("bles", back.BlessSlots[0].Spell);
         Assert.Equal(new[] { 1, 4, 9 }, back.BlessSlots[0].ClassNumbers);
+        Assert.Equal(25, back.BlessSlots[0].RecastMarginSec);
         Assert.Equal("shie", back.BlessSlots[3].Spell);
         Assert.Equal(new[] { 2 }, back.BlessSlots[3].ClassNumbers);
-        // Untouched slots stay empty across the trip.
+        Assert.Equal(0, back.BlessSlots[3].RecastMarginSec);
+        // Untouched slots stay empty across the trip and keep the default lead.
         Assert.Null(back.BlessSlots[1].Spell);
         Assert.Empty(back.BlessSlots[1].ClassNumbers);
+        Assert.Equal(SpellsSettings.DefaultBlessRecastMarginSec, back.BlessSlots[1].RecastMarginSec);
     }
 }

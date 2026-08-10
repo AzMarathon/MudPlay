@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.2.2
+
+- Per-slot "recast within N seconds of expiry" picker on every self-bless slot (Spells tab) and every party-bless slot (Party tab)
+- Still defaults to 15s; set a slot to 0 to hold its recast until the buff actually expires (a wear-off message or the tracked timer running out)
+
 ## 3.2.1
 
 - Two new Combat "Action order" modes: alternate the round's action every round — "spell, then physical" and "physical, then spell"

@@ -53,10 +53,12 @@ public sealed class CastingDirector : IDisposable
     // decision.
     public const string LogCategory = "CastDirector";
 
-    // Re-cast a buff once it's within this many seconds of expiry (or already
-    // expired / never confirmed). Matches the user's "15→0s-of-expiry recast
-    // window".
-    private const int RecastMarginSec = 15;
+    // Default recast lead when a bless slot doesn't carry its own: re-cast a buff
+    // once it's within this many seconds of expiry (or already expired / never
+    // confirmed). Each self / party bless slot can override this via its per-slot
+    // "recast within" picker (0 = wait for actual expiry); the chosen lead travels
+    // with the buff's active timer in _activeUntil.
+    private const int DefaultRecastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
 
     // Optimistic self-buff recast clock used the instant a self-buff cast is
     // SENT — before its AppliedMessage confirms — so a second evaluation on the
@@ -102,12 +104,14 @@ public sealed class CastingDirector : IDisposable
     private Func<IReadOnlyList<string>>? _downedAllies;
 
     // ----- Buff-duration tracking (self + party) ----------------------
-    // Per (targetKey, spellShort) → UTC instant the buff wears off.
-    // targetKey "" = self; otherwise the member's given name lower-cased.
-    private readonly Dictionary<(string Target, string Short), DateTime> _activeUntil = new();
+    // Per (targetKey, spellShort) → the buff's wear-off instant plus the slot's
+    // recast lead (seconds before Until we re-cast). targetKey "" = self;
+    // otherwise the member's given name lower-cased. The lead travels with the
+    // timer so IsRecastDue and the "recast in Xs" logs use the slot's own value.
+    private readonly Dictionary<(string Target, string Short), (DateTime Until, int MarginSec)> _activeUntil = new();
     // The one outstanding party-buff cast awaiting CasterMessage
     // confirmation. CastCoordinator's cooldown guarantees ≤1 in flight.
-    private (string Short, string Target, long DurationSec, CasterMessageMatcher Matcher)? _pendingPartyCast;
+    private (string Short, string Target, long DurationSec, int MarginSec, CasterMessageMatcher Matcher)? _pendingPartyCast;
     // The self-buff whose optimistic recast timer was armed on send but hasn't yet
     // been confirmed landed. Cleared when its AppliedMessage confirms (the real
     // duration timer takes over) OR when a server landing-failure arrives — a fizzle
@@ -393,12 +397,14 @@ public sealed class CastingDirector : IDisposable
     }
 
     // True when a buff on targetKey ("" = self) is due to be (re)cast: either never
-    // confirmed-active, or within RecastMarginSec seconds of expiry.
+    // confirmed-active, or within the slot's recast lead of expiry. The lead is the
+    // one stored with the timer when it was armed (0 ⇒ only once the buff has
+    // actually expired).
     private bool IsRecastDue(string targetKey, string spellShort)
     {
-        if (!_activeUntil.TryGetValue((targetKey, spellShort), out DateTime until))
+        if (!_activeUntil.TryGetValue((targetKey, spellShort), out (DateTime Until, int MarginSec) t))
             return true;
-        return (until - _now()).TotalSeconds <= RecastMarginSec;
+        return (t.Until - _now()).TotalSeconds <= t.MarginSec;
     }
 
     // True when spell is the same self-heal we just sent AND neither pool has
@@ -418,12 +424,12 @@ public sealed class CastingDirector : IDisposable
     // sent. Uses the buff's resolved effect duration when available, else a
     // conservative fallback; the AppliedMessage path later overwrites this with
     // the true duration once the buff confirms.
-    private void StartSelfBuffTimer(string spellShort)
+    private void StartSelfBuffTimer(string spellShort, int marginSec)
     {
         long seconds = _buffInfoByShort?.Invoke(spellShort) is { DurationSec: > 0 } info
             ? info.DurationSec
             : UnknownBuffRecastFallbackSec;
-        _activeUntil[("", spellShort)] = _now().AddSeconds(seconds);
+        _activeUntil[("", spellShort)] = (_now().AddSeconds(seconds), marginSec);
         _pendingSelfBuffShort = spellShort;   // awaiting land / fail — cleared by either
     }
 
@@ -452,7 +458,15 @@ public sealed class CastingDirector : IDisposable
         if (_shortFromAppliedRecord?.Invoke(r) is { } shortCode)
         {
             if (_buffInfoByShort?.Invoke(shortCode) is { } info)
-                _activeUntil[("", shortCode)] = _now().AddSeconds(info.DurationSec);
+            {
+                // Preserve the recast lead armed on send (StartSelfBuffTimer ran
+                // first for a bless-slot cast); default it for anything confirmed
+                // without a prior optimistic timer (e.g. the HP-regen HoT).
+                int margin = _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec) prev)
+                    ? prev.MarginSec
+                    : DefaultRecastMarginSec;
+                _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin);
+            }
             // Landed — the real duration timer is now authoritative, so the pending
             // optimistic marker mustn't later be treated as an unlanded cast.
             if (_pendingSelfBuffShort == shortCode) _pendingSelfBuffShort = null;
@@ -479,12 +493,12 @@ public sealed class CastingDirector : IDisposable
         if (!p.Matcher.ConfirmsTarget(line.Text, p.Target)) return;
 
         string key = p.Target.Trim().ToLowerInvariant();
-        _activeUntil[(key, p.Short)] = _now().AddSeconds(p.DurationSec);
+        _activeUntil[(key, p.Short)] = (_now().AddSeconds(p.DurationSec), p.MarginSec);
         // Info, not Combat: the user wants to confirm the recast timer actually
         // armed and see when it will re-fire, and the combat-diagnostics channel is
         // off in normal play. Surface both the effect duration and the recast lead
-        // (fires RecastMarginSec before expiry).
-        long recastInSec = Math.Max(0L, p.DurationSec - RecastMarginSec);
+        // (fires the slot's recast margin before expiry).
+        long recastInSec = Math.Max(0L, p.DurationSec - p.MarginSec);
         _log?.Info(LogCategory,
             $"party-buff confirmed spell={p.Short} target={p.Target} " +
             $"duration={p.DurationSec}s — recast in {recastInSec}s.");
@@ -551,7 +565,7 @@ public sealed class CastingDirector : IDisposable
             // recast timer by the token. Only buff slots carry tokens.
             if (category == SpellCategory.Buffing && ItemCastToken.IsToken(cand.Spell))
             {
-                if (TryFireItemCast(cand.Spell)) return cand.Spell;
+                if (TryFireItemCast(cand.Spell, cand.RecastMarginSec)) return cand.Spell;
                 continue; // unresolved / non-buff item — let a later category try
             }
 
@@ -602,8 +616,8 @@ public sealed class CastingDirector : IDisposable
             // before the AppliedMessage confirms with the true duration.
             if (category == SpellCategory.Buffing)
             {
-                if (cand.Target is { } tgt) ArmPartyBuffConfirm(cand.Spell, tgt);
-                else StartSelfBuffTimer(cand.Spell);
+                if (cand.Target is { } tgt) ArmPartyBuffConfirm(cand.Spell, tgt, cand.RecastMarginSec);
+                else StartSelfBuffTimer(cand.Spell, cand.RecastMarginSec);
             }
 
             _log?.Combat(LogCategory,
@@ -628,17 +642,17 @@ public sealed class CastingDirector : IDisposable
     // proactively from the cast spell's computed duration rather than awaiting an
     // AppliedMessage, since the landing buff confirms under the spell's own cast
     // code, not the token.
-    private bool TryFireItemCast(string token)
+    private bool TryFireItemCast(string token, int marginSec)
     {
         if (_itemCastDuration is null || _executeItemCast is null) return false;
         if (_itemCastDuration(token) is not { } durationSec || durationSec <= 0) return false;
         if (!_executeItemCast(token)) return false;
 
         _cast.NotifyExternalCastSent();
-        _activeUntil[("", token)] = _now().AddSeconds(durationSec);
+        _activeUntil[("", token)] = (_now().AddSeconds(durationSec), marginSec);
         // Same reasoning as the party-buff confirm: surface the armed recast timer
         // on the always-on Info channel, not combat diagnostics.
-        long recastInSec = Math.Max(0L, durationSec - RecastMarginSec);
+        long recastInSec = Math.Max(0L, durationSec - marginSec);
         _log?.Info(LogCategory,
             $"item-cast buff fired token={token} duration={durationSec}s — recast in {recastInSec}s.");
         CastFired?.Invoke();
@@ -1001,30 +1015,37 @@ public sealed class CastingDirector : IDisposable
         if (_state.InCombat && !spells.SelfBlessDuringCombat) return null;
         if (_state.Position == PlayerPosition.Resting && !spells.SelfBlessWhileResting) return null;
 
-        // Bless slots first (in priority = slot-index order), then the mana-regen
-        // / "when full" downtime buffs.
-        IEnumerable<(string? Spell, bool Eligible)> slots =
+        // Bless slots first (in priority = slot-index order), each carrying its
+        // per-slot recast lead; then the mana-regen / "when full" downtime buffs,
+        // which have no picker and use the shared default.
+        IEnumerable<(string? Spell, bool Eligible, int Margin)> slots =
             spells.BlessSlots.OrderBy(kv => kv.Key)
-                .Select(kv => ((string?)kv.Value, true))
-                .Concat(new (string? Spell, bool Eligible)[]
+                .Select(kv => ((string?)kv.Value, true, BlessSlotMargin(spells, kv.Key)))
+                .Concat(new (string? Spell, bool Eligible, int Margin)[]
                 {
-                    (spells.MaRegenSpell,     true),
+                    (spells.MaRegenSpell,     true, DefaultRecastMarginSec),
                     // WhenHp/MaFull additionally require the matching pool to be
                     // at max — they're "downtime, ready for next fight" buffs.
-                    (spells.WhenHpFullSpell,  _state.MaxHp > 0 && _state.Hp >= _state.MaxHp),
-                    (spells.WhenMaFullSpell,  _state.MaxMa > 0 && _state.Ma >= _state.MaxMa),
+                    (spells.WhenHpFullSpell,  _state.MaxHp > 0 && _state.Hp >= _state.MaxHp, DefaultRecastMarginSec),
+                    (spells.WhenMaFullSpell,  _state.MaxMa > 0 && _state.Ma >= _state.MaxMa, DefaultRecastMarginSec),
                 });
 
-        foreach ((string? slot, bool eligible) in slots)
+        foreach ((string? slot, bool eligible, int margin) in slots)
         {
             if (!eligible) continue;
             if (string.IsNullOrWhiteSpace(slot)) continue;
             if (!IsBuffAffordable(slot, manaBuffsAllowed)) continue;
             if (!IsRecastDue("", slot)) continue;
-            return new CastCandidate(slot, Target: null);
+            return new CastCandidate(slot, Target: null, margin);
         }
         return null;
     }
+
+    // The recast lead for a self-bless slot: the per-slot override when set, else
+    // the shared default. A 0 override (wait for actual expiry) is preserved.
+    private static int BlessSlotMargin(SpellsSettings spells, int slotIndex) =>
+        spells.BlessSlotRecastMargins.TryGetValue(slotIndex, out int m)
+            ? m : DefaultRecastMarginSec;
 
     // Walk the party-bless slots in priority order and pick one buff to cast. A
     // party-wide buff (its Spells.Targets is Full / Divided Party Area — e.g. a
@@ -1056,7 +1077,7 @@ public sealed class CastingDirector : IDisposable
             if (_isPartyWideBuff?.Invoke(slot.Spell) == true)
             {
                 if (!IsRecastDue("", slot.Spell)) continue;
-                return new CastCandidate(slot.Spell, Target: null);
+                return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
             }
 
             // Single-target buff — needs at least one class-matched member.
@@ -1071,7 +1092,7 @@ public sealed class CastingDirector : IDisposable
                 string given = GivenName(m.Name);
                 string key = given.ToLowerInvariant();
                 if (!IsRecastDue(key, slot.Spell)) continue;
-                return new CastCandidate(slot.Spell, given);
+                return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
             }
         }
         return null;
@@ -1100,12 +1121,12 @@ public sealed class CastingDirector : IDisposable
     // duration timer keyed to the target. Clears any prior pending cast
     // (CastCoordinator's cooldown guarantees <=1 in flight). No-op (clears pending)
     // when the buff has no resolvable caster template.
-    private void ArmPartyBuffConfirm(string shortCode, string target)
+    private void ArmPartyBuffConfirm(string shortCode, string target, int marginSec)
     {
         _pendingPartyCast = null;
         if (_buffInfoByShort?.Invoke(shortCode) is not { } info) return;
         if (CasterMessageMatcher.TryCreate(info.Caster) is not { } matcher) return;
-        _pendingPartyCast = (shortCode, target, info.DurationSec, matcher);
+        _pendingPartyCast = (shortCode, target, info.DurationSec, marginSec, matcher);
     }
 
     // ----- Debuffing — sourced from the combat engine -----------------
@@ -1139,7 +1160,12 @@ public sealed class CastingDirector : IDisposable
 
 // One picked cast — spell name + optional target string. Used internally by
 // CastingDirector to thread through the unified Pick* → TryCast pipeline.
-public readonly record struct CastCandidate(string Spell, string? Target);
+// RecastMarginSec carries the buff slot's recast lead through to the timer the
+// Buffing branch arms; it's meaningless (and ignored) for non-buff picks, which
+// leave it at the shared default.
+public readonly record struct CastCandidate(
+    string Spell, string? Target,
+    int RecastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec);
 
 // Spell-decision categories. Order matches the user-facing Spells settings tab;
 // numeric position is just for deterministic tiebreak when two priority slots share

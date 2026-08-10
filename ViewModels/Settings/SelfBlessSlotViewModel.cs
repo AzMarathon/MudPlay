@@ -1,5 +1,6 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MudPlay.Models.Profile;
 
 namespace MudPlay.ViewModels.Settings;
 
@@ -24,17 +25,28 @@ public sealed partial class SelfBlessSlotViewModel : ObservableObject
     // to the row's AutoCompleteBox.
     [ObservableProperty] private string? _spell;
 
-    public SelfBlessSlotViewModel(int index, string? spell, Action onChanged)
+    // Recast lead in seconds: how far before the buff's tracked expiry the engine
+    // recasts it. 0 = wait for actual expiry. Bound to the row's NumericUpDown.
+    [ObservableProperty] private int _recastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
+
+    public SelfBlessSlotViewModel(int index, string? spell, int recastMarginSec, Action onChanged)
     {
         Index = index;
         _onChanged = onChanged ?? throw new ArgumentNullException(nameof(onChanged));
 
         _suppress = true;
         Spell = spell;
+        RecastMarginSec = recastMarginSec;
         _suppress = false;
     }
 
     partial void OnSpellChanged(string? value)
+    {
+        if (_suppress) return;
+        _onChanged();
+    }
+
+    partial void OnRecastMarginSecChanged(int value)
     {
         if (_suppress) return;
         _onChanged();

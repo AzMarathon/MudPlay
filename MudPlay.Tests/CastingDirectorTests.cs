@@ -976,6 +976,106 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void Buff_SelfPerSlotMargin_RecastsAtConfiguredLead_NotTheDefault()
+    {
+        // A slot with a 30s recast lead re-casts 30s before expiry — earlier than
+        // the 15s default would.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bless";
+        h.Spells.BlessSlotRecastMargins[1] = 30;
+        h.BuffInfo["bless"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.RecordCondition("bless", MessageFlags.None,
+            applied: "You are blessed!", endsWith: "Your blessing fades.");
+
+        h.Director.Evaluate();                 // first cast
+        h.FeedLine("You are blessed!");        // 300s timer, 30s lead
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+
+        // 40s before expiry → past neither lead → not due.
+        h.Now = h.Now.AddSeconds(260);
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        // 25s before expiry → inside the 30s lead (the 15s default would still be
+        // waiting) → due.
+        h.Now = h.Now.AddSeconds(15);
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void Buff_SelfPerSlotMarginZero_WaitsForActualExpiry()
+    {
+        // A 0 lead means "don't recast until the tracked timer actually runs out"
+        // — the 15s default window must NOT trigger an early recast.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bless";
+        h.Spells.BlessSlotRecastMargins[1] = 0;
+        h.BuffInfo["bless"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.RecordCondition("bless", MessageFlags.None,
+            applied: "You are blessed!", endsWith: "Your blessing fades.");
+
+        h.Director.Evaluate();
+        h.FeedLine("You are blessed!");        // 300s timer, 0s lead
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+
+        // 5s before expiry → the default 15s window WOULD recast; a 0 lead holds.
+        h.Now = h.Now.AddSeconds(295);
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        // Tracked timer runs out → now due.
+        h.Now = h.Now.AddSeconds(5);
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void Buff_SelfPerSlotMarginZero_WearOffMessageRecastsImmediately()
+    {
+        // The other half of the 0-lead contract: a server wear-off message drops
+        // the timer and recasts at once, well before the tracked expiry.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bless";
+        h.Spells.BlessSlotRecastMargins[1] = 0;
+        h.BuffInfo["bless"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.RecordCondition("bless", MessageFlags.None,
+            applied: "You are blessed!", endsWith: "Your blessing fades.");
+
+        h.Director.Evaluate();
+        h.FeedLine("You are blessed!");        // 300s timer
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+
+        h.Director.Evaluate();                 // mid-duration → no recast
+        Assert.Empty(h.CastsSent);
+
+        h.FeedLine("Your blessing fades.");    // early wear-off → recast now
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void SelfHeal_StaleRepeat_SuppressedWhenPoolUnchanged()
     {
         // Repro of the swan double-cast: a combat tick wipes the coordinator's

@@ -115,6 +115,20 @@ public sealed class SpellsSettings
     // recognises.
     public Dictionary<int, string> BlessSlots { get; set; } = new();
 
+    // Per-bless-slot recast lead: how many seconds before a self-buff's tracked
+    // expiry the CastingDirector recasts it. Sparse and keyed by the same 1-based
+    // slot index as BlessSlots — an absent key means DefaultBlessRecastMarginSec.
+    // 0 = don't recast until the buff has actually expired (a wear-off message or
+    // the tracked timer running out). Only non-default values for filled slots
+    // persist, so a profile that never touches the pickers stays clean and the
+    // out-of-range picks round-trip like BlessSlots itself.
+    public Dictionary<int, int> BlessSlotRecastMargins { get; set; } = new();
+
+    // Default recast lead when a bless slot (self or party) doesn't override it.
+    // Shared with PartyBlessSlot and the CastingDirector so the "15s before
+    // expiry" default lives in one place.
+    public const int DefaultBlessRecastMarginSec = 15;
+
     // Self-bless slots the Spells tab shows on a Stock realm. Stock MajorMUD
     // caps active effects at 10 (buffs and debuffs share them), so 10 is the
     // working ceiling — nothing beyond it can stay up anyway.
