@@ -108,10 +108,17 @@ public sealed class MovePlayerHandler : IDisposable
         string query = string.Join(' ', ctx.Args).Trim();
         if (query.Length == 0) { ctx.Reply("@goto requires a destination"); return; }
 
-        // A coordinate query (1/297, 1,297, 1 297, bare 297) is explicit — never let
-        // a favourite / boss NAME hijack it; route straight to the coordinate/room
-        // search below. TryParseCoordinate splits on space / comma / slash.
-        bool isCoordQuery = RoomSearchService.TryParseCoordinate(query) is not (null, null);
+        // A FULL map/room coordinate (1/297, 1,297, 1 297 — TryParseCoordinate splits
+        // on space / comma / slash) is an explicit destination: never let a favourite
+        // / boss NAME hijack it. A BARE room number is rejected — the same number is a
+        // different room on every map, so "297" alone can't pick one; ask for a map.
+        (int? coordMap, int? coordRoom) = RoomSearchService.TryParseCoordinate(query);
+        if (coordMap is null && coordRoom is int bareRoom)
+        {
+            ctx.Reply($"room {bareRoom} needs a map — try e.g. 1/{bareRoom}");
+            return;
+        }
+        bool isCoordQuery = coordMap is not null && coordRoom is not null;
 
         // Tier 1: a saved GOTO location matched by label. It takes precedence over a
         // raw room name — a place the user bookmarked is almost always what they mean.

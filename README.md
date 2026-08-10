@@ -4,7 +4,7 @@
 > **Version 3.2.5**
 > - `@loop <name>` matches a saved loop by a close-enough 1-of-1 name — every typed word, any order (e.g. `@loop godfrey bank` starts "Bank of Godfrey Loop")
 > - `@goto <name>` resolves a saved GOTO location by name (takes precedence over a raw room name), and as a last resort a boss name → the boss's closest listed room (stops one room short for StopBefore bosses)
-> - `@goto` coordinate destinations accept space, comma, or slash separators
+> - `@goto` coordinate destinations accept a full map/room with space, comma, or slash separators; a bare room number is rejected (the same number is a different room on each map)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
