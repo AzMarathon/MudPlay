@@ -217,7 +217,11 @@ public sealed class MudSplashAnimator : IDisposable
         int cx = s.Cols / 2, cy = (s.Rows + TitleRows) / 2;
         double maxR = MaxRadius(s);
         double p = (f - SplatEnd) / (double)(SlideEnd - SplatEnd);   // 0..1
-        double baseOff = EaseInSoft(p) * s.Rows;
+        // Push far enough that even the slowest column clears the splat's whole
+        // vertical extent by the end (so the last frame is truly clean — no abrupt
+        // cut before the loop). The 1.2 margin over-clears.
+        double baseOff = EaseInSoft(p) * (s.Rows + maxR) * 1.2;
+        double residueFade = 1.0 - p;   // streaks wash away as the mud finishes running off
 
         for (int x = 0; x < s.Cols; x++)
         {
@@ -230,9 +234,9 @@ public sealed class MudSplashAnimator : IDisposable
                 if (y < edgeY)
                 {
                     // Residue streaks the mud left running down — denser near the
-                    // edge, thinning upward.
+                    // edge, thinning upward, and fading to nothing as it finishes.
                     double nearEdge = 1.0 - (edgeY - y) / (double)Math.Max(1, off);
-                    if (Noise(x, 7) > 0.5 && Noise(x, y) < 0.12 + 0.5 * nearEdge)
+                    if (Noise(x, 7) > 0.5 && Noise(x, y) < (0.12 + 0.5 * nearEdge) * residueFade)
                         PutCell(s, x, y, '│', y > edgeY - 3 ? Brown : BrownDark);
                     continue;
                 }
