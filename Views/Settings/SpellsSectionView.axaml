@@ -242,7 +242,7 @@
                 <ItemsControl ItemsSource="{Binding BlessSlots}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SelfBlessSlotViewModel">
-                            <Grid ColumnDefinitions="80,260" Margin="0,0,0,4">
+                            <Grid ColumnDefinitions="80,260,Auto" Margin="0,0,0,4">
                                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"/>
                                 <AutoCompleteBox Grid.Column="1"
                                                  Text="{Binding Spell, Mode=TwoWay}"
@@ -252,6 +252,16 @@
                                                  ItemTemplate="{StaticResource SpellPickItem}"
                                                  PlaceholderText="Type spell or #item…"
                                                  Width="260" HorizontalAlignment="Left"/>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4"
+                                            Margin="12,0,0,0" VerticalAlignment="Center"
+                                            IsVisible="{Binding Spell, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                    <TextBlock Classes="FieldLabel" Text="recast within" VerticalAlignment="Center"/>
+                                    <NumericUpDown Value="{Binding RecastMarginSec, Mode=TwoWay}"
+                                                   Minimum="0" Maximum="999" FormatString="0" Increment="1"
+                                                   Width="110" VerticalAlignment="Center"
+                                                   ToolTip.Tip="Recast this buff when it's within this many seconds of expiring. 0 = don't recast until it actually expires (a wear-off message or the tracked timer running out)."/>
+                                    <TextBlock Classes="FieldLabel" Text="s of expiry" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

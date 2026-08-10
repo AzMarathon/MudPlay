@@ -29,6 +29,11 @@ public sealed partial class PartyBlessSlotViewModel : ObservableObject
     // to the row's AutoCompleteBox.
     [ObservableProperty] private string? _spell;
 
+    // Recast lead in seconds: how far before the buff's tracked expiry the engine
+    // recasts it on the party target. 0 = wait for actual expiry. Bound to the
+    // row's NumericUpDown.
+    [ObservableProperty] private int _recastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
+
     // One toggle per loaded class — ticking it adds that class number to the
     // slot's target set.
     public IReadOnlyList<PartyBlessClassToggle> Classes { get; }
@@ -44,6 +49,7 @@ public sealed partial class PartyBlessSlotViewModel : ObservableObject
 
         _suppress = true;
         Spell = dto.Spell;
+        RecastMarginSec = dto.RecastMarginSec;
         _suppress = false;
         _spellWasEmpty = string.IsNullOrWhiteSpace(Spell);
 
@@ -60,7 +66,14 @@ public sealed partial class PartyBlessSlotViewModel : ObservableObject
     {
         Spell = string.IsNullOrWhiteSpace(Spell) ? null : Spell.Trim(),
         ClassNumbers = Classes.Where(c => c.IsChecked).Select(c => c.Number).ToList(),
+        RecastMarginSec = RecastMarginSec,
     };
+
+    partial void OnRecastMarginSecChanged(int value)
+    {
+        if (_suppress) return;
+        _onChanged();
+    }
 
     partial void OnSpellChanged(string? value)
     {

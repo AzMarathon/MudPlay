@@ -199,6 +199,12 @@ public sealed class PartyBlessSlot
     // Class numbers (from Classes.json) this buff applies to. Empty means the
     // slot targets no one.
     public List<int> ClassNumbers { get; set; } = new();
+
+    // Recast lead in seconds: how far before this buff's tracked expiry the
+    // CastingDirector recasts it on its party target. 0 = wait for actual expiry
+    // (a wear-off / the tracked timer running out). Defaults to the shared
+    // DefaultBlessRecastMarginSec.
+    public int RecastMarginSec { get; set; } = SpellsSettings.DefaultBlessRecastMarginSec;
 }
 
 // Local character's combat rank within a party.

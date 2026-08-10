@@ -168,7 +168,7 @@
             <ItemsControl ItemsSource="{Binding BlessSlots}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PartyBlessSlotViewModel">
-                        <Grid ColumnDefinitions="26,220,*" ColumnSpacing="10" Margin="0,0,0,4">
+                        <Grid ColumnDefinitions="26,220,Auto,*" ColumnSpacing="10" Margin="0,0,0,4">
                             <Border Grid.Column="0" Width="26" Height="26"
                                     Background="{StaticResource ChromeBgElevBrush}"
                                     CornerRadius="3" VerticalAlignment="Center"
@@ -188,7 +188,17 @@
                                              ItemTemplate="{StaticResource SpellPickItem}"
                                              PlaceholderText="Type code or name…"
                                              ToolTip.Tip="Beneficial spell cast on party members whose class is ticked to the right. Cast as `&lt;code&gt; &lt;member-name&gt;`."/>
-                            <ItemsControl Grid.Column="2" ItemsSource="{Binding Classes}"
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding Spell, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Classes="FieldLabel" Text="recast within" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding RecastMarginSec, Mode=TwoWay}"
+                                               Minimum="0" Maximum="999" FormatString="0" Increment="1"
+                                               Width="110" VerticalAlignment="Center"
+                                               ToolTip.Tip="Recast this buff when it's within this many seconds of expiring. 0 = don't recast until it actually expires (a wear-off message or the tracked timer running out)."/>
+                                <TextBlock Classes="FieldLabel" Text="s of expiry" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ItemsControl Grid.Column="3" ItemsSource="{Binding Classes}"
                                           VerticalAlignment="Center"
                                           IsVisible="{Binding Spell, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <ItemsControl.ItemsPanel>
