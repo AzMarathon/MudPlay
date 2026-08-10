@@ -150,6 +150,26 @@ public sealed class CombatSettings
     // slots below. Default Percentage.
     public ThresholdMode SpellManaThresholdMode { get; set; } = ThresholdMode.Percentage;
 
+    // ----- Round-cycle action order (ActionOrder = CustomRoundCycle) -----
+
+    // Rounds to spend in the cycle's PHYSICAL phase before switching to the
+    // spell phase. 0 = physical forever (the physical phase never ends, so the
+    // cycle never reaches the spell phase — degenerates to PhysicalFirst-style
+    // behavior). Only consulted when ActionOrder is CustomRoundCycle. Default 1.
+    public int CycleRoundsPhysical { get; set; } = 1;
+
+    // Rounds to spend in the cycle's SPELL phase before switching back to
+    // physical. 0 = spells for the rest of the fight once reached — "spells
+    // till death" (the phase never ends, so the cycle never returns to
+    // physical). Only consulted when ActionOrder is CustomRoundCycle. Default 1.
+    public int CycleRoundsSpell { get; set; } = 1;
+
+    // Which phase the cycle opens on for a fresh target. False (default) opens
+    // physical (e.g. "physical 2 rounds, then spells"); true opens spell (e.g.
+    // "spell 1 round, then physical till death"). Only consulted when
+    // ActionOrder is CustomRoundCycle.
+    public bool CycleStartOnSpell { get; set; }
+
     // Multi-target room spell (e.g. cast star).
     public CombatSpellSlot MultiAttackSpell { get; set; } = new();
 
@@ -226,6 +246,23 @@ public enum CombatActionOrder
     // Same per-round alternation, starting on the swing: physical, spell,
     // physical…
     AlternatePhysicalSpell,
+
+    // Round-scheduled phases of configurable length instead of a fixed 1-round
+    // flip: spend CombatSettings.CycleRoundsPhysical rounds in the physical
+    // phase, then CombatSettings.CycleRoundsSpell rounds in the spell phase
+    // (CycleStartOnSpell picks which phase opens), repeating for as long as
+    // both lengths are positive. A 0 length makes ITS phase permanent once
+    // reached — e.g. CycleRoundsSpell = 0 is "physical for N rounds, then
+    // spells for the rest of the fight" ("spells till death"). Each phase
+    // behaves like the matching fixed order while it holds (a spell-phase
+    // round falls back to the weapon when nothing can fire; WeaponIneffective
+    // still overrides into the spell cascade regardless of phase, the same
+    // safety valve PhysicalFirst gets). Unlike the two fixed Alternate* modes
+    // above, a same-phase round does NOT re-issue a command — it leans on the
+    // server's own auto-repeat / the existing spell-heartbeat dedup exactly
+    // like SpellsFirst / PhysicalFirst do; only a genuine phase boundary forces
+    // a fresh dispatch.
+    CustomRoundCycle,
 }
 
 // Direction strategy for the auto-flee path.

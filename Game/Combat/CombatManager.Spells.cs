@@ -363,8 +363,14 @@ public sealed partial class CombatManager
         // back to a spell next round. Gated on _currentTarget (not _castingSpellTarget)
         // so it drives both spell-phase and weapon-phase rounds, advancing the phase
         // once per round. An interrupted round (_combatOff, handled above) pauses the
-        // phase rather than advancing it.
-        if (AlternationPreferSpell(settings.ActionOrder) is not null
+        // phase rather than advancing it. Explicit enum match (not "AlternationPreferSpell
+        // is not null") so CustomRoundCycle — which also returns non-null — takes its OWN
+        // branch below instead of this always-redispatch one: a round-cycle phase can span
+        // many rounds, and redispatching every one of them would re-announce a spell the
+        // server is already auto-repeating (the double-cast bug this file's spell heartbeat
+        // otherwise prevents).
+        if (settings.ActionOrder is CombatActionOrder.AlternateSpellPhysical
+                or CombatActionOrder.AlternatePhysicalSpell
             && _currentTarget is { } altTarget)
         {
             if (_classifier.Current is not { } altObs || !TargetPresent(altObs, altTarget))
@@ -378,6 +384,45 @@ public sealed partial class CombatManager
             else
                 _castingSpellTarget = null;   // can't rebuild the target — drop; next observe re-picks
             return;
+        }
+
+        // CustomRoundCycle: unlike the fixed Alternate* orders above, a phase can
+        // span many rounds, so we must NOT redispatch every tick — only on a
+        // genuine phase boundary. Advancing _alternationRound every tick (even
+        // when nothing is forced) is what lets the phase math in
+        // CustomCyclePreferSpell track elapsed rounds correctly. Only the
+        // physical→spell edge needs forcing here: a physical round is otherwise
+        // fully passive (the server auto-repeats the swing with no client-side
+        // heartbeat), so nothing else would ever notice the schedule says it's
+        // time to cast. The reverse edge (spell→physical) needs no special case —
+        // it falls through to the ordinary spell-mode heartbeat below, which
+        // already re-decides every tick and naturally redispatches the moment
+        // ctx.AlternationPreferSpell (fed by the same CustomCyclePreferSpell call)
+        // turns false, exactly like a PhysicalFirst weapon-fallback would.
+        if (settings.ActionOrder == CombatActionOrder.CustomRoundCycle
+            && _currentTarget is { } cycleTarget)
+        {
+            if (_classifier.Current is not { } cycleObs || !TargetPresent(cycleObs, cycleTarget))
+            {
+                _castingSpellTarget = null;
+                return;
+            }
+            _alternationRound++;
+            if (CustomCyclePreferSpell(settings) && _castingSpellTarget is null)
+            {
+                _log?.Combat(LogCategory,
+                    $"round-cycle switch → spell phase (round={_alternationRound})");
+                if (TryBuildCandidate(cycleObs, cycleTarget) is { } cycleCand)
+                    DispatchRoundAction(settings, cycleCand, CountEngageable(cycleObs), cycleObs);
+                return;
+            }
+            // Not a forced physical→spell edge — fall through. A continuing
+            // physical round (_castingSpellTarget null) hits the weapon-mode
+            // early-return just below and does nothing, correctly leaving the
+            // server's auto-repeat alone. A continuing or ending spell round
+            // (_castingSpellTarget set) reaches the ordinary heartbeat, which
+            // already handles both "same decision, just tally" and "decision
+            // changed, redispatch".
         }
 
         if (_castingSpellTarget is not { } target) return;   // weapon / idle mode — nothing to drive
@@ -543,19 +588,43 @@ public sealed partial class CombatManager
             OverridePreAttackMaxCasts: preAttackCap,
             WeaponIneffective:   WeaponPathExhausted(
                 settings, ResolveSpeciesByName(target), monsterNumber),
-            AlternationPreferSpell: AlternationPreferSpell(settings.ActionOrder));
+            AlternationPreferSpell: AlternationPreferSpell(settings));
     }
 
-    // This round's forced spell-vs-physical preference for the alternating action
-    // orders, from the parity of _alternationRound; null for the fixed orders (the
-    // chooser then follows settings.ActionOrder). AlternateSpellPhysical opens on
-    // the spell (even rounds → spell); AlternatePhysicalSpell opens on the swing.
-    private bool? AlternationPreferSpell(CombatActionOrder order) => order switch
+    // This round's forced spell-vs-physical preference for the alternating /
+    // round-cycle action orders, from _alternationRound; null for the fixed
+    // orders (the chooser then follows settings.ActionOrder). AlternateSpellPhysical
+    // opens on the spell (even rounds → spell); AlternatePhysicalSpell opens on the
+    // swing; CustomRoundCycle delegates to CustomCyclePreferSpell for its
+    // configurable-length phases.
+    private bool? AlternationPreferSpell(CombatSettings settings) => settings.ActionOrder switch
     {
         CombatActionOrder.AlternateSpellPhysical => (_alternationRound % 2) == 0,
         CombatActionOrder.AlternatePhysicalSpell => (_alternationRound % 2) == 1,
+        CombatActionOrder.CustomRoundCycle => CustomCyclePreferSpell(settings),
         _ => null,
     };
+
+    // CustomRoundCycle's phase math: phase 1 runs for p1 rounds (0 = forever),
+    // then phase 2 runs for p2 rounds (0 = forever once reached), then — only
+    // when BOTH are positive — the pair repeats every (p1 + p2) rounds.
+    // CycleStartOnSpell picks which phase (1 or 2) is the spell phase.
+    // _alternationRound is 0 on the fight's first round (the initial engage),
+    // matching the fixed alternating orders' convention.
+    private bool CustomCyclePreferSpell(CombatSettings settings)
+    {
+        int p1 = Math.Max(0, settings.CycleStartOnSpell ? settings.CycleRoundsSpell : settings.CycleRoundsPhysical);
+        int p2 = Math.Max(0, settings.CycleStartOnSpell ? settings.CycleRoundsPhysical : settings.CycleRoundsSpell);
+        bool phase1IsSpell = settings.CycleStartOnSpell;
+        int r = _alternationRound;
+
+        bool inPhase1;
+        if (p1 == 0) inPhase1 = true;                  // phase 1 never ends
+        else if (p2 == 0) inPhase1 = r < p1;            // phase 2 never ends once reached
+        else inPhase1 = (r % (p1 + p2)) < p1;           // both finite — repeat every p1+p2
+
+        return inPhase1 == phase1IsSpell;
+    }
 
     // The current target's per-monster DontBackstab overlay flag — the backstab
     // opener must skip a flagged target and open with a normal attack instead.

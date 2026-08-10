@@ -678,4 +678,97 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat.");
         Assert.Equal("a giant rat", h.LastSent);
     }
+
+    // ----- Round-cycle action order: configurable-length phases ---------
+    // Unlike the fixed Alternate* orders above, a phase can span many rounds.
+    // Continuing rounds within a phase must NOT resend — physical leans on the
+    // server's own auto-repeat, and spell leans on the existing heartbeat's
+    // same-decision dedup. Only a genuine phase boundary forces a fresh command,
+    // and only the physical→spell edge needs an explicit push (the spell→physical
+    // edge already falls out of the ordinary heartbeat re-deciding every tick).
+
+    [Fact]
+    public void CustomRoundCycle_PhysicalThenSpellsTillDeath_SwitchesOnceNoRepeats()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.CustomRoundCycle;
+        h.Settings.CycleRoundsPhysical = 2;
+        h.Settings.CycleRoundsSpell = 0;   // "spells till death" — never switches back
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        // Round 0 (engage) — physical phase.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+        int afterEngage = h.Sent.Count;
+
+        // Round 1 — still physical (1 < 2 rounds configured). No resend: the
+        // server's own auto-repeat is carrying the swing.
+        h.Tick();
+        Assert.Equal(afterEngage, h.Sent.Count);
+
+        // Round 2 — phase boundary: forced switch to the spell (nothing else
+        // would ever interrupt an otherwise-passive physical auto-repeat).
+        h.Tick();
+        Assert.Equal("harm giant rat", h.LastSent);
+        int afterSwitch = h.Sent.Count;
+
+        // Rounds 3–4 — spells till death: stay on the cast, no re-announce
+        // (re-sending a spell the server is already repeating is the
+        // double-cast / corpse-cast bug the ordinary heartbeat dedup prevents).
+        h.Tick();
+        Assert.Equal(afterSwitch, h.Sent.Count);
+        h.Tick();
+        Assert.Equal(afterSwitch, h.Sent.Count);
+    }
+
+    [Fact]
+    public void CustomRoundCycle_OneOneMatchesFixedAlternation()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.CustomRoundCycle;
+        h.Settings.CycleRoundsPhysical = 1;
+        h.Settings.CycleRoundsSpell = 1;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);       // round 0 — physical (default open)
+
+        h.Tick();
+        Assert.Equal("harm giant rat", h.LastSent);    // round 1 — spell
+
+        h.Tick();
+        Assert.Equal("a giant rat", h.LastSent);       // round 2 — physical again
+
+        h.Tick();
+        Assert.Equal("harm giant rat", h.LastSent);    // round 3 — spell again
+    }
+
+    [Fact]
+    public void CustomRoundCycle_StartOnSpell_ThenPhysicalTillDeath()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.CustomRoundCycle;
+        h.Settings.CycleStartOnSpell = true;
+        h.Settings.CycleRoundsSpell = 1;
+        h.Settings.CycleRoundsPhysical = 0;   // physical forever once reached
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        // Round 0 (engage) — opens on the spell phase.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("harm giant rat", h.LastSent);
+
+        // Round 1 — phase boundary: switches to physical.
+        h.Tick();
+        Assert.Equal("a giant rat", h.LastSent);
+        int afterSwitch = h.Sent.Count;
+
+        // Rounds 2–3 — physical till death: no resend.
+        h.Tick();
+        Assert.Equal(afterSwitch, h.Sent.Count);
+        h.Tick();
+        Assert.Equal(afterSwitch, h.Sent.Count);
+    }
 }

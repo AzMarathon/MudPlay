@@ -1142,6 +1142,13 @@ public sealed partial class CombatManager : IDisposable
 
         if (_usingAlternateWeapon)
         {
+            // SpellsFirst, the two Alternate* orders, AND CustomRoundCycle all take
+            // the "try the spell cascade immediately" branch below — this is a
+            // narrow double-weapon-failure edge case (both configured weapons just
+            // proved immune), not a per-round scheduling decision, so it isn't worth
+            // making phase-aware for the round-cycle order: once both weapons are
+            // dead, casting beats force-retrying a proven-dead swing regardless of
+            // which phase the cycle happened to be in when this fired.
             bool physicalFirst = settings.ActionOrder == CombatActionOrder.PhysicalFirst;
 
             // First no-effect while believed on the alternate. It's itself evidence
