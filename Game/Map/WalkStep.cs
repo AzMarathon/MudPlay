@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One unit of work in an expanded walk path. Either a movement (single
 // direction whose execution changes the room) or a free-text command that the

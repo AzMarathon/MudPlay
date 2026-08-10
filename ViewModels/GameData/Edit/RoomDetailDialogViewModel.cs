@@ -2,13 +2,13 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // Interactive "everything attached to this room" popup — opened from the Rooms
 // tab (row double-click) and the Monsters tab's spawn/placed/summoned room

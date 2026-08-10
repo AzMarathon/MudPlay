@@ -1,9 +1,9 @@
 using System.ComponentModel;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Conditions;
+namespace MudPlay.Game.Conditions;
 
 // Handles the LOCAL side of our own held / knocked-down state — the sibling of
 // SelfConfusionResponder for the MovementPrevented flag.

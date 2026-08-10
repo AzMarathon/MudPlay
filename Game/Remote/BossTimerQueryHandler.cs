@@ -1,12 +1,12 @@
 using System;
 using System.Linq;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Read-only handler for @timer — reports the boss respawn timers currently being
 // tracked (BossTimerStore), gated by the QueryBossTimers permission.

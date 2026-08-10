@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Spells;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Spells;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // In-memory graph of every room in the active game-data set — primary lookup
 // for the navigation stack (room tracker, BFS mapper, walker, loop manager,

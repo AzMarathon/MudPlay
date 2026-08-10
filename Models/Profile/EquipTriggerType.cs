@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // The fixed game-state moments the Equipment Manager swaps gear for. Each maps
 // one-to-one to a trigger-purposed EquipmentSet in the left-hand set list — the

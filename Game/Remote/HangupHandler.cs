@@ -1,8 +1,8 @@
 using System.Text;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // The HangupDisconnect permission category. Currently registers only the
 // @hangup handler — raises the HangupSignal "intentional hangup" intent and

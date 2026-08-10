@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Cardinal exit direction off a room. Values match the order of the
 // matching property names on a MajorMUD Rooms row

@@ -1,12 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:FujinTerm.ViewModels.CharacterWorkshop"
-             xmlns:vmroot="using:FujinTerm.ViewModels"
-             xmlns:profile="using:FujinTerm.Models.Profile"
+             xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
+             xmlns:vmroot="using:MudPlay.ViewModels"
+             xmlns:profile="using:MudPlay.Models.Profile"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="560"
-             x:Class="FujinTerm.Views.CharacterWorkshop.DeathSectionView"
+             x:Class="MudPlay.Views.CharacterWorkshop.DeathSectionView"
              x:DataType="vm:DeathSectionViewModel">
 
     <UserControl.Styles>

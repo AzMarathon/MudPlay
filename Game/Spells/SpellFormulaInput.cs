@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // The subset of Spells-table columns that SpellCalculator needs to reproduce
 // MajorMUD's level-scaled spell math. The known-spell catalog builds one of

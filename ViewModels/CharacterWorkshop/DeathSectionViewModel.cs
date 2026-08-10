@@ -3,12 +3,12 @@ using System.Linq;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Recovery;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.CharacterWorkshop;
+using MudPlay.Game.Recovery;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.CharacterWorkshop;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // DEATH section — the Death Recovery surface. Binds to DeathRecoveryManager for
 // the deathpile record grid, the Auto-Recover / Auto-Equip toggles, and the

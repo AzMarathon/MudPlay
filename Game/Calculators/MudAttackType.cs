@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Physical attack mode for accuracy/swing math. Values match MajorMUD's own
 // attack-type field values so they can be compared against game-data

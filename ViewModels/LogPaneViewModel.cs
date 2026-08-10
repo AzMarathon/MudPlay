@@ -4,9 +4,9 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Live view of LogService. Subscribes to LogService.EntryAdded on the
 // producer's thread, marshals to the dispatcher, applies the current filter,

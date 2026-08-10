@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Fast lookup of whether a monster summons another monster when it dies, by
 // monster Number in the active game-data set. A monster's Monsters.DeathSpell is

@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Pause switch for every engine-driven wire send. Held while the app is in a flow
 // that mustn't be polluted by automatic commands — and more than one such flow can

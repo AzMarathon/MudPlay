@@ -1,6 +1,6 @@
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Blankets the `train stats` / character-creation form in an EngineSendGate hold
 // so NO background automation can type into it. The form is a full-screen,

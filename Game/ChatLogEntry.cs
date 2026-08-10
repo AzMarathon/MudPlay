@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // One classified chat / realm-event line. Emitted by ChatRouter and consumed
 // by ChatHistoryStore, the ConversationWindow, and any logging / alerting

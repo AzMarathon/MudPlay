@@ -1,7 +1,7 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // XAML converter that returns true when the bound StubFieldKind equals the
 // instance's expected kind. One static instance per kind so the view can switch a

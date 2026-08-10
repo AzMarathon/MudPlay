@@ -1,0 +1,640 @@
+using System.Text;
+using MudPlay.Game;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
+using Xunit;
+
+namespace MudPlay.Tests;
+
+/// <summary>
+/// Coverage for the Phase 6 PR 6.5 additions to PartyManager —
+/// disconnect / death / grace-window auto-invite. PR 6.1 tests cover
+/// follows-you / par-block; this class focuses on the new event paths
+/// only. Updated post-PR-6.8 to use the real BBS-observed wordings
+/// ("X started to follow you." instead of the earlier "now follows
+/// you" guess).
+/// </summary>
+public sealed class PartyDisconnectDeathTests
+{
+    private static readonly DateTimeOffset Now = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+
+    private static (MessageRouter router, PartyManager mgr, List<byte[]> wire) Setup(DateTimeOffset? clock = null)
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state);
+        List<byte[]> wire = new();
+        mgr.SetWireSender(wire.Add);
+        DateTimeOffset fakeNow = clock ?? Now;
+        mgr.NowProvider = () => fakeNow;
+        return (router, mgr, wire);
+    }
+
+    private static LineExtractor.EmittedLine Line(string text) =>
+        new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
+
+    // ===== Disconnect =====
+
+    [Fact]
+    public void Disconnect_OfPartyMember_RemovesAndStartsGraceWindow()
+    {
+        var (router, mgr, _) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.Single(mgr.State.Members);
+
+        router.Dispatch(Line("Helper just disconnected!!!."));
+
+        Assert.Empty(mgr.State.Members);
+        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void HungUp_OfPartyMember_RemovesAndStartsGraceWindow()
+    {
+        // "X just hung up!!!" is the clean-logoff line, distinct from
+        // "X just disconnected!!!." (carrier lost). Both should route
+        // through the same remove-and-grace-window handler so the
+        // re-invite-lost-party-members flow works either way.
+        var (router, mgr, _) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.Single(mgr.State.Members);
+
+        router.Dispatch(Line("Helper just hung up!!!."));
+
+        Assert.Empty(mgr.State.Members);
+        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dissolution_WithoutPerPlayerSignal_StampsPriorMembersIntoGraceWindow()
+    {
+        // Real-world scenario (Playpen-like BBS): a member hangs up but
+        // the BBS only emits the account-name signal ("[Raijin] logs OFF"
+        // — we don't pattern-match that, it's not player-keyed). The
+        // result we DO see is the bare dissolution line. Treat that as
+        // the fallback "lost member" signal and seed the grace window
+        // with every prior other-member name so they're re-invite-
+        // eligible when they reconnect.
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        mgr.NowProvider = () => Now;
+        mgr.SetWireSender(_ => { });
+
+        router.Dispatch(Line("Raijin started to follow you."));
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[]
+        {
+            "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Frontrank",
+            "  MudPlay  WuzHere                  (Mystic)                  [H:100%]   - Frontrank",
+            string.Empty,
+        });
+        Assert.True(mgr.State.SelfIsLeader);
+
+        // Dissolution arrives with no per-player signal.
+        router.Dispatch(Line("You are not in a party at the present time."));
+
+        Assert.Empty(mgr.State.Members);
+        // Snapshot key is the given name — matches the lookup
+        // OnPlayerEnters does when "Raijin just entered the Realm" fires.
+        Assert.Contains("Raijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dissolution_WithoutPerPlayerSignal_AndWeLead_AutoInvitesOnReconnect()
+    {
+        // End-to-end: dissolution → snapshot → re-entry within window
+        // auto-fires the invite. Wires the user's reported scenario.
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        mgr.NowProvider = () => Now;
+        List<byte[]> wire = new();
+        mgr.SetWireSender(wire.Add);
+
+        router.Dispatch(Line("Raijin started to follow you."));
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[]
+        {
+            "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Frontrank",
+            "  MudPlay  WuzHere                  (Mystic)                  [H:100%]   - Frontrank",
+            string.Empty,
+        });
+        router.Dispatch(Line("You are not in a party at the present time."));
+        wire.Clear();
+
+        router.Dispatch(Line("Raijin just entered the Realm."));
+
+        byte[] sent = Assert.Single(wire);
+        Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
+    }
+
+    [Fact]
+    public void ParPoll_MissingMemberInPartyOf3_StampsLostAndRemoves()
+    {
+        // Party of 3 — when a single member drops without a per-player
+        // signal, the party survives and the next par poll just shows
+        // N-1. End-of-block reconciliation detects the missing member,
+        // stamps their given name into the grace window, and drops
+        // them from the roster so the Re-invite-lost-party-members
+        // flow can pick them up on reconnect.
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        mgr.NowProvider = () => Now;
+        mgr.SetWireSender(_ => { });
+
+        router.Dispatch(Line("Raijin started to follow you."));
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.True(mgr.State.SelfIsLeader);
+
+        // First par poll — all three present, names upgrade to long form.
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[]
+        {
+            "  MudPlay  WuzHere                  (Mystic)                  [H:100%]   - Frontrank",
+            "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Frontrank",
+            "  Helper WuzHere                  (Cleric)        [M:100%] [H:100%]   - Midrank",
+            string.Empty,
+        });
+        Assert.Equal(3, mgr.State.Members.Count);
+
+        // Second par poll — Raijin dropped silently; par shows just
+        // MudPlay + Helper. Reconciliation should mark Raijin as lost.
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[]
+        {
+            "  MudPlay  WuzHere                  (Mystic)                  [H:100%]   - Frontrank",
+            "  Helper WuzHere                  (Cleric)        [M:100%] [H:100%]   - Midrank",
+            string.Empty,
+        });
+
+        Assert.Equal(2, mgr.State.Members.Count);
+        Assert.DoesNotContain(mgr.State.Members, m => m.Name.StartsWith("Raijin"));
+        Assert.Contains("Raijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ParPoll_MissingMember_AndReconnectsWithinWindow_GetsReinvited()
+    {
+        // End-to-end for the 3+-party case: par drops Raijin's row →
+        // they're stamped → they re-enter the realm → invite fires.
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        mgr.NowProvider = () => Now;
+        List<byte[]> wire = new();
+        mgr.SetWireSender(wire.Add);
+
+        router.Dispatch(Line("Raijin started to follow you."));
+        router.Dispatch(Line("Helper started to follow you."));
+
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[]
+        {
+            "  MudPlay  WuzHere                  (Mystic)                  [H:100%]   - Frontrank",
+            "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Frontrank",
+            "  Helper WuzHere                  (Cleric)        [M:100%] [H:100%]   - Midrank",
+            string.Empty,
+        });
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[]
+        {
+            "  MudPlay  WuzHere                  (Mystic)                  [H:100%]   - Frontrank",
+            "  Helper WuzHere                  (Cleric)        [M:100%] [H:100%]   - Midrank",
+            string.Empty,
+        });
+        wire.Clear();
+
+        router.Dispatch(Line("Raijin just entered the Realm."));
+
+        byte[] sent = Assert.Single(wire);
+        Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
+    }
+
+    [Fact]
+    public void ParPoll_EmptyBlock_DoesNotFlagMembersAsLost()
+    {
+        // Defensive: a malformed/truncated par block (zero parsed
+        // rows) shouldn't false-positive every member as missing.
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        mgr.NowProvider = () => Now;
+        mgr.SetWireSender(_ => { });
+
+        router.Dispatch(Line("Raijin started to follow you."));
+        router.Dispatch(Line("Helper started to follow you."));
+        int before = mgr.State.Members.Count;
+
+        // Header fires (par block opens) but no rows parse — terminator
+        // arrives immediately.
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[] { string.Empty });
+
+        Assert.Equal(before, mgr.State.Members.Count);
+        Assert.Empty(mgr.RecentlyDisconnected);
+    }
+
+    [Fact]
+    public void StopsFollowing_StampsMemberIntoGraceWindow()
+    {
+        // "X stops following you" is leader-side only — we didn't
+        // initiate (uninvite goes through OnFollowerRemoved). Stamp
+        // them so a reconnect can re-invite them automatically.
+        var (router, mgr, _) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.Single(mgr.State.Members);
+
+        router.Dispatch(Line("Helper has stopped following you."));
+
+        Assert.Empty(mgr.State.Members);
+        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void HungUp_AndReturnsWithinWindow_AndWeLead_SendsInvite()
+    {
+        var (router, mgr, wire) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.True(mgr.State.SelfIsLeader);
+
+        router.Dispatch(Line("Helper just hung up!!!."));
+        wire.Clear();
+
+        router.Dispatch(Line("Helper just entered the Realm."));
+
+        byte[] sent = Assert.Single(wire);
+        Assert.Equal("invite Helper\r", Encoding.Latin1.GetString(sent));
+    }
+
+    [Fact]
+    public void Disconnect_OfLeader_DissolvesEntireParty()
+    {
+        // MajorMUD game rule: if the party leader disconnects, the
+        // party disbands — leadership doesn't transfer. The roster
+        // wipes for every follower (not just the leader's row), and
+        // the leader is NOT added to the grace-window map because a
+        // returning leader has no party to be auto-invited back into.
+        //
+        // Build the scenario manually: MudPlay leads, we (Raijin) are a
+        // follower, and a third member Helper also follows MudPlay. When
+        // MudPlay disconnects, ALL three rows must clear.
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "Raijin" };
+
+        router.Dispatch(Line("You are now following MudPlay."));   // adds MudPlay (leader) + self
+        // Simulate a second follower by feeding a par block with three rows.
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[]
+        {
+            "  MudPlay  WuzHere                  (Mystic)        [M:100%] [H:100%]   - Frontrank",
+            "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Midrank",
+            "  Helper WuzHere                  (Cleric)        [M:100%] [H:100%]   - Backrank",
+            string.Empty,
+        });
+        Assert.Equal(3, mgr.State.Members.Count);
+        Assert.False(mgr.State.SelfIsLeader);
+        Assert.Equal("MudPlay", mgr.State.LeaderName);
+
+        router.Dispatch(Line("MudPlay just disconnected!!!."));
+
+        Assert.Empty(mgr.State.Members);
+        Assert.False(mgr.State.IsInParty);
+        Assert.Null(mgr.State.LeaderName);
+        Assert.DoesNotContain("MudPlay", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Disconnect_OfNonMember_IsIgnored()
+    {
+        var (router, mgr, _) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+
+        router.Dispatch(Line("Stranger just disconnected!!!."));
+
+        Assert.Single(mgr.State.Members);
+        Assert.DoesNotContain("Stranger", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuiltInDisconnect_WhenWeLead_FiresMemberDisconnected()
+    {
+        // The leader-side signal PartyDisconnectMovementGate rides — a follower
+        // drop while we lead must fire MemberDisconnected with the given name.
+        var (router, mgr, _) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.True(mgr.State.SelfIsLeader);
+        string? fired = null;
+        mgr.MemberDisconnected += g => fired = g;
+
+        router.Dispatch(Line("Helper just disconnected!!!."));
+
+        Assert.Equal("Helper", fired);
+    }
+
+    [Fact]
+    public void CoFollowerDisconnect_WhenWeFollow_DoesNotFireMemberDisconnected()
+    {
+        // We (Raijin) follow MudPlay; Helper is a co-follower. When Helper drops,
+        // OUR own movement is already held by the FollowerGate — a second
+        // member-wait gate would only linger to timeout — so MemberDisconnected
+        // is leader-only and must stay silent here.
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "Raijin" };
+        router.Dispatch(Line("You are now following MudPlay."));
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[]
+        {
+            "  MudPlay  WuzHere                  (Mystic)        [M:100%] [H:100%]   - Frontrank",
+            "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Midrank",
+            "  Helper WuzHere                  (Cleric)        [M:100%] [H:100%]   - Backrank",
+            string.Empty,
+        });
+        Assert.False(mgr.State.SelfIsLeader);
+        string? fired = null;
+        mgr.MemberDisconnected += g => fired = g;
+
+        router.Dispatch(Line("Helper just disconnected!!!."));
+
+        Assert.Null(fired);
+        Assert.DoesNotContain(mgr.State.Members, m => m.Name.StartsWith("Helper"));
+    }
+
+    // ===== Left-the-Realm (train / train stats / quit) =====
+
+    [Fact]
+    public void LeftRealm_OfFollower_RemovesAndStartsGraceWindow()
+    {
+        // "X just left the Realm." is what a follower's `train stats` excursion
+        // emits to the rest of the party — the game drops them server-side
+        // exactly like a disconnect, so route it through the same
+        // remove-and-grace-window path.
+        var (router, mgr, _) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.Single(mgr.State.Members);
+
+        router.Dispatch(Line("Helper just left the Realm."));
+
+        Assert.Empty(mgr.State.Members);
+        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LeftRealm_OfFollower_AndReturnsWithinWindow_AndWeLead_SendsInvite()
+    {
+        // The reported bug: a follower trains, comes back, and is stuck
+        // "partied but not following." The re-entry must auto-re-invite.
+        var (router, mgr, wire) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.True(mgr.State.SelfIsLeader);
+
+        router.Dispatch(Line("Helper just left the Realm."));
+        wire.Clear();
+
+        router.Dispatch(Line("Helper just entered the Realm."));
+
+        byte[] sent = Assert.Single(wire);
+        Assert.Equal("invite Helper\r", Encoding.Latin1.GetString(sent));
+    }
+
+    [Fact]
+    public void LeftRealm_OfLeader_DissolvesEntireParty()
+    {
+        // MajorMUD leadership rule: a leader's `train stats` excursion (leave +
+        // re-enter the realm) disbands the whole party, same as a leader
+        // disconnect. Every follower row clears; the leader is not stamped
+        // recoverable (a returning leader has no party to be invited into).
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state) { LocalCharacterName = "Raijin" };
+
+        router.Dispatch(Line("You are now following MudPlay."));
+        mgr.TestEnterParBlock();
+        mgr.FeedTestLines(new[]
+        {
+            "  MudPlay  WuzHere                  (Mystic)        [M:100%] [H:100%]   - Frontrank",
+            "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Midrank",
+            "  Helper WuzHere                  (Cleric)        [M:100%] [H:100%]   - Backrank",
+            string.Empty,
+        });
+        Assert.Equal(3, mgr.State.Members.Count);
+        Assert.Equal("MudPlay", mgr.State.LeaderName);
+
+        router.Dispatch(Line("MudPlay just left the Realm."));
+
+        Assert.Empty(mgr.State.Members);
+        Assert.False(mgr.State.IsInParty);
+        Assert.Null(mgr.State.LeaderName);
+        Assert.DoesNotContain("MudPlay", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    // ===== Board-specific (custom) disconnect line =====
+
+    private const string LogoffPattern = "►►► [{name}] logs OFF*";
+
+    [Fact]
+    public void CustomDisconnectLine_DirectName_RemovesPartyMember()
+    {
+        // A board whose logoff line keys on the CHARACTER name — the identity
+        // resolver maps the captured presence name straight to the given name.
+        var (router, mgr, _) = Setup();
+        mgr.DisconnectPatternProvider = () => LogoffPattern;
+        mgr.PresenceNameResolver = presence => presence;
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.Single(mgr.State.Members);
+
+        mgr.FeedTestEmittedLine("►►► [Helper] logs OFF the BBS.");
+
+        Assert.Empty(mgr.State.Members);
+        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CustomDisconnectLine_AccountName_ResolvesToPartyMember()
+    {
+        // Playpen-style board: the logoff line carries the BBS ACCOUNT name, not
+        // the in-game name. The resolver maps it to the given name through the
+        // account-name override table before the shared correlation runs.
+        var (router, mgr, _) = Setup();
+        mgr.DisconnectPatternProvider = () => LogoffPattern;
+        mgr.PresenceNameResolver = presence =>
+            presence.Equals("SuijinAcct", StringComparison.OrdinalIgnoreCase) ? "Suijin" : presence;
+        router.Dispatch(Line("Suijin started to follow you."));
+        Assert.Single(mgr.State.Members);
+        string? fired = null;
+        mgr.MemberDisconnected += g => fired = g;
+
+        mgr.FeedTestEmittedLine("►►► [SuijinAcct] logs OFF the BBS.");
+
+        Assert.Empty(mgr.State.Members);
+        Assert.Contains("Suijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("Suijin", fired);
+    }
+
+    [Fact]
+    public void CustomDisconnectLine_OfNonMember_IsIgnored()
+    {
+        var (router, mgr, _) = Setup();
+        mgr.DisconnectPatternProvider = () => LogoffPattern;
+        mgr.PresenceNameResolver = presence => presence;
+        router.Dispatch(Line("Helper started to follow you."));
+
+        mgr.FeedTestEmittedLine("►►► [Stranger] logs OFF the BBS.");
+
+        Assert.Single(mgr.State.Members);
+        Assert.DoesNotContain("Stranger", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CustomDisconnectLine_NoPatternConfigured_IsInert()
+    {
+        // No board pattern set — the custom path must never fire, leaving only
+        // the built-in disconnect / hang-up lines active.
+        var (router, mgr, _) = Setup();
+        mgr.PresenceNameResolver = presence => presence;
+        router.Dispatch(Line("Helper started to follow you."));
+
+        mgr.FeedTestEmittedLine("►►► [Helper] logs OFF the BBS.");
+
+        Assert.Single(mgr.State.Members);
+    }
+
+    [Fact]
+    public void CustomDisconnectLine_MalformedPattern_DoesNotThrow()
+    {
+        // A pattern that compiles to invalid regex disables the custom path
+        // rather than throwing on every emitted line.
+        var (router, mgr, _) = Setup();
+        mgr.DisconnectPatternProvider = () => "[unterminated";
+        mgr.PresenceNameResolver = presence => presence;
+        router.Dispatch(Line("Helper started to follow you."));
+
+        mgr.FeedTestEmittedLine("anything at all");
+
+        Assert.Single(mgr.State.Members);
+    }
+
+    // ===== Reconnect within grace window — auto-invite =====
+
+    [Fact]
+    public void Reconnect_WithinWindow_AndWeLead_SendsInvite()
+    {
+        // "X started to follow you" automatically flips SelfIsLeader=true,
+        // so no par-block setup needed.
+        var (router, mgr, wire) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.True(mgr.State.SelfIsLeader);
+
+        router.Dispatch(Line("Helper just disconnected!!!."));
+        wire.Clear();
+
+        router.Dispatch(Line("Helper just entered the Realm."));
+
+        byte[] sent = Assert.Single(wire);
+        Assert.Equal("invite Helper\r", Encoding.Latin1.GetString(sent));
+        Assert.DoesNotContain("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Reconnect_WithinWindow_AndWeFollow_DoesNotInvite()
+    {
+        // We follow MudPlay → not leader. Then MudPlay (or Helper) disconnects
+        // and reconnects → no invite because we're not the leader.
+        var (router, mgr, wire) = Setup();
+        router.Dispatch(Line("You are now following MudPlay."));
+        Assert.False(mgr.State.SelfIsLeader);
+        // Also a follower joins us... actually that'd flip us to leader.
+        // Use the simpler "MudPlay is leader, MudPlay disconnects" scenario.
+        router.Dispatch(Line("MudPlay just disconnected!!!."));
+        wire.Clear();
+
+        router.Dispatch(Line("MudPlay just entered the Realm."));
+
+        Assert.Empty(wire);
+    }
+
+    [Fact]
+    public void Reconnect_OutsideWindow_DoesNotInvite()
+    {
+        // Use a mutable clock — advance past the grace window between disconnect and re-entry.
+        DateTimeOffset clock = Now;
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PartyState state = new();
+        PartyManager mgr = new(router, state);
+        List<byte[]> wire = new();
+        mgr.SetWireSender(wire.Add);
+        mgr.NowProvider = () => clock;
+        mgr.DisconnectGraceWindow = TimeSpan.FromSeconds(10);
+
+        // Establish leadership via the follows-you path.
+        router.Dispatch(Line("Helper started to follow you."));
+        router.Dispatch(Line("Helper just disconnected!!!."));
+        wire.Clear();
+
+        // Jump 11 s into the future — past the 10 s window.
+        clock = clock.AddSeconds(11);
+        router.Dispatch(Line("Helper just entered the Realm."));
+
+        Assert.Empty(wire);
+        Assert.DoesNotContain("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Reconnect_OfNonDisconnectedPlayer_IsIgnored()
+    {
+        var (router, mgr, wire) = Setup();
+        router.Dispatch(Line("Stranger just entered the Realm."));
+
+        Assert.Empty(wire);
+    }
+
+    [Fact]
+    public void Reconnect_NoWireSender_NoThrow()
+    {
+        var (router, mgr, _) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        router.Dispatch(Line("Helper just disconnected!!!."));
+        router.Dispatch(Line("Helper just entered the Realm."));
+        // No assertion — passes if no exception.
+    }
+
+    // ===== Death =====
+
+    [Fact]
+    public void Death_OfPartyMember_RemovesImmediately()
+    {
+        var (router, mgr, _) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+        Assert.Single(mgr.State.Members);
+
+        router.Dispatch(Line("Helper has been slain by a giant rat."));
+
+        Assert.Empty(mgr.State.Members);
+        Assert.DoesNotContain("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Death_OfNonMember_IsIgnored()
+    {
+        var (router, mgr, _) = Setup();
+        router.Dispatch(Line("Helper started to follow you."));
+
+        router.Dispatch(Line("Stranger has been slain by a dragon."));
+
+        Assert.Single(mgr.State.Members);
+    }
+}

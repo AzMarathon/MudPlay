@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-BBS room-blacklist store. Loads Data/BBS/{bbs}/room_blacklist.json on
 // every BBS pin (the usual ProfileService event the rest of the BBS-tier

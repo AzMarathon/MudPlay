@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Default ITravelCostModel — multiplies hop count by a configurable
 // seconds-per-hop constant. Used until the user feeds real timings into

@@ -1,4 +1,4 @@
-namespace FujinTerm.Services.Patterns;
+namespace MudPlay.Services.Patterns;
 
 // Stable identifiers for the default MessageRouter pattern seed. Subsystems
 // subscribe by name — router.Subscribe(KnownPatterns.UserHits, handler) —

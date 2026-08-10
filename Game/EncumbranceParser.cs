@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Sole writer of PlayerState.Encumbrance. Subscribes to
 // KnownPatterns.UserEncumbrance via the MessageRouter and extracts the bracket

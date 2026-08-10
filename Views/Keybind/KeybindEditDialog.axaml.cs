@@ -1,9 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using FujinTerm.ViewModels.Keybind;
+using MudPlay.ViewModels.Keybind;
 
-namespace FujinTerm.Views.Keybind;
+namespace MudPlay.Views.Keybind;
 
 public partial class KeybindEditDialog : Window
 {

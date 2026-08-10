@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Stateful parser that pulls race + class + equipment loadout out of the
 // `look <player>` response and feeds them to PlayerDatabase.RecordLook. Sibling
@@ -12,10 +12,10 @@ namespace FujinTerm.Game;
 //
 // Expected shape (verbatim from a real session):
 //
-//   [ Fujin WuzHere ]
-//   Fujin is a healthy, well built Dark-Elf Mystic with short black
+//   [ MudPlay WuzHere ]
+//   MudPlay is a healthy, well built Dark-Elf Mystic with short black
 //   hair and black eyes.  He moves very swiftly, and is quite
-//   unfriendly and aloof.  Fujin appears to be bright and seems sullen
+//   unfriendly and aloof.  MudPlay appears to be bright and seems sullen
 //   and impulsive.  He is unwounded.
 //
 //   He is equipped with:
@@ -228,7 +228,7 @@ public sealed partial class LookParser : IDisposable
         return best;
     }
 
-    // Bracketed player name header — e.g. "[ Fujin WuzHere ]". Restricted to
+    // Bracketed player name header — e.g. "[ MudPlay WuzHere ]". Restricted to
     // alphabetic content + spaces so unrelated bracketed lines (chat tags,
     // status codes) don't false-trigger.
     [GeneratedRegex(@"^\s*\[\s+(?<name>[A-Za-z][A-Za-z' -]*?)\s+\]\s*$",

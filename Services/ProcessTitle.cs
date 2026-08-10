@@ -1,11 +1,11 @@
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Sets the OS process name (the comm field shown by ps, top, htop, and
 // process managers) to the active {char}@{bbs} identity, so a user running
-// several FujinTerm instances side-by-side can tell them apart at the process
+// several MudPlay instances side-by-side can tell them apart at the process
 // level. Linux-only via prctl(PR_SET_NAME); a silent no-op on every other
 // platform (Windows / macOS expose no equivalently cheap per-process rename,
 // and the window title already carries the readable form there).
@@ -43,7 +43,7 @@ public static class ProcessTitle
         if (hasProfile && hasBbs) return $"{profile}@{bbs}";
         if (hasProfile) return profile!;
         if (hasBbs) return $"@{bbs}";
-        return "FujinTerm";
+        return "MudPlay";
     }
 
     private static byte[] ToCommBytes(string name)

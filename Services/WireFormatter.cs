@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Byte → printable-text converters used by the Wire Inspector's two panes.
 // Pure functions; no state.

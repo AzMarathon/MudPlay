@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Whether a boss respawns on a kill-based countdown (Timed) or only on a server
 // cleanup (Cleanup — no live timer, shown as "Cleanup").

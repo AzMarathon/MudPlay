@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 public partial class GameDataManagerDialog : Window
 {

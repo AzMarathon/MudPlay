@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Live, observable channel for the terminal's display state. ScrollbackLines,
 // TerminalCols and TerminalRows mirror the BBS-tier settings; FontFamily,
@@ -17,7 +17,7 @@ public sealed partial class DisplayConfig : ObservableObject
     // default — kept in sync with TerminalControl.FontFamilyProperty's default
     // and used as the fallback whenever the char-tier font choice is unset.
     public const string DefaultFontFamily =
-        "avares://FujinTerm/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16";
+        "avares://MudPlay/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16";
 
     public const double DefaultFontSize = 16.0;
 

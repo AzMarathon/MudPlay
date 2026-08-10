@@ -1,7 +1,7 @@
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Number → max-HP lookup for the active game-data set's Monsters table. Feeds
 // the look-target HP-range readout (MonsterLookParser): the wound descriptor

@@ -4,11 +4,11 @@ using System.Linq;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.Navigation;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using MudPlay.ViewModels.Navigation;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Right-click → "Center on…" prompt. Mirrors the Navigation window's
 // room-search behaviour — coordinate input ("1/297", "1,297", bare "297") or

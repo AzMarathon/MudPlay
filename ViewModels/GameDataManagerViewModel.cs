@@ -1,9 +1,9 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Game Data → "Manage Sets…". Two immediate-action sections over
 // GameDataSetManager: copy / move a set's loop library to another set, and

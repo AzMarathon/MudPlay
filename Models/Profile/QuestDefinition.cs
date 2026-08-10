@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // One user-authored quest definition for a game-data set, persisted in the
 // per-set {set}/quests.json overlay and seeded by the universal

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Rate-based exp/hr model for a lair loop. Combat resolves on a fixed 5-second
 // global tick (720/hour): you bank exp only on a tick you're engaged with a live

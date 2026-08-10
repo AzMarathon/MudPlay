@@ -4,11 +4,11 @@ using System.Collections.Specialized;
 using System.Globalization;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.GameData.Edit;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Edit;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Players tab. Surfaces the rows held by PlayerDatabase. Engine-backed;
 // reloads on every CollectionChanged from the database so the grid mirrors live observations.
@@ -66,7 +66,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         _handler = (_, _) => Reload();
         _db.Players.CollectionChanged += _handler;
         // Refresh the filter when the loaded character swaps so a
-        // freshly-loaded Raijin doesn't keep Fujin's row hidden (and
+        // freshly-loaded Raijin doesn't keep MudPlay's row hidden (and
         // vice versa). Drafts (no loaded profile) reload to "show
         // everyone".
         if (_profile is not null)

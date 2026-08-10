@@ -2,12 +2,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Turns the wire's "Also here:" line into a classified entity list (Player /
 // Monster / Unknown). The output feeds CombatStateTracker — which holds the

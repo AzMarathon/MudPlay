@@ -1,8 +1,8 @@
 using System.Text;
 using Avalonia.Input;
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Runtime hook between a key-down event and the active Telnet connection.
 // Given a (Key, KeyModifiers) chord, looks up a matching Macro in MacroStore;

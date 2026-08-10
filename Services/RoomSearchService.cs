@@ -3,10 +3,10 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using FujinTerm.Game.Map;
-using FujinTerm.ViewModels.Navigation;
+using MudPlay.Game.Map;
+using MudPlay.ViewModels.Navigation;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Centralised room-search resolver. Consumed by the Navigation rail search box,
 // the Loop / Lair editor "Add room" rows, the manual Center-on dialog, the

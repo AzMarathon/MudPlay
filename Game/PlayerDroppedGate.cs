@@ -1,8 +1,8 @@
 using System.ComponentModel;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Reacts to the local character dropping — HP falling to or below 0, the
 // "mortally wounded" state — and slams three doors shut at once until HP climbs

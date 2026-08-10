@@ -1,7 +1,7 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Inverse of GreaterThanZeroConverter — returns true when the bound numeric
 // is at or below zero. Used to show the PartyWindow's MA placeholder Border

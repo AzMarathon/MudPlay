@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // One reorderable row in a PriorityRankingViewModel list. Rank is simply the
 // row's 1-based position in the list — the list always renders top-to-bottom

@@ -1,6 +1,6 @@
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // A disconnect can strand the shared Acquisition movement gate: cash/items deferred
 // mid-fight (CollectAfterCombatFinished) hold the gate via NoteDeferredPending, which

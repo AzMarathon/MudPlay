@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Quests;
+namespace MudPlay.Game.Quests;
 
 // One auto-drafted, followable step in a quest, produced by QuestStepGraph from a
 // TBInfo chain that advances the quest flag. This is the baseline checklist a user

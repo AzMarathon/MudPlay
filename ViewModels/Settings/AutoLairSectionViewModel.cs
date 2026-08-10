@@ -2,12 +2,12 @@ using System.Collections.Generic;
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.Settings;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "Auto-Lair" tab — per-character scheduler tuning. Marked-room catalogue lives
 // BBS-side in LairManager; the heuristic + weighting + per-encumbrance hop-time

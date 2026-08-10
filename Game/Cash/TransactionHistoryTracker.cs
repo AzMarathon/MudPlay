@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Cash;
+namespace MudPlay.Game.Cash;
 
 // A per-session ledger of cash/item offloads for the Session Stats →
 // Transaction history window. Records one TransactionEntry per bank `dep`osit and

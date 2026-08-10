@@ -3,10 +3,10 @@ using System.Linq;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // "Add favourite" room picker for the Navigation Management GOTO tab. Type a
 // room name (loose token match over the loaded game-data room names) OR a

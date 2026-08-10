@@ -1,7 +1,7 @@
-using FujinTerm.Models.Settings;
-using FujinTerm.ViewModels;
+using MudPlay.Models.Settings;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Routes "are you sure?" prompts through a single per-action API so the many
 // call sites (window close, disconnect command, settings apply, list-row
@@ -40,7 +40,7 @@ public sealed class ConfirmService
     // it.
     public Task<bool> ConfirmExitAsync()
         => Settings.ConfirmExit
-            ? PromptAsync("Exit FujinTerm", "Are you sure you want to exit?", "Exit")
+            ? PromptAsync("Exit MudPlay", "Are you sure you want to exit?", "Exit")
             : Task.FromResult(true);
 
     // Prompt before a user-initiated disconnect. App-initiated disconnects

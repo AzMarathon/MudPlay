@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // MajorMUD alignment / evil-points band. Feeds the vile-ward adjustment in
 // CombatCalculator — higher evil scales a defender's vile ward down before it

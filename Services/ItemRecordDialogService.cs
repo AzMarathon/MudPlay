@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
-using FujinTerm.Game.GameData;
-using FujinTerm.Models.GameData;
-using FujinTerm.ViewModels.GameData.Edit;
+using MudPlay.Game.GameData;
+using MudPlay.Models.GameData;
+using MudPlay.ViewModels.GameData.Edit;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Opens the item record (edit) dialog by item Number, modelessly, from anywhere —
 // today the Item Finder's double-click, which wants the record itself rather than

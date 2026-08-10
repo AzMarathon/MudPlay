@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Stable identity of a room — the (Map, Room) pair MajorMUD uses as a primary
 // key everywhere it references a room (exit targets in Rooms.json, lair group

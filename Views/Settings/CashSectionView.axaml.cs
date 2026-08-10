@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace FujinTerm.Views.Settings;
+namespace MudPlay.Views.Settings;
 
 public partial class CashSectionView : UserControl
 {

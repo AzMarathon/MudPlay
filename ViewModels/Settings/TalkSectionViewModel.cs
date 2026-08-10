@@ -4,11 +4,11 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.Settings;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "Talk" tab — engine-level policy for RemoteCommandManager. Follows the
 // PartySectionViewModel pattern: Apply / Discard against an in-memory edit set,
@@ -87,16 +87,16 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     // the pickers; a non-default pick persists as an avares:// URI / point size
     // and is read back when the window next opens.
     private const string DefaultConvoFontUri =
-        "avares://FujinTerm/Assets/Fonts/JetBrainsMono-Regular.ttf#JetBrains Mono";
+        "avares://MudPlay/Assets/Fonts/JetBrainsMono-Regular.ttf#JetBrains Mono";
     private const double DefaultConvoFontSize = 12;
 
     public IReadOnlyList<FontFamilyOption> ConvoFontOptions { get; } = new[]
     {
         new FontFamilyOption("JetBrains Mono {default}", DefaultConvoFontUri),
         new FontFamilyOption("IBM Plex Sans",
-            "avares://FujinTerm/Assets/Fonts/IBMPlexSans-Regular.ttf#IBM Plex Sans"),
+            "avares://MudPlay/Assets/Fonts/IBMPlexSans-Regular.ttf#IBM Plex Sans"),
         new FontFamilyOption("MX437 IBM VGA",
-            "avares://FujinTerm/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16"),
+            "avares://MudPlay/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16"),
     };
 
     public IReadOnlyList<FontSizeOption> ConvoFontSizeOptions { get; } = BuildConvoFontSizes();

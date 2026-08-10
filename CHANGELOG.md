@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.0.0
+
+- Officially named the program MudPlay
+
 ## 2.39.6
 
 - "All auto off" now also parks navigation: engaging it suspends any in-flight walk / loop / auto-lair right where it is, and toggling it back on resumes exactly that — a manual pause or stop you make in between is respected, and it's idle-safe (nothing to resume when nothing was running)
@@ -26,10 +30,10 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 ## 2.38.0
 
 - Party stats probe: the first time you party with a player each day, the client asks them `@level` and `@version` and records their exact level + client version onto their player record (shown in Game Data → Players); `@health` still fires on every join for live vitals. New Party setting "probe party members' level & version on the first party of the day" (on by default)
-- `@version` replies (e.g. `{FujinTerm 2.38.0}`, `{MegaMud 1.03u}`) are now captured and stored per player; the player edit dialog shows Version + Last partied
+- `@version` replies (e.g. `{MudPlay 2.38.0}`, `{MegaMud 1.03u}`) are now captured and stored per player; the player edit dialog shows Version + Last partied
 - Level display now reconciles exact vs. title: a recorded exact level wins, unless the player's title band has climbed above it (they trained since we last asked) — then the title range is shown until we re-learn an exact at or above the band's floor
 - Route level-gating now treats a recorded level as fresh for the current day (was a fixed 24h window), and re-learns it via the once-a-day probe or any manual `@level`; the old leader-only roster-change level poll is retired
-- Peer `@level` replies from other FujinTerm clients (brace-wrapped) now record correctly
+- Peer `@level` replies from other MudPlay clients (brace-wrapped) now record correctly
 
 ## 2.37.0
 
@@ -48,7 +52,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 2.36.0
 
-- Main window title now shows the running version — `FujinTerm v<x.y.z> — <profile> — <BBS>`
+- Main window title now shows the running version — `MudPlay v<x.y.z> — <profile> — <BBS>`
 - New Mana Regen calculator (Calculators tab): plan level / stat / gear against mana-regen tick breakpoints for a mage, priest or druid — a natural-tick readout, a tick-vs-level breakpoint chart (capped at each stat's racial trained max), and a roll-spell slider that shows the tick any roll lands so you can find the breakpoints; the class dropdown is limited to those three archetypes, the driving stat follows the class (mage INT, priest WIL, druid INT/WIL average), and priests pick between their two roll spells (serenity / profane link)
 - Loops no longer freeze forever when combat interrupts a move mid-step: a stall watchdog now detects the never-confirmed move and re-establishes position (Paradigm `rm` resync / stock footprint backtrack) so the loop resumes instead of standing still
 - Item-cast buff swap now handles an off-hand buff item (e.g. engraved warhorn) correctly — it restores the off-hand shield instead of the weapon, and when the buff item was left equipped from a prior session it puts the right gear back from your equipment set instead of stranding it

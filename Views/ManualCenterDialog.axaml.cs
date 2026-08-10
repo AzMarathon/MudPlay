@@ -1,9 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
-using FujinTerm.ViewModels;
-using FujinTerm.ViewModels.Navigation;
+using MudPlay.ViewModels;
+using MudPlay.ViewModels.Navigation;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Modeless "Center on…" picker. Reuses the room-search behaviour
 // from the Navigation rail's main search box — coordinate input

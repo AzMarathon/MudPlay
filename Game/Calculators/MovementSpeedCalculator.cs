@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Movement-speed cap solver, matching the ParaMUD realm movement formula. Base
 // speed is 1100 ms; encumbrance adds (enc%/100)^2 * 2000, slowness adds

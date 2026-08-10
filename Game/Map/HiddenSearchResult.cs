@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Terminal outcome of a HiddenExitRevealManager request. Revealed means
 // the hidden exit now appears in the tracker's current room and the

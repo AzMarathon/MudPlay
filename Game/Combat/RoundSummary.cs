@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // One closed combat round emitted by RoundDamageTracker. Carries the aggregate
 // damage / hit-rate snapshot CastingDirector uses to decide next-round casts and

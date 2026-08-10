@@ -1,8 +1,8 @@
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.Spells;
+using MudPlay.Game.Spells;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // Base for one section in the SettingsWindowViewModel's sidebar. Every settings
 // tab — including app-wide ones like Display and Toolbar — lives on the loaded

@@ -4,12 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
-using FujinTerm.Game;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Terminal;
+using MudPlay.Game;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory cache of the active character's triggers + the app-session named
 // variable store, plus the runtime dispatch path.

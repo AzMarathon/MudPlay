@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // Confirm-and-execute dialog for the Settings → General "Change data directory"
 // flow. Summarises what's about to happen (file count, total size, source →

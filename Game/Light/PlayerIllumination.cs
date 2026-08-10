@@ -1,9 +1,9 @@
 using System;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Services;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Inventory;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // The player's live carried illumination — the charIllu half of the LightModel
 // visibility model. Two sources sum into it: worn +illu gear (ability codes 13 /

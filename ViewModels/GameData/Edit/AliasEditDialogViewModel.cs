@@ -2,10 +2,10 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // Per-record edit dialog for Game Data Browser → Aliases. Editable fields: Name
 // (required, no whitespace, unique, must not collide with a chat-channel command),

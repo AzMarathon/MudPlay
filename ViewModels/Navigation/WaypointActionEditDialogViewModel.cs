@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // Small modeless dialog for editing a single loop waypoint's per-row action
 // — a free-form Command to send at the waypoint and a Delay in milliseconds

@@ -1,8 +1,8 @@
 using System.ComponentModel;
-using FujinTerm.Models.Settings;
-using FujinTerm.Services;
+using MudPlay.Models.Settings;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Health;
+namespace MudPlay.Game.Health;
 
 // Traces a realm's true negative-HP death floor and refines
 // BbsProfile.PlayerDiesAtHp toward it from two independent kinds of evidence.

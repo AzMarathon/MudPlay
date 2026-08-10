@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Models.Profile;
+using MudPlay.Game.Calculators;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // One "Find best" ranking option for the Item Finder's trial gearset: a label and
 // the per-item score it maximizes. The starter set mirrors the equipment fields a

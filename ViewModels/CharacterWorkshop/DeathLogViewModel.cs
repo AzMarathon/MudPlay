@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Read-only "How did I Die?" viewer — shows the backscroll snapshot captured at
 // the moment of a recorded death. No pending state, so there's only a Close

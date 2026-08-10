@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Where a movement speed sits relative to the 1-second (1000 ms) cap.
 public enum MovementCapState

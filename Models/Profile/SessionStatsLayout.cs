@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Persisted layout of the Session Stats window's panels — the user's chosen
 // top-to-bottom order and which panels they've hidden. One layout per character

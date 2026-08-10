@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Output of BfsMapper.BuildLayout. Maps room keys to their planar (X, Y)
 // coordinates relative to the origin (the origin sits at (0, 0)).

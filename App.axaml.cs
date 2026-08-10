@@ -1,13 +1,13 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using FujinTerm.Services;
-using FujinTerm.ViewModels;
-using FujinTerm.ViewModels.Import;
-using FujinTerm.Views;
-using FujinTerm.Views.Import;
+using MudPlay.Services;
+using MudPlay.ViewModels;
+using MudPlay.ViewModels.Import;
+using MudPlay.Views;
+using MudPlay.Views.Import;
 
-namespace FujinTerm;
+namespace MudPlay;
 
 // The root Avalonia "Application" object. Loads the XAML and creates the
 // main window when the framework finishes initializing.
@@ -48,7 +48,7 @@ public partial class App : Application
             // focused — an app-wide class handler covers every window (dialogs +
             // directly-shown ones); the main window is excluded so its own input
             // is untouched.
-            FujinTerm.Controls.DialogKeyboardFallthrough.Install(mainWindow);
+            MudPlay.Controls.DialogKeyboardFallthrough.Install(mainWindow);
 
             // DialogService parents every modeless dialog to the main window so
             // closing main tears down its children. FloatingPanelHost owns the
@@ -64,94 +64,94 @@ public partial class App : Application
 
             // Per-record edit dialogs — Messages tab + Monsters tab.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameData.Edit.MessageEditDialogViewModel,
-                FujinTerm.Views.GameData.Edit.MessageEditDialog>();
+                MudPlay.ViewModels.GameData.Edit.MessageEditDialogViewModel,
+                MudPlay.Views.GameData.Edit.MessageEditDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameData.Edit.MonsterEditDialogViewModel,
-                FujinTerm.Views.GameData.Edit.MonsterEditDialog>();
+                MudPlay.ViewModels.GameData.Edit.MonsterEditDialogViewModel,
+                MudPlay.Views.GameData.Edit.MonsterEditDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameData.Edit.ItemEditDialogViewModel,
-                FujinTerm.Views.GameData.Edit.ItemEditDialog>();
+                MudPlay.ViewModels.GameData.Edit.ItemEditDialogViewModel,
+                MudPlay.Views.GameData.Edit.ItemEditDialog>();
             // Interactive room-detail popup — Rooms tab double-click + Monsters
             // tab room chips. Clickable title/exits centre the Nav map, monster
             // names jump to their record, Add/Remove toggle the blacklist.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameData.Edit.RoomDetailDialogViewModel,
-                FujinTerm.Views.GameData.Edit.RoomDetailDialog>();
+                MudPlay.ViewModels.GameData.Edit.RoomDetailDialogViewModel,
+                MudPlay.Views.GameData.Edit.RoomDetailDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameData.Edit.PlayerEditDialogViewModel,
-                FujinTerm.Views.GameData.Edit.PlayerEditDialog>();
+                MudPlay.ViewModels.GameData.Edit.PlayerEditDialogViewModel,
+                MudPlay.Views.GameData.Edit.PlayerEditDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameData.Edit.PlayerAddDialogViewModel,
-                FujinTerm.Views.GameData.Edit.PlayerAddDialog>();
+                MudPlay.ViewModels.GameData.Edit.PlayerAddDialogViewModel,
+                MudPlay.Views.GameData.Edit.PlayerAddDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameData.Edit.MacroEditDialogViewModel,
-                FujinTerm.Views.GameData.Edit.MacroEditDialog>();
+                MudPlay.ViewModels.GameData.Edit.MacroEditDialogViewModel,
+                MudPlay.Views.GameData.Edit.MacroEditDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameData.Edit.TriggerEditDialogViewModel,
-                FujinTerm.Views.GameData.Edit.TriggerEditDialog>();
+                MudPlay.ViewModels.GameData.Edit.TriggerEditDialogViewModel,
+                MudPlay.Views.GameData.Edit.TriggerEditDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameData.Edit.AliasEditDialogViewModel,
-                FujinTerm.Views.GameData.Edit.AliasEditDialog>();
+                MudPlay.ViewModels.GameData.Edit.AliasEditDialogViewModel,
+                MudPlay.Views.GameData.Edit.AliasEditDialog>();
 
             // Bosses tab dialogs — the mark-timer picker and the boss-list editor.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.CharacterWorkshop.MarkTimerDialogViewModel,
-                FujinTerm.Views.CharacterWorkshop.MarkTimerDialog>();
+                MudPlay.ViewModels.CharacterWorkshop.MarkTimerDialogViewModel,
+                MudPlay.Views.CharacterWorkshop.MarkTimerDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.CharacterWorkshop.ManageBossesDialogViewModel,
-                FujinTerm.Views.CharacterWorkshop.ManageBossesDialog>();
+                MudPlay.ViewModels.CharacterWorkshop.ManageBossesDialogViewModel,
+                MudPlay.Views.CharacterWorkshop.ManageBossesDialog>();
 
             // Per-action keybind rebind dialog — opened from any
             // toolbar button or menu item that owns a BuiltInAction.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Keybind.KeybindEditDialogViewModel,
-                FujinTerm.Views.Keybind.KeybindEditDialog>();
+                MudPlay.ViewModels.Keybind.KeybindEditDialogViewModel,
+                MudPlay.Views.Keybind.KeybindEditDialog>();
 
             // Settings.Events tab's per-row editor.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Settings.EventEditDialogViewModel,
-                FujinTerm.Views.Settings.EventEditDialog>();
+                MudPlay.ViewModels.Settings.EventEditDialogViewModel,
+                MudPlay.Views.Settings.EventEditDialog>();
 
             // Folder name prompt — New / Rename folder on both the Manage
             // dialog (loops + lairs) and the rail (gotos).
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.NavFolderNameDialogViewModel,
-                FujinTerm.Views.Navigation.NavFolderNameDialog>();
+                MudPlay.ViewModels.Navigation.NavFolderNameDialogViewModel,
+                MudPlay.Views.Navigation.NavFolderNameDialog>();
 
             // Add-favourite room picker — the Manage dialog's Go To tab "Add"
             // button (search by name or map/room, then save as a favourite).
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.AddFavoriteDialogViewModel,
-                FujinTerm.Views.Navigation.AddFavoriteDialog>();
+                MudPlay.ViewModels.Navigation.AddFavoriteDialogViewModel,
+                MudPlay.Views.Navigation.AddFavoriteDialog>();
 
             // Full favourite editor — the Go To tab's Edit button (name + map +
             // room, so a favourite can be re-pointed at a different room).
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.FavoriteEditDialogViewModel,
-                FujinTerm.Views.Navigation.FavoriteEditDialog>();
+                MudPlay.ViewModels.Navigation.FavoriteEditDialogViewModel,
+                MudPlay.Views.Navigation.FavoriteEditDialog>();
 
             // Folder picker — the Go To tab / rail "Move to folder…" action lists
             // existing folders to choose from instead of typing a path.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.FolderPickerDialogViewModel,
-                FujinTerm.Views.Navigation.FolderPickerDialog>();
+                MudPlay.ViewModels.Navigation.FolderPickerDialogViewModel,
+                MudPlay.Views.Navigation.FolderPickerDialog>();
 
             // File → Open profile / Save profile as — custom modeless dialogs
             // replacing the platform file pickers (the per-folder layout means
             // profiles live as subfolders, not flat .json files).
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Profile.ProfilePickerDialogViewModel,
-                FujinTerm.Views.Profile.ProfilePickerDialog>();
+                MudPlay.ViewModels.Profile.ProfilePickerDialogViewModel,
+                MudPlay.Views.Profile.ProfilePickerDialog>();
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Profile.ProfileNameInputDialogViewModel,
-                FujinTerm.Views.Profile.ProfileNameInputDialog>();
+                MudPlay.ViewModels.Profile.ProfileNameInputDialogViewModel,
+                MudPlay.Views.Profile.ProfileNameInputDialog>();
 
             // Room-name learned prompt — fires when the tracker adopts
             // a name for a previously-unnamed map-15 ganghouse room.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.RoomNameLearnedDialogViewModel,
-                FujinTerm.Views.RoomNameLearnedDialog>();
+                MudPlay.ViewModels.RoomNameLearnedDialogViewModel,
+                MudPlay.Views.RoomNameLearnedDialog>();
 
             // Unknown-entity fix dialog. RoomEntityClassifier opens this
             // when it emits a Warn row for an Also-Here name it can't
@@ -160,129 +160,129 @@ public partial class App : Application
             // returns it for the classifier to commit at the active
             // 4-tier scope.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.UnknownEntityFixDialogViewModel,
-                FujinTerm.Views.UnknownEntityFixDialog>();
+                MudPlay.ViewModels.UnknownEntityFixDialogViewModel,
+                MudPlay.Views.UnknownEntityFixDialog>();
 
             // Modify Room Blacklist (Game Data menu) — staged editor
             // over the per-BBS room blacklist.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.BlacklistEditorDialogViewModel,
-                FujinTerm.Views.BlacklistEditorDialog>();
+                MudPlay.ViewModels.BlacklistEditorDialogViewModel,
+                MudPlay.Views.BlacklistEditorDialog>();
 
             // Manage Sets… (Game Data menu) — copy/move a set's loop
             // library between sets, or delete a set (tables + loops).
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.GameDataManagerViewModel,
-                FujinTerm.Views.GameDataManagerDialog>();
+                MudPlay.ViewModels.GameDataManagerViewModel,
+                MudPlay.Views.GameDataManagerDialog>();
 
             // Quest editor (Character Workshop → Quest Status → "Edit
             // Quests…"). Names / show-hides / annotates quest steps;
             // writes the active set's {set}/quests.json overlay.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.CharacterWorkshop.QuestEditorViewModel,
-                FujinTerm.Views.CharacterWorkshop.QuestEditorWindow>();
+                MudPlay.ViewModels.CharacterWorkshop.QuestEditorViewModel,
+                MudPlay.Views.CharacterWorkshop.QuestEditorWindow>();
 
             // Death-log viewer (Character Workshop → Death Recovery → "How did
             // I Die?"). Read-only replay of the backscroll snapshot captured at
             // the moment of a recorded death.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.CharacterWorkshop.DeathLogViewModel,
-                FujinTerm.Views.CharacterWorkshop.DeathLogWindow>();
+                MudPlay.ViewModels.CharacterWorkshop.DeathLogViewModel,
+                MudPlay.Views.CharacterWorkshop.DeathLogWindow>();
 
             // Item Finder (Character Workshop → Equipment Manager →
             // "Item Finder"). Read-only catalog of every equippable item in the
             // active set, grouped filters by class / level / alignment / stats.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.CharacterWorkshop.ItemFinderViewModel,
-                FujinTerm.Views.CharacterWorkshop.ItemFinderWindow>();
+                MudPlay.ViewModels.CharacterWorkshop.ItemFinderViewModel,
+                MudPlay.Views.CharacterWorkshop.ItemFinderWindow>();
 
             // Right-click → "Center on…" — two-int (map / room) input
             // that returns a RoomKey for the Navigation window to
             // rebuild its layout around.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.ManualCenterDialogViewModel,
-                FujinTerm.Views.ManualCenterDialog>();
+                MudPlay.ViewModels.ManualCenterDialogViewModel,
+                MudPlay.Views.ManualCenterDialog>();
 
             // Terminal right-click → "Bug report…" — collects the user's
             // problem description; the client-state capture happens in the
             // MainWindow command at click time and is written to Desktop.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.BugReportDialogViewModel,
-                FujinTerm.Views.BugReportDialog>();
+                MudPlay.ViewModels.BugReportDialogViewModel,
+                MudPlay.Views.BugReportDialog>();
 
             // EngineRecoveryGate → "Lost — couldn't recover" info dialog.
             // Single OK button; pops on tier-3 backtrack exhaustion.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.LostRecoveryDialogViewModel,
-                FujinTerm.Views.Navigation.LostRecoveryDialog>();
+                MudPlay.ViewModels.Navigation.LostRecoveryDialogViewModel,
+                MudPlay.Views.Navigation.LostRecoveryDialog>();
 
             // Loops pane → right-click → "Edit…" opens this dialog.
             // Name / Notes / Steps (command-step CRUD; moves locked).
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.LoopEditorDialogViewModel,
-                FujinTerm.Views.Navigation.LoopEditorDialog>();
+                MudPlay.ViewModels.Navigation.LoopEditorDialogViewModel,
+                MudPlay.Views.Navigation.LoopEditorDialog>();
 
             // Auto-Lair Setups pane → right-click → "Edit…" + "Save lairs"
             // bottom-strip button both route through this dialog. Name /
             // Notes / Marker list with per-marker respawn override.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.LairEditorDialogViewModel,
-                FujinTerm.Views.Navigation.LairEditorDialog>();
+                MudPlay.ViewModels.Navigation.LairEditorDialogViewModel,
+                MudPlay.Views.Navigation.LairEditorDialog>();
 
             // CURRENT NAV ✎ button on a marked-lair row → single-marker
             // timer-override editor. Mutates AutoLairManager directly;
             // result payload is only used by callers that care.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.LairTimerEditDialogViewModel,
-                FujinTerm.Views.Navigation.LairTimerEditDialog>();
+                MudPlay.ViewModels.Navigation.LairTimerEditDialogViewModel,
+                MudPlay.Views.Navigation.LairTimerEditDialog>();
 
             // Loop editor ✎ button on a waypoint row → per-waypoint
             // command + delay editor. Payload routes back through the
             // Loop editor's apply path.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.WaypointActionEditDialogViewModel,
-                FujinTerm.Views.Navigation.WaypointActionEditDialog>();
+                MudPlay.ViewModels.Navigation.WaypointActionEditDialogViewModel,
+                MudPlay.Views.Navigation.WaypointActionEditDialog>();
 
             // Navigation → "Manage" chip → loops + auto-lair markers
             // CRUD surface. Modeless; replaces the bottom-strip
             // save/discard/name textbox UX with a dedicated window.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.NavigationManagerDialogViewModel,
-                FujinTerm.Views.Navigation.NavigationManagerDialog>();
+                MudPlay.ViewModels.Navigation.NavigationManagerDialogViewModel,
+                MudPlay.Views.Navigation.NavigationManagerDialog>();
 
             // .mp importer disambiguation prompt — only fires when
             // multiple candidate rooms tie on the closure score.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.MpAnchorPickerDialogViewModel,
-                FujinTerm.Views.Navigation.MpAnchorPickerDialog>();
+                MudPlay.ViewModels.Navigation.MpAnchorPickerDialogViewModel,
+                MudPlay.Views.Navigation.MpAnchorPickerDialog>();
 
             // Free-vs-direct route picker — fires on a user-initiated walk when a
             // shorter route crosses an acquirable gate the crosser can't yet pass.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Navigation.RouteChoiceDialogViewModel,
-                FujinTerm.Views.Navigation.RouteChoiceDialog>();
+                MudPlay.ViewModels.Navigation.RouteChoiceDialogViewModel,
+                MudPlay.Views.Navigation.RouteChoiceDialog>();
 
             // Settings → General → "Change data directory" confirm + execute dialog.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.Settings.DataDirectoryRelocateDialogViewModel,
-                FujinTerm.Views.Settings.DataDirectoryRelocateDialog>();
+                MudPlay.ViewModels.Settings.DataDirectoryRelocateDialogViewModel,
+                MudPlay.Views.Settings.DataDirectoryRelocateDialog>();
 
             // Generic "are you sure?" confirm dialog — owned by
             // ConfirmService, surfaced by the exit / hangup / save /
             // delete paths whose matching flag is on in Settings →
             // BBS's Display group.
             AppServices.Current.Dialogs.RegisterWindow<
-                FujinTerm.ViewModels.ConfirmDialogViewModel,
-                FujinTerm.Views.ConfirmDialog>();
+                MudPlay.ViewModels.ConfirmDialogViewModel,
+                MudPlay.Views.ConfirmDialog>();
 
             // Register the LogPane double-click handler for the spell-
             // coverage auditor's summary entries. Opening reuses any
             // already-open window (single-instance) so repeated
             // double-clicks just focus the existing detail surface
             // instead of stacking new ones.
-            FujinTerm.Views.GameData.SpellCoverageReportWindow? coverageWindow = null;
+            MudPlay.Views.GameData.SpellCoverageReportWindow? coverageWindow = null;
             AppServices.Current.Log.RegisterDetailHandler(
-                FujinTerm.Services.SpellCoverageAuditor.LogSource,
+                MudPlay.Services.SpellCoverageAuditor.LogSource,
                 () =>
                 {
                     if (coverageWindow is not null && coverageWindow.IsVisible)
@@ -290,9 +290,9 @@ public partial class App : Application
                         coverageWindow.Activate();
                         return;
                     }
-                    var vm = new FujinTerm.ViewModels.GameData.SpellCoverageReportViewModel(
+                    var vm = new MudPlay.ViewModels.GameData.SpellCoverageReportViewModel(
                         AppServices.Current.SpellCoverage);
-                    coverageWindow = new FujinTerm.Views.GameData.SpellCoverageReportWindow
+                    coverageWindow = new MudPlay.Views.GameData.SpellCoverageReportWindow
                     {
                         DataContext = vm,
                     };
@@ -310,25 +310,25 @@ public partial class App : Application
             // picking the target monster needs a UI affordance (search +
             // selection) that hasn't shipped yet.
             AppServices.Current.Log.RegisterDetailHandler(
-                FujinTerm.Game.Combat.RoomEntityClassifier.LogCategory,
+                MudPlay.Game.Combat.RoomEntityClassifier.LogCategory,
                 async (entry) =>
                 {
                     if (entry.Context is not { Length: > 0 } rawLine) return;
                     string unknownName = ParseUnknownNameFromMessage(entry.Message);
                     if (unknownName.Length == 0) return;
 
-                    var vm = new FujinTerm.ViewModels.UnknownEntityFixDialogViewModel(
+                    var vm = new MudPlay.ViewModels.UnknownEntityFixDialogViewModel(
                         rawLine, unknownName);
-                    FujinTerm.ViewModels.UnknownEntityFixResult? result =
+                    MudPlay.ViewModels.UnknownEntityFixResult? result =
                         await AppServices.Current.Dialogs
                             .OpenWindowAsync<
-                                FujinTerm.ViewModels.UnknownEntityFixDialogViewModel,
-                                FujinTerm.ViewModels.UnknownEntityFixResult?>(vm);
+                                MudPlay.ViewModels.UnknownEntityFixDialogViewModel,
+                                MudPlay.ViewModels.UnknownEntityFixResult?>(vm);
                     if (result is null) return;
 
                     switch (result.Action)
                     {
-                        case FujinTerm.ViewModels.UnknownEntityFixAction.AddPlayerObservation:
+                        case MudPlay.ViewModels.UnknownEntityFixAction.AddPlayerObservation:
                             if (AppServices.Current.Players.AddManual(
                                     result.EntityName, familyName: string.Empty,
                                     nowUtc: DateTime.UtcNow))
@@ -343,11 +343,11 @@ public partial class App : Application
                             }
                             break;
 
-                        case FujinTerm.ViewModels.UnknownEntityFixAction.AddAsMonster:
+                        case MudPlay.ViewModels.UnknownEntityFixAction.AddAsMonster:
                             AddPlaceholderMonster(result.EntityName);
                             break;
 
-                        case FujinTerm.ViewModels.UnknownEntityFixAction.AddFlavorPrefix:
+                        case MudPlay.ViewModels.UnknownEntityFixAction.AddFlavorPrefix:
                             // Not yet wired: open a monster picker, then attach
                             // the prefix to the selected MonsterMessageRecord.
                             AppServices.Current.Log.Info("RoomClassifier",
@@ -363,7 +363,7 @@ public partial class App : Application
             // monster Number; double-click opens that Game Data record so the
             // user can record the missing flavor prefix.
             AppServices.Current.Log.RegisterDetailHandler(
-                FujinTerm.Game.Combat.RoomEntityClassifier.MissingFlavorCategory,
+                MudPlay.Game.Combat.RoomEntityClassifier.MissingFlavorCategory,
                 (entry) =>
                 {
                     if (entry.Context is not { Length: > 0 } numText) return;
@@ -405,8 +405,8 @@ public partial class App : Application
         string trimmed = (name ?? string.Empty).Trim();
         if (trimmed.Length == 0) return;
 
-        FujinTerm.Services.MonsterMessageStore store = AppServices.Current.MonsterMessages;
-        foreach (FujinTerm.Models.GameData.MonsterMessageRecord existing in store.Messages)
+        MudPlay.Services.MonsterMessageStore store = AppServices.Current.MonsterMessages;
+        foreach (MudPlay.Models.GameData.MonsterMessageRecord existing in store.Messages)
         {
             if (string.Equals(existing.Name, trimmed, StringComparison.OrdinalIgnoreCase))
             {
@@ -422,7 +422,7 @@ public partial class App : Application
         // a stable id so the record round-trips through Save / Load
         // without churning the on-disk file.
         string id = ComputeMonsterMessageId(trimmed);
-        FujinTerm.Models.GameData.MonsterMessageRecord placeholder = new(
+        MudPlay.Models.GameData.MonsterMessageRecord placeholder = new(
             Id:               id,
             Name:             trimmed,
             HitYou:           Array.Empty<string>(),

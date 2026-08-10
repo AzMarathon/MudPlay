@@ -1,7 +1,7 @@
 using System.IO;
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory cache of the Monster Messages catalogue for the active game-data
 // set. Parallels MessageStore for monsters: one MonsterMessageRecord per

@@ -1,7 +1,7 @@
-using FujinTerm.Models.Profile;
-using FujinTerm.Models.Settings;
+using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Loads and resolves quest definitions. Two layers merge per (flag, step) in
 // priority order:

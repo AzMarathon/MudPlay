@@ -3,11 +3,11 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.GameData.Edit;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Edit;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Macros tab. Surfaces the loaded character's keybinds from MacroStore.
 // Editable — double-click a row opens the MacroEditDialogViewModel; save routes through

@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Modeless dialog VM for File → Quick Connect. Takes a free-form host (DNS
 // name or IP) plus a port, then raises ConnectRequested when the user clicks

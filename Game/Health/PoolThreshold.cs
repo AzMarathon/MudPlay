@@ -1,6 +1,6 @@
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Health;
+namespace MudPlay.Game.Health;
 
 // Shared HP / MA threshold math for the Health tab's dual-radial model: every
 // pool threshold (rest / run / hang triggers, heal + bless trigger floors) is

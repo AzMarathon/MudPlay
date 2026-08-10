@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Backstab damage range: lower and upper damage bounds.
 public readonly record struct BSDamageResult(int MinDamage, int MaxDamage)

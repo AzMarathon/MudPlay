@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Deterministic Auto-Lair target picker. Given a set of marked lairs
 // (with their respawn timers + last-arrival timestamps), the current

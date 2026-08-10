@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One saved navigation loop — the user's clicked-room cycle plus optional
 // per-waypoint commands. The Navigation right-rail "Loops" section lists

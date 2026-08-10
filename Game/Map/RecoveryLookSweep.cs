@@ -1,8 +1,8 @@
 using System.Text;
 using Avalonia.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Move-free "look sweep" for location recovery. Standing in a room whose
 // name+exits alone can't pin us on the map (name-ambiguous twins like the

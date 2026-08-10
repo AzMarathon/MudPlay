@@ -1,9 +1,9 @@
 using System.Text;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Passive observer for the in-game set suicide / suicide password flows.
 // Drives an EngineSendGate to pause every engine while the user is in a

@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "Talk" settings — engine-level policy for
 // Game.Remote.RemoteCommandManager. Stored as the "Talk" entry in

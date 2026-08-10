@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace FujinTerm.Controls;
+namespace MudPlay.Controls;
 
 // A per-category high-low bar chart — the stock-chart view where each x slot (here,
 // a loop step) shows a vertical bar spanning a value's min→max range on a FIXED

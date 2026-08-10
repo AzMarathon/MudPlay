@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // The two attack-targeting settings commands: @atkprio (Target Priority — the
 // "who") and @atkorder (Attack Order — the "when"). Both mirror the Combat tab's

@@ -1,8 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Input;
-using FujinTerm.ViewModels.Profile;
+using MudPlay.ViewModels.Profile;
 
-namespace FujinTerm.Views.Profile;
+namespace MudPlay.Views.Profile;
 
 public partial class ProfilePickerDialog : Window
 {

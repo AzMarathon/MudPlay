@@ -1,8 +1,8 @@
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Engages a monster that shares a dark room with us — one the normal room
 // display can't reveal. A room too dark to see in prints only "The room is very

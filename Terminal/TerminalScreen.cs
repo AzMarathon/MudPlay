@@ -1,4 +1,4 @@
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // The character grid that the emulator writes into and the renderer reads
 // from. Stores cells in a flat row-major array (length = cols × rows) plus the

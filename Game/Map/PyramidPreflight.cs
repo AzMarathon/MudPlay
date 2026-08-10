@@ -1,6 +1,6 @@
-using FujinTerm.Game.Calculators;
+using MudPlay.Game.Calculators;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Floor-1 timer feasibility gate for the Great Pyramid climb (see
 // GAME_MECHANICS.md). Floor 1 must finish ~126 moves + 6 actions within 5 min of

@@ -6,10 +6,10 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using FujinTerm.Controls;
-using FujinTerm.ViewModels;
+using MudPlay.Controls;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Modeless terminal-history window. Bound to BackscrollViewModel, which holds a
 // frozen snapshot captured when the window opened (the window never tracks the
@@ -33,7 +33,7 @@ public partial class BackscrollWindow : Window
         _scroll = this.FindControl<ScrollViewer>("OuterScroll")!;
         _view   = this.FindControl<BackscrollView>("Transcript")!;
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "backscroll");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "backscroll");
         Opened += OnOpened;
         Closed += OnClosed;
         // Ctrl+C copies the view's (row, col) selection. The view doesn't own a

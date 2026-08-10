@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.Navigation;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using MudPlay.ViewModels.Navigation;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Thin glue between the remote-command engine and the existing Navigation stack.
 // Registers the five MovePlayer commands and routes each to the in-place services

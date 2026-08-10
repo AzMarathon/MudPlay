@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Parses the body of the shop `list` readout into live stock rows. The captured
 // in-game format is a fixed-width three-column table:

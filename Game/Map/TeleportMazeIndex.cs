@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Text;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Per-active-set index of "teleport-maze" pockets — random-teleport areas
 // (the Warped Asylum is the canonical one) where the tracker can't tell which

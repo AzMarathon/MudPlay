@@ -1,8 +1,8 @@
-using FujinTerm.Game.Cash;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Cash;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Tracks the items lying on the current room's floor, parsed from the
 // "You notice <list> here." survey line. Cash entries are filtered out (coin is

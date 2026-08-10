@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Which code path produced a RoomEntitiesObservation. Carried so consumers (and
 // the LogPane) can tell a real room display apart from a synthetic re-fire.

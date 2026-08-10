@@ -2,11 +2,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.GameData.Edit;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Edit;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Rooms tab. Renders the imported MajorMUD Rooms table — fuel for the
 // RoomGraphManager (seeded from Rooms + the embedded N / S / E / W / NE / NW / SE / SW / U / D

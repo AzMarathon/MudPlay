@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Stateful parser that pulls player observations out of the who command's
 // "Current Adventurers" table and feeds them to
@@ -16,7 +16,7 @@ namespace FujinTerm.Game;
 //                  Current Adventurers
 //                  ===================
 //         Lawful  Debbie Schwartz       - Magebane  of Mudd Life Crisis
-//                 Fujin WuzHere         - Apprentice
+//                 MudPlay WuzHere         - Apprentice
 //           Good  Ivy Leaf              - High Druid  of what happen
 //           Good  Lenneth BoxOfRocksDumb- Heroine  of what happen
 //

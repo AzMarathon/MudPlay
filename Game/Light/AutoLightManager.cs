@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // Auto-light need poster. When the server prints a "can't see" room-light line
 // (The room is pitch black / The room is very dark - you can't see anything)

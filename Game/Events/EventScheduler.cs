@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using Avalonia.Threading;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Events;
+namespace MudPlay.Game.Events;
 
 // Connection-aware lifecycle + timers that decide when each ScheduledEvent
 // fires. EventManager owns storage + dispatch; this class owns the trigger

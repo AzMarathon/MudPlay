@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // One-shot bootstrap that seeds a freshly-imported game-data set with base
 // navigation loops + GOTO favourites from the realm-matched bundle shipped under

@@ -1,7 +1,7 @@
 using Avalonia.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Base auto-search engine — issues a room-wide `sea` to reveal concealed items,
 // which then surface on the "You notice ... here." survey line and are picked up

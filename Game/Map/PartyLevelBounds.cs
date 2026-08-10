@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One party member's level estimate for level-gate evaluation. Prefer the
 // Exact level (learned from an @level probe) when known; otherwise fall back to

@@ -1,8 +1,8 @@
-using FujinTerm.Game.Inventory;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Debug instrumentation that records the wall-clock duration between "movement
 // command sent" and "next room display Confirmed", tagged with the carry-weight

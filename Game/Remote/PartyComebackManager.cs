@@ -1,11 +1,11 @@
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
-using FujinTerm.Game.Combat;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Combat;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Leader-side reconnect recovery. Two entry paths converge on the same walk-to-
 // re-collect flow:

@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Game.Quests;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Quests;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Pure MajorMUD character-stat formulas (CP, HP, mana/kai regen). Most methods
 // take primitive inputs and return a result — no UI, no manager dependencies.

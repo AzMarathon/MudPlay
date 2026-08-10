@@ -1,6 +1,6 @@
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Which movement engine, if any, is currently driving the wire.
 public enum MovementKind

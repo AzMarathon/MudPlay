@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // In-memory model of the local character's spell book: the full set of spells
 // the current class can ever learn (Available, from KnownSpellCatalog) paired

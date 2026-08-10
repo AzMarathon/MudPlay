@@ -2,9 +2,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using FujinTerm.ViewModels.Settings;
+using MudPlay.ViewModels.Settings;
 
-namespace FujinTerm.Views.Settings;
+namespace MudPlay.Views.Settings;
 
 public partial class SettingsWindow : Window
 {
@@ -15,7 +15,7 @@ public partial class SettingsWindow : Window
         // call to actually take effect — otherwise it's a silent no-op
         // and the TextBox keeps its caret.
         Focusable = true;
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "settings");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "settings");
         // Re-subscribe whenever the view-model is swapped; first attach happens
         // after construction when the host assigns DataContext.
         DataContextChanged += (_, _) => HookCloseRequested();

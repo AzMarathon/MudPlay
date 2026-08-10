@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Per-set Auto-Lair setup catalogue. Round-trips LairSetups under the
 // shared GameDataSetLoopsFolder — same folder as loops, with the

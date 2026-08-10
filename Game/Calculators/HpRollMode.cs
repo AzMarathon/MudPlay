@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Which per-level HP roll to assume when estimating max HP. MajorMUD rolls a
 // random HP gain in [0, range] each level; the projection picks one of these to

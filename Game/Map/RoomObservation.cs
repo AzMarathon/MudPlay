@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One observed room display — the inputs RoomTracker needs to decide a state
 // transition. Name is the room title line; Exits is the parsed set of

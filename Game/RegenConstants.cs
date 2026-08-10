@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Seed values for HP / MA regen tick intervals. Used by RegenTracker as the
 // initial estimate until live observation refines the average. These are the

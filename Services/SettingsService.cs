@@ -1,6 +1,6 @@
-using FujinTerm.Models.Settings;
+using MudPlay.Models.Settings;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Owns Data/Global/global.json — the Global tier of the settings hierarchy.
 // Singleton owned by AppServices.

@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "Health" settings — drives Game.Health.HealthManager passive
 // HP / MA threshold behavior: rest, meditate, run, hang. Stored as the "Health"

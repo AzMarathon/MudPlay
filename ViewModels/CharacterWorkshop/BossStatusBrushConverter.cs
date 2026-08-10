@@ -3,7 +3,7 @@ using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Colours the Bosses tab's status column by its text: cleanup bosses read ALIVE
 // (green) / DEAD (red); a timed boss's live countdown stays amber. Single static

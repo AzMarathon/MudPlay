@@ -4,12 +4,12 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Game.Quests;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Game.Quests;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Modeless editor for the active set's quest overlay ({set}/quests.json): per
 // quest the user sets a display name, show/hide visibility, and amplifying step

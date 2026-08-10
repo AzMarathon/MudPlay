@@ -1,8 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Sniffs outbound user commands going to the wire and notifies RoomTracker
 // when one of them affects movement semantics. Specifically:

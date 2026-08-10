@@ -3,10 +3,10 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Profile;
+namespace MudPlay.ViewModels.Profile;
 
 // Picker over the saved character profiles on disk, each a ProfileRef (bbs, char) pair
 // — profiles are BBS-scoped now, so the bare character name is no longer a unique key.
@@ -21,7 +21,7 @@ public sealed partial class ProfilePickerDialogViewModel : ObservableObject, IDi
     public ObservableCollection<ProfileRef> Profiles { get; } = new();
 
     // Window title — the caller's base wording plus the absolute folder the list is read
-    // from (AppPaths.BbsDir), e.g. "Open profile - C:\Users\…\FujinTerm\Data\BBS", so
+    // from (AppPaths.BbsDir), e.g. "Open profile - C:\Users\…\MudPlay\Data\BBS", so
     // it's obvious at a glance which data directory the app is actually using.
     public string WindowTitle { get; }
 

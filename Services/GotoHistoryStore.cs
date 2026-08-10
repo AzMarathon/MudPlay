@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-character recent walk-to destinations for the Navigation goto button. Mirrors
 // FavoritesStore's ProfileLoaded / ProfileClosed wiring: hydrates from

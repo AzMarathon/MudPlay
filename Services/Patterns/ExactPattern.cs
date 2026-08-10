@@ -1,6 +1,6 @@
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Services.Patterns;
+namespace MudPlay.Services.Patterns;
 
 // Matches when the line's text equals a fixed string. Useful for well-known
 // one-shot lines (e.g. "Welcome to MajorMUD!") where neither prefix nor regex is

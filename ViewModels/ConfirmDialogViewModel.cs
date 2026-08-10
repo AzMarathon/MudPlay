@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Generic "Are you sure?" dialog VM, used by every confirm-prompt path
 // surfaced through ConfirmService. The caller supplies the dialog title and

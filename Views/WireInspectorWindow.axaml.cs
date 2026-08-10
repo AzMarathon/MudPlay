@@ -3,9 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
-using FujinTerm.ViewModels;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Two-pane modeless debug window: Raw (with non-printables shown) on the
 // left, Stripped (CSI sequences removed) on the right. Bound to
@@ -22,7 +22,7 @@ public partial class WireInspectorWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "wireinspector");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "wireinspector");
         Opened += OnOpened;
         Closed += OnClosed;
     }

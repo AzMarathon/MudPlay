@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Demand-driven party-wealth gate for path planning. Unlike the level tracker —
 // which keeps every member's level warm on every roster change because level is

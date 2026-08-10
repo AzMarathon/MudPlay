@@ -1,0 +1,351 @@
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using Xunit;
+
+namespace MudPlay.Tests;
+
+/// <summary>
+/// Coverage for <see cref="OutboundMovementObserver"/> + the tracker's
+/// look-suppression machinery. Verifies <c>look &lt;dir&gt;</c> peeks
+/// don't desync the tracker and text-exit verbs are announced as moves.
+/// </summary>
+public sealed class OutboundMovementObserverTests : IDisposable
+{
+    private readonly string _root;
+
+    public OutboundMovementObserverTests()
+    {
+        _root = Path.Combine(Path.GetTempPath(), "mudplay-outbound-tests-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(_root);
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); }
+        catch { /* best-effort */ }
+    }
+
+    private const string GraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Town Gates",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "North Square",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private (RoomTracker Tracker, OutboundMovementObserver Observer) NewObserver()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        RoomTracker tracker = new(graph);
+        OutboundMovementObserver observer = new(tracker);
+        return (tracker, observer);
+    }
+
+    private static byte[] Cmd(string text) => Encoding.Latin1.GetBytes(text + "\r");
+
+    private static RoomObservation Obs(string name, params Direction[] dirs)
+        => new(name, new HashSet<Direction>(dirs));
+
+    // ----- look-direction suppression --------------------------------
+
+    [Theory]
+    [InlineData("look n")]
+    [InlineData("l e")]
+    [InlineData("lo w")]   // "lo" abbreviation — the reported miss that walked the tracker onto the peeked room
+    [InlineData("loo n")]
+    [InlineData("look north")]
+    [InlineData("peek north")]
+    [InlineData("peer south")]
+    public void LookCommand_ArmsSuppression_DropsNextObservation(string command)
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(Cmd(command));
+
+        // Server replies with a peek of the neighbouring room — the
+        // tracker MUST treat this as a peek and stay at 1/1, not move
+        // to 1/2.
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Theory]
+    [InlineData("lock door")]  // "lo" is only a prefix — the token is "lock", not a peek verb
+    [InlineData("lower rope")]
+    public void LoPrefixedNonLookVerb_DoesNotArmSuppression(string command)
+    {
+        // The look regex anchors each alternative to a whole token via the
+        // trailing \s+, so a verb that merely starts with the letters "lo" must
+        // NOT be read as a peek — otherwise it would wrongly swallow the next
+        // real room render.
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(Cmd(command));
+
+        // A genuine move + its render must process normally (not be dropped).
+        tracker.NoteMoveSent(Direction.N);
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S));
+        Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Theory]
+    [InlineData("look Tristian")]  // the party-member race probe that raced the walker's step (paradigm-20260716-005420)
+    [InlineData("l Tristian")]
+    [InlineData("look sign")]
+    [InlineData("look at altar")]
+    [InlineData("peek chest")]
+    public void LookAtNonDirection_DoesNotArmSuppression_MoveConfirmationSurvives(string command)
+    {
+        // A look at a player / item / feature renders a description, never an
+        // adjacent-room display, so it must NOT arm peek-suppression. If it did,
+        // a real move's confirming room render landing inside the 3-s window
+        // would be swallowed and the walk would stall until a manual re-display
+        // — the party-splitting-teleport stall from bug report
+        // paradigm-20260716-005420 (TrapDelegationManager's "look <member>" race
+        // probe on a re-join raced the walker's next step).
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(Cmd(command));
+
+        // The walker's next step and its room render must confirm normally.
+        tracker.NoteMoveSent(Direction.N);
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S));
+        Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void LookCommand_SuppressesOnlyOneObservation()
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(Cmd("look n"));
+
+        // First observation = the peek, dropped.
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S));
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+
+        // Subsequent observation must process normally.
+        tracker.NoteMoveSent(Direction.N);
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S));
+        Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    // ----- text-exit movement ----------------------------------------
+
+    [Theory]
+    [InlineData("go path")]
+    [InlineData("enter portal")]
+    [InlineData("climb tree")]
+    [InlineData("swim river")]
+    [InlineData("cross bridge")]
+    public void TextExitMovement_AnnouncesMoveToTracker(string command)
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(Cmd(command));
+
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+    }
+
+    [Fact]
+    public void TextExitMovement_StepPersistsToProfile()
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        var profile = new MudPlay.Models.Profile.CharacterProfile
+        {
+            LastKnownRoom = new MudPlay.Models.Profile.RoomRef(1, 1),
+        };
+        tracker.Hydrate(profile);
+
+        observer.ObserveOutbound(Cmd("go path"));
+
+        Assert.NotNull(profile.RecentSteps);
+        Assert.Single(profile.RecentSteps!);
+        Assert.Equal("go path", profile.RecentSteps![0].Command);
+        Assert.Null(profile.RecentSteps![0].Cardinal);
+    }
+
+    // ----- cardinal announcement (added so manual movement updates) -
+
+    [Theory]
+    [InlineData("n",  Direction.N)]
+    [InlineData("north", Direction.N)]
+    [InlineData("ne", Direction.NE)]
+    [InlineData("southwest", Direction.SW)]
+    [InlineData("u",  Direction.U)]
+    [InlineData("d",  Direction.D)]
+    public void CardinalCommand_AnnouncesMoveToTracker(string command, Direction expected)
+    {
+        // Manual cardinal typing must reach the tracker — without it,
+        // the tracker can't predict the landing when the player walks
+        // through a chain of same-named rooms (e.g. Stone Street
+        // corridors). Walker/loop-runner duplicate calls are debounced
+        // by the tracker on the matching-direction-within-100ms rule.
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(Cmd(command));
+
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+        _ = expected;
+    }
+
+    [Theory]
+    [InlineData("rest")]
+    [InlineData("inv")]
+    [InlineData("who")]
+    [InlineData("stat")]
+    public void NonMovementCommand_LeavesTrackerConfirmed(string command)
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(Cmd(command));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+    }
+
+    [Theory]
+    [InlineData("leave party")]
+    [InlineData("LEAVE PARTY")]
+    [InlineData("leave  party")]
+    public void LeaveParty_IsNotAMove_TrackerStaysConfirmed(string command)
+    {
+        // "leave" is a text-exit verb, so "leave party" would otherwise match
+        // TextMovementPattern and enqueue a phantom, cardinal-less pending move.
+        // In a dark room that phantom has no mapped exit and jams the pending
+        // queue, stalling the walk after one step (bug paradigm-20260722-111523,
+        // typed manually mid-loop trying to leave a party). "leave party" isn't a
+        // valid game command and never a move — the tracker must stay put.
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(Cmd(command));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void Cardinal_RapidDuplicate_DebouncedByTracker()
+    {
+        // Walker calls NoteMoveSent directly before the bytes flush
+        // through SendUserInput, then OutboundMovementObserver fires
+        // the same direction back. The tracker drops the duplicate
+        // so the pending queue doesn't double-up.
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        tracker.NoteMoveSent(Direction.N);
+        observer.ObserveOutbound(Cmd("n"));
+
+        // Land on the predicted neighbour — proves the queue has one
+        // entry (not two).
+        tracker.NoteRoomObserved(new RoomObservation("North Square",
+            new HashSet<Direction> { Direction.S }));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void TextExit_RapidDuplicate_DebouncedByTracker()
+    {
+        // Real text-exit flow: SpecialExitDispatch (walker / loop-runner)
+        // announces the text exit WITH its resolved cardinal, then pumps the
+        // bytes — which flow back here through SendUserInput. Without the
+        // debounce the observer's cardinal-less echo double-enqueues the step,
+        // leaving a phantom pending move that holds the tracker in Pending after
+        // the walker has already landed (the reported movement stall). Proves the
+        // queue has one entry: the predicted-neighbour match lands Confirmed, not
+        // "move confirmed, queue not empty" Pending.
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        tracker.NoteMoveSent("go path", cardinal: Direction.N);
+        observer.ObserveOutbound(Cmd("go path"));
+
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    // ----- realm-entry suppression -----------------------------------
+
+    [Fact]
+    public void SuppressNextMove_DropsEntryKeystroke_TrackerStaysConfirmed()
+    {
+        // Realm-entry keystroke "E" collides with cardinal East. On login the
+        // tracker is freshly hydrated to the confirmed login room; without
+        // suppression the observer would read "E" as an East move and walk the
+        // tracker off it (Confirmed → Pending → Suspect ×3 → Lost).
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.SuppressNextMove();
+        observer.ObserveOutbound(Cmd("e"));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void SuppressNextMove_ConsumesOnlyOneCommand()
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.SuppressNextMove();
+        observer.ObserveOutbound(Cmd("e"));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+
+        // Suppression spent — a genuine cardinal now reaches the tracker.
+        observer.ObserveOutbound(Cmd("n"));
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+    }
+
+    // ----- safety guards ---------------------------------------------
+
+    [Fact]
+    public void OversizedPayload_IsIgnored()
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        // 100-byte payload — past the safety cap, nothing should fire.
+        observer.ObserveOutbound(Encoding.Latin1.GetBytes(new string('a', 100)));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+    }
+
+    [Fact]
+    public void EmptyPayload_IsIgnored()
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        observer.ObserveOutbound(ReadOnlySpan<byte>.Empty);
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+    }
+}

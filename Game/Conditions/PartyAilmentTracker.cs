@@ -1,10 +1,10 @@
-using FujinTerm.Game.Remote;
-using FujinTerm.Game.Spells;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Game.Remote;
+using MudPlay.Game.Spells;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Conditions;
+namespace MudPlay.Game.Conditions;
 
 // Inbound counterpart to AilmentSyncEngine. Mirrors a party member's
 // curable-ailment state onto their PartyMember chip so the PartyWindow shows it

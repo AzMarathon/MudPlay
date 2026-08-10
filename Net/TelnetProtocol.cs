@@ -1,4 +1,4 @@
-namespace FujinTerm.Net;
+namespace MudPlay.Net;
 
 // Constants and helpers for the Telnet wire protocol (RFC 854 + friends).
 //

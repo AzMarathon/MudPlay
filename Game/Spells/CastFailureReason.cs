@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Why a cast was rejected by the server (or the local CastCoordinator's gate).
 // Surfaces on the CastCoordinator.CastFailed event so downstream engines

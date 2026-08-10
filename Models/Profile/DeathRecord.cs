@@ -1,8 +1,8 @@
 using System.Linq;
 using System.Text.Json.Serialization;
-using FujinTerm.Game.Inventory;
+using MudPlay.Game.Inventory;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // One record of a character's death — captured by the death-message detector
 // when the post-suicide / killed-in-combat "You now have N lives remaining."

@@ -1,9 +1,9 @@
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.Combat;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Combat;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Read-only handler for the two QueryExperience commands:
 //   - @exp — session experience earned, the exp-per-hour rate, and an estimated

@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // BBS-scoped identifier for a character profile. Profiles live under
 // Data/BBS/{Bbs}/profiles/{Name}/profile.json, so the same character name on

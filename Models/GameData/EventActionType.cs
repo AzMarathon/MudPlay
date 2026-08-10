@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // What a ScheduledEvent does when its trigger fires. One action per event.
 //   WalkTo — start a walk to ScheduledEvent.WalkToTarget via

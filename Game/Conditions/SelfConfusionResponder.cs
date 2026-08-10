@@ -1,10 +1,10 @@
 using System.ComponentModel;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Conditions;
+namespace MudPlay.Game.Conditions;
 
 // Handles the LOCAL side of our own confusion — the piece AilmentSyncEngine
 // can't cover for a party leader (or a solo player).

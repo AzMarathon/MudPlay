@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Central pause-gate aggregator for the movement stack. AutoWalkManager
 // (walk-to), the loop manager, and the auto-lair scheduler all share this

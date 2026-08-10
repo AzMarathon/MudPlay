@@ -6,9 +6,9 @@ using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // Per-record edit dialog for Game Data Browser → Triggers. Editable fields cover the full Trigger
 // record: Name / Enabled / Scope / MatchType / Pattern / Response, plus an optional Sound sidecar.

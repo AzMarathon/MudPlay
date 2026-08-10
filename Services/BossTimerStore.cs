@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Game;
-using FujinTerm.Game.Combat;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
+using MudPlay.Game;
+using MudPlay.Game.Combat;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Persisted per-set boss kill-times. On a confirmed boss kill (a specific
 // MonsterDied identity that matches a tracked boss AND lands in one of that boss's

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Auto-sell engine. When a shop `list` readout appears — the signal that the
 // player is standing at a merchant — sells each carried item the user flagged

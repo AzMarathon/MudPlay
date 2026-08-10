@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map.MpFile;
+namespace MudPlay.Game.Map.MpFile;
 
 // Reproduces the MegaMUD rooms.md hash + exits encoding used by every .mp
 // path/loop file. Each step row in a .mp file starts with an 8-char hashExits

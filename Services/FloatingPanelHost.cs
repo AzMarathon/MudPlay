@@ -1,8 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-house docking/floating panel framework. Each registered panel owns one
 // UserControl instance that the host reparents between a dock container in the

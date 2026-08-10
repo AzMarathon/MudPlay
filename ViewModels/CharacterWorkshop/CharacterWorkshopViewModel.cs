@@ -1,12 +1,12 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Game.Recovery;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Recovery;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Shell view-model for the Character Workshop window: a flat tab strip of
 // sections — Character Info / Death Recovery / Level Projection / CP Allocation /

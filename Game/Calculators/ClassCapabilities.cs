@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Class / race capability lookups resolved from MajorMUD game data: which
 // classes can learn Smash, and whether a class or race grants innate stealth.

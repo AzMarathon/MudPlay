@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Terminal outcome of a DoorOpenManager request. Opened means the walker
 // can now safely send the cardinal move command; Failed carries a

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // One per-character record of a player encountered in the world, maintained by
 // Game.PlayerSightingTracker and surfaced by the Session Stats → Players Seen

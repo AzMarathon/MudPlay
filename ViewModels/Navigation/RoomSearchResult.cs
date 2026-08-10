@@ -1,6 +1,6 @@
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // One entry in the Navigation right-rail search results list. Carries just
 // enough to render a row (primary + secondary line + optional step distance)

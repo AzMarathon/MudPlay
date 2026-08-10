@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "Cash" settings — drives Game.Cash.CashManager's per-currency
 // pickup / discard behaviour and auto-deposit trigger. Stored as the "Cash"

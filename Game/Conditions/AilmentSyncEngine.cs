@@ -1,10 +1,10 @@
 using System.ComponentModel;
 using System.Text;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Conditions;
+namespace MudPlay.Game.Conditions;
 
 // Outbound ailment-sync: when the local character catches a curable ailment
 // (poison / blindness / confusion / disease) or is held (movement-prevented),
@@ -225,7 +225,7 @@ public sealed class AilmentSyncEngine : IDisposable
     {
         if (_wireSender is null) return;
         // MajorMUD say channel — a line prefixed with '.' is spoken to
-        // the room. ".@poisoned" lets other FujinTerm clients mirror us.
+        // the room. ".@poisoned" lets other MudPlay clients mirror us.
         byte[] bytes = Encoding.Latin1.GetBytes("." + token + "\r");
         _wireSender(bytes);
         _log?.Info(LogCategory, $"announced '{token}' on say");

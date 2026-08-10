@@ -1,7 +1,7 @@
 using Avalonia;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm;
+namespace MudPlay;
 
 // Entry point. Boots the Avalonia application and hands off to App.
 internal static class Program

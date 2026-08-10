@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // Full editor for a saved favourite — name, map, and room. Unlike the rail's
 // rename-only dialog this can re-point a favourite at a different room (fix a

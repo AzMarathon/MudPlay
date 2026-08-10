@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One candidate spawn site for a monster-dropped item: a room the
 // dropping monster spawns in, tagged with the monster and its drop chance

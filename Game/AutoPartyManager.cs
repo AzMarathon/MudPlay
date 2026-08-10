@@ -1,9 +1,9 @@
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Engine that consumes the per-player PlayerCustomization auto-party flags. Two
 // behaviours, both gated on the loaded character's PlayerDatabase
@@ -410,7 +410,7 @@ public sealed class AutoPartyManager : IDisposable
     }
 
     // A telepath body wholly wrapped in braces is an automated remote-command
-    // reply from another FujinTerm client (@health, @status, {Ok}, …), never a
+    // reply from another MudPlay client (@health, @status, {Ok}, …), never a
     // person typing a decline.
     private static bool IsBracedPayload(string body) =>
         body.Length >= 2 && body[0] == '{' && body[^1] == '}';

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using FujinTerm.Game.Calculators;
+using MudPlay.Game.Calculators;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // The ordered "stats from your worn items" readout, shared by the Equipment
 // Manager (its Equipment Bonuses box) and the Item Finder's trial gearset panel so

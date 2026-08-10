@@ -1,10 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:FujinTerm.ViewModels.Settings"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="420"
-             x:Class="FujinTerm.Views.Settings.BbsSectionView"
+             x:Class="MudPlay.Views.Settings.BbsSectionView"
              x:DataType="vm:BbsSectionViewModel">
 
     <UserControl.Styles>
@@ -413,7 +413,7 @@
                                    FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/>
                         <CheckBox Content="Confirm exit"
                                   IsChecked="{Binding ConfirmExit, Mode=TwoWay}"
-                                  ToolTip.Tip="Prompt 'Are you sure?' when closing FujinTerm (window X / File → Quit / hotkey)."/>
+                                  ToolTip.Tip="Prompt 'Are you sure?' when closing MudPlay (window X / File → Quit / hotkey)."/>
                         <CheckBox Content="Confirm hangup"
                                   IsChecked="{Binding ConfirmHangup, Mode=TwoWay}"
                                   ToolTip.Tip="Prompt before user-initiated disconnects (toolbar / hotkey / menu). App-initiated disconnects (carrier-lost, @hangup, health drops) bypass the prompt."/>

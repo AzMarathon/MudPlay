@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Visibility / docking state for a single floating panel. Persisted as part of
 // CharacterProfile.PanelLayouts.

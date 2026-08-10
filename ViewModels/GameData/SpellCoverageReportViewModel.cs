@@ -8,11 +8,11 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.GameData.Edit;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Edit;
 
-namespace FujinTerm.ViewModels.GameData;
+namespace MudPlay.ViewModels.GameData;
 
 // Modeless detail surface for the SpellCoverageAuditor — opened from a LogPane
 // double-click on the auditor's summary entry. Shows the active set's full list of

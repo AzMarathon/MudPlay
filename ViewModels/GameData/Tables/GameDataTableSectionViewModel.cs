@@ -5,10 +5,10 @@ using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Services;
-using FujinTerm.Views.GameData.Tables;
+using MudPlay.Services;
+using MudPlay.Views.GameData.Tables;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Shared, source-agnostic base for every per-table tab in the Game Data Browser. Owns the
 // column list, the all-rows / filtered-rows observable pair, the selected-row slot, the

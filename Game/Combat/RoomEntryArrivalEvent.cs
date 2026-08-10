@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Payload of RoomEntryWatcher.ArrivalObserved. The classifier appends a
 // RoomEntity to its observation list and re-fires

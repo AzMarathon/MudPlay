@@ -1,11 +1,11 @@
 using Avalonia.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Keybind;
+namespace MudPlay.ViewModels.Keybind;
 
 // Per-action rebind dialog for built-in app actions (BuiltInAction). Capture-UX
 // mirror of GameData.Edit.MacroEditDialogViewModel — same click-Capture → press

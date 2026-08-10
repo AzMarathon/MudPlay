@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace FujinTerm.Views.CharacterWorkshop;
+namespace MudPlay.Views.CharacterWorkshop;
 
 public partial class QuestEditorWindow : Window
 {

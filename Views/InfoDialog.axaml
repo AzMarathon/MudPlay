@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="FujinTerm.Views.InfoDialog"
-        Title="FujinTerm"
+        x:Class="MudPlay.Views.InfoDialog"
+        Title="MudPlay"
         Width="640" Height="480"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">

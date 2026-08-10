@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Auto-buy engine. When a shop `list` readout appears, buys each stocked item
 // the user flagged ItemOverlay.AutoBuy up to its MaxToGet cap, honouring the

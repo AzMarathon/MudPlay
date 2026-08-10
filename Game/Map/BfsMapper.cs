@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // BFS over the active room graph. Two roles:
 //   Pathfinding: shortest-path step list between two rooms — consumed by

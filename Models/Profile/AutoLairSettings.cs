@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "Auto-Lair" settings — the scheduler's tuning surface.
 // Stored as the "AutoLair" entry in CharacterProfile.Settings.

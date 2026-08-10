@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Moves the entire AppPaths.DataRoot tree to a user-chosen destination, then
 // restarts the app at the new location. Used by the Settings → General "Change
@@ -75,7 +75,7 @@ public static class DataRootRelocator
         try
         {
             Directory.CreateDirectory(dst);
-            string probe = Path.Combine(dst, ".fujinterm-write-probe");
+            string probe = Path.Combine(dst, ".mudplay-write-probe");
             File.WriteAllText(probe, "ok");
             File.Delete(probe);
         }

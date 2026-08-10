@@ -1,6 +1,6 @@
 using Avalonia.Input;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // One key combination — primary Key + three modifier flags. Serializes as JSON;
 // matches the chord shape GameData.Macro stores so macros and built-in actions

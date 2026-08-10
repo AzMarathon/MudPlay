@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // State machine that drives the walker's bash → pick → open flow for a
 // single door. Mirrors TrapDisarmManager's shape: one request in flight

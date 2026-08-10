@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace FujinTerm.Game.Cash;
+namespace MudPlay.Game.Cash;
 
 // Formats a copper-farthing amount as MajorMUD coin denominations. The Session
 // Stats window uses it so the currency total and per-hour rate read as coins

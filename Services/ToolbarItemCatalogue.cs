@@ -1,6 +1,6 @@
 using System.Collections.Frozen;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Central registry of every action that can appear on the main window toolbar.
 // Maps each stable ActionId string (e.g. "ToggleConnection") to its display

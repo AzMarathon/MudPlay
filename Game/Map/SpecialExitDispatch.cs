@@ -1,7 +1,7 @@
 using System;
 using System.Text;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Outcome of SpecialExitDispatch.TrySendSynchronous.
 internal enum SpecialExitSend

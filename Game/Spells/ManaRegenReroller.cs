@@ -1,6 +1,6 @@
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Threshold + cap governing a mana-regen roll-spell reroll cycle, read live
 // from SpellsSettings on every decision so a mid-cycle settings edit takes

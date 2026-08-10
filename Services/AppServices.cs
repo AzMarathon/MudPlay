@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Lightweight singleton service holder. POCO — no DI container.
 // Every cross-cutting service the app owns is exposed as an instance property
@@ -997,7 +997,7 @@ public sealed class AppServices
     public Game.Conditions.MessageResponder MessageResponder { get; private set; } = null!;
 
     // Outbound ailment-sync engine — on a local curable ailment it
-    // announces on say (.@poisoned etc.) so other FujinTerm
+    // announces on say (.@poisoned etc.) so other MudPlay
     // clients mirror our state, and @waits the leader; on clear it @oks.
     public Game.Conditions.AilmentSyncEngine AilmentSync { get; private set; } = null!;
 
@@ -2113,7 +2113,7 @@ public sealed class AppServices
         // parser can tag the right row IsSelf=true (par's "Given Family"
         // name is compared against this). The profile name is a label the
         // user picks and often differs from the in-game character name
-        // (e.g. profile "FujinPVP" vs character "Fujin"), which mis-tagged
+        // (e.g. profile "MudPlayPVP" vs character "MudPlay"), which mis-tagged
         // the self row and spawned a phantom party entry. So prefer the
         // parsed character name (StatParser owns PlayerStats.Name) whenever
         // it's known, falling back to the profile name until the first
@@ -2986,7 +2986,7 @@ public sealed class AppServices
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a
         // curable ailment (or being held) it announces ".@poisoned" /
-        // ".@held" etc. on say (so other FujinTerm clients mirror our state
+        // ".@held" etc. on say (so other MudPlay clients mirror our state
         // and a cure-holds caster can free us) and, for the curable four,
         // @waits the leader; on clear it @oks. The say only fires when we're
         // in a party AND have no cure spell configured for that ailment (we

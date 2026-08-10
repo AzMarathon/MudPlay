@@ -1,11 +1,11 @@
 using System.ComponentModel;
-using FujinTerm.Game.Health;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Game.Health;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Unified spell-decision engine. Subscribes to PlayerState +
 // TickEngine.CombatTickElapsed, reads the ConditionTracker's active flags, and

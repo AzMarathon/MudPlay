@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character toolbar layout. An ordered list of items — top-to-bottom in
 // Settings ≡ left-to-right on the live toolbar. Each item is either a button

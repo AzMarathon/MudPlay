@@ -1,7 +1,7 @@
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // The @kill <target> command — a party member asks us to engage a named monster
 // on their behalf. It simply retargets our combat engine: the named monster

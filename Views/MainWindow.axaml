@@ -1,15 +1,15 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:FujinTerm.ViewModels"
-        xmlns:ctl="using:FujinTerm.Controls"
-        xmlns:svc="using:FujinTerm.Services"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:ctl="using:MudPlay.Controls"
+        xmlns:svc="using:MudPlay.Services"
         xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="520"
-        x:Class="FujinTerm.Views.MainWindow"
+        x:Class="MudPlay.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="{Binding WindowTitle, FallbackValue=FujinTerm}"
+        Title="{Binding WindowTitle, FallbackValue=MudPlay}"
         Width="660" Height="520">
 
     <Design.DataContext>
@@ -101,7 +101,7 @@
                 <MenuItem Header="Auto-load last profile on startup"
                           ToggleType="CheckBox"
                           IsChecked="{Binding AutoLoadLastProfile, Mode=TwoWay}"
-                          ToolTip.Tip="When checked, FujinTerm reopens the profile you loaded last time on launch instead of a blank draft (falls back to blank if that profile was deleted). Applies app-wide."/>
+                          ToolTip.Tip="When checked, MudPlay reopens the profile you loaded last time on launch instead of a blank draft (falls back to blank if that profile was deleted). Applies app-wide."/>
                 <Separator IsVisible="{Binding HasRecents}"/>
                 <!-- Recent profiles. Header shows "<profile> - <BBS>"
                      when the profile has a pinned BBS, else just the

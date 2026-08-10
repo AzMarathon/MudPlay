@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // Per-character / per-BBS / global override layered on top of an MDB item
 // row. Persisted under the chosen tier via
@@ -67,7 +67,7 @@ public sealed record ItemOverlay
     // Loyal item — never drop / discard / lose to PvP.
     public bool? LoyalItem { get; init; }
 
-    // ----- Navigation path provisioning (FujinTerm, not from MegaMUD's dialog) -----
+    // ----- Navigation path provisioning (MudPlay, not from MegaMUD's dialog) -----
 
     // Single opt-in for on-demand path provisioning. When a planned route needs
     // this item to cross a gate or survive a room-entry hazard and the player

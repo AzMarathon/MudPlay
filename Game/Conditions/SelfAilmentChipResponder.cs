@@ -1,9 +1,9 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Conditions;
+namespace MudPlay.Game.Conditions;
 
 // Mirrors our OWN curable, non-movement ailments (poison / blindness / disease)
 // onto the self row's party-window chip. The say-driven chip mirror

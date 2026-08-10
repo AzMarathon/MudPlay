@@ -4,9 +4,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Controls;
+namespace MudPlay.Controls;
 
 // BFS-planar room map rendering for the Navigation window.
 //
@@ -174,16 +174,16 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<RoomKey?> DestinationRoomKeyProperty =
         AvaloniaProperty.Register<MapControl, RoomKey?>(nameof(DestinationRoomKey));
 
-    public static readonly StyledProperty<FujinTerm.Models.Profile.KeyChord> UpStepChordProperty =
-        AvaloniaProperty.Register<MapControl, FujinTerm.Models.Profile.KeyChord>(nameof(UpStepChord),
-            new FujinTerm.Models.Profile.KeyChord(Key.PageUp));
+    public static readonly StyledProperty<MudPlay.Models.Profile.KeyChord> UpStepChordProperty =
+        AvaloniaProperty.Register<MapControl, MudPlay.Models.Profile.KeyChord>(nameof(UpStepChord),
+            new MudPlay.Models.Profile.KeyChord(Key.PageUp));
 
-    public static readonly StyledProperty<FujinTerm.Models.Profile.KeyChord> DownStepChordProperty =
-        AvaloniaProperty.Register<MapControl, FujinTerm.Models.Profile.KeyChord>(nameof(DownStepChord),
-            new FujinTerm.Models.Profile.KeyChord(Key.PageDown));
+    public static readonly StyledProperty<MudPlay.Models.Profile.KeyChord> DownStepChordProperty =
+        AvaloniaProperty.Register<MapControl, MudPlay.Models.Profile.KeyChord>(nameof(DownStepChord),
+            new MudPlay.Models.Profile.KeyChord(Key.PageDown));
 
-    public static readonly StyledProperty<IReadOnlyDictionary<Direction, FujinTerm.Models.Profile.KeyChord>?> CompassChordsProperty =
-        AvaloniaProperty.Register<MapControl, IReadOnlyDictionary<Direction, FujinTerm.Models.Profile.KeyChord>?>(nameof(CompassChords));
+    public static readonly StyledProperty<IReadOnlyDictionary<Direction, MudPlay.Models.Profile.KeyChord>?> CompassChordsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlyDictionary<Direction, MudPlay.Models.Profile.KeyChord>?>(nameof(CompassChords));
 
     public RoomLayout? Layout
     {
@@ -372,13 +372,13 @@ public sealed class MapControl : Control
     // macro configured to send u to the game so the same chord drives both
     // in-game movement and the map crawler. Defaults to PageUp when the macro
     // isn't bound.
-    public FujinTerm.Models.Profile.KeyChord UpStepChord
+    public MudPlay.Models.Profile.KeyChord UpStepChord
     {
         get => GetValue(UpStepChordProperty);
         set => SetValue(UpStepChordProperty, value);
     }
 
-    public FujinTerm.Models.Profile.KeyChord DownStepChord
+    public MudPlay.Models.Profile.KeyChord DownStepChord
     {
         get => GetValue(DownStepChordProperty);
         set => SetValue(DownStepChordProperty, value);
@@ -390,7 +390,7 @@ public sealed class MapControl : Control
     // direction in-game also drives the map. Directions absent here fall
     // through to the hardcoded numpad / arrow defaults in OnKeyDown, so the
     // crawler is never left with no binding.
-    public IReadOnlyDictionary<Direction, FujinTerm.Models.Profile.KeyChord>? CompassChords
+    public IReadOnlyDictionary<Direction, MudPlay.Models.Profile.KeyChord>? CompassChords
     {
         get => GetValue(CompassChordsProperty);
         set => SetValue(CompassChordsProperty, value);
@@ -997,7 +997,7 @@ public sealed class MapControl : Control
         // always-available fallback (and covers directions with no macro).
         if (CompassChords is { } chords)
         {
-            foreach ((Direction cd, FujinTerm.Models.Profile.KeyChord chord) in chords)
+            foreach ((Direction cd, MudPlay.Models.Profile.KeyChord chord) in chords)
             {
                 if (!ChordMatches(e, chord)) continue;
                 TryStepSelection(cd);
@@ -1025,7 +1025,7 @@ public sealed class MapControl : Control
         }
     }
 
-    private static bool ChordMatches(Avalonia.Input.KeyEventArgs e, FujinTerm.Models.Profile.KeyChord chord)
+    private static bool ChordMatches(Avalonia.Input.KeyEventArgs e, MudPlay.Models.Profile.KeyChord chord)
     {
         if (chord.IsEmpty || chord.Key != e.Key) return false;
         bool ctrl  = (e.KeyModifiers & KeyModifiers.Control) != 0;

@@ -1,9 +1,9 @@
 using System;
 using System.Text.Json;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Services;
+using MudPlay.Game.Calculators;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Decides whether a character can equip an Items row given their level, class,
 // and alignment — the gate behind the Equipment Manager's per-slot item search

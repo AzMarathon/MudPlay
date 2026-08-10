@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Live party-membership state. Members mirrors the in-game par table (one
 // row per actively-following character including the local player);

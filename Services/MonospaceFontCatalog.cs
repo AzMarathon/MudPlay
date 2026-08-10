@@ -1,6 +1,6 @@
 using Avalonia.Media;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Enumerates the OS-installed font families and keeps only the fixed-pitch ones
 // so the terminal font picker can offer system fonts alongside the two bundled

@@ -1,8 +1,8 @@
 using System.IO;
 using System.Text.Json;
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory cache of the active game-data set's ItemOverlay seed — the
 // Defaults-tier baseline for per-item automation behaviour (the 9 Options

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.Spells;
+using MudPlay.Game.Spells;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Modeless Spell Book window VM. Renders the active class's full learnable
 // list (SpellbookState.Available) with an obtained checkmark and

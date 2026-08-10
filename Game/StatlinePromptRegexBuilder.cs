@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Turns a statline command string (the Settings → Statline editor value)
 // into the regex WirePromptScanner matches the live prompt against. The

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // A class-usable item that casts a spell on command when used — an Items row
 // carrying a bare CastsSp ability (MajorMUD ability code 43, AbilVal = the cast

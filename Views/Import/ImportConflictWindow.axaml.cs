@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace FujinTerm.Views.Import;
+namespace MudPlay.Views.Import;
 
 public partial class ImportConflictWindow : Window
 {

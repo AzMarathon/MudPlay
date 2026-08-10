@@ -6,11 +6,11 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Reactive;
 using Avalonia.Threading;
-using FujinTerm.Models.Settings;
-using FujinTerm.Services;
-using FujinTerm.ViewModels;
+using MudPlay.Models.Settings;
+using MudPlay.Services;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Wires the terminal control's user-input event to the view-model and
 // re-focuses the terminal whenever a connection is established (so the user
@@ -214,7 +214,7 @@ public partial class MainWindow : Window
         HelpMenu.Items.Add(new Separator());
         HelpMenu.Items.Add(new MenuItem
         {
-            Header  = "About FujinTerm",
+            Header  = "About MudPlay",
             Command = vm.OpenAboutCommand,
         });
     }

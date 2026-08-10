@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Drives the proactive log-off half of the nightly-cleanup cycle. When the BBS
 // announces an upcoming shutdown (CleanupWarningWatcher.WarningObserved), this

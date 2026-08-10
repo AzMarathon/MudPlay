@@ -1,4 +1,4 @@
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // How a TerminalColor should be interpreted.
 public enum ColorKind : byte

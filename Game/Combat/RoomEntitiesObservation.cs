@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // One emit of RoomEntityClassifier.EntitiesObserved — every time the classifier
 // consumes a fresh "Also here:" line from the wire. Holds the parsed entity list

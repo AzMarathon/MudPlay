@@ -3,10 +3,10 @@ using System.Linq;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Models.Profile;
+using MudPlay.Game;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Modeless Players Seen window VM — a projection over PlayerSightingTracker.
 // Rebuilds Rows on the tracker's Changed signal (marshalled to the dispatcher)

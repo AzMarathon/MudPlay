@@ -1,6 +1,6 @@
 using Avalonia.Input;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Bridges keyboard input from any window back to the main terminal. The terminal
 // control registers its input core once (RegisterTerminal); other windows'

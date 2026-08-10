@@ -1,13 +1,13 @@
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.Settings;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "Cash" tab — per-currency Collect / Ignore / Discard policy plus the
 // auto-deposit threshold + bank-room key. Persists as the "Cash" entry in

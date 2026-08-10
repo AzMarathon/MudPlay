@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // One folder node in a navigation tree (Manage dialog or the rail). Holds
 // its own stored /-separated Path plus a mixed Children collection: nested

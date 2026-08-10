@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // Per-monster combat-line bundle — the parser-pattern set the future
 // combat manager uses to recognise every line a single monster can produce

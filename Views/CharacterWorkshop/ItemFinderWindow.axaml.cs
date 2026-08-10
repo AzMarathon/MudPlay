@@ -7,11 +7,11 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.CharacterWorkshop;
+using MudPlay.Game.Inventory;
+using MudPlay.Services;
+using MudPlay.ViewModels.CharacterWorkshop;
 
-namespace FujinTerm.Views.CharacterWorkshop;
+namespace MudPlay.Views.CharacterWorkshop;
 
 public partial class ItemFinderWindow : Window
 {

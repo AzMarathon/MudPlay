@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Quests;
+namespace MudPlay.Game.Quests;
 
 // Discovers quests and their permanent rewards straight from the active set's
 // TBInfo table — the mechanical underlay QuestStore hangs user names / visibility

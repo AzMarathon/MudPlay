@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // MajorMUD's level-scaled spell math: min / max damage, min / max heal,
 // duration, and mana cost. All results are per-ROUND totals: the energy

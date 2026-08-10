@@ -2,11 +2,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Game.Map.MpFile;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Game.Map.MpFile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // Multi-candidate disambiguation prompt for the .mp importer. Fires when
 // MpFileImporter.Resolve finds two or more rooms that hash-match the file's

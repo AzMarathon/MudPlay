@@ -1,6 +1,6 @@
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Keeps the in-game statline aligned with the Settings → Statline editor on
 // every (re)connect. The editor command is the single source of truth: it's

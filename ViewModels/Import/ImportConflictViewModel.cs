@@ -3,10 +3,10 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.Import;
-using FujinTerm.Services;
+using MudPlay.Models.Import;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Import;
+namespace MudPlay.ViewModels.Import;
 
 // View-model for the unified Import Conflict dialog. Holds one
 // ImportConflictRowViewModel per supplied conflict, exposes the bulk-apply commands

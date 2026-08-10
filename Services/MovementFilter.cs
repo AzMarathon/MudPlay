@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-character avoided + stash room set. Implements IRoomFilter for BFS —
 // the walker / loop runner / auto-lair scheduler all read IsAvoided at

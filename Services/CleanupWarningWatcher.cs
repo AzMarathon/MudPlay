@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Sniffs the post-IAC wire stream for the BBS's "shutting down for nightly
 // cleanup" warning and captures the most recent (observed_at,

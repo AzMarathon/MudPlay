@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Canned solve scripts for the Great Pyramid puzzle climb (see GAME_MECHANICS.md
 // "Great Pyramid puzzle climb"). The climb is NOT graph-routable — floors are

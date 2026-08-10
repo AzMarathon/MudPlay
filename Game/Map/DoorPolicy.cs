@@ -1,6 +1,6 @@
-using FujinTerm.Game;
+using MudPlay.Game;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Verb selection + achievability helpers for the door FSM. Captures the
 // decision matrix the walker consults at door-handling time.

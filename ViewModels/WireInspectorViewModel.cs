@@ -1,9 +1,9 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // View-model behind Views.WireInspectorWindow. Polls the shared WireBuffer
 // on a low-frequency UI tick (200 ms) and exposes the rendered Raw +

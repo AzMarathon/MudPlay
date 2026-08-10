@@ -1,7 +1,7 @@
 using System.IO;
 using System.Linq;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // One-shot migration that moves the legacy flat per-BBS settings file
 // (Data/BBS/{name}.json) into the per-folder layout (Data/BBS/{name}/bbs.json).

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // The kinds of acquisition need an engine can post to the NeedsRegistry.
 // Deliberately minimal. New kinds are added when an engine actually needs

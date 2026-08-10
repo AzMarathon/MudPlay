@@ -1,7 +1,7 @@
 using System.Text;
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // @help (QueryVersion). Replies to the sender with the flat list of remote
 // commands they're permitted to issue, derived from their merged per-player

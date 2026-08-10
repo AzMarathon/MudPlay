@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Divides the session's in-game wall-clock time across the player's activities
 // for the Time Analysis panel (a reproduction of the MegaMUD Time Analysis

@@ -1,10 +1,10 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Leader-side roster hygiene for a party member who dies mid-farm. When we're
 // leading an automated route (loop / walk-to / Auto-Lair) and a member is

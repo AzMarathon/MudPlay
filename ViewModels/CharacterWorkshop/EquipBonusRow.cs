@@ -1,4 +1,4 @@
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One aggregated equipment-bonus row in the Character Info section's Equipment
 // Bonuses box: a stat label (Stat, e.g. "Armour Class"), its net bonus value

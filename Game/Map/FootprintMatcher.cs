@@ -1,6 +1,6 @@
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Tier-2 SLAM-style localisation accumulator. Seeded with a candidate set
 // from the first ambiguous observation; each subsequent (move,

@@ -3,7 +3,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One quest card in the Quest Status checklist. Collapsed it shows just the title,
 // level gate, and a manual IsComplete checkbox; clicking the header

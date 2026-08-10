@@ -1,9 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Yes/No prompt that fires when the room tracker learns a real name for a
 // previously-unnamed room (typical of map-15 ganghouse rooms in 1.x MDB

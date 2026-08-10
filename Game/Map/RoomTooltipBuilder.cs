@@ -2,11 +2,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.Light;
-using FujinTerm.Services;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Light;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Builds the plain-text hover tooltip for a room on the Navigation map. Lair
 // Exp/HP/Dmg-per-clear is intentionally omitted — those numbers need

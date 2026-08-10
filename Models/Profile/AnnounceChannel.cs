@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Chat channel the Auto-Trainer "Announce level-ups" feature broadcasts
 // "I can now train to level: N" on. Persisted in AutoTrainerSettings.AnnounceChannel;

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory set of the active game-data set's room-entry spells that STRIP player
 // buffs on entry — a room whose cast-on-enter spell (Room.Spell) removes or

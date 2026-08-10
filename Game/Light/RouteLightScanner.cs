@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // Scans a planned route for its darkest room and the light strength needed to see
 // it. The route is any ordered sequence of RoomKey (a walk-to path or a loop

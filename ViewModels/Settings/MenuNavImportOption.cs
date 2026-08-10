@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // One selectable source in the BBS section's "import logon steps from another
 // character" picker: a single character's saved menu-nav sequence for one BBS.

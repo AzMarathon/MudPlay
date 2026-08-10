@@ -5,12 +5,12 @@ using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Game.Map.MpFile;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Game.Map.MpFile;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // Modeless "Manage" dialog hosting the user's saved Loops + marked Auto-Lair
 // rooms. The bottom strip in the NavigationWindow is a pure status surface —

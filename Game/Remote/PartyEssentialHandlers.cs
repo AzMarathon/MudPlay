@@ -1,11 +1,11 @@
 using System.Text;
-using FujinTerm.Game.Combat;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Combat;
+using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // The party-essential @-commands:
 //   - Query-tier — @version, @health, @status, @lives, @where. Each replies via

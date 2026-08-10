@@ -1,9 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using FujinTerm.ViewModels.GameData.Edit;
+using MudPlay.ViewModels.GameData.Edit;
 
-namespace FujinTerm.Views.GameData.Edit;
+namespace MudPlay.Views.GameData.Edit;
 
 public partial class MacroEditDialog : Window
 {

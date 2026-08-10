@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Info tab. Single-row realm metadata exposed by the MDB — version
 // stamps, build date / time, custom-realm flag, the Legit / DisableKai gameplay-mode bits,

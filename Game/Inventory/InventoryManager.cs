@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
-using FujinTerm.Game;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Game;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Tracks the player's currency and carry-weight by watching the terminal
 // line stream: a full 'i' dump re-bases the snapshot, and incremental coin

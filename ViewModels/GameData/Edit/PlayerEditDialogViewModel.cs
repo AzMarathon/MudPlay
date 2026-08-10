@@ -1,12 +1,12 @@
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Remote;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Remote;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // Per-record edit dialog for the Game Data Browser → Players tab. Surfaces the
 // engine-observed fields (Given / Family name + Last Seen timestamp displayed read-only)
@@ -135,7 +135,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         get
         {
             (int Min, int Max)? range = ClassTitleTable.LookupLevelRange(_original.Title);
-            var estimate = new FujinTerm.Game.Map.PartyLevelEstimate(_original.Level, range);
+            var estimate = new MudPlay.Game.Map.PartyLevelEstimate(_original.Level, range);
             if (estimate.Low is not { } lo || estimate.High is not { } hi) return null;
             return ClassTitleTable.FormatLevelRange((lo, hi));
         }

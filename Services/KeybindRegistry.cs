@@ -1,7 +1,7 @@
 using Avalonia.Input;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Single source of truth for which keys + key combinations the user is
 // allowed to bind a macro to. Encodes:

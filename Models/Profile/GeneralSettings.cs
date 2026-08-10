@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "General" settings — what to do on logon and the master on/off
 // state for every auto-engine. Stored as the "General" entry in

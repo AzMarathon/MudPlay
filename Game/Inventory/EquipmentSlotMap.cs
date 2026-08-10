@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Calculators;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Translation layer between the Workshop's EquipmentSlot enum and MajorMUD's
 // worn-id model. Owns the display labels, the virtual-slot test, the Items.Worn

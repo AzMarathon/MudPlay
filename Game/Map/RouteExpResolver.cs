@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Turns a loop's waypoints into the ordered ExpRoute the LoopExpSimulator
 // replays: BFS-expands the cycle to its room sequence, then reads each room's

@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Pure interpretation of a MajorMUD statline command string — the literal
 // argument that follows set statline on the wire. One home for the grammar so

@@ -1,8 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
-using FujinTerm.ViewModels;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 // Modeless Session Stats → Transaction history window. Bound to
 // TransactionHistoryViewModel; code-behind only disposes the VM on close
@@ -13,7 +13,7 @@ public partial class TransactionHistoryWindow : Window
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
-        FujinTerm.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "transactions");
+        MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "transactions");
         Closed += OnClosed;
     }
 

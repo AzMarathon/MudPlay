@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One boss row in the Bosses tab. StopBefore is the only inline-editable field
 // (a quick toggle); name / rooms / flags are edited in the Manage Bosses dialog.

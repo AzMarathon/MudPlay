@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // On-demand party-wealth probe. Asks the whole party "how much are you
 // carrying?" by broadcasting @wealth to every non-self member and aggregating

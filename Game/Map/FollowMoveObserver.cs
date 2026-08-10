@@ -1,7 +1,7 @@
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Keeps a dragged party follower's map position live. In MajorMUD movement is
 // leader-driven: when the leader walks, the game drags every follower one room

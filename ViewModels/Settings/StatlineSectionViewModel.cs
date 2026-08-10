@@ -3,12 +3,12 @@ using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.Settings;
+using MudPlay.Game;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "Statline" tab — modelled on MegaMUD's Statline dialog: a read-only Current
 // Statline preview, the editable Statline Command (default full), and a

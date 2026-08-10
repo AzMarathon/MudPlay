@@ -1,9 +1,9 @@
 using System.Text;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Follower-side @comeback sender. When the party leader walks off and a
 // movement-blocking condition leaves us behind, this telepaths

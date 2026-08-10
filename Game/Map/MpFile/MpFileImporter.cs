@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map.MpFile;
+namespace MudPlay.Game.Map.MpFile;
 
 // Resolves a parsed MpLoopFile against the active RoomGraphManager and produces a
 // ready-to-save Loop.

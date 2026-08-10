@@ -9,17 +9,17 @@ using Avalonia.Collections;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Game.Leaderboard;
-using FujinTerm.Game.Quests;
-using FujinTerm.Game.Spells;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.CharacterWorkshop;
+using MudPlay.Game;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Leaderboard;
+using MudPlay.Game.Quests;
+using MudPlay.Game.Spells;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.CharacterWorkshop;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // CALCULATORS section — combat what-if tools that sit apart from the live
 // stat sheet:

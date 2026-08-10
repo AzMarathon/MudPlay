@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Settings;
+namespace MudPlay.Models.Settings;
 
 // UX-confirmation preferences shown in Settings → BBS's Display group.
 // Each flag governs whether the corresponding action prompts the user

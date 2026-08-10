@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 
-namespace FujinTerm.Controls;
+namespace MudPlay.Controls;
 
 // Attached behaviours for top-level windows.
 //

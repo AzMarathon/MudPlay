@@ -3,9 +3,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using FujinTerm.ViewModels.Navigation;
+using MudPlay.ViewModels.Navigation;
 
-namespace FujinTerm.Views.Navigation;
+namespace MudPlay.Views.Navigation;
 
 // Modeless dialog hosting saved Loops + Auto-Lair markers for
 // run/load/edit/delete actions. Surfaced from the NavigationWindow's
@@ -21,7 +21,7 @@ public partial class NavigationManagerDialog : Window
     // In-process object reference carried by the drag session. Avalonia 12's
     // DataTransfer surface replaced the legacy string-keyed DataObject.
     private static readonly DataFormat<object> RowFormat =
-        DataFormat.CreateInProcessFormat<object>("fujin-nav-manager-row");
+        DataFormat.CreateInProcessFormat<object>("mudplay-nav-manager-row");
 
     // The leaf row under the press point, captured on pointer-down and
     // promoted to a drag once the pointer moves past the threshold.

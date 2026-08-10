@@ -1,9 +1,9 @@
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using FujinTerm.Game;
+using MudPlay.Game;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Live mirror of the imported MajorMUD game data on disk. Holds the raw
 // JsonDocument per loaded table for the currently active set, exposes set

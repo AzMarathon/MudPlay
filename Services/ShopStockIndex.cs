@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory reverse index of Shops.json for the active game-data set: item id →
 // the set of shop Numbers that stock it. Backs the Settings → Other "buy item

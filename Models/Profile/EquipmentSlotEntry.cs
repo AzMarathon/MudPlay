@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // One slot's intent inside an EquipmentSet: which item the set wants in Slot.
 //

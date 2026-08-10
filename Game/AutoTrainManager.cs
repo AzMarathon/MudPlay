@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading.Tasks;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Inventory;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Drives MajorMUD's `train stats` screen to apply the character's saved CP
 // plan. On TrainNow it sends `train stats`, waits for the trainer screen to

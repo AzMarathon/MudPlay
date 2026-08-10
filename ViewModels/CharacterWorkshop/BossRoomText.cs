@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Shared "map/room; map/room" text <-> RoomKey-list conversion for the boss row
 // view-models (the table row and the Manage dialog row both parse the same field).

@@ -5,12 +5,12 @@ using System.Linq;
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.Light;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.Settings;
+using MudPlay.Game.Light;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "Auto-Light" tab — provisioning knobs for the auto-light engine: how many
 // hours of lit time to carry into a dark route, which light source to buy /

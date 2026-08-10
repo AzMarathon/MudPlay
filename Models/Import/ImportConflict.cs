@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Models.Import;
+namespace MudPlay.Models.Import;
 
 // One row-level collision between an incoming import and the existing
 // store. Carries enough context for ImportConflictViewModel to show a

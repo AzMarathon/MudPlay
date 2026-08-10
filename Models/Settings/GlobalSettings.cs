@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace FujinTerm.Models.Settings;
+namespace MudPlay.Models.Settings;
 
 // Root DTO for Data/Global/global.json — the Global tier of the settings
 // hierarchy. Holds app-wide deltas (the things every character shares) plus

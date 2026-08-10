@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text;
 using Avalonia.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // The minimal surface the walker needs to hand a maze destination off to the
 // solver. Kept tiny so AutoWalkManager doesn't take a hard dependency on the

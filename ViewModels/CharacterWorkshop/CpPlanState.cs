@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Live CP-plan state shared between the CP Allocation tab (writer) and the Level
 // Projection tab (reader), so projected HP / HP-regen / MP-regen reflect the

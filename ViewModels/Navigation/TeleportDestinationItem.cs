@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.Input;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // One flat "Use Teleport → {room}" context-menu entry for a CMD/teleport
 // room that leads to more than one distinct destination. Label is the full

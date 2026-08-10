@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Globalization;
 using Avalonia.Threading;
-using FujinTerm.Game.Quests;
-using FujinTerm.Services;
+using MudPlay.Game.Quests;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Quest Flags tab. A computed view over QuestFlagIndex: every quest-flag
 // reference in the active set's TBInfo — the flag, how the block relates to it (grants / gates

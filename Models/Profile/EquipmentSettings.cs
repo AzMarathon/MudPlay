@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character equipment-manager state — the trigger-purposed gear sets. One
 // EquipmentSet per EquipTriggerType (the Equipment Manager seeds any that are

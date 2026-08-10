@@ -1,6 +1,6 @@
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Canonical default toolbar layout — a curated, ordered set of catalogue actions
 // grouped by separators. Used when a profile has no stored

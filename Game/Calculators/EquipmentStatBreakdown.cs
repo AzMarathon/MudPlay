@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Result of CharacterCalculator.AggregateEquipmentStats: the summed Totals plus
 // a per-stat list of which items contributed what, so the Workshop can render

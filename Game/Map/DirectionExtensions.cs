@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Display helpers for Direction — the single home for the enum →
 // human-readable name mapping that UI labels and @-command replies share,

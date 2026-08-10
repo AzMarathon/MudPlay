@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // A provisioning hand-off from AutoLightProvisioner to AutoLightShopRouter: the
 // planner returned Buy for a light the pack doesn't hold, so a shop detour is

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Reverse index of RoomKey → monster ids whose Monsters.json Summoned By
 // field references that room. Builds once on the active game-data set and

@@ -1,12 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:FujinTerm.ViewModels.Settings"
-             xmlns:settings="using:FujinTerm.Views.Settings"
-             xmlns:spells="using:FujinTerm.Game.Spells"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
+             xmlns:settings="using:MudPlay.Views.Settings"
+             xmlns:spells="using:MudPlay.Game.Spells"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="900"
-             x:Class="FujinTerm.Views.Settings.SpellsSectionView"
+             x:Class="MudPlay.Views.Settings.SpellsSectionView"
              x:DataType="vm:SpellsSectionViewModel">
 
     <UserControl.Resources>
@@ -271,7 +271,7 @@
                 <!-- ============ Ailment handling / coordination ============ -->
                 <!-- Each ailment pairs its Ignore* (gates the @wait) with the
                      matching Don't-announce* (gates the ".@poisoned" say
-                     broadcast that lets other FujinTerm clients mirror our
+                     broadcast that lets other MudPlay clients mirror our
                      ailment on their party window). The two are independent —
                      one suppresses the pause, the other the broadcast. Sits on
                      the Spells tab next to the cure-spell picks it coordinates

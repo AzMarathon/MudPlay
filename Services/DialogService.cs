@@ -1,8 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
-using FujinTerm.Views;
+using MudPlay.Views;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Modeless-only window spawner. OpenWindowAsync is the single API — uses
 // Window.Show(Window) (not ShowDialog) plus a TaskCompletionSource that

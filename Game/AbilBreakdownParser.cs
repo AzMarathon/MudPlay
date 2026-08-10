@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // One source slice of an `abil <code>` breakdown — where a portion of an
 // ability's current total comes from and how much that source contributes.

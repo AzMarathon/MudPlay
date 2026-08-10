@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace FujinTerm.Game.Leaderboard;
+namespace MudPlay.Game.Leaderboard;
 
 // Derives the displayed board, the XP/HR column, and reroll/dropout notices from
 // the per-BBS capture history (newest first).

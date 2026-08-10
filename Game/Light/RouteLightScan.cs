@@ -1,6 +1,6 @@
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // The darkness profile of a planned route (a walk-to path or a farming loop): the
 // darkest room on it and the minimum light-source Strength the player must ready to

@@ -1,10 +1,10 @@
 using System.Collections.Generic;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
-using FujinTerm.Terminal;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Recognises monster deaths from MonsterMessageRecord.DeathLine patterns. Builds
 // a lookup index from MonsterMessageStore at startup + on set switch and matches

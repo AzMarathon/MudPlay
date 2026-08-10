@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Text.Json;
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Background audit that flags player-facing spells in the active game-data
 // set's Spells.json that have no corresponding MessageRecord anchor — i.e.

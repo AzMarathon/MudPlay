@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Per-denomination coin counts the player is carrying, plus the consolidated
 // wealth value. Counts are individual coins, not values (e.g. Gold = 30 means

@@ -1,12 +1,12 @@
 using System.Reflection;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Compile-time facts about the running app — repo URL, external links, the
 // kind of stuff every Help / About / Report-an-issue menu entry needs.
 public static class AppInfo
 {
-    public const string DisplayName = "FujinTerm";
+    public const string DisplayName = "MudPlay";
 
     // Version pulled from the compiled assembly's AssemblyInformationalVersion
     // attribute, which MSBuild generates from the <Version> property in the
@@ -15,11 +15,11 @@ public static class AppInfo
     // to "unknown" in the (impossible) case where the attribute didn't land.
     public static string Version { get; } = ReadAssemblyVersion();
 
-    // "FujinTerm 1.0.0" — the form the @version remote-command reply uses to
+    // "MudPlay 1.0.0" — the form the @version remote-command reply uses to
     // match the format other clients emit (MegaMUD: "MegaMud 1.03u").
     public static string DisplayNameWithVersion { get; } = $"{DisplayName} {Version}";
 
-    public const string RepoUrl    = "https://github.com/Tehshortbus/FujinTerm";
+    public const string RepoUrl    = "https://github.com/Tehshortbus/MudPlay";
     public const string IssuesUrl  = RepoUrl + "/issues/new";
 
     private static string ReadAssemblyVersion()

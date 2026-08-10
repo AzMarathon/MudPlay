@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // One row of the Character Workshop's CP Allocation plan — the target value of
 // each trainable attribute at a given level. Persisted as

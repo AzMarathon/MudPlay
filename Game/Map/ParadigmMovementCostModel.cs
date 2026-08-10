@@ -1,8 +1,8 @@
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Services;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Inventory;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // ITravelCostModel for ParaMUD realms. Instead of a flat or bucketed
 // seconds-per-hop, it evaluates the game's own movement-speed formula

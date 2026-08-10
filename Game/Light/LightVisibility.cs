@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // How visible a room is to the player, from the combined illumination
 // V = charIllu + roomLight against MajorMUD's band table. PitchBlack and VeryDark

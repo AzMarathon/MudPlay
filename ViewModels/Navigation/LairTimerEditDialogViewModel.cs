@@ -1,9 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // Small modeless dialog for tweaking a single marked lair's respawn timer
 // override — opened from the CURRENT NAV row's ✎ button while in Auto-Lair

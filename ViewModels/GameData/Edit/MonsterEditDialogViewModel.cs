@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // View-model for the Game Data Browser → Monsters tab's per-record edit dialog.
 // Surfaces the editable overlay fields (Use-tier, Name, Relationship, Priority, override

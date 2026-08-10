@@ -1,10 +1,10 @@
 using System.Text;
-using FujinTerm.Game.Cash;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
+using MudPlay.Game.Cash;
+using MudPlay.Game.Inventory;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Write-side handler for the inventory / cash action commands. Unlike the
 // read-only InventoryQueryHandler, these emit wire commands, so a wire-sender is

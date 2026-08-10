@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Attacker hit chance, defender dodge chance, and net hit chance after dodge,
 // plus the realm-specific caps that bounded them (for tooltip display).

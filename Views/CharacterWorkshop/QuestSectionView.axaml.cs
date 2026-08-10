@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace FujinTerm.Views.CharacterWorkshop;
+namespace MudPlay.Views.CharacterWorkshop;
 
 public partial class QuestSectionView : UserControl
 {

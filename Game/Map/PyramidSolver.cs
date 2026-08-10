@@ -1,11 +1,11 @@
 using System;
 using System.Text;
 using Avalonia.Threading;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Game.Inventory;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // The minimal surface the walker needs to hand a pyramid-climb destination off to
 // the solver. Parallel to IMazeSolver — kept tiny so AutoWalkManager takes no hard
@@ -697,7 +697,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     internal void FireSettleForTests() => OnSettleTick();
     internal void FeedLineForTests(string text)
         => OnLine(new LineExtractor.EmittedLine(
-            text, Array.Empty<FujinTerm.Terminal.CellAttributes>(), DateTimeOffset.UnixEpoch, IsPromptLine: false));
+            text, Array.Empty<MudPlay.Terminal.CellAttributes>(), DateTimeOffset.UnixEpoch, IsPromptLine: false));
 
     public void Dispose()
     {

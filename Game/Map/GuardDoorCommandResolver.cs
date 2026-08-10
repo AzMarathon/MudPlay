@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Globalization;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Decodes a placed monster's greet chain into the `ask` commands that open a
 // door on the monster's OWN room — the "ask the guard the password and the gate

@@ -1,8 +1,8 @@
 using Avalonia.Controls;
-using FujinTerm.Models.Profile;
-using FujinTerm.ViewModels;
+using MudPlay.Models.Profile;
+using MudPlay.ViewModels;
 
-namespace FujinTerm.Views;
+namespace MudPlay.Views;
 
 public partial class BlacklistEditorDialog : Window
 {

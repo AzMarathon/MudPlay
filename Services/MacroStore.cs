@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory store of the loaded character's Macro entries. Owns the merge /
 // save path against CharacterProfile.Macros + exposes lookup + conflict-check

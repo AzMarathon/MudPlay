@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // What the auto-light engine should do about the route ahead.
 public enum AutoLightAction

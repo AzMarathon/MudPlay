@@ -1,8 +1,8 @@
-using FujinTerm.Game.GameData;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.GameData;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // State machine that drives the auto-disarm flow for @trap <direction> remote
 // commands. Owns the per-request search → disarm loop, the queue of pending

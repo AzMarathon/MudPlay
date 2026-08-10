@@ -1,4 +1,4 @@
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // Per-cell visual flags (the SGR "styles" — bold, underline, etc.). Stored as
 // bit-flags so multiple can be combined.

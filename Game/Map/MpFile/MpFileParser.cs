@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Game.Map.MpFile;
+namespace MudPlay.Game.Map.MpFile;
 
 // Pure structural parser for MegaMUD .mp loop files. Reads the text into an
 // MpLoopFile with no graph resolution and no RoomKey assignment — that's

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
-using FujinTerm.Game.Leaderboard;
+using MudPlay.Game.Leaderboard;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-BBS store of captured "top N" leaderboard snapshots. Mirrors
 // RoomBlacklistStore: loads Data/BBS/{bbs}/leaderboard.json on every BBS pin, and

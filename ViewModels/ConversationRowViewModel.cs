@@ -1,7 +1,7 @@
 using Avalonia.Media;
-using FujinTerm.Game;
+using MudPlay.Game;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // One displayed row in the ConversationViewModel's filtered list. Wraps a
 // ChatLogEntry with the channel-color brush + timestamp / channel-tag /

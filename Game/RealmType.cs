@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Which MajorMUD formula family a game-data set targets. The distinction
 // comes from the MDB's Info table (Legit == 2 → GreaterMUD, otherwise

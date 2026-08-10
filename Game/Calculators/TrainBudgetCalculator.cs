@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Pure banked-exp budgeting for auto-train / Train Now: how many levels above the
 // current one the character's banked exp can already reach, and how many of those

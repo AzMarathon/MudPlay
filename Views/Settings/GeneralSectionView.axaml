@@ -1,10 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:FujinTerm.ViewModels.Settings"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="440"
-             x:Class="FujinTerm.Views.Settings.GeneralSectionView"
+             x:Class="MudPlay.Views.Settings.GeneralSectionView"
              x:DataType="vm:GeneralSectionViewModel">
 
     <UserControl.Styles>
@@ -181,7 +181,7 @@
                 <CheckBox Margin="0,8,0,0"
                           IsChecked="{Binding AutoConnect, Mode=TwoWay}"
                           Content="Auto-connect when profile loads"
-                          ToolTip.Tip="When checked, FujinTerm dials the profile's pinned BBS immediately after the profile loads (skipped if you're already connected or there's no BBS pinned yet)."/>
+                          ToolTip.Tip="When checked, MudPlay dials the profile's pinned BBS immediately after the profile loads (skipped if you're already connected or there's no BBS pinned yet)."/>
 
                 <CheckBox IsChecked="{Binding BackupOnSave, Mode=TwoWay}"
                           Content="Backup profile when making changes"
@@ -251,7 +251,7 @@
                 <CheckBox Margin="0,12,0,0"
                           IsChecked="{Binding AllowHangupInAllOffMode, Mode=TwoWay}"
                           Content="Allow hangup in all-off mode"
-                          ToolTip.Tip="When checked: even with every Auto-* engine off, FujinTerm still drops the line if your HP falls to the Health → 'hang up if below' threshold. Default off — opt-in safety net for fully-manual play."/>
+                          ToolTip.Tip="When checked: even with every Auto-* engine off, MudPlay still drops the line if your HP falls to the Health → 'hang up if below' threshold. Default off — opt-in safety net for fully-manual play."/>
 
                 <!-- Re-enable auto-actions on reconnect. One checkbox per
                      auto-action (1-to-1 with the auto-engine switches above).

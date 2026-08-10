@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Accumulates the min and max HP / mana (as percent of max) observed at each loop
 // STEP POSITION, for the Session Stats "HP/MA History" graph. The graph answers

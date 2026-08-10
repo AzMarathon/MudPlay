@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Live "where am I?" state for the connected character — the room graph node we
 // currently believe the player is standing on, plus the confidence we have in

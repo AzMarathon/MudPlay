@@ -1,8 +1,8 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // One "given by" entry in an item's read-only MDB info: a monster or room that
 // hands the item over through a textblock `giveitem` award, with an optional

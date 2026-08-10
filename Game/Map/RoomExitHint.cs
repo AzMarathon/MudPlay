@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Parenthetical exit-cell hint imported alongside the target RoomKey. The MDB
 // encodes these inline on the exit string — e.g. "1/1381 (Door)",

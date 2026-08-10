@@ -1,8 +1,8 @@
 using System.ComponentModel;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Tracks who — if anyone — is currently dragging the local character while it's
 // mortally wounded. A dropped character can't move on its own; a party member

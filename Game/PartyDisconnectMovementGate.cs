@@ -1,7 +1,7 @@
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Leader-side hold that stops us sprinting off when a party follower drops
 // connection. PartyManager fires MemberDisconnected (given name) whenever a

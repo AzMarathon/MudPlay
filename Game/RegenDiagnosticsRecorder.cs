@@ -1,6 +1,6 @@
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Debug-channel instrument that traces every observed HP / MA regen uptick
 // to the program log — the gap since the previous tick of the same stream,

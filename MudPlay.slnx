@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="MudPlay.csproj" />
+  <Project Path="MudPlay.Tests/MudPlay.Tests.csproj" />
+</Solution>

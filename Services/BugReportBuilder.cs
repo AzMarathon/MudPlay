@@ -1,10 +1,10 @@
 using System.Text;
 using System.Text.Json;
-using FujinTerm.Game;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Terminal;
+using MudPlay.Game;
+using MudPlay.Game.Inventory;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Snapshots the live client state into a self-contained Markdown bug report.
 // Capture freezes everything time-sensitive (recent scrollback, the program
@@ -81,7 +81,7 @@ public static class BugReportBuilder
         ArgumentNullException.ThrowIfNull(capture);
 
         StringBuilder sb = new(capacity: 16 * 1024);
-        sb.Append("# FujinTerm bug report\n\n");
+        sb.Append("# MudPlay bug report\n\n");
         sb.Append("_Captured ").Append(capture.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss zzz"))
           .Append("  •  realm ").Append(RealmLabel(capture.Realm)).Append("_\n\n");
 

@@ -2,13 +2,13 @@ using System.Text.Json;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.Cash;
-using FujinTerm.Game.Combat;
-using FujinTerm.Services;
+using MudPlay.Game;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Cash;
+using MudPlay.Game.Combat;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Modeless Session Stats window VM. A pure projection over the three session
 // trackers — CombatSessionTracker (Player Statistics), TimeAnalysisTracker

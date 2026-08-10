@@ -1,9 +1,9 @@
 using System;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One row of the Item Finder's trial gearset: a slot, the item currently placed in
 // it, and a Hold lock that keeps Find Best from overwriting it. Options are the

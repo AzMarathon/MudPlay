@@ -1,7 +1,7 @@
 using System.IO;
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory cache of the Messages/Responses catalogue for the active set.
 // Records are paired with the active game-data set on disk at

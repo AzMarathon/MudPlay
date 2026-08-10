@@ -1,7 +1,7 @@
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Fast lookup of a monster's elemental damage-type resistance by monster Number
 // in the active game-data set.

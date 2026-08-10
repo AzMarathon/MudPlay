@@ -1,7 +1,7 @@
 using System;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // One user-defined scheduled / lifecycle event. Per-character; persisted
 // on CharacterProfile.Events and consumed at runtime by EventManager.

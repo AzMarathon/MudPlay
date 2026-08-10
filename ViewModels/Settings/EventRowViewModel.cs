@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Game.Events;
-using FujinTerm.Models.GameData;
+using MudPlay.Game.Events;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // Display row for one ScheduledEvent in the Settings → Events table. Formats the
 // trigger as a human-readable "Time" column (Logon / "Every 30 seconds" / "At

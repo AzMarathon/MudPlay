@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // JSON-friendly entry for one marked lair room inside a LairSetup. Carries the
 // Game.Map.RoomKey wire pair plus an optional override respawn timer that beats

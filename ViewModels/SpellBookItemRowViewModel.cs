@@ -1,6 +1,6 @@
-using FujinTerm.Game.Spells;
+using MudPlay.Game.Spells;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // One cast-on-use item row in the Spell Book's item section: the carrier
 // item, the spell it casts, and a charges indicator (∞ for unlimited). An

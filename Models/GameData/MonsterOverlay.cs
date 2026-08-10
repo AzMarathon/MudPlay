@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // Per-character / per-BBS / global override layered on top of an MDB
 // monster row. Persisted under the chosen tier via

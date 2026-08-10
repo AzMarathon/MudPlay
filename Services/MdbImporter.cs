@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using JetDatabaseReader;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Imports every user table from a Microsoft Access .mdb / .accdb database into
 // a folder of JSON files (one per table) under AppPaths.GameDataRoot. Each

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Counts the session's monster kills, experience earned, and currency picked up
 // vs. stashed/deposited for the Session Stats panel's "Session Statistics"

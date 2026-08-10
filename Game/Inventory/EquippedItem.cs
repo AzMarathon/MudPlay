@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // One worn item parsed from an 'i' dump: the game prints equipped items inline
 // with a trailing (<Slot>) suffix (e.g. "padded vest (Torso)"), while

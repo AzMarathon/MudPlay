@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One row from the imported TBInfo.json table — the MajorMUD "TextBlock Info"
 // mechanism that backs room-level CMD chains (gambling / NPC services / teleport

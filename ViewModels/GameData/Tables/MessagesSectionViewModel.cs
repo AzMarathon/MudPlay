@@ -4,11 +4,11 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.GameData.Edit;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Edit;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Messages tab. Surfaces the active game-data set's Messages/Responses
 // catalogue from MessageStore. Records are paired per set: seeded from the wcc-derived

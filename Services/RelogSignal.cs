@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // One-shot flag coordinating a deliberate "relog" — a graceful exit plus a
 // forced reconnect-and-login — across the engine that requests it and the

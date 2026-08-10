@@ -1,6 +1,6 @@
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Shared tier-1/2/3 location-recovery service for the walker, loop runner,
 // and auto-lair scheduler. Owns the strict-1-of-1 anchor, the rolling

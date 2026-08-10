@@ -1,10 +1,10 @@
 using System;
 using System.Text.Json;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // The live inputs a CP plan is computed against: the raw-base baseline (current
 // stats minus equipment bonuses, floored at the race minimum), the race min/max

@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "Auto-Light" settings — drives the auto-light provisioning
 // engine: how much lit time to carry into a dark route, which light source to

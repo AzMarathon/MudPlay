@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Mana-regen breakpoint planning math for casters (mage / druid). The natural,
 // non-resting, non-meditating per-tick amount is CharacterCalculator.CalcManaRegen

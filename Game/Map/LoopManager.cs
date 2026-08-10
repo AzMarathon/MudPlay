@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Per-game-data-set catalogue of saved navigation loops. CRUD over the
 // JSON files under Data/game data/{set}/Loops/, plus the builder helpers

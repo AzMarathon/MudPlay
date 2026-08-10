@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // When a ScheduledEvent fires.
 //   Logon — fires on every successful game entry (every

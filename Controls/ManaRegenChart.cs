@@ -3,9 +3,9 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using FujinTerm.ViewModels.CharacterWorkshop;
+using MudPlay.ViewModels.CharacterWorkshop;
 
-namespace FujinTerm.Controls;
+namespace MudPlay.Controls;
 
 // Hand-drawn line chart for the Mana Regen calculator: X = character level, Y =
 // mana tick (MP / 30 s), one polyline per stat-value series so the integer-tick

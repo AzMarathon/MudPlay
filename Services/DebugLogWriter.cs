@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-session diagnostic file writer. Each instance opens one file under
 // Data/Logs/{yyyy-MM-dd_HH-mm-ss}-{topic}.log and appends timestamped lines.
@@ -64,7 +64,7 @@ public sealed class DebugLogWriter : IDisposable, IAsyncDisposable
     private void WriteHeader()
     {
         if (_writer is null) return;
-        _writer.WriteLine($"# FujinTerm debug log — topic={Topic}");
+        _writer.WriteLine($"# MudPlay debug log — topic={Topic}");
         _writer.WriteLine($"# started {DateTimeOffset.Now:O}");
     }
 

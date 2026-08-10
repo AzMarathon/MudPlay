@@ -1,7 +1,7 @@
 using System.Text.Json;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // One-time, per-profile schema upgrades. Applied on load (ProfileService.Load)
 // before ProfileLoaded fires, so per-character services see the migrated shape.

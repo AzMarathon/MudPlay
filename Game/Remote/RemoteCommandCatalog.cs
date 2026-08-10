@@ -1,6 +1,6 @@
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Single source of truth mapping every documented MajorMUD / MegaMUD @-command
 // to the PlayerRemoteControls category that gates it. Sourced from the
@@ -9,7 +9,7 @@ namespace FujinTerm.Game.Remote;
 //
 // Whichever handler wires a command, it looks the category up here via
 // TryGetCategory rather than hardcoding — keeping the mapping in one place means
-// "Fujin grants Raijin QueryHealthStatus" produces consistent behaviour across
+// "MudPlay grants Raijin QueryHealthStatus" produces consistent behaviour across
 // every @health-class command without per-handler ceremony.
 //
 // Categories follow the 12-checkbox grid in the Game Data Browser → Players edit

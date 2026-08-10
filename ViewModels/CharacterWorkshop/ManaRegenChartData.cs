@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One plotted line in the Mana Regen chart: a stat value's label, its colour
 // (ARGB), and the per-level tick amounts across the chart's level window (one

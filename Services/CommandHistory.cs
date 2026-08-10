@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory ring buffer of the user's most-recently-submitted command lines —
 // the terminal line-buffer flushes (Enter) and the Conversation window's sends

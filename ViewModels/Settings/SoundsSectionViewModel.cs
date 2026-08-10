@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // "Sounds" tab stub — master volume + per-event sound assignments. The audio
 // backend (LibVLCSharp / NAudio / ManagedBass) is picked when the first feature

@@ -1,4 +1,4 @@
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Fixed-capacity byte ring that retains the tail of the cleaned display stream
 // from the live Net.TelnetClient. Drives the Wire Inspector window and is the

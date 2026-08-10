@@ -4,11 +4,11 @@ using System.Linq;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Modeless floating Party window VM. Binds directly to PartyState's
 // observable collection so member additions / removals / per-member HP/MA
@@ -31,7 +31,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
     public PartyState State { get; }
 
     // Header text shown at the top of the PartyWindow. When a leader is
-    // known, shows their given name + current HP percent ("Fujin (94%)");
+    // known, shows their given name + current HP percent ("MudPlay (94%)");
     // when there's no leader yet (mid-formation, solo, or par hasn't
     // disclosed who leads), falls back to the "Party (N)" count. Recomputes
     // on:

@@ -1,7 +1,7 @@
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // Fast lookup of a spell's Short cast-code by its Spells.Number in the active
 // game-data set.

@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace FujinTerm.Services.Patterns;
+namespace MudPlay.Services.Patterns;
 
 // Registers the baseline MajorMUD pattern set against a MessageRouter. Each
 // entry pairs a stable pattern id with the regex that recognises one shape of
@@ -153,7 +153,7 @@ public static class DefaultPatterns
 
         // Local-player death. MajorMUD's canonical wording is "You have been
         // slain by <killer>." — the killer is whatever last hit landed (monster
-        // name OR another player for PvP, even though FujinTerm scopes engines
+        // name OR another player for PvP, even though MudPlay scopes engines
         // to PvE; we still observe the line so DeathRecoveryManager can fire).
         // The trailing "." is captured tolerantly: some realms include a
         // trailing "!" instead.
@@ -453,7 +453,7 @@ public static class DefaultPatterns
             @"^Also here: (?<players>.+?)\.\s*$");
 
         // Incoming party invite from another player. Real Playpen BBS
-        // wording (verified live, 2026-06-01): "Fujin has invited you
+        // wording (verified live, 2026-06-01): "MudPlay has invited you
         // to follow him."
         //
         // MajorMUD gender vocabulary — apply consistently when adding
@@ -536,13 +536,13 @@ public static class DefaultPatterns
 
         // ----- Party dissolution (Playpen-verified, 2026-06-01) ---------
         // Three signals that should evict members / wipe the party.
-        // Verified live by uninviting Raijin from Fujin's party — the
+        // Verified live by uninviting Raijin from MudPlay's party — the
         // game emits the first two from the leader's side and the
         // third + "no longer following" from the follower's side.
         //
         //   "Raijin has been removed from your followers."
         //     ⇒ leader's view of an uninvite (or self-leave). Remove X.
-        //   "You are no longer following Fujin."
+        //   "You are no longer following MudPlay."
         //     ⇒ follower's view of the leader uninviting us, OR our own
         //        `unfollow` command. Remove X from the roster.
         //   "You are not in a party at the present time."

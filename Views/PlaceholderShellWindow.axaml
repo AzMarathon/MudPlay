@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="FujinTerm.Views.PlaceholderShellWindow"
+        x:Class="MudPlay.Views.PlaceholderShellWindow"
         Width="640" Height="420"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">

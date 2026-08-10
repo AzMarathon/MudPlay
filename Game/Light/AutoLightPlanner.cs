@@ -1,7 +1,7 @@
-using FujinTerm.Game.Inventory;
-using FujinTerm.Models.Profile;
+using MudPlay.Game.Inventory;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // Pure decision core for the auto-light engine. Given the darkness of the route
 // ahead (RouteLightScanner), the character's worn illumination, the currently

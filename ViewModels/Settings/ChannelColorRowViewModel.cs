@@ -2,7 +2,7 @@ using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // One editable row in the Talk tab's per-channel colour list. Each channel gets
 // two slots: the accent ("Label") colour used for the channel tag / speaker /

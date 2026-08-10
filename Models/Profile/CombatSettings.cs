@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character "Combat" settings — drives Game.Combat.CombatManager target
 // picking, weapon swap matrix, multi-attack spell gating, and re-fire timing.

@@ -6,11 +6,11 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.Navigation;
+namespace MudPlay.ViewModels.Navigation;
 
 // View-model for the NavigationWindow shell — owns the status strip + mode
 // bar and hosts the per-section state for map / room tree / favourites /
@@ -183,7 +183,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // crawler chord for that direction. Directions with no macro are
         // omitted and fall through to MapControl's numpad / arrow
         // defaults, so the crawler is never left unbound.
-        Dictionary<Direction, FujinTerm.Models.Profile.KeyChord> compass = new();
+        Dictionary<Direction, MudPlay.Models.Profile.KeyChord> compass = new();
         AddCompassChord(compass, Direction.N,  "n");
         AddCompassChord(compass, Direction.S,  "s");
         AddCompassChord(compass, Direction.E,  "e");
@@ -195,21 +195,21 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         CompassChords = compass.Count > 0 ? compass : null;
     }
 
-    private void AddCompassChord(Dictionary<Direction, FujinTerm.Models.Profile.KeyChord> map,
+    private void AddCompassChord(Dictionary<Direction, MudPlay.Models.Profile.KeyChord> map,
         Direction dir, string command)
     {
         if (FindChordForDirectionCommand(command) is { } chord) map[dir] = chord;
     }
 
-    private FujinTerm.Models.Profile.KeyChord? FindChordForDirectionCommand(string direction)
+    private MudPlay.Models.Profile.KeyChord? FindChordForDirectionCommand(string direction)
     {
-        foreach (FujinTerm.Models.GameData.Macro m in _services.Macros.Macros)
+        foreach (MudPlay.Models.GameData.Macro m in _services.Macros.Macros)
         {
             if (!m.Enabled) continue;
             string cmd = m.Command?.Trim() ?? string.Empty;
             if (!string.Equals(cmd, direction, StringComparison.OrdinalIgnoreCase)) continue;
             if (!Enum.TryParse<Avalonia.Input.Key>(m.Key, ignoreCase: true, out Avalonia.Input.Key avk)) continue;
-            return new FujinTerm.Models.Profile.KeyChord(avk, m.Ctrl, m.Shift, m.Alt);
+            return new MudPlay.Models.Profile.KeyChord(avk, m.Ctrl, m.Shift, m.Alt);
         }
         return null;
     }
@@ -871,11 +871,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // u / d movement macros (Settings → Macros). When the user has
     // no macro for either direction we fall back to the MapControl's
     // default chord (PageUp / PageDown).
-    [ObservableProperty] private FujinTerm.Models.Profile.KeyChord _upStepChord
+    [ObservableProperty] private MudPlay.Models.Profile.KeyChord _upStepChord
         = new(Avalonia.Input.Key.PageUp);
-    [ObservableProperty] private FujinTerm.Models.Profile.KeyChord _downStepChord
+    [ObservableProperty] private MudPlay.Models.Profile.KeyChord _downStepChord
         = new(Avalonia.Input.Key.PageDown);
-    [ObservableProperty] private IReadOnlyDictionary<Direction, FujinTerm.Models.Profile.KeyChord>? _compassChords;
+    [ObservableProperty] private IReadOnlyDictionary<Direction, MudPlay.Models.Profile.KeyChord>? _compassChords;
 
     // ----- Search ---------------------------------------------------
 

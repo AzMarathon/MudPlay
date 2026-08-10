@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // One action step required to unlock a multi-action hidden exit.
 // Multi-action exits encode the action data in OTHER exit fields on the

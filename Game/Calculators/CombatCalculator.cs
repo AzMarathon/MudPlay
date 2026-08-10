@@ -1,6 +1,6 @@
 using System;
 
-namespace FujinTerm.Game.Calculators;
+namespace MudPlay.Game.Calculators;
 
 // Pure MajorMUD combat formulas (hit/dodge, magic resist, backstab damage +
 // accuracy, attack accuracy, swings). Stock and ParaMUD branches select on

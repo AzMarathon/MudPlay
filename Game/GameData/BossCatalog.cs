@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.GameData;
+namespace MudPlay.Game.GameData;
 
 // One boss monster in the active set's Monsters table — a monster with GameLimit 1
 // (only one alive in the game at a time) or RegenTime >= 1 hour. RegenHours is the

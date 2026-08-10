@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Active fulfiller for NeedKind.PathItem needs backed by a shop: when a
 // one-shot walk crosses an (Item: N) / (Ticket: N) gate whose item we're not

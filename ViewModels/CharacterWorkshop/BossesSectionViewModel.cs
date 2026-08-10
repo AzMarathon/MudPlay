@@ -11,13 +11,13 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Game.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.CharacterWorkshop;
+using MudPlay.Game;
+using MudPlay.Game.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.CharacterWorkshop;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // BOSSES section — the per-realm boss list from BossStore, with respawn timers
 // resolved from game data (or a per-boss override). The table is read-mostly:

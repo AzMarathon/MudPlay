@@ -10,17 +10,17 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Game.Quests;
-using FujinTerm.Game.Spells;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.CharacterWorkshop;
+using MudPlay.Game;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Quests;
+using MudPlay.Game.Spells;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.CharacterWorkshop;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // EQUIPMENT MANAGER section — one unified view. The left list holds the four
 // fixed trigger-purposed gear sets (Default / Backstab / Pre-rest HP / Pre-rest

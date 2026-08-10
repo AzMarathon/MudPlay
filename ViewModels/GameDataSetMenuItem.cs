@@ -2,7 +2,7 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // One entry in the File → Game Data → Active set submenu. Carries the set
 // name + a checkbox-style IsActive flag (the currently-selected set's row

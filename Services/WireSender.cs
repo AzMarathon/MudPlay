@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Shared helper that bundles the three concerns every automation engine needs
 // when issuing a raw wire command:
@@ -19,7 +19,7 @@ internal sealed class WireSender
     private Action<byte[]>? _sink;
 
     // Every buffer ever pushed through Send, in order. Internal so tests assigned
-    // to the FujinTerm assembly can read it without exposing the field publicly.
+    // to the MudPlay assembly can read it without exposing the field publicly.
     // Engines forward this via their own LastSentForTests property.
     public List<byte[]> LastSentForTests { get; } = new();
 

@@ -1,11 +1,11 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Staged editor for the per-BBS room blacklist. Pre-loaded with the store's
 // current entries; in-dialog Add / Remove mutate a local working copy. Save

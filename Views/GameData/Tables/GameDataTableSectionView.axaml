@@ -1,10 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:FujinTerm.ViewModels.GameData.Tables"
+             xmlns:vm="using:MudPlay.ViewModels.GameData.Tables"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="480"
-             x:Class="FujinTerm.Views.GameData.Tables.GameDataTableSectionView"
+             x:Class="MudPlay.Views.GameData.Tables.GameDataTableSectionView"
              x:DataType="vm:GameDataTableSectionViewModel">
 
     <UserControl.Styles>

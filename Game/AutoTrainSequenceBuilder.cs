@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Builds the ordered keystroke payloads that drive MajorMUD's `train stats`
 // full-screen form to apply a CP plan. The form is navigated entirely with

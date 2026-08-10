@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Chat channels the RemoteCommandManager watches for inbound @-commands and
 // routes replies back through. Subset of ChatChannel — exclude system-level

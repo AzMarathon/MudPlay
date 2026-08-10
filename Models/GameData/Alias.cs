@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // User-defined outgoing typed-shortcut → command expansion. The
 // outgoing-text mirror of Trigger: when the user hits Enter on the

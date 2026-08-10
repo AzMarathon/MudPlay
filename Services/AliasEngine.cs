@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory cache of the active character's Alias entries + the runtime
 // expansion path.

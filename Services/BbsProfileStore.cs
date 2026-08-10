@@ -1,8 +1,8 @@
 using System.IO;
 using System.Linq;
-using FujinTerm.Models.Settings;
+using MudPlay.Models.Settings;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Owns Data/BBS/{name}/ — one folder per BBS, containing the primary bbs.json
 // (connection info + BBS-tier settings deltas) plus any per-set override

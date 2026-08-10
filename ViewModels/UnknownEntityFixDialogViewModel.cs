@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Modeless dialog opened when the LogPane user double-clicks a row whose
 // LogEntry.Source is "RoomClassifier" and whose LogEntry.Context carries the

@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // Parses the spells / pow command output into the obtained set of
 // SpellbookState. A small state machine batches the table rows — the list

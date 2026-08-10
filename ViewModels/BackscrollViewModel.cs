@@ -6,9 +6,9 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // View-model behind Views.BackscrollWindow. A FROZEN snapshot of the terminal
 // history captured when the window opened: the ScrollbackBuffer rows that

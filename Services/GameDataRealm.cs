@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text.Json;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Classifies a game-data set as "stock" or "paradigm" from its Info.json Legit
 // field (2 = paradigm / GreaterMUD, anything else = stock). Works by set NAME off

@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // JSON-friendly favourite-room bookmark. Carries the Game.Map.RoomKey as Map +
 // Room (matches RoomRef's wire shape) plus an optional user-typed Label for the

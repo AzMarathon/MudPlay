@@ -1,6 +1,6 @@
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Always-alive, headless control surface over the three movement engines
 // (AutoWalkManager, LoopRunner, AutoLairManager) and their shared

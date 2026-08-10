@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character completion state for one crawled quest (or alignment band),
 // keyed by the same (Flag, Step) identity QuestCrawler emits. Persisted as

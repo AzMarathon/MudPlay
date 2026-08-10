@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // Per-character credentials for a single BBS. Stored under
 // CharacterProfile.BbsCredentials keyed by BBS name — one entry per BBS the

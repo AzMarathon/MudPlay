@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Stealth;
+namespace MudPlay.Game.Stealth;
 
 // Coarse FSM state for StealthManager. The granular in-flight states
 // (AttemptingSneak / AttemptingHide) are observable separately from the

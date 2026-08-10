@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace FujinTerm.Views.Profile;
+namespace MudPlay.Views.Profile;
 
 public partial class ProfileNameInputDialog : Window
 {

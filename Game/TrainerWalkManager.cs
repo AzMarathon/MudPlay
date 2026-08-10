@@ -5,14 +5,14 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // The manual / armed entry point for "go train". Resolves the nearest
 // allowed, level-appropriate trainer (TrainerCatalog.SelectNearest + BFS

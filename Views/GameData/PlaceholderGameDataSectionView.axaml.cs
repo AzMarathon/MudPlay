@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace FujinTerm.Views.GameData;
+namespace MudPlay.Views.GameData;
 
 public partial class PlaceholderGameDataSectionView : UserControl
 {

@@ -1,9 +1,9 @@
-using FujinTerm.Game.Inventory;
-using FujinTerm.Game.Map;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Light;
+namespace MudPlay.Game.Light;
 
 // The active auto-light engine, split across a PROVISIONING path (keeps a covering
 // light in the pack) and a READYING path (lights / puts one away):

@@ -1,6 +1,6 @@
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Splits an InventorySnapshot into the two halves a deathpile is recorded as:
 // items worn at death (re-equippable) and carried-but-unworn items ("inventory

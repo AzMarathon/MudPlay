@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Game.Map;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Watches inbound lines for the post-death lives-count readout and tells
 // RoomTracker.NoteDeath so the room the character died in is captured on the

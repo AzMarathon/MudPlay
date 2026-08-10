@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
-using FujinTerm.Game.Spells;
+using MudPlay.Game.Spells;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory index of the active set's room-entry hazards: the harmful spell a
 // room casts on the player when they step in (Room.Spell), mapped to the item(s)

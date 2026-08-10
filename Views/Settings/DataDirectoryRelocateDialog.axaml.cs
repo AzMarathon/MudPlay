@@ -1,9 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.Settings;
+using MudPlay.Services;
+using MudPlay.ViewModels.Settings;
 
-namespace FujinTerm.Views.Settings;
+namespace MudPlay.Views.Settings;
 
 public partial class DataDirectoryRelocateDialog : Window
 {

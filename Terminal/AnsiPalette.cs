@@ -1,4 +1,4 @@
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // Color resolver: turns a logical TerminalColor (default / indexed / RGB)
 // into a concrete 32-bit ARGB value the renderer can blit.

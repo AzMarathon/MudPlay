@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
-using FujinTerm.Game;
-using FujinTerm.Game.Calculators;
-using FujinTerm.Game.GameData;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Game;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // One equippable item projected into the searchable columns the Item Finder
 // lists — slot, type, the wear requirements (level / strength), the item's weight,

@@ -2,9 +2,9 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using FujinTerm.ViewModels.CharacterWorkshop;
+using MudPlay.ViewModels.CharacterWorkshop;
 
-namespace FujinTerm.Views.CharacterWorkshop;
+namespace MudPlay.Views.CharacterWorkshop;
 
 public partial class ManageBossesDialog : Window
 {

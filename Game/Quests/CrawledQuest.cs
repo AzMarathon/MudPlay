@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Quests;
+namespace MudPlay.Game.Quests;
 
 // One quest discovered by QuestCrawler from the active set's TBInfo
 // quest/textblock chains — the mechanical layer that QuestStore's user/seed text

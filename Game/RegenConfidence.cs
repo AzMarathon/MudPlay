@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Trust level the UI / automation can place in a RegenStat's estimate.
 // Thresholds are empirical — pin them here so consumers (status-bar tinting,

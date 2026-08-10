@@ -11,17 +11,17 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Windows.Input;
-using FujinTerm.Net;
+using MudPlay.Net;
 using System.Collections.ObjectModel;
-using FujinTerm.Models.Profile;
-using FujinTerm.Models.Settings;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
-using FujinTerm.ViewModels.Settings;
-using FujinTerm.Views;
-using FujinTerm.Views.Settings;
+using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
+using MudPlay.Services;
+using MudPlay.Terminal;
+using MudPlay.ViewModels.Settings;
+using MudPlay.Views;
+using MudPlay.Views.Settings;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // View-model for the main window. Owns the terminal emulator and the active
 // Telnet connection, and exposes the bindable state and commands the XAML
@@ -188,7 +188,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Window title — "FujinTerm v{version} — {profile} — {bbs}". The version is
+    // Window title — "MudPlay v{version} — {profile} — {bbs}". The version is
     // the running build's AppInfo.Version. When no profile is loaded the
     // placeholder {default} stands in; when no BBS is selected {No BBS} stands
     // in. Both slots always render so the title bar shape stays consistent.
@@ -198,7 +198,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             string profile = AppServices.Current.Profile.CurrentProfileName ?? "{default}";
             string bbs     = ActiveBbsName ?? "{No BBS}";
-            return $"FujinTerm v{AppInfo.Version} — {profile} — {bbs}";
+            return $"MudPlay v{AppInfo.Version} — {profile} — {bbs}";
         }
     }
 
@@ -3073,11 +3073,11 @@ public partial class MainWindowViewModel : ObservableObject
     private async Task OpenProfileAsync()
     {
         ProfileService profile = AppServices.Current.Profile;
-        FujinTerm.ViewModels.Profile.ProfilePickerDialogViewModel vm =
+        MudPlay.ViewModels.Profile.ProfilePickerDialogViewModel vm =
             new(profile.ListAll());
 
         ProfileRef? picked = await AppServices.Current.Dialogs.OpenWindowAsync<
-            FujinTerm.ViewModels.Profile.ProfilePickerDialogViewModel, ProfileRef>(vm);
+            MudPlay.ViewModels.Profile.ProfilePickerDialogViewModel, ProfileRef>(vm);
         if (picked is null) return;
 
         try
@@ -3134,12 +3134,12 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        FujinTerm.ViewModels.Profile.ProfileNameInputDialogViewModel vm = new(
+        MudPlay.ViewModels.Profile.ProfileNameInputDialogViewModel vm = new(
             suggestedName: profile.CurrentProfileName ?? "character",
             exists:        name => profile.Exists(bbs, name));
 
         string? name = await AppServices.Current.Dialogs.OpenWindowAsync<
-            FujinTerm.ViewModels.Profile.ProfileNameInputDialogViewModel, string>(vm);
+            MudPlay.ViewModels.Profile.ProfileNameInputDialogViewModel, string>(vm);
         if (string.IsNullOrWhiteSpace(name)) return;
 
         profile.SaveAs(bbs, name);
@@ -3380,7 +3380,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Singleton-ish handle to the Game Data Browser. Re-press of the
     // command / hotkey toggles it closed.
-    private FujinTerm.Views.GameData.GameDataBrowserWindow? _gameDataBrowser;
+    private MudPlay.Views.GameData.GameDataBrowserWindow? _gameDataBrowser;
 
     [RelayCommand]
     private void OpenGameDataBrowser() => ShowGameDataBrowser(initialSectionId: null);
@@ -3467,15 +3467,15 @@ public partial class MainWindowViewModel : ObservableObject
     // the requested section and selects the matching row, never closes.
     private void ShowGameDataBrowser(
         string? initialSectionId,
-        Func<FujinTerm.ViewModels.GameData.Tables.GameDataRow, bool>? rowSelector = null)
+        Func<MudPlay.ViewModels.GameData.Tables.GameDataRow, bool>? rowSelector = null)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
         if (_gameDataBrowser is { } existing)
         {
-            FujinTerm.ViewModels.GameData.GameDataBrowserViewModel? existingVm =
-                existing.DataContext as FujinTerm.ViewModels.GameData.GameDataBrowserViewModel;
+            MudPlay.ViewModels.GameData.GameDataBrowserViewModel? existingVm =
+                existing.DataContext as MudPlay.ViewModels.GameData.GameDataBrowserViewModel;
 
             if (rowSelector is not null && initialSectionId is not null)
             {
@@ -3494,7 +3494,7 @@ public partial class MainWindowViewModel : ObservableObject
 
             if (existingVm is not null)
             {
-                FujinTerm.ViewModels.GameData.GameDataSectionViewModel? target =
+                MudPlay.ViewModels.GameData.GameDataSectionViewModel? target =
                     existingVm.Sections.FirstOrDefault(s => string.Equals(s.Id, initialSectionId, StringComparison.OrdinalIgnoreCase));
                 if (target is not null) existingVm.SelectedSection = target;
                 existing.Activate();
@@ -3505,7 +3505,7 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        FujinTerm.ViewModels.GameData.GameDataBrowserViewModel newVm = new(
+        MudPlay.ViewModels.GameData.GameDataBrowserViewModel newVm = new(
             AppServices.Current.GameData,
             AppServices.Current.Triggers,
             AppServices.Current.Aliases,
@@ -3523,7 +3523,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.PlayerStats,
             AppServices.Current.ItemSources,
             initialSectionId);
-        FujinTerm.Views.GameData.GameDataBrowserWindow window = new() { DataContext = newVm };
+        MudPlay.Views.GameData.GameDataBrowserWindow window = new() { DataContext = newVm };
         window.Closed += (_, _) => _gameDataBrowser = null;
         _gameDataBrowser = window;
         window.Show(main);
@@ -3654,7 +3654,7 @@ public partial class MainWindowViewModel : ObservableObject
     private async Task WalkToFavoriteRoomAsync(Game.Map.RoomKey key)
     {
         MovementStop();
-        await FujinTerm.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, key);
+        await MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, key);
     }
 
     // Flip the active set and persist the user's choice. Active set is a
@@ -4180,10 +4180,10 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(QuitGesture));
     }
 
-    // Help → About FujinTerm.
+    // Help → About MudPlay.
     [RelayCommand]
     private void OpenAbout()
-        => ShowInfoDialog("About FujinTerm",
+        => ShowInfoDialog("About MudPlay",
             $"""
             {AppInfo.DisplayName}
             A modern Avalonia BBS terminal client with MajorMUD-aware features.

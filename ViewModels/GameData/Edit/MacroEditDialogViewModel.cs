@@ -3,10 +3,10 @@ using System.Linq;
 using Avalonia.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.GameData.Edit;
+namespace MudPlay.ViewModels.GameData.Edit;
 
 // Per-record edit dialog for Game Data Browser → Macros. Editable fields: Name, the
 // (Key + 3 modifier) chord, Command string (with ^M / ; multi-step split semantics),

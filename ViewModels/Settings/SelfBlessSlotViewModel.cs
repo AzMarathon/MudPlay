@@ -1,7 +1,7 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // One self-bless row in the Settings → Spells tab: a 4-letter spell short-code
 // picker the CastingDirector recasts when the buff isn't active. Row order is

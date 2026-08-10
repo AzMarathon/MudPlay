@@ -7,14 +7,14 @@ using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game;
-using FujinTerm.Game.Map;
-using FujinTerm.Game.Quests;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Views.CharacterWorkshop;
+using MudPlay.Game;
+using MudPlay.Game.Map;
+using MudPlay.Game.Quests;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Views.CharacterWorkshop;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // QUEST STATUS section — the per-character quest checklist. Crawls every quest in
 // the active set (QuestCrawler), resolves each to the character's class for

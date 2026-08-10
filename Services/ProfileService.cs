@@ -1,7 +1,7 @@
 using System.Text.Json;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Owns Data/BBS/{bbs}/profiles/{char}/profile.json — the Character tier of the
 // settings hierarchy. Profiles nest under their BBS folder because each

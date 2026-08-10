@@ -1,6 +1,6 @@
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Game.Combat;
+namespace MudPlay.Game.Combat;
 
 // What kind of "Also Here" occupant a name resolved to. CombatStateTracker only
 // treats Monster entries as candidate targets; CombatManager further filters by

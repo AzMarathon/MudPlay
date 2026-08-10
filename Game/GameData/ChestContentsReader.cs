@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.GameData;
+namespace MudPlay.Game.GameData;
 
 // One possible drop from a chest: the item and the chance (0..1) that a single
 // `open` yields at least one of it, aggregated across every draw the chest makes.

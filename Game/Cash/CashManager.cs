@@ -1,11 +1,11 @@
 using System.Text;
 using Avalonia.Threading;
-using FujinTerm.Game.Inventory;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Game.Inventory;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Cash;
+namespace MudPlay.Game.Cash;
 
 // Per-currency cash pickup / discard engine. Subscribes to CashOnGround,
 // CashPickedUp, CashDropped, and CashFromKill (corpse loot after a monster

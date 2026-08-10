@@ -2,10 +2,10 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.Cash;
-using FujinTerm.Services;
+using MudPlay.Game.Cash;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels;
+namespace MudPlay.ViewModels;
 
 // Modeless Transaction history window VM — a projection over
 // TransactionHistoryTracker. Rebuilds Rows on the tracker's Changed signal

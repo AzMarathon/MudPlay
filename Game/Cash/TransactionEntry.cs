@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Cash;
+namespace MudPlay.Game.Cash;
 
 // Which store a TransactionEntry came from — a cash-only bank `dep`osit, or a
 // stash room `hide` (cash and/or items).

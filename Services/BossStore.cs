@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using FujinTerm.Game;
-using FujinTerm.Models.Profile;
+using MudPlay.Game;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Loads and resolves the boss catalog for the active game-data set. Two layers,
 // keyed by boss Name (game-data spelling):

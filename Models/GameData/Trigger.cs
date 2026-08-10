@@ -1,4 +1,4 @@
-namespace FujinTerm.Models.GameData;
+namespace MudPlay.Models.GameData;
 
 // User-defined incoming-text pattern → response. Per-character; persisted
 // on CharacterProfile. Loaded into TriggerEngine on profile load; the
@@ -79,6 +79,6 @@ public enum TriggerScope
     ChatGangpath,
     // Specific chat channel — Broadcast.
     ChatBroadcast,
-    // FujinTerm's own LogService emissions.
+    // MudPlay's own LogService emissions.
     SystemLog,
 }

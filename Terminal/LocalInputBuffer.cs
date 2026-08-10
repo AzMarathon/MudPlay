@@ -1,12 +1,12 @@
 using System.Text;
 
-namespace FujinTerm.Terminal;
+namespace MudPlay.Terminal;
 
 // Client-side line buffer for the terminal control. Replaces character-mode
 // (every keystroke straight to the wire) with line-mode: printable keystrokes
 // accumulate locally and only flush to the server when the user presses Enter.
 //
-// Two reasons the line-mode model wins for FujinTerm:
+// Two reasons the line-mode model wins for MudPlay:
 //   1. Engine auto-sends (par poll, AutoParty invite, @health round-trip,
 //      @wait/@ok, etc.) can fire at any time. In character-mode they
 //      interleave into the user's half-typed input on the wire — the server's
@@ -42,7 +42,7 @@ public sealed class LocalInputBuffer
     // When true, line-mode is suspended: callers send each keystroke straight
     // to the wire and skip the local-echo overlay. Flipped on entry to / exit
     // from MajorMUD's full-screen forms (trainer stats, character creation)
-    // via FujinTerm.Game.TrainerMenuTracker. Setting it to true also drops any
+    // via MudPlay.Game.TrainerMenuTracker. Setting it to true also drops any
     // in-progress buffered text so a stale overlay can't linger behind the
     // server's form. Re-raising Changed lets the control repaint immediately.
     public bool CharacterMode

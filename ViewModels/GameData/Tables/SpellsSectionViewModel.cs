@@ -5,13 +5,13 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Spells;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.ViewModels.GameData.Edit;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Spells;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Edit;
 
-namespace FujinTerm.ViewModels.GameData.Tables;
+namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Spells tab. Renders the imported MajorMUD Spells table — fuel for the
 // CastingDirector + the Settings → Spells / Party spell pickers + the Workshop Spell Book.

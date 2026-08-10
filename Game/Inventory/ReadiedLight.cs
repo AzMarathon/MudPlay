@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // The light source the player currently has lit, parsed from an 'i' dump where a
 // readied light prints inline as "lantern (Readied/239)" — the same (<suffix>)

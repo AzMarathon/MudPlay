@@ -1,6 +1,6 @@
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
 // JSON-friendly representation of a single tracked step taken from a
 // Game.Map.RoomTracker Confirmed state — one entry per outbound move command.

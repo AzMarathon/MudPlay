@@ -854,7 +854,7 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   included) sees `<name> drops to the ground!`; the dropped character sees it with their **own** name
   (observed: `Raijin drops to the ground!`). That line is the party-side signal a member has gone
   down. The drag, once someone starts it, prints `<leader> is dragging you around.` to the dragged
-  character on each of the dragger's moves (observed: `Fujin is dragging you around.`).
+  character on each of the dragger's moves (observed: `MudPlay is dragging you around.`).
 - **Drag is a manual leader command, not automatic.** A dropped ally is only dragged when the party
   **leader types `drag <name>`** after seeing the drop line — nothing drags them on its own. Dragging
   merely relocates the still-mortally-wounded body; it does **not** revive them or restore party
@@ -1963,7 +1963,7 @@ an encumbrance-adjusted one, since it's a planning aid without a fixed load assu
     their `who` title's level band is used with the LOW end as the conservative floor** (they
     could be as low as the band's minimum, so a `MinLevel` gate clears only if even that floor
     clears it). Every client answers `@level` — formats vary by client, parsed leniently (the
-    parser also tolerates the `{ }` wrap another FujinTerm client adds to its reply). An exact
+    parser also tolerates the `{ }` wrap another MudPlay client adds to its reply). An exact
     reading is stamped with the time it was learned (`PlayerObservation.LevelAt`) and counts as
     **fresh only for the current local day** — a member could have levelled since — so
     `PartyLevelTracker.WarmStaleLevels` re-fires `@level` for any unknown member, or one whose
@@ -1986,7 +1986,7 @@ Settings → Party "probe stats on partying", default on), the client telepaths 
   sole `@level` recorder); the `@version` reply is recorded onto the player record
   (`PlayerObservation.Version` / `VersionAt`).
 - **`@version` reply shape:** the answering client returns its name + version, brace-wrapped —
-  `{FujinTerm 2.37.0}`, `{MegaMud 1.03u}`. Recorded verbatim. (Correlated to the member we just
+  `{MudPlay 2.37.0}`, `{MegaMud 1.03u}`. Recorded verbatim. (Correlated to the member we just
   probed within a short window; a brace-wrapped, letter-led payload carrying a digit — which
   rejects denial / chat lines and the `@level`/`@health` replies that share the window.)
 

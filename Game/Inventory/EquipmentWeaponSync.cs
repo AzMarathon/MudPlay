@@ -1,8 +1,8 @@
 using System;
 using System.Linq;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Derives the combat weapon-swap matrix — the six weapon fields on
 // CombatSettings — from the Equipment Manager's gear sets, which are the single

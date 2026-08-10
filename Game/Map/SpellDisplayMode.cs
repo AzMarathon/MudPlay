@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // How the Navigation map paints room-spell rooms (rooms whose Room.Spell > 0). The
 // Spells chip cycles through these in order: Mono -> ByName -> Off -> Mono.

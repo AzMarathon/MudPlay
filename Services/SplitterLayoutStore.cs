@@ -1,7 +1,7 @@
 using Avalonia.Controls;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Per-character splitter-position memory for two-pane resizable dialogs.
 // Parallels WindowLayoutStore for the horizontal split inside a window (e.g. the

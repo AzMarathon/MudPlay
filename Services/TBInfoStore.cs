@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using FujinTerm.Game.Map;
+using MudPlay.Game.Map;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // In-memory index of TBInfo.json for the active game-data set. Mirrors
 // RoomGraphManager's lifecycle: subscribes to GameDataCache.ActiveSetChanged,

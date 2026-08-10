@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
-using FujinTerm.Game.GameData;
-using FujinTerm.Game.Map;
-using FujinTerm.Game.Quests;
-using FujinTerm.Services;
+using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
+using MudPlay.Game.Quests;
+using MudPlay.Services;
 
-namespace FujinTerm.ViewModels.CharacterWorkshop;
+namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Presentation formatting shared by the Quest Status tab and the Quest editor window —
 // turns crawled quest mechanics (CrawledQuest / QuestStep) into the human-readable

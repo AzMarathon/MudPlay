@@ -1,8 +1,8 @@
 using System.ComponentModel;
-using FujinTerm.Game.Map;
-using FujinTerm.Services;
+using MudPlay.Game.Map;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Suppresses this client's own automated movement while it is a party
 // follower. In MajorMUD movement is leader-driven — the leader walks and the

@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // One row in PartyState.Members. Carries the per-member snapshot the
 // PartyWindow renders (HP / MA + status flags) plus the baseline HP / MA

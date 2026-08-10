@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Expected-exp read of a room's monster-summoning entry spell. A room's Spell
 // (Rooms.Spell) can carry a TextBlock ability (Spells Abil code 148) whose action is

@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // One spell a given class can learn/cast at a given level — the output row of
 // KnownSpellCatalog. Carries the display identity (Short cast-code + full Name) plus

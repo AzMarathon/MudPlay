@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Threading;
-using FujinTerm.Models.Profile;
-using FujinTerm.Services;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Inventory;
+namespace MudPlay.Game.Inventory;
 
 // Applies saved gear sets (EquipmentSet) — the engine half of the Workshop's
 // Equipment tab. Given a set, it diffs the desired controlled-slot items against

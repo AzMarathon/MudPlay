@@ -1,6 +1,6 @@
-using FujinTerm.Terminal;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Tee the live terminal transcript to a file. Each completed row (the same rows
 // the Backscroll window sees) is appended as [HH:mm:ss] <ansi-encoded-text>\n so
@@ -45,7 +45,7 @@ public sealed class CaptureSession : IAsyncDisposable
         _source.RowAdded += OnRowAdded;
         _subscribed = true;
 
-        _writer.WriteLine($"# FujinTerm capture — started {DateTimeOffset.Now:O}");
+        _writer.WriteLine($"# MudPlay capture — started {DateTimeOffset.Now:O}");
     }
 
     // Stop the capture and close the file. No-op when inactive.

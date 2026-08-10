@@ -1,7 +1,7 @@
 using System.Text;
-using FujinTerm.Models.GameData;
+using MudPlay.Models.GameData;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // The @divert command (DivertConversations permission category). While
 // diverting, every incoming telepath is repeated to a chosen target player so an

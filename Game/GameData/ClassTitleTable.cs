@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.GameData;
+namespace MudPlay.Game.GameData;
 
 // MajorMUD class titles indexed by level — the lookup behind "infer class + level
 // from who output".

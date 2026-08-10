@@ -1,4 +1,4 @@
-namespace FujinTerm.Game.Spells;
+namespace MudPlay.Game.Spells;
 
 // One entry in CasterMessageMatcher.Placeholders — a template token paired with
 // what it captures, shown in the Game Data → Messages editor so a user

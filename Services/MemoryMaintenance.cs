@@ -1,7 +1,7 @@
 using System.Runtime;
 using System.Runtime.InteropServices;
 
-namespace FujinTerm.Services;
+namespace MudPlay.Services;
 
 // Background memory hygiene for a client that runs in loop mode for days or
 // months at a stretch. There are two distinct problems with two different

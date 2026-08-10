@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
-using FujinTerm.Services;
-using FujinTerm.Terminal;
+using MudPlay.Services;
+using MudPlay.Terminal;
 
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Turns a `look <monster>` response into an estimated HP window for the status
 // bar. Unlike LookParser (players — a bracketed "[ Name ]" header ending in

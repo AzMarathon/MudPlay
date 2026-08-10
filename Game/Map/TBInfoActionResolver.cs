@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using FujinTerm.Services;
+using MudPlay.Services;
 
-namespace FujinTerm.Game.Map;
+namespace MudPlay.Game.Map;
 
 // Resolves a TBInfo CMD chain into the player-typed keywords for a remoteaction
 // directive. Sibling to TBInfoTeleportResolver — same Action-string parse shape,

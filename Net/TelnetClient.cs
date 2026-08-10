@@ -3,9 +3,9 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using static FujinTerm.Net.TelnetProtocol;
+using static MudPlay.Net.TelnetProtocol;
 
-namespace FujinTerm.Net;
+namespace MudPlay.Net;
 
 // A minimal Telnet client tailored for connecting to BBSes.
 //

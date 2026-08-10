@@ -1,4 +1,4 @@
-namespace FujinTerm.Game;
+namespace MudPlay.Game;
 
 // Per-realm regen tick cadence — the wall-clock interval at which each of
 // RegenTracker's cycles delivers an observable uptick. Selected off

@@ -1,6 +1,6 @@
-namespace FujinTerm.Models.Profile;
+namespace MudPlay.Models.Profile;
 
-// What FujinTerm does when a profile loads and the connection comes up.
+// What MudPlay does when a profile loads and the connection comes up.
 // User-configurable on the Settings → General tab. Consumed by the loop /
 // Auto-Lair engines.
 public enum InitialTask

@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.ViewModels.Settings;
+namespace MudPlay.ViewModels.Settings;
 
 // Row view-model for one entry in the BBS section's "Menu nav after login"
 // editor. Wraps a MenuStep with INotifyPropertyChanged so the table cells two-way

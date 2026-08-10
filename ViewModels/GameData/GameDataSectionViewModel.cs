@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace FujinTerm.ViewModels.GameData;
+namespace MudPlay.ViewModels.GameData;
 
 // Base for one tab in the Game Data Browser sidebar. Each tab represents one game-data
 // table (Monsters / Items / Spells / TextBlocks / etc.) plus its user-overrides view.

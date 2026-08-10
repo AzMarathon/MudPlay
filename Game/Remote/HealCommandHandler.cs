@@ -1,8 +1,8 @@
 using System.Text;
-using FujinTerm.Models.GameData;
-using FujinTerm.Models.Profile;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Receive side of @heal — a party member's request "cast a heal on me". A
 // configured party-healer responds by polling party HP now (par), which

@@ -1,9 +1,9 @@
 using System.Text;
-using FujinTerm.Models.GameData;
-using FujinTerm.Services;
-using FujinTerm.Services.Patterns;
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
-namespace FujinTerm.Game.Remote;
+namespace MudPlay.Game.Remote;
 
 // Consumer of RemoteCommandManager for the @suicide remote command. Authorised
 // callers — players with the PlayerRemoteControls.SysopCommands ("Elevated
