@@ -81,6 +81,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         {
             new ActionOrderOption(CombatActionOrder.SpellsFirst,   "Spells first"),
             new ActionOrderOption(CombatActionOrder.PhysicalFirst, "Physical first"),
+            new ActionOrderOption(CombatActionOrder.AlternateSpellPhysical, "Alternate — spell, then physical"),
+            new ActionOrderOption(CombatActionOrder.AlternatePhysicalSpell, "Alternate — physical, then spell"),
         };
 
     // ----- Weapon slots --------------------------------------------

@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.2.1
+
+- Two new Combat "Action order" modes: alternate the round's action every round — "spell, then physical" and "physical, then spell"
+- On its off phase each mode falls back to the other action type (no castable spell → swing; weapon can't hit → cast) so the round never stalls
+
 ## 3.2.0
 
 - New Help → About window: program name + version, a clickable link to the repo, a tab per bundled license (MudPlay, Avalonia, JetDatabaseReader, and the bundled fonts — MIT / SIL OFL 1.1 / CC BY-SA 4.0, shown verbatim), and a thank-you to the MajorMUD community and the tools it built (MegaMUD, Nightmare Redux, MajorMUD Explorer)

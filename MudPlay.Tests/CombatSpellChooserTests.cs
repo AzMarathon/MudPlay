@@ -1174,4 +1174,86 @@ public sealed class CombatSpellChooserTests
         CombatSpellDecision r4 = sut.Choose(settings, Ctx(enemies: 4));
         Assert.Equal(CombatSpellAction.WeaponAttack, r4.Action);
     }
+
+    // ----- Alternating action orders (per-round spell↔physical) ---------
+    // The two Alternate* orders resolve their spell-vs-physical preference per
+    // round and pass it in via ctx.AlternationPreferSpell (true = this round is a
+    // spell phase, false = physical). A spell phase behaves like SpellsFirst
+    // (falls to the swing when no spell can fire); a physical phase behaves like
+    // PhysicalFirst (falls to the cascade only when the weapon is ineffective).
+    // The engine-owned round counter and the every-round command re-issue are
+    // exercised at the manager level (CombatManagerSpellsTests).
+
+    private static CombatSpellContext AltCtx(
+        bool preferSpell, bool weaponIneffective = false,
+        int mana = 100, int maxMana = 100, bool backstabPending = false) =>
+        new(EnemyCount: 1, TargetRawName: "a rat", Mana: mana, MaxMana: maxMana,
+            BackstabPending: backstabPending, WeaponIneffective: weaponIneffective,
+            AlternationPreferSpell: preferSpell);
+
+    [Fact]
+    public void Alternation_SpellPhase_CastsEvenWhenFixedOrderIsPhysicalFirst()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("harm"),
+            // The per-round preference must override the configured fixed order.
+            ActionOrder = CombatActionOrder.PhysicalFirst,
+        };
+
+        CombatSpellDecision d = sut.Choose(settings, AltCtx(preferSpell: true));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
+        Assert.Equal("harm", d.Spell);
+    }
+
+    [Fact]
+    public void Alternation_PhysicalPhase_SwingsEvenWhenFixedOrderIsSpellsFirst()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("harm"),
+            ActionOrder = CombatActionOrder.SpellsFirst,
+        };
+
+        CombatSpellDecision d = sut.Choose(settings, AltCtx(preferSpell: false));
+        Assert.Equal(CombatSpellAction.WeaponAttack, d.Action);
+        Assert.Null(d.Spell);
+    }
+
+    [Fact]
+    public void Alternation_SpellPhase_NoCastableSpell_FallsToWeapon()
+    {
+        CombatSpellChooser sut = new();
+        // Spell phase but nothing is configured to fire → fall back to the swing.
+        CombatSpellDecision d = sut.Choose(new CombatSettings(), AltCtx(preferSpell: true));
+        Assert.Equal(CombatSpellAction.WeaponAttack, d.Action);
+    }
+
+    [Fact]
+    public void Alternation_PhysicalPhase_WeaponIneffective_FallsToSpell()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new() { NormalAttackSpell = Slot("harm") };
+
+        // Physical phase but the weapon can't hit → the cascade fires anyway.
+        CombatSpellDecision d = sut.Choose(
+            settings, AltCtx(preferSpell: false, weaponIneffective: true));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
+        Assert.Equal("harm", d.Spell);
+    }
+
+    [Fact]
+    public void Alternation_BackstabOpensRegardlessOfPhase()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new() { NormalAttackSpell = Slot("harm") };
+
+        // The opener outranks the per-round choice in both phases.
+        Assert.Equal(CombatSpellAction.Backstab,
+            sut.Choose(settings, AltCtx(preferSpell: false, backstabPending: true)).Action);
+        Assert.Equal(CombatSpellAction.Backstab,
+            sut.Choose(settings, AltCtx(preferSpell: true, backstabPending: true)).Action);
+    }
 }

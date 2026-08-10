@@ -175,10 +175,15 @@ public sealed partial class CombatManager
         RoomEntitiesObservation obs)
     {
         // A change of combat target resets the per-target single-target cast caps —
-        // MaxCasts is per-target for those slots (the AoE slots stay per-room). A
-        // same-target re-announce (a mid-fight decision switch) doesn't reset.
+        // MaxCasts is per-target for those slots (the AoE slots stay per-room) — and
+        // restarts the alternating-order phase so each new fight opens on the mode's
+        // first phase. A same-target re-announce (a mid-fight decision switch, incl.
+        // the per-round alternation heartbeat) doesn't reset.
         if (!string.Equals(_currentTarget, picked.RawName, StringComparison.OrdinalIgnoreCase))
+        {
             _spellChooser.ResetForNewTarget();
+            _alternationRound = 0;
+        }
 
         // A per-monster forced attack COMMAND wins over the entire normal flow
         // (spell chooser + weapon pick): send it verbatim and let the server
@@ -346,6 +351,35 @@ public sealed partial class CombatManager
         if (!CombatSpellsWired) return;
         if (!_isEnabled()) return;
         if (_combatOff) return;                         // round interrupted; resume path owns re-engage
+
+        CombatSettings settings = _readSettings();
+
+        // Alternating action orders (CombatActionOrder.Alternate*) drive a fresh
+        // command EVERY round — the desired action flips round to round, so the
+        // server auto-repeat the fixed orders lean on is never what we want here.
+        // This must run ahead of the weapon-mode early-return below: a physical-phase
+        // round leaves weapon mode (_castingSpellTarget cleared by the swing), and
+        // without this branch the heartbeat would then return early and never flip
+        // back to a spell next round. Gated on _currentTarget (not _castingSpellTarget)
+        // so it drives both spell-phase and weapon-phase rounds, advancing the phase
+        // once per round. An interrupted round (_combatOff, handled above) pauses the
+        // phase rather than advancing it.
+        if (AlternationPreferSpell(settings.ActionOrder) is not null
+            && _currentTarget is { } altTarget)
+        {
+            if (_classifier.Current is not { } altObs || !TargetPresent(altObs, altTarget))
+            {
+                _castingSpellTarget = null;
+                return;
+            }
+            _alternationRound++;
+            if (TryBuildCandidate(altObs, altTarget) is { } altCand)
+                DispatchRoundAction(settings, altCand, CountEngageable(altObs), altObs);
+            else
+                _castingSpellTarget = null;   // can't rebuild the target — drop; next observe re-picks
+            return;
+        }
+
         if (_castingSpellTarget is not { } target) return;   // weapon / idle mode — nothing to drive
 
         if (_classifier.Current is not { } obs)
@@ -373,7 +407,6 @@ public sealed partial class CombatManager
             return;
         }
 
-        CombatSettings settings = _readSettings();
         CombatSpellContext ctx = BuildContext(
             settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
         CombatSpellDecision decision = _spellChooser.Choose(settings, ctx);
@@ -509,8 +542,20 @@ public sealed partial class CombatManager
             OverridePreAttackSpell:    preAttackOverride,
             OverridePreAttackMaxCasts: preAttackCap,
             WeaponIneffective:   WeaponPathExhausted(
-                settings, ResolveSpeciesByName(target), monsterNumber));
+                settings, ResolveSpeciesByName(target), monsterNumber),
+            AlternationPreferSpell: AlternationPreferSpell(settings.ActionOrder));
     }
+
+    // This round's forced spell-vs-physical preference for the alternating action
+    // orders, from the parity of _alternationRound; null for the fixed orders (the
+    // chooser then follows settings.ActionOrder). AlternateSpellPhysical opens on
+    // the spell (even rounds → spell); AlternatePhysicalSpell opens on the swing.
+    private bool? AlternationPreferSpell(CombatActionOrder order) => order switch
+    {
+        CombatActionOrder.AlternateSpellPhysical => (_alternationRound % 2) == 0,
+        CombatActionOrder.AlternatePhysicalSpell => (_alternationRound % 2) == 1,
+        _ => null,
+    };
 
     // The current target's per-monster DontBackstab overlay flag — the backstab
     // opener must skip a flagged target and open with a normal attack instead.
