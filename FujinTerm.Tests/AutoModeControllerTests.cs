@@ -86,6 +86,40 @@ public sealed class AutoModeControllerTests
     }
 
     [Fact]
+    public void KillSwitchToggled_FiresTrueOnKill_FalseOnRestore()
+    {
+        // The event AppServices bridges to MovementController so navigation
+        // suspends on engage and resumes on restore.
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, CombatOn());
+        AutoModeController controller = new(profile);
+        List<bool> events = new();
+        controller.KillSwitchToggled += engaged => events.Add(engaged);
+
+        controller.ToggleAll();   // kill
+        controller.ToggleAll();   // restore
+
+        Assert.Equal(new[] { true, false }, events);
+    }
+
+    [Fact]
+    public void KillSwitchToggled_DoesNotFire_WhenRestoreHasNoSnapshot()
+    {
+        // A restore press with nothing snapshotted (everything already off, no
+        // prior kill this session) is a no-op — it must not emit a spurious
+        // resume, which would fight a nav the user is intentionally running.
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, AllOff());
+        AutoModeController controller = new(profile);
+        List<bool> events = new();
+        controller.KillSwitchToggled += engaged => events.Add(engaged);
+
+        controller.ToggleAll();   // all already off, no snapshot → no-op
+
+        Assert.Empty(events);
+    }
+
+    [Fact]
     public void ResetSnapshot_ClearsKillSwitch()
     {
         // Profile-load boundary: a freshly loaded character must not

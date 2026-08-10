@@ -398,6 +398,9 @@ public static class BugReportBuilder
         // needs to point at the right engine.
         var gates = svc.MovementCoordinator.AssertedGates;
         Kv(sb, "Paused by", gates.Count > 0 ? string.Join(", ", gates) : "(nothing)");
+        // Whether the Auto-All kill switch is the one holding navigation — it
+        // suspends an in-flight nav on engage and resumes it on restore.
+        Kv(sb, "Auto-All suspended nav", svc.MovementControl.IsAutoAllSuspended.ToString());
         var loop = svc.LoopRunner;
         Kv(sb, "Loop runner", loop.State.ToString());
         // CurrentLoop is the loop of the LIVE run; StagedLoop is the loaded-but-

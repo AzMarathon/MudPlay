@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 2.39.6
+
+- "All auto off" now also parks navigation: engaging it suspends any in-flight walk / loop / auto-lair right where it is, and toggling it back on resumes exactly that — a manual pause or stop you make in between is respected, and it's idle-safe (nothing to resume when nothing was running)
+- Equipment Manager and Item Finder trial gear slots now list in the in-game "look" order — worn slots top-to-bottom (Head → Feet → Worn), then Off-Hand / Weapon at the bottom, with the alternates mirroring that pairing right after
+
 ## 2.39.4
 
 - Death now clears the client's condition tracker, so a knockdown / held ("flat on your back") state whose in-game recovery line never arrived can't survive the death and leave navigation stuck "Paused by: Held" while the character is free to move

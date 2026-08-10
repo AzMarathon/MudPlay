@@ -4343,7 +4343,19 @@ public sealed class AppServices
         // the window-scoped NavigationViewModel) and stays in sync with
         // the Nav window because both act on the same engine primitives.
         MovementControl = new Game.Map.MovementController(
-            Walker, LoopRunner, AutoLair, MovementCoordinator);
+            Walker, LoopRunner, AutoLair, MovementCoordinator, Log);
+
+        // Auto-All kill switch also parks navigation: engaging it suspends any
+        // in-flight walk / loop / auto-lair (retaining where it is), and restoring
+        // it resumes exactly that. Both the toolbar button and the @auto-all remote
+        // funnel through AutoModeController.ToggleAll, so this one bridge covers
+        // both. (MovementControl is built here, after AutoModeController, so the
+        // hook is wired at this point rather than at the controller's construction.)
+        AutoModeController.KillSwitchToggled += engaged =>
+        {
+            if (engaged) MovementControl.SuspendForAutoAll();
+            else MovementControl.ReleaseFromAutoAll();
+        };
 
         // Death engine-quiescence. On our death RoomTracker fires
         // PlayerDeathObserved (both death phrasings). PlayerDeathHalt does a clean
