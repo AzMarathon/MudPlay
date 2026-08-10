@@ -15,7 +15,7 @@ namespace MudPlay.Controls;
 // emulator — so nothing here reaches the scrollback log.
 public sealed class MudSplashAnimator : IDisposable
 {
-    public const int LoopFrames = 96;
+    public const int LoopFrames = 116;
     private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(80);
 
     // Phase boundaries (frame index within the loop). The slide gets the bulk of
@@ -24,8 +24,8 @@ public sealed class MudSplashAnimator : IDisposable
     private const int ThrowEnd  = 19;   // overhand swing; ball leaves the hand
     private const int FlyEnd    = 27;   // ball grows as it flies at the camera
     private const int SplatEnd  = 34;   // mud floods the viewport
-    private const int SlideEnd  = 86;   // it slides down and off (slow) — 52 frames
-    // 87..95: figure stands clean, ready to throw → loops back to windup.
+    private const int SlideEnd  = 106;  // it slides down and off (slow) — 72 frames
+    // 107..115: figure stands clean, ready to throw → loops back to windup.
 
     private const int TitleRows = 4;    // reserved for header; mud stays below.
 
@@ -220,7 +220,7 @@ public sealed class MudSplashAnimator : IDisposable
         // Push far enough that even the slowest column clears the splat's whole
         // vertical extent by the end (so the last frame is truly clean — no abrupt
         // cut before the loop). The 1.2 margin over-clears.
-        double baseOff = EaseInSoft(p) * (s.Rows + maxR) * 1.2;
+        double baseOff = EaseInSoft(p) * (s.Rows + maxR) * 1.1;
         double residueFade = 1.0 - p;   // streaks wash away as the mud finishes running off
 
         for (int x = 0; x < s.Cols; x++)
