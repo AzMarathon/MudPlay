@@ -234,11 +234,6 @@
                      game-data set swap; picks beyond a narrower realm's count
                      are preserved (stashed off-screen), not lost. -->
                 <TextBlock Classes="SectionHeader" Text="Bless spells"/>
-                <TextBlock Text="Self-buff slots — CastingDirector recasts when not active."
-                           Foreground="{StaticResource ChromeFgMutedBrush}"
-                           FontSize="{StaticResource FontSizeSm}"
-                           FontStyle="Italic"
-                           Margin="0,0,0,4"/>
                 <!-- Column header: label the recast-lead picker once, above the rows. -->
                 <Grid ColumnDefinitions="80,130,Auto" Margin="0,0,0,2">
                     <TextBlock Grid.Column="2" Text="recast within (s)" Margin="8,0,0,0"
@@ -260,7 +255,6 @@
                                 <NumericUpDown Grid.Column="2" Value="{Binding RecastMarginSec, Mode=TwoWay}"
                                                Minimum="0" Maximum="999" FormatString="0" Increment="1"
                                                Width="110" Margin="8,0,0,0" VerticalAlignment="Center"
-                                               IsVisible="{Binding Spell, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                                ToolTip.Tip="Recast this buff when it's within this many seconds of expiring. 0 = don't recast until it actually expires (a wear-off message or the tracked timer running out)."/>
                             </Grid>
                         </DataTemplate>
