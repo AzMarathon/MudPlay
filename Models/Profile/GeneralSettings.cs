@@ -58,6 +58,16 @@ public sealed class GeneralSettings
     // relocated here from the per-BBS Display settings.
     public double? TerminalFontSize { get; set; }
 
+    // Navigation map hover-tooltip font family as an avares:// URI. Null = the
+    // bundled MX437 CP437 bitmap font (the FontTerminal resource the tooltip has
+    // always used). Independent of the terminal-canvas font above so the map
+    // tooltip can be tuned on its own. Char-tier.
+    public string? NavTooltipFontFamily { get; set; }
+
+    // Navigation map hover-tooltip font size in points. Null = 13 (the size the
+    // tooltip has always rendered at). Char-tier.
+    public double? NavTooltipFontSize { get; set; }
+
     // Master on/off state for every auto-engine. Each flag gates whether the
     // matching engine actually fires: AutoActionDefaults.AutoCombat gates
     // Game.Combat.CombatManager + the Game.Combat.CombatStateTracker's
