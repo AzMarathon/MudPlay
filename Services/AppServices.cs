@@ -4411,7 +4411,7 @@ public sealed class AppServices
         // + GraphReloaded internally so callers don't need to wire
         // cache invalidation.
         RoomSearch = new RoomSearchService(
-            RoomGraph, GameData, Bfs, RoomBlacklist, Movement, Log);
+            RoomGraph, GameData, Bfs, RoomBlacklist, Movement, Log, Favorites, Bosses);
 
         // MovePlayer remote-command handler.
         // Registers @goto, @loop, @lair, @stop, @rego against the
@@ -4421,7 +4421,7 @@ public sealed class AppServices
         // can issue these.
         MoveRemote = new Game.Remote.MovePlayerHandler(
             RemoteCommands, RoomSearch, RoomGraph, RoomTracker, Walker, Loops, LoopRunner,
-            Lairs, AutoLair, MovementCoordinator, MovementControl);
+            Lairs, AutoLair, MovementCoordinator, MovementControl, Favorites, Bosses, Bfs);
 
         // Leader-side @comeback. Snapshots the running movement
         // engine, stops it (stop-and-restart, NOT a coordinator gate —

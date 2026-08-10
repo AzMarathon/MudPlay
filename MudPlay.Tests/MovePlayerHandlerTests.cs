@@ -98,4 +98,30 @@ public sealed class MovePlayerHandlerTests
         // through to name match.
         Assert.Null(RoomSearchService.TryParseCoordList("1, 2, 3"));
     }
+
+    // ----- NameMatchesTokens (@loop / @goto fuzzy resolution) -------
+    // Shared 1-of-1 matcher: every typed word must appear in the candidate name
+    // (case-insensitive, order-independent). Used to single out a saved loop, a
+    // GOTO favourite label, or a boss name.
+
+    [Theory]
+    // The motivating case: "godfrey bank" resolves to "Bank of Godfrey Loop".
+    [InlineData("Bank of Godfrey Loop", "godfrey bank", true)]
+    [InlineData("Bank of Godfrey Loop", "bank godfrey", true)]   // order-independent
+    [InlineData("Bank of Godfrey Loop", "GODFREY", true)]        // case-insensitive, single word
+    [InlineData("Bank of Godfrey Loop", "god bank", true)]       // partial-word substrings count
+    [InlineData("Bank of Godfrey Loop", "godfrey, bank", true)]  // separators in the needle are tokenized
+    [InlineData("Bank of Silvermere",   "godfrey bank", false)]  // missing a token → no match
+    [InlineData("Bank of Godfrey Loop", "godfrey castle", false)]
+    public void NameMatchesTokens_TokenSubset(string name, string needle, bool expected)
+        => Assert.Equal(expected, RoomSearchService.NameMatchesTokens(name, needle));
+
+    [Theory]
+    [InlineData(null, "bank")]
+    [InlineData("Bank of Godfrey Loop", null)]
+    [InlineData("Bank of Godfrey Loop", "")]
+    [InlineData("Bank of Godfrey Loop", "   ")]
+    [InlineData("", "bank")]
+    public void NameMatchesTokens_BlankInputs_NeverMatch(string? name, string? needle)
+        => Assert.False(RoomSearchService.NameMatchesTokens(name, needle));
 }

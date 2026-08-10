@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.Navigation;
 
@@ -30,6 +31,9 @@ public sealed class MovePlayerHandler : IDisposable
     private readonly AutoLairManager _autoLair;
     private readonly MovementCoordinator _coordinator;
     private readonly MovementController _controller;
+    private readonly FavoritesStore _favorites;
+    private readonly BossStore _bosses;
+    private readonly BfsMapper _bfs;
     private bool _disposed;
 
     public MovePlayerHandler(
@@ -43,7 +47,10 @@ public sealed class MovePlayerHandler : IDisposable
         LairManager lairs,
         AutoLairManager autoLair,
         MovementCoordinator coordinator,
-        MovementController controller)
+        MovementController controller,
+        FavoritesStore favorites,
+        BossStore bosses,
+        BfsMapper bfs)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(search);
@@ -56,6 +63,9 @@ public sealed class MovePlayerHandler : IDisposable
         ArgumentNullException.ThrowIfNull(autoLair);
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(controller);
+        ArgumentNullException.ThrowIfNull(favorites);
+        ArgumentNullException.ThrowIfNull(bosses);
+        ArgumentNullException.ThrowIfNull(bfs);
         _engine = engine;
         _search = search;
         _graph = graph;
@@ -67,6 +77,9 @@ public sealed class MovePlayerHandler : IDisposable
         _autoLair = autoLair;
         _coordinator = coordinator;
         _controller = controller;
+        _favorites = favorites;
+        _bosses = bosses;
+        _bfs = bfs;
 
         Register("@goto", OnGoto);
         Register("@loop", OnLoop);
@@ -95,31 +108,130 @@ public sealed class MovePlayerHandler : IDisposable
         string query = string.Join(' ', ctx.Args).Trim();
         if (query.Length == 0) { ctx.Reply("@goto requires a destination"); return; }
 
-        // Acronyms (FCCO-style) are the only @goto-specific tier; the
-        // rest mirrors the Navigation search box behaviour.
-        IReadOnlyList<RoomSearchResult> matches = _search.Search(
-            query, source: null, cap: 50, includeAcronyms: true);
-
-        // Drop informational rows (monsters with no known lair room)
-        // — they can't be walked to.
-        List<RoomSearchResult> walkable = matches.Where(m => !m.IsInformational).ToList();
-
-        // Rooms beat monsters. Rationale: when the user types a place
-        // name that ALSO happens to be a monster substring, the room is
-        // almost always what they meant — they'd specify a coordinate
-        // if they meant a particular spawn. Falling through to the
-        // monster tier only when there's no room hit keeps "@goto
-        // godfrey" routing to the Bank of Godfrey instead of drowning
-        // in the Mayor's three spawn rooms.
-        List<RoomSearchResult> roomMatches = walkable.Where(m => m.MonsterTag is null).ToList();
-        if (roomMatches.Count > 0)
+        // A FULL map/room coordinate (1/297, 1,297, 1 297 — TryParseCoordinate splits
+        // on space / comma / slash) is an explicit destination: never let a favourite
+        // / boss NAME hijack it. A BARE room number is rejected — the same number is a
+        // different room on every map, so "297" alone can't pick one; ask for a map.
+        (int? coordMap, int? coordRoom) = RoomSearchService.TryParseCoordinate(query);
+        if (coordMap is null && coordRoom is int bareRoom)
         {
-            DispatchRoomMatches(ctx, query, roomMatches);
+            ctx.Reply($"room {bareRoom} needs a map — try e.g. 1/{bareRoom}");
+            return;
+        }
+        bool isCoordQuery = coordMap is not null && coordRoom is not null;
+
+        // Tier 1: a saved GOTO location matched by label. It takes precedence over a
+        // raw room name — a place the user bookmarked is almost always what they mean.
+        if (!isCoordQuery && TryGotoFavorite(ctx, query)) return;
+
+        // Tier 2: the shared coordinate / acronym / room-name search. Monsters are
+        // opted out (includeMonsters: false) — a monster or boss destination now
+        // resolves through the GOTO list above or the boss table below, not a raw
+        // monster-lair name match, so @goto only ever lands on a named place.
+        IReadOnlyList<RoomSearchResult> rooms = _search.Search(
+            query, source: null, cap: 50, includeAcronyms: true, includeMonsters: false);
+        if (rooms.Count > 0)
+        {
+            DispatchRoomMatches(ctx, query, rooms.ToList());
             return;
         }
 
-        List<RoomSearchResult> monsterMatches = walkable.Where(m => m.MonsterTag is not null).ToList();
-        DispatchMonsterMatches(ctx, query, monsterMatches);
+        // Tier 3: boss table — last resort. Walk to the boss's closest listed room
+        // (one room short of it when the boss is flagged StopBefore).
+        if (!isCoordQuery && TryGotoBoss(ctx, query)) return;
+
+        ctx.Reply($"no match for '{query}'");
+    }
+
+    // Resolve a saved GOTO favourite by its label: an exact (case-insensitive) label
+    // wins outright, else a 1-of-1 token match (every typed word appears in the
+    // label). Returns true when it handled the command — walked, or reported an
+    // ambiguity — and false when no favourite matched so @goto falls through to the
+    // room / monster / boss tiers.
+    private bool TryGotoFavorite(RemoteCommandContext ctx, string query)
+    {
+        FavoriteRoom? exact = _favorites.All.FirstOrDefault(f =>
+            string.Equals(f.Label, query, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null) { DispatchFavoriteGoto(ctx, exact); return true; }
+
+        List<FavoriteRoom> fuzzy = _favorites.All
+            .Where(f => RoomSearchService.NameMatchesTokens(f.Label, query))
+            .ToList();
+        switch (fuzzy.Count)
+        {
+            case 1:
+                DispatchFavoriteGoto(ctx, fuzzy[0]);
+                return true;
+            case > 1:
+                ctx.Reply($"'{query}' matches {fuzzy.Count} GOTO locations: "
+                    + string.Join(", ", fuzzy.Take(4).Select(f => $"'{f.Label}'")));
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void DispatchFavoriteGoto(RemoteCommandContext ctx, FavoriteRoom fav)
+    {
+        RoomKey key = new(fav.Map, fav.Room);
+        string label = string.IsNullOrWhiteSpace(fav.Label)
+            ? (_graph.GetRoom(key)?.DisplayName ?? "?")
+            : fav.Label!;
+        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
+        ctx.Reply(_walker.WalkTo(key)
+            ? $"walking to GOTO '{label}' ({key.Map}/{key.Room})"
+            : $"no path to GOTO '{label}'");
+    }
+
+    // Resolve a boss name from the boss table and walk to its CLOSEST listed room
+    // (rooms are "map/room" strings). An exact name wins, else a 1-of-1 token match.
+    // Honours the boss's StopBefore flag by stopping one room outside. Returns true
+    // when it handled the command; false when no boss matched.
+    private bool TryGotoBoss(RemoteCommandContext ctx, string query)
+    {
+        IReadOnlyList<BossDef> bosses = _bosses.Resolve();
+        BossDef? boss = bosses.FirstOrDefault(b =>
+            string.Equals(b.Name, query, StringComparison.OrdinalIgnoreCase));
+        if (boss is null)
+        {
+            List<BossDef> fuzzy = bosses
+                .Where(b => RoomSearchService.NameMatchesTokens(b.Name, query))
+                .ToList();
+            if (fuzzy.Count == 1) boss = fuzzy[0];
+            else if (fuzzy.Count > 1)
+            {
+                ctx.Reply($"'{query}' matches {fuzzy.Count} bosses: "
+                    + string.Join(", ", fuzzy.Take(4).Select(b => b.Name)));
+                return true;
+            }
+            else return false;
+        }
+
+        // Parse the boss's "map/room" entries into keys that exist in the graph.
+        List<RoomKey> rooms = boss.Rooms
+            .Select(RoomSearchService.TryParseCoordinate)
+            .Where(c => c.Map is not null && c.Room is not null)
+            .Select(c => new RoomKey(c.Map!.Value, c.Room!.Value))
+            .Where(k => _graph.GetRoom(k) is not null)
+            .ToList();
+        if (rooms.Count == 0) { ctx.Reply($"{boss.Name} has no known room on this map"); return true; }
+
+        // Closest by hop count from the current room; fall back to the first listed
+        // when the tracker has no settled room to measure from.
+        RoomKey target = _tracker.State.CurrentRoom is { } here
+            ? rooms.OrderBy(k => _bfs.DistanceBetween(here.Key, k) ?? int.MaxValue).First()
+            : rooms[0];
+
+        // WalkTo itself honours the boss table's StopBefore flag (AutoWalkManager
+        // re-points a walk at a flagged boss room to the room one hop short on the
+        // real route), so we just target the boss room and let the walker halt
+        // adjacent — the reply is worded from the flag for the sender's benefit.
+        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
+        if (!_walker.WalkTo(target)) { ctx.Reply($"no path to {boss.Name}"); return true; }
+        ctx.Reply(boss.StopBefore
+            ? $"walking to boss {boss.Name}, stopping just outside ({target.Map}/{target.Room})"
+            : $"walking to boss {boss.Name} ({target.Map}/{target.Room})");
+        return true;
     }
 
     private void DispatchRoomMatches(RemoteCommandContext ctx, string query, List<RoomSearchResult> rooms)
@@ -139,104 +251,12 @@ public sealed class MovePlayerHandler : IDisposable
         }
     }
 
-    private void DispatchMonsterMatches(RemoteCommandContext ctx, string query, List<RoomSearchResult> monsters)
-    {
-        if (monsters.Count == 0)
-        {
-            ctx.Reply($"no match for '{query}'");
-            return;
-        }
-
-        // Collapse multiple spawns of the same monster into one group —
-        // the user wants "this monster has N lairs", not N separate
-        // "did you mean" entries for the same name.
-        List<IGrouping<string, RoomSearchResult>> groups = monsters
-            .GroupBy(m => m.MonsterTag!)
-            .ToList();
-
-        switch (groups.Count)
-        {
-            case 1:
-                IGrouping<string, RoomSearchResult> only = groups[0];
-                List<RoomSearchResult> spawns = only.ToList();
-                string name = ExtractMonsterName(only.Key);
-                if (spawns.Count == 1)
-                {
-                    DispatchGoto(ctx, spawns[0]);
-                    return;
-                }
-                string coords = string.Join(", ", spawns.Select(s => $"{s.Key.Map}/{s.Key.Room}"));
-                ctx.Reply($"{name} has {spawns.Count} lairs: {coords} — specify a coordinate");
-                return;
-
-            case <= 3:
-                ctx.Reply("did you mean: " + string.Join(", ", groups.Select(FormatMonsterGroup)) + "?");
-                return;
-
-            default:
-                ctx.Reply($"too many monster matches ({groups.Count}) for '{query}'");
-                return;
-        }
-    }
-
-    private static string FormatMonsterGroup(IGrouping<string, RoomSearchResult> group)
-    {
-        List<RoomSearchResult> spawns = group.ToList();
-        string name = ExtractMonsterName(group.Key);
-        return spawns.Count == 1
-            ? $"{name} ({spawns[0].Key.Map}/{spawns[0].Key.Room})"
-            : $"{name} ({spawns.Count} lairs)";
-    }
-
-    // Strip the regen suffix from the search result's MonsterTag. Tag format from
-    // RoomSearchService: "Mayor of Godfrey · regen 4h" — we want just the monster
-    // name for chat replies.
-    private static string ExtractMonsterName(string monsterTag)
-    {
-        int sep = monsterTag.IndexOf(" · ", StringComparison.Ordinal);
-        return sep > 0 ? monsterTag.Substring(0, sep) : monsterTag;
-    }
-
     private void DispatchGoto(RemoteCommandContext ctx, RoomSearchResult match)
     {
-        // Monster-tagged matches → walk to a neighbour, stop OUTSIDE
-        // the lair so the user doesn't trigger the spawn on arrival.
-        // Plain room matches → walk straight there.
-        if (match.MonsterTag is not null)
-        {
-            RoomKey? wait = PickNeighbour(match.Key);
-            if (wait is null)
-            {
-                ctx.Reply($"no neighbour to wait at for {match.Name}");
-                return;
-            }
-            StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-            if (_walker.WalkTo(wait.Value))
-                ctx.Reply($"walking outside {match.Name} ({match.Key.Map}/{match.Key.Room})");
-            else
-                ctx.Reply($"no path to {match.Name}");
-            return;
-        }
-
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-        if (_walker.WalkTo(match.Key))
-            ctx.Reply($"walking to {match.Name} ({match.Key.Map}/{match.Key.Room})");
-        else
-            ctx.Reply($"no path to {match.Name}");
-    }
-
-    // Pick any walkable neighbour of lair so the monster-search @goto can stop one
-    // room outside. First-found wins; the walker handles BFS from current to that
-    // neighbour.
-    private RoomKey? PickNeighbour(RoomKey lair)
-    {
-        if (_graph.GetRoom(lair) is not { } room) return null;
-        foreach (RoomExit exit in room.Exits.Values)
-        {
-            if (exit.Target.Equals(lair)) continue;
-            if (_graph.GetRoom(exit.Target) is not null) return exit.Target;
-        }
-        return null;
+        ctx.Reply(_walker.WalkTo(match.Key)
+            ? $"walking to {match.Name} ({match.Key.Map}/{match.Key.Room})"
+            : $"no path to {match.Name}");
     }
 
     private void OnLoop(RemoteCommandContext ctx)
@@ -253,12 +273,30 @@ public sealed class MovePlayerHandler : IDisposable
             return;
         }
 
+        // Exact name first, then a close-enough 1-of-1: every typed word must appear
+        // in the loop name (order-independent), and it has to single out exactly one
+        // loop — "godfrey bank" resolves to "Bank of Godfrey Loop" when it's the only
+        // loop carrying both words.
         Loop? saved = _loops.Loops.FirstOrDefault(l =>
             string.Equals(l.Name, raw, StringComparison.OrdinalIgnoreCase));
+        if (saved is null)
+        {
+            List<Loop> fuzzy = _loops.Loops
+                .Where(l => RoomSearchService.NameMatchesTokens(l.Name, raw))
+                .ToList();
+            if (fuzzy.Count == 1) saved = fuzzy[0];
+            else if (fuzzy.Count > 1)
+            {
+                ctx.Reply($"'{raw}' matches {fuzzy.Count} loops: "
+                    + string.Join(", ", fuzzy.Take(4).Select(l => $"'{l.Name}'")));
+                return;
+            }
+        }
+
         if (saved is null) { ctx.Reply($"no saved loop named '{raw}'"); return; }
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Loop);
         _loopRunner.Start(saved);
-        ctx.Reply($"looping '{saved.Name}' ({saved.Waypoints.Count} rooms)");
+        ctx.Reply($"starting loop '{saved.Name}' ({saved.Waypoints.Count} rooms)");
     }
 
     private void OnLair(RemoteCommandContext ctx)
