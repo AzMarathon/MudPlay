@@ -213,9 +213,11 @@ public sealed class RoomSearchService
         }
 
         // ----- Tier 5: saved GOTO favourites by label (opt-in) -----
-        // Match the user's bookmark label; the row jumps to the favourite's room,
-        // shown with a ★ so it reads as a saved GOTO rather than a plain room. Skips
-        // a room the room-name tier already surfaced (no duplicate row).
+        // Match ANY saved GOTO bookmark's label (not only starred ones); the row
+        // jumps to the favourite's room and carries a "<label> · goto" header tag so
+        // it reads as a named GOTO (the label above, the underlying room below) — the
+        // same tagged-row shape the boss / monster tiers use. Skips a room the
+        // room-name tier already surfaced (no duplicate row).
         if (includeFavorites && _favorites is not null && needle.Length >= 2 && matches.Count < cap)
         {
             foreach (Models.Profile.FavoriteRoom fav in _favorites.All)
@@ -228,7 +230,7 @@ public sealed class RoomSearchService
                 if (_graph.GetRoom(key) is not { } froom) continue;
                 if (matches.Any(x => x.MonsterTag is null && x.Key.Equals(key))) continue;
                 matches.Add(BuildRoomMatch(froom, source)
-                    with { Name = $"★ {fav.Label}", MatchRank = MatchRank(fav.Label!, tokens) });
+                    with { MonsterTag = $"{fav.Label} · goto", MatchRank = MatchRank(fav.Label!, tokens) });
             }
         }
 

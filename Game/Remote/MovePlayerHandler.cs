@@ -222,20 +222,15 @@ public sealed class MovePlayerHandler : IDisposable
             ? rooms.OrderBy(k => _bfs.DistanceBetween(here.Key, k) ?? int.MaxValue).First()
             : rooms[0];
 
+        // WalkTo itself honours the boss table's StopBefore flag (AutoWalkManager
+        // re-points a walk at a flagged boss room to the room one hop short on the
+        // real route), so we just target the boss room and let the walker halt
+        // adjacent — the reply is worded from the flag for the sender's benefit.
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-        if (boss.StopBefore)
-        {
-            RoomKey? wait = PickNeighbour(target);
-            if (wait is null) { ctx.Reply($"no neighbour to wait at for {boss.Name}"); return true; }
-            ctx.Reply(_walker.WalkTo(wait.Value)
-                ? $"walking outside boss {boss.Name} ({target.Map}/{target.Room})"
-                : $"no path to {boss.Name}");
-            return true;
-        }
-
-        ctx.Reply(_walker.WalkTo(target)
-            ? $"walking to boss {boss.Name} ({target.Map}/{target.Room})"
-            : $"no path to {boss.Name}");
+        if (!_walker.WalkTo(target)) { ctx.Reply($"no path to {boss.Name}"); return true; }
+        ctx.Reply(boss.StopBefore
+            ? $"walking to boss {boss.Name}, stopping just outside ({target.Map}/{target.Room})"
+            : $"walking to boss {boss.Name} ({target.Map}/{target.Room})");
         return true;
     }
 
@@ -262,20 +257,6 @@ public sealed class MovePlayerHandler : IDisposable
         ctx.Reply(_walker.WalkTo(match.Key)
             ? $"walking to {match.Name} ({match.Key.Map}/{match.Key.Room})"
             : $"no path to {match.Name}");
-    }
-
-    // Pick any walkable neighbour of a room so a StopBefore boss @goto can halt one
-    // room outside it. First-found wins; the walker handles BFS from current to that
-    // neighbour.
-    private RoomKey? PickNeighbour(RoomKey lair)
-    {
-        if (_graph.GetRoom(lair) is not { } room) return null;
-        foreach (RoomExit exit in room.Exits.Values)
-        {
-            if (exit.Target.Equals(lair)) continue;
-            if (_graph.GetRoom(exit.Target) is not null) return exit.Target;
-        }
-        return null;
     }
 
     private void OnLoop(RemoteCommandContext ctx)
