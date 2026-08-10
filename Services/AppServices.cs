@@ -1641,6 +1641,10 @@ public sealed class AppServices
         // opens once the toggle turns on (applied from the profile below or
         // flipped from the Log pane), so a normal session leaves no file.
         ProgramLog = new ProgramLogFile(Log, LogDiagnostics);
+        // Surface a one-time legacy data migration (pre-3.0 FujinTerm → MudPlay)
+        // now that logging is up — AppPaths ran it at static-init.
+        if (AppPaths.MigrationNote is { } migrationNote)
+            Log.Info("Migration", migrationNote);
         // Same gating for the memory-footprint sampler: the timer runs for the
         // whole process, but samples land on disk only while AutoCollectLogs is on.
         MemoryLog = new MemoryUsageLog(LogDiagnostics);

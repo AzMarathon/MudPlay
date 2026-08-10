@@ -503,6 +503,8 @@
                       Background="{StaticResource ChromeBgSunkenBrush}">
             <ctl:TerminalControl x:Name="Terminal"
                                  Emulator="{Binding Emulator}"
+                                 SplashActive="{Binding ShowSplash}"
+                                 SplashAnimate="{Binding SplashAnimate}"
                                  FontFamily="{Binding TerminalFontFamily}"
                                  FontSize="{Binding TerminalFontSize}"
                                  ScaleToFit="{Binding ScaleTerminalToWindow}"

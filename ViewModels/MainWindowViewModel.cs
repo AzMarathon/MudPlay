@@ -78,6 +78,16 @@ public partial class MainWindowViewModel : ObservableObject
     // The screen buffer the UI renders. Lifetime spans the whole window.
     public TerminalEmulator Emulator { get; } = new(80, 25);
 
+    // Startup mud-throw splash on the terminal. Plays from launch and is cleared
+    // the moment a session begins (first connect or first server data), reverting
+    // the control to the live emulator. Bound to TerminalControl.SplashActive.
+    [ObservableProperty] private bool _showSplash = true;
+
+    // Whether the mud figure animates (Settings → General "Show startup mud
+    // animation"). When off, the splash still shows its static header (title +
+    // byline + hint). Read at construction; bound to TerminalControl.SplashAnimate.
+    [ObservableProperty] private bool _splashAnimate = true;
+
     // Extracts completed lines from the emulator's screen stream. Foundation
     // for every "what did the server say" subsystem (MessageRouter,
     // ChatRouter, Triggers, prompt parser).
@@ -470,6 +480,10 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel()
     {
+        // Splash animation preference (Global tier applies before a profile loads).
+        _splashAnimate = AppServices.Current.Resolver
+            .Resolve<Models.Profile.GeneralSettings>("General").ShowStartupMudAnimation;
+
         Lines = new LineExtractor(Emulator);
         Capture = new CaptureSession(Emulator.Screen.Scrollback);
 
@@ -2390,6 +2404,7 @@ public partial class MainWindowViewModel : ObservableObject
             // keeps them aligned within one dispatch tick.
             Dispatcher.UIThread.Post(() =>
             {
+                if (ShowSplash) ShowSplash = false;   // real content now — dismiss the splash
                 AppServices.Current.PromptScanner.Append(copy);
                 AppServices.Current.Cleanup.Append(copy);
                 _automator?.Feed(copy);
@@ -2401,6 +2416,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Log.Info("Telnet", $"Connected to {Host}:{Port}");
             Dispatcher.UIThread.Post(() =>
             {
+                if (ShowSplash) ShowSplash = false;   // session started — dismiss the splash
                 IsConnected = true;
                 // Fresh session — drop any cleanup-watcher state carried
                 // over and clear any pending auto-reconnect schedule.
@@ -4180,24 +4196,29 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(QuitGesture));
     }
 
-    // Help → About MudPlay.
+    private AboutWindow? _aboutWindow;
+
+    // Help → About MudPlay. A modeless, read-only window: program name + version,
+    // a clickable repo link, a tab per bundled license (MIT / SIL OFL / CC BY-SA),
+    // and a community thank-you. Toggle convention — pressing the command while
+    // it's open closes it (see OpenPlaceholder).
     [RelayCommand]
     private void OpenAbout()
-        => ShowInfoDialog("About MudPlay",
-            $"""
-            {AppInfo.DisplayName}
-            A modern Avalonia BBS terminal client with MajorMUD-aware features.
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
 
-            Source: {AppInfo.RepoUrl}
-            License: MIT — see LICENSE in the project root for the full text.
+        if (_aboutWindow is { } existing)
+        {
+            existing.Close();
+            return;
+        }
 
-            Built on .NET 10 + Avalonia 12 (CommunityToolkit.Mvvm source-gen).
-            Bundles JetDatabaseReader 2.2.0 (MIT) for pure-managed .mdb / .accdb
-            imports without Wine or mdbtools.
-
-            Help → Licenses… lists every third-party component shipped in
-            this build.
-            """);
+        AboutWindow window = new() { DataContext = new AboutWindowViewModel() };
+        window.Closed += (_, _) => _aboutWindow = null;
+        _aboutWindow = window;
+        window.Show(main);
+    }
 
     // ----- Auto-engine toggle commands --------------------------------
     // ToolbarItemCatalogue routes its ToggleAutoCombat / ToggleAutoHealRest

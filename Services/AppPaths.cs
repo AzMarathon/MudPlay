@@ -11,7 +11,17 @@ namespace MudPlay.Services;
 public static class AppPaths
 {
     private const string AppFolderName = "MudPlay";
+    // Pre-3.0 folder name. On first 3.x launch we migrate a user's data out of
+    // the old "FujinTerm" folders into the new MudPlay ones (non-destructive,
+    // one-time), so updating from a 2.x build doesn't appear to lose profiles /
+    // settings / BBS data. See MigrateLegacyData.
+    private const string LegacyAppFolderName = "FujinTerm";
     private const string DataSubfolder = "Data";
+
+    // One-line summary of any legacy migration performed at static-init, for the
+    // program log (AppServices reads it once services + logging exist). null when
+    // nothing was migrated.
+    public static string? MigrationNote { get; private set; }
 
     // Single root containing all user-writable app data.
     public static string DataRoot { get; }
@@ -62,6 +72,18 @@ public static class AppPaths
         string configDir = Environment.GetFolderPath(
             Environment.SpecialFolder.ApplicationData,
             Environment.SpecialFolderOption.Create);
+        // LocalApplicationData maps cleanly across platforms:
+        //   Linux  → $XDG_DATA_HOME (or ~/.local/share)
+        //   Win    → %LOCALAPPDATA%
+        //   macOS  → ~/Library/Application Support
+        string baseDir = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData,
+            Environment.SpecialFolderOption.Create);
+
+        // Carry the data-location pointer over first (relocated installs), so the
+        // resolution below reads the MudPlay pointer that used to be FujinTerm's.
+        MigrateLegacyDir(Path.Combine(configDir, LegacyAppFolderName),
+                         Path.Combine(configDir, AppFolderName));
         PointerFile = Path.Combine(configDir, AppFolderName, "data-location.txt");
 
         // Resolution order: env var → pointer file → platform default.
@@ -80,16 +102,16 @@ public static class AppPaths
         }
         else
         {
-            // LocalApplicationData maps cleanly across platforms:
-            //   Linux  → $XDG_DATA_HOME (or ~/.local/share)
-            //   Win    → %LOCALAPPDATA%
-            //   macOS  → ~/Library/Application Support
-            string baseDir = Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData,
-                Environment.SpecialFolderOption.Create);
             DataRoot             = Path.Combine(baseDir, AppFolderName, DataSubfolder);
             DataRootResolvedFrom = DataRootSource.PlatformDefault;
         }
+
+        // On the default location, carry a pre-3.0 user's data out of the old
+        // "FujinTerm" folder into MudPlay (non-destructive, one-time). Relocated
+        // installs (env / pointer) already point at the user's real data, so
+        // there's nothing at the default path to migrate.
+        if (DataRootResolvedFrom == DataRootSource.PlatformDefault)
+            MigrateLegacyData(Path.Combine(baseDir, LegacyAppFolderName, DataSubfolder), DataRoot);
 
         GameDataRoot       = Path.Combine(DataRoot, "game data");
         GlobalSettingsFile = Path.Combine(DataRoot, "Global", "global.json");
@@ -108,6 +130,69 @@ public static class AppPaths
         Directory.CreateDirectory(Path.GetDirectoryName(GlobalSettingsFile)!);
         Directory.CreateDirectory(BbsDir);
         Directory.CreateDirectory(LogsDir);
+    }
+
+    // Non-destructive, one-time migration of a pre-3.0 "FujinTerm" data root into
+    // the new MudPlay one. Marker-gated so it runs at most once; copies only files
+    // the new root LACKS (never overwrites), so a user's profiles / BBS folders /
+    // global settings / imported game data are backfilled without clobbering
+    // anything MudPlay already created. Best-effort: any failure leaves the legacy
+    // folder intact and unmarked, so the next launch retries.
+    private static void MigrateLegacyData(string legacyRoot, string newRoot)
+    {
+        try
+        {
+            if (!Directory.Exists(legacyRoot)) return;
+            string marker = Path.Combine(newRoot, ".migrated-from-fujinterm");
+            if (File.Exists(marker)) return;
+
+            int copied = CopyMissing(legacyRoot, newRoot);
+            Directory.CreateDirectory(newRoot);
+            File.WriteAllText(marker, $"migrated {copied} file(s) from {legacyRoot}");
+            if (copied > 0)
+                MigrationNote = $"Migrated {copied} file(s) from the pre-3.0 " +
+                    $"'{LegacyAppFolderName}' data folder into '{AppFolderName}'.";
+        }
+        catch
+        {
+            // Permissions / disk error — don't block startup. Legacy data is left
+            // untouched and unmarked, so a later launch tries again.
+        }
+    }
+
+    // Config-dir counterpart — carries the data-location pointer (relocated
+    // installs) from the old FujinTerm config folder to the MudPlay one.
+    private static void MigrateLegacyDir(string legacyDir, string newDir)
+    {
+        try
+        {
+            if (!Directory.Exists(legacyDir)) return;
+            string marker = Path.Combine(newDir, ".migrated-from-fujinterm");
+            if (File.Exists(marker)) return;
+            CopyMissing(legacyDir, newDir);
+            Directory.CreateDirectory(newDir);
+            File.WriteAllText(marker, $"migrated from {legacyDir}");
+        }
+        catch { /* best-effort — see MigrateLegacyData */ }
+    }
+
+    // Recursively copy every file under src that dst doesn't already have; files
+    // already in dst are left untouched. Returns how many files were copied.
+    // internal so the migration's non-destructive contract can be unit-tested.
+    internal static int CopyMissing(string src, string dst)
+    {
+        Directory.CreateDirectory(dst);
+        int copied = 0;
+        foreach (string dir in Directory.GetDirectories(src))
+            copied += CopyMissing(dir, Path.Combine(dst, Path.GetFileName(dir)));
+        foreach (string file in Directory.GetFiles(src))
+        {
+            string target = Path.Combine(dst, Path.GetFileName(file));
+            if (File.Exists(target)) continue;
+            File.Copy(file, target);
+            copied++;
+        }
+        return copied;
     }
 
     // Per-set Messages catalogue file, scoped INSIDE the game-data set's folder
