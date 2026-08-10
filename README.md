@@ -65,7 +65,7 @@ MudPlay has a **built-in bug reporter** that snapshots the client's state at the
 2. MudPlay writes a Markdown report to your **Desktop**, named `<realm>-<timestamp>.md`. It contains your player/inventory state, movement-engine status, relevant settings, the program log, and recent scrollback — with time-sensitive data frozen at click time.
 3. **File the issue** — open a new issue at **https://github.com/Tehshortbus/MudPlay/issues/new**, describe the problem, and **attach the generated `.md` file**.
 
-The more of that capture you include, the faster a fix lands. Review the file before attaching if you'd like to redact anything but absolutely no login information can or will be shared, as your username and password are Sha-256 encrypted when stored on disk.
+The bug report includes almost all of the info needed to isolate the problem but a good description helps me target it faster. You can review the bug report before submitting if you wish but please leave as much context in the report as possible. The bug report does include all your settings, your character name, stats, inventory, client info, the program log and ~250 lines of backscroll. ***It DOES NOT include your BBS login name or password, your login menu navigation settings.***
 
 ## Contributing
 
