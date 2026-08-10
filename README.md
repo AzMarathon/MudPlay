@@ -16,15 +16,14 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 ## Features
 
 - **Faithful terminal** — Telnet (RFC 854/855 with NAWS + TERM-TYPE), an explicit VT100/ANSI escape-sequence parser, and a CP437 cell grid rendered by a custom Avalonia control that scales crisply to fill the window. No host TTY dependency.
-- **Combat automation** — attack rotations, target ordering, backstab handling, area/debuff spells with an immunity-aware fallback cascade, and per-monster attack/priority overrides.
-- **Party play** — party tracking, coordinated healing/blessing, leader-aware wait/invite logic, and remote `@`-commands over chat channels: live intel (`@health`, `@level`, `@version`), reconnect recovery (`@comeback`), coin sharing (`@share`), and more.
-- **Navigation** — a room-graph map with go-to routing and starrable favourites, repeatable movement loops, Auto-Lair hunting, and trap handling. A single "all auto off" kill switch silences every engine — and parks any in-flight navigation, resuming it when switched back on.
+- **Combat automation** — attack/spell primary and alternate settings, target ordering/priority, backstab handling, area/single target debuff spells with an immunity-aware fallback cascade, and per-monster attack/priority overrides.
+- **Party play** — party tracking, coordinated healing/blessing, leader-aware wait/invite logic, and remote `@`-commands over chat channels: @health, @level, @version, @comeback, @share and more.
+- **Navigation** — a room-graph map with go-to routing via saved goto locations, search for destination or right click menu on map, looping, new Auto-Lair mode, trap handling, stash rooms, storable favorite loops, auto-lairs and goto's in right click menu. auto-mode toggles and fully configurable keybinds and toolbar. Map overlays!
 - **Healing & spells** — HP/mana thresholds, rest management, cures, buffs, and mana-regen roll-spell rerolling.
-- **Character Workshop** — a unified hub for stats, equipment sets with auto-equip triggers, an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons, CP allocation plans, and quest tracking.
-- **Scripting** — macros, pattern triggers, and scheduled/lifecycle events.
-- **Game data** — import MajorMUD `.MDB` databases to JSON, then browse and override records (monsters, items, spells, rooms, shops, and more) in the Game Data Browser.
-- **Layered settings** — a 4-tier hierarchy (installed defaults → all characters → per-BBS → per-character) where each tier stores only its deltas.
-- **Quality of life** — session statistics, scrollback + a searchable backscroll window, a conversation/chat pane, a configurable toolbar and statline, type-through so keystrokes keep reaching the terminal while other windows are open, an animated startup splash (toggleable), and a built-in bug reporter (see below).
+- **Character Workshop** — a unified hub for character management and development. live stats, equipment sets with auto-equip triggers, an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons, CP allocation plans, quest tracking, boss timer tracking, various calculators.
+- **automation tools** — macros, aliases, triggers, and events.
+- **Game data** — import MajorMUD `.MDB` databases, all engines read from game data and you can then browse many significant aspects of game data in the Game Data Browser.
+- **Quality of life** — session statistics, timestamped full ansi scrollback + search filter, a conversation/chat pane, type-through so keystrokes keep reaching the terminal while other windows are open unless a textblock is focused on another window and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES IT WILL SHOW ME A LOT MORE THAN YOU CAN DESCRIBE OR SHOW VIA PICTURES)***.
 
 ## Getting started
 
@@ -67,7 +66,7 @@ MudPlay has a **built-in bug reporter** that snapshots the client's state at the
 2. MudPlay writes a Markdown report to your **Desktop**, named `<realm>-<timestamp>.md`. It contains your player/inventory state, movement-engine status, relevant settings, the program log, and recent scrollback — with time-sensitive data frozen at click time.
 3. **File the issue** — open a new issue at **https://github.com/Tehshortbus/MudPlay/issues/new**, describe the problem, and **attach the generated `.md` file**.
 
-The more of that capture you include, the faster a fix lands. Review the file before attaching if you'd like to redact anything.
+The more of that capture you include, the faster a fix lands. Review the file before attaching if you'd like to redact anything but absolutely no login information can or will be shared, as your username and password are Sha-256 encrypted when stored on disk.
 
 ## Contributing
 
