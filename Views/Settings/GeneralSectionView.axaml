@@ -113,6 +113,44 @@
                     </ComboBox>
                 </Grid>
 
+                <TextBlock Classes="SectionHeader" Text="Navigation tooltip font"/>
+
+                <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto" RowSpacing="6">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Font:"
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeMd}"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1"
+                              Width="240"
+                              HorizontalAlignment="Left"
+                              ItemsSource="{Binding FontFamilyOptions}"
+                              SelectedItem="{Binding SelectedNavTooltipFontFamily, Mode=TwoWay}"
+                              ToolTip.Tip="Font the Navigation map's room hover-tooltip renders with. Defaults to the same MX437 bitmap face the tooltip has always used. Applies to the next hover after Save.">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FontFamilyOption">
+                                <TextBlock Text="{Binding Label}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Font size:"
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeMd}"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1"
+                              Width="240"
+                              HorizontalAlignment="Left"
+                              ItemsSource="{Binding NavTooltipFontSizeOptions}"
+                              SelectedItem="{Binding SelectedNavTooltipFontSize, Mode=TwoWay}"
+                              ToolTip.Tip="Point size of the Navigation map's room hover-tooltip text. Applies to the next hover after Save.">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FontSizeOption">
+                                <TextBlock Text="{Binding Label}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+
                 <CheckBox Margin="0,2,0,0"
                           IsChecked="{Binding ScaleTerminalToWindow, Mode=TwoWay}"
                           Content="Scale terminal output to fill the window"

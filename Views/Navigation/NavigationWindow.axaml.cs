@@ -134,6 +134,12 @@ public partial class NavigationWindow : Window
 
         label.Text = Game.Map.RoomTooltipBuilder.Build(room, svc.RoomGraph, svc.GameData, svc.TBInfo, svc.MonsterSpawns, svc.SpellCatalog, svc.PlayerIllumination.Current);
 
+        // Font is char-tier configurable (Settings → General → Navigation tooltip
+        // font). Read it live per hover so a Settings change lands on the next
+        // hover with no rebind plumbing — the tooltip is transient anyway.
+        label.FontFamily = new Avalonia.Media.FontFamily(svc.Display.NavTooltipFontFamily);
+        label.FontSize = svc.Display.NavTooltipFontSize;
+
         // Anchor near the cursor — offset a few pixels so the popup
         // doesn't sit directly under the pointer. The MapControl shares
         // the Grid column with this Border (Grid.Column="0"), so the

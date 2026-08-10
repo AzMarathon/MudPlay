@@ -6107,6 +6107,10 @@ public sealed class AppServices
             ? DisplayConfig.DefaultFontFamily
             : general.TerminalFontFamily;
         Display.FontSize = general.TerminalFontSize ?? DisplayConfig.DefaultFontSize;
+        Display.NavTooltipFontFamily = string.IsNullOrWhiteSpace(general.NavTooltipFontFamily)
+            ? DisplayConfig.DefaultFontFamily
+            : general.NavTooltipFontFamily;
+        Display.NavTooltipFontSize = general.NavTooltipFontSize ?? DisplayConfig.DefaultNavTooltipFontSize;
         Display.ScaleToWindow = general.ScaleTerminalToWindow;
         TerminalInput.Enabled = general.TypeToTerminalFromOtherWindows;
 
@@ -6129,6 +6133,8 @@ public sealed class AppServices
         Models.Settings.BbsProfile defaults = new();
         Display.FontFamily = DisplayConfig.DefaultFontFamily;
         Display.FontSize = DisplayConfig.DefaultFontSize;
+        Display.NavTooltipFontFamily = DisplayConfig.DefaultFontFamily;
+        Display.NavTooltipFontSize = DisplayConfig.DefaultNavTooltipFontSize;
         Display.ScrollbackLines = defaults.ScrollbackLines;
         Display.BackscrollWheelLines = defaults.BackscrollWheelLines;
         Display.TerminalCols = defaults.TerminalCols;

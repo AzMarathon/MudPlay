@@ -78,6 +78,12 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // normal Info channel), so no Rebuild. Persisted per-character. Off by default.
     [ObservableProperty] private bool _hopTiming;
 
+    // Reveals the Death Recovery tab's "Simulate Death" test button. Mirrors
+    // LogDiagnosticState.ShowSimulateDeath — session-only (off every launch) so a
+    // normal user never sees the button; a tester flips it on here. Doesn't touch
+    // displayed rows, so no Rebuild.
+    [ObservableProperty] private bool _showSimulateDeath;
+
     // When true, every appended row scrolls the list to the bottom. The XAML
     // hooks the actual scroll-into-view call; this flag gates it.
     [ObservableProperty] private bool _autoScroll = true;
@@ -118,6 +124,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             _combatDiagnostics = _diagnostics.CombatDiagnostics;
             _autoCollectLogs   = _diagnostics.AutoCollectLogs;
             _hopTiming         = _diagnostics.HopTiming;
+            _showSimulateDeath = _diagnostics.ShowSimulateDeath;
             _suppressDiagnosticEcho = false;
             _diagnostics.Changed += OnDiagnosticsChanged;
         }
@@ -155,6 +162,12 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             {
                 _suppressDiagnosticEcho = true;
                 HopTiming = _diagnostics.HopTiming;
+                _suppressDiagnosticEcho = false;
+            }
+            if (ShowSimulateDeath != _diagnostics.ShowSimulateDeath)
+            {
+                _suppressDiagnosticEcho = true;
+                ShowSimulateDeath = _diagnostics.ShowSimulateDeath;
                 _suppressDiagnosticEcho = false;
             }
         });
@@ -195,6 +208,14 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
         if (_suppressDiagnosticEcho) return;
         if (_diagnostics is null) return;
         _diagnostics.HopTiming = value;
+    }
+
+    partial void OnShowSimulateDeathChanged(bool value)
+    {
+        // Only gates the Death tab's test button visibility — no displayed rows change.
+        if (_suppressDiagnosticEcho) return;
+        if (_diagnostics is null) return;
+        _diagnostics.ShowSimulateDeath = value;
     }
 
     private void OnEntryAdded(LogEntry entry)

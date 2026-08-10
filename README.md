@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.3.1**
-> - Stat collection now arms on the `stat` abbreviations too (`st` / `sta`), not just the full word — the Player Workshop updates however you spell it
+> **Version 3.3.4**
+> - Loop building now allows the same room twice in a row (map-click loop mode and the create-loop editor) — a zero-length "stay put" step that runs another command in place (e.g. two barmaid steps: hand in pies, then convert the coin)
+> - Program Log has a "Simulate Death button" toggle that reveals the Death Recovery tab's test button; off by default (and reset off each launch), so a normal session never shows it
+> - Settings → General now has a Navigation-tooltip font + size picker under the terminal font, defaulting to the map room-tooltip's current look
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

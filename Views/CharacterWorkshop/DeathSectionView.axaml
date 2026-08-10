@@ -55,8 +55,9 @@
             <Button Content="Clear All Recovered" Margin="0,0,18,6"
                     Command="{Binding ClearAllRecoveredCommand}"/>
             <Button Content="Simulate Death" Margin="0,0,6,6"
+                    IsVisible="{Binding ShowSimulateDeath}"
                     Command="{Binding SimulateDeathCommand}"
-                    ToolTip.Tip="Append a synthetic death record to exercise the grid + recovery flow without dying in game."/>
+                    ToolTip.Tip="Append a synthetic death record to exercise the grid + recovery flow without dying in game. Shown only while the Log pane's 'Simulate Death button' toggle is on."/>
         </WrapPanel>
 
         <!-- Deathpile grid -->
