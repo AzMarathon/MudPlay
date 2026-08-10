@@ -29,7 +29,7 @@
          (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
          fixes AND ordinary enhancements to existing features (one bump per
          report handled or per enhancement). -->
-    <Version>3.0.0</Version>
+    <Version>3.1.0</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
          the Server GC (a heap + background thread per core), which on a
@@ -41,9 +41,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Embed everything under Assets/ (fonts) into the assembly so it can
-         be loaded at runtime via avares:// URIs. -->
+    <!-- Embed everything under Assets/ (fonts + bundled third-party license
+         texts) into the assembly so it can be loaded at runtime via avares://
+         URIs. The root LICENSE is bundled too so the About page can display our
+         own MIT text from the same source of truth the repo ships. -->
     <AvaloniaResource Include="Assets\**" />
+    <AvaloniaResource Include="LICENSE" />
   </ItemGroup>
 
   <ItemGroup>

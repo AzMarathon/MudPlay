@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.1.0
+
+- New Help → About window: program name + version, a clickable link to the repo, a tab per bundled license (MudPlay, Avalonia, JetDatabaseReader, and the bundled fonts — MIT / SIL OFL 1.1 / CC BY-SA 4.0, shown verbatim), and a thank-you to the MajorMUD community and the tools it built (MegaMUD, Nightmare Redux, MajorMUD Explorer)
+
 ## 3.0.0
 
 - Officially named the program MudPlay

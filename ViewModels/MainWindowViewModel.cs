@@ -4180,24 +4180,29 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(QuitGesture));
     }
 
-    // Help → About MudPlay.
+    private AboutWindow? _aboutWindow;
+
+    // Help → About MudPlay. A modeless, read-only window: program name + version,
+    // a clickable repo link, a tab per bundled license (MIT / SIL OFL / CC BY-SA),
+    // and a community thank-you. Toggle convention — pressing the command while
+    // it's open closes it (see OpenPlaceholder).
     [RelayCommand]
     private void OpenAbout()
-        => ShowInfoDialog("About MudPlay",
-            $"""
-            {AppInfo.DisplayName}
-            A modern Avalonia BBS terminal client with MajorMUD-aware features.
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
 
-            Source: {AppInfo.RepoUrl}
-            License: MIT — see LICENSE in the project root for the full text.
+        if (_aboutWindow is { } existing)
+        {
+            existing.Close();
+            return;
+        }
 
-            Built on .NET 10 + Avalonia 12 (CommunityToolkit.Mvvm source-gen).
-            Bundles JetDatabaseReader 2.2.0 (MIT) for pure-managed .mdb / .accdb
-            imports without Wine or mdbtools.
-
-            Help → Licenses… lists every third-party component shipped in
-            this build.
-            """);
+        AboutWindow window = new() { DataContext = new AboutWindowViewModel() };
+        window.Closed += (_, _) => _aboutWindow = null;
+        _aboutWindow = window;
+        window.Show(main);
+    }
 
     // ----- Auto-engine toggle commands --------------------------------
     // ToolbarItemCatalogue routes its ToggleAutoCombat / ToggleAutoHealRest

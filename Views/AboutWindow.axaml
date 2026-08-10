@@ -1,0 +1,65 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="640"
+        x:Class="MudPlay.Views.AboutWindow"
+        x:DataType="vm:AboutWindowViewModel"
+        Title="About MudPlay"
+        Width="680" Height="640"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <DockPanel Margin="16" LastChildFill="True">
+
+        <!-- Header: name, version, tagline, clickable repo link -->
+        <StackPanel DockPanel.Dock="Top" Spacing="3" Margin="0,0,0,12">
+            <TextBlock Text="{Binding AppName}" FontSize="26" FontWeight="Bold"/>
+            <TextBlock Text="{Binding VersionLine}" FontSize="13" Opacity="0.75"/>
+            <TextBlock Text="{Binding Tagline}" FontSize="13" TextWrapping="Wrap"
+                       Opacity="0.9" Margin="0,3,0,0"/>
+            <Button Content="{Binding RepoUrl}" Command="{Binding OpenRepoCommand}"
+                    ToolTip.Tip="Open the source repository in your browser"
+                    Background="Transparent" BorderThickness="0" Padding="0"
+                    Cursor="Hand" HorizontalAlignment="Left" Margin="0,5,0,0"
+                    Foreground="{DynamicResource SystemAccentColor}"/>
+        </StackPanel>
+
+        <!-- Close (bottom-most) -->
+        <Border DockPanel.Dock="Bottom" Padding="0,12,0,0">
+            <Button Content="Close" IsCancel="True" IsDefault="True" MinWidth="80"
+                    HorizontalAlignment="Right" Click="OnClose"/>
+        </Border>
+
+        <!-- Acknowledgements (above Close) -->
+        <Border DockPanel.Dock="Bottom" Padding="12,12,12,0"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource ThemeControlMidBrush}">
+            <SelectableTextBlock Text="{Binding Acknowledgements}" TextWrapping="Wrap"
+                                 FontSize="12" Opacity="0.9" Margin="0,10,0,0"/>
+        </Border>
+
+        <!-- License tabs (fill) -->
+        <TabControl ItemsSource="{Binding Licenses}">
+            <TabControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:LicenseEntry">
+                    <TextBlock Text="{Binding Name}" FontSize="12"/>
+                </DataTemplate>
+            </TabControl.ItemTemplate>
+            <TabControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:LicenseEntry">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto">
+                        <SelectableTextBlock Text="{Binding Text}"
+                                             TextWrapping="Wrap"
+                                             FontFamily="avares://MudPlay/Assets/Fonts/JetBrainsMono-Regular.ttf#JetBrains Mono"
+                                             FontSize="12" LineHeight="17"
+                                             Margin="6,10,6,6"/>
+                    </ScrollViewer>
+                </DataTemplate>
+            </TabControl.ContentTemplate>
+        </TabControl>
+
+    </DockPanel>
+</Window>

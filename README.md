@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.0.0**
-> - Officially named the program MudPlay
+> **Version 3.1.0**
+> - New Help → About window: program name + version, a clickable link to the repo, a tab per bundled license (MudPlay, Avalonia, JetDatabaseReader, and the bundled fonts), and a thank-you to the MajorMUD community and its tools (MegaMUD, Nightmare Redux, MajorMUD Explorer)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
