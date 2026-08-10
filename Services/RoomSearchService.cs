@@ -23,10 +23,16 @@ namespace MudPlay.Services;
 //      query must appear in Room.Name or Room.DisplayName (case-insensitive,
 //      order-independent, so "titan aged" finds "aged titan"). Requires >= 2 chars
 //      to avoid flooding on a single keystroke.
-//   4. Monster-name token match — lair-respawning mobs (RegenTime > 0) plus unique
-//      spawns (GameLimit == 1, e.g. "aged titan"). One RoomSearchResult per
-//      (monster, room) pair; mobs whose spawn rooms aren't recorded surface as
-//      informational rows.
+//   4. Monster-name token match (opt-out via Search's includeMonsters flag) —
+//      lair-respawning mobs (RegenTime > 0) plus unique spawns (GameLimit == 1,
+//      e.g. "aged titan"). One RoomSearchResult per (monster, room) pair; mobs
+//      whose spawn rooms aren't recorded surface as informational rows. @goto and
+//      the nav search box opt out — they resolve places only (monster / boss
+//      destinations go through the GOTO list + boss table).
+//   5. Saved GOTO favourites by label (opt-in via includeFavorites) — the nav
+//      search box surfaces bookmarks whose label matches, jumping to their room.
+//   6. Boss names from the boss table (opt-in via includeBosses) — one row per
+//      listed room, tagged with the boss name.
 //
 // Caches: the regen-monster list + monster→rooms index live on the service and
 // invalidate on GameDataCache.ActiveSetChanged + RoomGraphManager.GraphReloaded.
@@ -49,6 +55,11 @@ public sealed class RoomSearchService
     private readonly RoomBlacklistStore _blacklist;
     private readonly MovementFilter? _movement;
     private readonly LogService? _log;
+    // Opt-in tiers (nav search box): saved GOTO favourites by label + boss names
+    // from the boss table. Null when the caller didn't wire them (e.g. tests) — the
+    // corresponding tier then no-ops.
+    private readonly FavoritesStore? _favorites;
+    private readonly BossStore? _bosses;
 
     private List<(int Id, string Name, string Tag)>? _searchableMonsterCache;
     private Dictionary<int, List<RoomKey>>? _roomsByMonsterIdCache;
@@ -66,7 +77,9 @@ public sealed class RoomSearchService
         BfsMapper bfs,
         RoomBlacklistStore blacklist,
         MovementFilter? movement = null,
-        LogService? log = null)
+        LogService? log = null,
+        FavoritesStore? favorites = null,
+        BossStore? bosses = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -78,6 +91,8 @@ public sealed class RoomSearchService
         _blacklist = blacklist;
         _movement = movement;
         _log = log;
+        _favorites = favorites;
+        _bosses = bosses;
 
         _gameData.ActiveSetChanged += _ => InvalidateCaches();
         _graph.GraphReloaded        += InvalidateCaches;
@@ -94,11 +109,19 @@ public sealed class RoomSearchService
     //   source — player's current room for step distance; pass null to skip.
     //   cap — soft cap on total matches; tiers stop accumulating once reached.
     //   includeAcronyms — run the acronym tier (only @goto uses this).
+    //   includeMonsters — run the monster-name tier; pass false to resolve places
+    //     only (@goto + the nav search box opt out — monster / boss destinations go
+    //     through the GOTO list + boss table instead).
+    //   includeFavorites — surface saved GOTO favourites matched by their label.
+    //   includeBosses — surface boss names from the boss table (→ their rooms).
     public IReadOnlyList<RoomSearchResult> Search(
         string query,
         RoomKey? source = null,
         int cap = 200,
-        bool includeAcronyms = false)
+        bool includeAcronyms = false,
+        bool includeMonsters = true,
+        bool includeFavorites = false,
+        bool includeBosses = false)
     {
         List<RoomSearchResult> matches = new();
         string needle = (query ?? string.Empty).Trim();
@@ -156,7 +179,7 @@ public sealed class RoomSearchService
         }
 
         // ----- Tier 4: monster-name token match (lair-respawning + unique mobs) -----
-        if (needle.Length >= 2 && matches.Count < cap)
+        if (includeMonsters && needle.Length >= 2 && matches.Count < cap)
         {
             foreach ((int monsterId, string name, string tag)
                      in EnumerateSearchableMonsters())
@@ -185,6 +208,52 @@ public sealed class RoomSearchService
                     if (_graph.GetRoom(lk) is not { } lroom) continue;
                     int? steps = source is { } src ? DistanceFrom(src, lroom.Key) : null;
                     matches.Add(new RoomSearchResult(lroom.Key, lroom.DisplayName, steps, monsterTag, rank));
+                }
+            }
+        }
+
+        // ----- Tier 5: saved GOTO favourites by label (opt-in) -----
+        // Match the user's bookmark label; the row jumps to the favourite's room,
+        // shown with a ★ so it reads as a saved GOTO rather than a plain room. Skips
+        // a room the room-name tier already surfaced (no duplicate row).
+        if (includeFavorites && _favorites is not null && needle.Length >= 2 && matches.Count < cap)
+        {
+            foreach (Models.Profile.FavoriteRoom fav in _favorites.All)
+            {
+                if (matches.Count >= cap) break;
+                if (string.IsNullOrWhiteSpace(fav.Label)) continue;
+                if (!AllTokensMatch(fav.Label, tokens)) continue;
+                RoomKey key = new(fav.Map, fav.Room);
+                if (_blacklist.IsBlacklisted(key)) continue;
+                if (_graph.GetRoom(key) is not { } froom) continue;
+                if (matches.Any(x => x.MonsterTag is null && x.Key.Equals(key))) continue;
+                matches.Add(BuildRoomMatch(froom, source)
+                    with { Name = $"★ {fav.Label}", MatchRank = MatchRank(fav.Label!, tokens) });
+            }
+        }
+
+        // ----- Tier 6: boss names from the boss table (opt-in) -----
+        // Mirrors the monster tier but sourced from the curated boss list — one row
+        // per listed room, tagged with the boss name so it renders as a named target.
+        if (includeBosses && _bosses is not null && needle.Length >= 2 && matches.Count < cap)
+        {
+            foreach (Models.Profile.BossDef boss in _bosses.Resolve())
+            {
+                if (matches.Count >= cap) break;
+                if (!AllTokensMatch(boss.Name, tokens)) continue;
+                string bossTag = $"{boss.Name} · boss";
+                int rank = MatchRank(boss.Name, tokens);
+                foreach (string roomRef in boss.Rooms)
+                {
+                    if (matches.Count >= cap) break;
+                    (int? bm, int? br) = TryParseCoordinate(roomRef);
+                    if (bm is null || br is null) continue;
+                    RoomKey bk = new(bm.Value, br.Value);
+                    if (_blacklist.IsBlacklisted(bk)) continue;
+                    if (_graph.GetRoom(bk) is not { } broom) continue;
+                    if (matches.Any(x => x.MonsterTag == bossTag && x.Key.Equals(bk))) continue;
+                    int? steps = source is { } src ? DistanceFrom(src, broom.Key) : null;
+                    matches.Add(new RoomSearchResult(broom.Key, broom.DisplayName, steps, bossTag, rank));
                 }
             }
         }

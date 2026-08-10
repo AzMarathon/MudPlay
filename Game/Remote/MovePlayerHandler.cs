@@ -124,33 +124,15 @@ public sealed class MovePlayerHandler : IDisposable
         // raw room name — a place the user bookmarked is almost always what they mean.
         if (!isCoordQuery && TryGotoFavorite(ctx, query)) return;
 
-        // Tier 2: the shared coordinate / acronym / room-name / monster search —
-        // mirrors the Navigation search box behaviour 1:1.
-        IReadOnlyList<RoomSearchResult> matches = _search.Search(
-            query, source: null, cap: 50, includeAcronyms: true);
-
-        // Drop informational rows (monsters with no known lair room)
-        // — they can't be walked to.
-        List<RoomSearchResult> walkable = matches.Where(m => !m.IsInformational).ToList();
-
-        // Rooms beat monsters. Rationale: when the user types a place
-        // name that ALSO happens to be a monster substring, the room is
-        // almost always what they meant — they'd specify a coordinate
-        // if they meant a particular spawn. Falling through to the
-        // monster tier only when there's no room hit keeps "@goto
-        // godfrey" routing to the Bank of Godfrey instead of drowning
-        // in the Mayor's three spawn rooms.
-        List<RoomSearchResult> roomMatches = walkable.Where(m => m.MonsterTag is null).ToList();
-        if (roomMatches.Count > 0)
+        // Tier 2: the shared coordinate / acronym / room-name search. Monsters are
+        // opted out (includeMonsters: false) — a monster or boss destination now
+        // resolves through the GOTO list above or the boss table below, not a raw
+        // monster-lair name match, so @goto only ever lands on a named place.
+        IReadOnlyList<RoomSearchResult> rooms = _search.Search(
+            query, source: null, cap: 50, includeAcronyms: true, includeMonsters: false);
+        if (rooms.Count > 0)
         {
-            DispatchRoomMatches(ctx, query, roomMatches);
-            return;
-        }
-
-        List<RoomSearchResult> monsterMatches = walkable.Where(m => m.MonsterTag is not null).ToList();
-        if (monsterMatches.Count > 0)
-        {
-            DispatchMonsterMatches(ctx, query, monsterMatches);
+            DispatchRoomMatches(ctx, query, rooms.ToList());
             return;
         }
 
@@ -274,88 +256,16 @@ public sealed class MovePlayerHandler : IDisposable
         }
     }
 
-    private void DispatchMonsterMatches(RemoteCommandContext ctx, string query, List<RoomSearchResult> monsters)
-    {
-        // Collapse multiple spawns of the same monster into one group —
-        // the user wants "this monster has N lairs", not N separate
-        // "did you mean" entries for the same name.
-        List<IGrouping<string, RoomSearchResult>> groups = monsters
-            .GroupBy(m => m.MonsterTag!)
-            .ToList();
-
-        switch (groups.Count)
-        {
-            case 1:
-                IGrouping<string, RoomSearchResult> only = groups[0];
-                List<RoomSearchResult> spawns = only.ToList();
-                string name = ExtractMonsterName(only.Key);
-                if (spawns.Count == 1)
-                {
-                    DispatchGoto(ctx, spawns[0]);
-                    return;
-                }
-                string coords = string.Join(", ", spawns.Select(s => $"{s.Key.Map}/{s.Key.Room}"));
-                ctx.Reply($"{name} has {spawns.Count} lairs: {coords} — specify a coordinate");
-                return;
-
-            case <= 3:
-                ctx.Reply("did you mean: " + string.Join(", ", groups.Select(FormatMonsterGroup)) + "?");
-                return;
-
-            default:
-                ctx.Reply($"too many monster matches ({groups.Count}) for '{query}'");
-                return;
-        }
-    }
-
-    private static string FormatMonsterGroup(IGrouping<string, RoomSearchResult> group)
-    {
-        List<RoomSearchResult> spawns = group.ToList();
-        string name = ExtractMonsterName(group.Key);
-        return spawns.Count == 1
-            ? $"{name} ({spawns[0].Key.Map}/{spawns[0].Key.Room})"
-            : $"{name} ({spawns.Count} lairs)";
-    }
-
-    // Strip the regen suffix from the search result's MonsterTag. Tag format from
-    // RoomSearchService: "Mayor of Godfrey · regen 4h" — we want just the monster
-    // name for chat replies.
-    private static string ExtractMonsterName(string monsterTag)
-    {
-        int sep = monsterTag.IndexOf(" · ", StringComparison.Ordinal);
-        return sep > 0 ? monsterTag.Substring(0, sep) : monsterTag;
-    }
-
     private void DispatchGoto(RemoteCommandContext ctx, RoomSearchResult match)
     {
-        // Monster-tagged matches → walk to a neighbour, stop OUTSIDE
-        // the lair so the user doesn't trigger the spawn on arrival.
-        // Plain room matches → walk straight there.
-        if (match.MonsterTag is not null)
-        {
-            RoomKey? wait = PickNeighbour(match.Key);
-            if (wait is null)
-            {
-                ctx.Reply($"no neighbour to wait at for {match.Name}");
-                return;
-            }
-            StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-            if (_walker.WalkTo(wait.Value))
-                ctx.Reply($"walking outside {match.Name} ({match.Key.Map}/{match.Key.Room})");
-            else
-                ctx.Reply($"no path to {match.Name}");
-            return;
-        }
-
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-        if (_walker.WalkTo(match.Key))
-            ctx.Reply($"walking to {match.Name} ({match.Key.Map}/{match.Key.Room})");
-        else
-            ctx.Reply($"no path to {match.Name}");
+        ctx.Reply(_walker.WalkTo(match.Key)
+            ? $"walking to {match.Name} ({match.Key.Map}/{match.Key.Room})"
+            : $"no path to {match.Name}");
     }
 
-    // Pick any walkable neighbour of lair so the monster-search @goto can stop one
-    // room outside. First-found wins; the walker handles BFS from current to that
+    // Pick any walkable neighbour of a room so a StopBefore boss @goto can halt one
+    // room outside it. First-found wins; the walker handles BFS from current to that
     // neighbour.
     private RoomKey? PickNeighbour(RoomKey lair)
     {

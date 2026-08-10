@@ -1044,9 +1044,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
         // Cap 200 internally; we only display 50 to keep the dropdown
         // scannable. Larger cap gives the sort more candidates to pull
-        // the best 50 closest-first from.
+        // the best 50 closest-first from. Resolves PLACES — rooms, saved GOTO
+        // favourites, and boss names from the boss table — not monster lairs.
         IReadOnlyList<RoomSearchResult> matches =
-            _services.RoomSearch.Search(needle, CurrentRoomKey, cap: 200);
+            _services.RoomSearch.Search(
+                needle, CurrentRoomKey, cap: 200,
+                includeMonsters: false, includeFavorites: true, includeBosses: true);
 
         foreach (RoomSearchResult mm in matches.Take(50))
             SearchResults.Add(mm);

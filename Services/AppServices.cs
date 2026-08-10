@@ -4411,7 +4411,7 @@ public sealed class AppServices
         // + GraphReloaded internally so callers don't need to wire
         // cache invalidation.
         RoomSearch = new RoomSearchService(
-            RoomGraph, GameData, Bfs, RoomBlacklist, Movement, Log);
+            RoomGraph, GameData, Bfs, RoomBlacklist, Movement, Log, Favorites, Bosses);
 
         // MovePlayer remote-command handler.
         // Registers @goto, @loop, @lair, @stop, @rego against the
