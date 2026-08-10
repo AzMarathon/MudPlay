@@ -55,6 +55,30 @@ public sealed class TerminalControl : Control
     public static readonly StyledProperty<Size> ViewportSizeProperty =
         AvaloniaProperty.Register<TerminalControl, Size>(nameof(ViewportSize));
 
+    // When true, the startup mud splash plays over the terminal (drawn from a
+    // standalone screen, never the emulator/scrollback). MainWindowViewModel
+    // sets it true at launch and clears it on connect / first data / profile load.
+    public static readonly StyledProperty<bool> SplashActiveProperty =
+        AvaloniaProperty.Register<TerminalControl, bool>(nameof(SplashActive));
+
+    public bool SplashActive
+    {
+        get => GetValue(SplashActiveProperty);
+        set => SetValue(SplashActiveProperty, value);
+    }
+
+    // Whether the mud figure animates. When false the splash shows only the
+    // static header (title + byline + hint). Bound from the General setting.
+    public static readonly StyledProperty<bool> SplashAnimateProperty =
+        AvaloniaProperty.Register<TerminalControl, bool>(nameof(SplashAnimate), defaultValue: true);
+
+    public bool SplashAnimate
+    {
+        get => GetValue(SplashAnimateProperty);
+        set => SetValue(SplashAnimateProperty, value);
+    }
+    private MudSplashAnimator? _splash;
+
     public TerminalEmulator? Emulator
     {
         get => GetValue(EmulatorProperty);
@@ -167,8 +191,44 @@ public sealed class TerminalControl : Control
         // applies — so they re-fit rather than re-measure the base cell.
         ScaleToFitProperty.Changed.AddClassHandler<TerminalControl>((c, _) => c.ApplyScale());
         ViewportSizeProperty.Changed.AddClassHandler<TerminalControl>((c, _) => c.ApplyScale());
+        SplashActiveProperty.Changed.AddClassHandler<TerminalControl>((c, e) => c.OnSplashActiveChanged((bool)e.NewValue!));
+        // A live toggle of the animate flag while the splash is showing rebuilds
+        // the animator so the change takes effect immediately.
+        SplashAnimateProperty.Changed.AddClassHandler<TerminalControl>((c, _) =>
+        {
+            if (c.SplashActive) { c.OnSplashActiveChanged(false); c.OnSplashActiveChanged(true); }
+        });
         AffectsRender<TerminalControl>(EmulatorProperty);
     }
+
+    // Start/stop the splash animator as SplashActive flips. The animator owns a
+    // standalone TerminalScreen sized to the live grid; on each frame it repaints
+    // (we invalidate). Nothing here touches the emulator or scrollback.
+    private void OnSplashActiveChanged(bool active)
+    {
+        if (active)
+        {
+            int cols = Emulator?.Screen.Cols ?? 80;
+            int rows = Emulator?.Screen.Rows ?? 25;
+            if (_splash is null)
+            {
+                _splash = new MudSplashAnimator(cols, rows, SplashAnimate);
+                _splash.FrameAdvanced += OnSplashFrame;
+            }
+            else _splash.Resize(cols, rows);
+            _splash.Start();
+        }
+        else if (_splash is { } sp)
+        {
+            sp.FrameAdvanced -= OnSplashFrame;
+            sp.Dispose();
+            _splash = null;
+        }
+        InvalidateVisual();
+    }
+
+    // FrameAdvanced fires on the UI thread (DispatcherTimer); repaint directly.
+    private void OnSplashFrame() => InvalidateVisual();
 
     private void OnEmulatorChanged(TerminalEmulator? oldEm, TerminalEmulator? newEm)
     {
@@ -206,7 +266,11 @@ public sealed class TerminalControl : Control
     // ScreenResized only fires on Emulator.Resize. Re-fit (the new cols/rows
     // change the natural grid the ScaleToFit math targets) then re-measure so
     // the canvas grows / shrinks to match the new cell grid.
-    private void OnScreenResized() => Dispatcher.UIThread.Post(ApplyScale);
+    private void OnScreenResized() => Dispatcher.UIThread.Post(() =>
+    {
+        _splash?.Resize(Emulator?.Screen.Cols ?? 80, Emulator?.Screen.Rows ?? 25);
+        ApplyScale();
+    });
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
@@ -332,6 +396,16 @@ public sealed class TerminalControl : Control
         // Clear background. (Done explicitly even though Background="Black"
         // is the window default — inside the ScrollViewer we may extend.)
         context.FillRectangle(Brushes.Black, bounds);
+
+        // Startup splash: draw the standalone splash screen instead of the
+        // emulator. Guarded so the normal path is untouched when inactive.
+        if (SplashActive && _splash is { } sp)
+        {
+            if (_fitScale > 1.0) RenderScaledCells(context, sp.Screen);
+            else DrawCells(context, sp.Screen);
+            return;
+        }
+
         if (em is null) return;
 
         // Zoomed: render the grid at native size into an offscreen bitmap, then
@@ -364,6 +438,48 @@ public sealed class TerminalControl : Control
             DrawScreen(bctx, em);
         }
 
+        var src = new Rect(0, 0, nativeW, nativeH);
+        var dest = new Rect(0, 0, nativeW * _fitScale, nativeH * _fitScale);
+        using (context.PushRenderOptions(new RenderOptions
+        {
+            BitmapInterpolationMode = BitmapInterpolationMode.None,
+            EdgeMode = EdgeMode.Aliased,
+        }))
+        {
+            context.DrawImage(_scaleBitmap!, src, dest);
+        }
+    }
+
+    // Draw a standalone screen (the splash) with the same cell primitive as the
+    // live terminal, batching same-attr runs per row. No input overlay / cursor.
+    private void DrawCells(DrawingContext context, TerminalScreen screen)
+    {
+        for (int y = 0; y < screen.Rows; y++)
+        {
+            int x = 0;
+            while (x < screen.Cols)
+            {
+                CellAttributes attr = screen[x, y].Attr;
+                int x1 = x + 1;
+                while (x1 < screen.Cols && screen[x1, y].Attr.Equals(attr)) x1++;
+                DrawRun(context, screen, x, x1, y, attr);
+                x = x1;
+            }
+        }
+    }
+
+    // Zoomed splash: native-size into the offscreen buffer, then nearest-neighbour
+    // blit — mirrors RenderScaled but for an arbitrary screen.
+    private void RenderScaledCells(DrawingContext context, TerminalScreen screen)
+    {
+        int nativeW = Math.Max(1, (int)Math.Round(_cellW * screen.Cols));
+        int nativeH = Math.Max(1, (int)Math.Round(_cellH * screen.Rows));
+        EnsureScaleBitmap(nativeW, nativeH);
+        using (var bctx = _scaleBitmap!.CreateDrawingContext())
+        {
+            bctx.FillRectangle(Brushes.Black, new Rect(0, 0, nativeW, nativeH));
+            DrawCells(bctx, screen);
+        }
         var src = new Rect(0, 0, nativeW, nativeH);
         var dest = new Rect(0, 0, nativeW * _fitScale, nativeH * _fitScale);
         using (context.PushRenderOptions(new RenderOptions

@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.1.0**
+> **Version 3.2.0**
 > - New Help → About window: program name + version, a clickable link to the repo, a tab per bundled license (MudPlay, Avalonia, JetDatabaseReader, and the bundled fonts), and a thank-you to the MajorMUD community and its tools (MegaMUD, Nightmare Redux, MajorMUD Explorer)
+> - New animated mud-throw startup splash on the terminal (toggle in Settings → General); the title/byline stay either way, and it never touches the backscroll
+> - Updating from a 2.x build now migrates your existing data (profiles, BBS, settings, game data) from the old FujinTerm folder into MudPlay — fixes profiles appearing missing after the 3.0 rename
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

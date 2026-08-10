@@ -92,6 +92,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _backupOnSave;
     [ObservableProperty] private bool _scaleTerminalToWindow;
     [ObservableProperty] private bool _typeToTerminalFromOtherWindows = true;
+    [ObservableProperty] private bool _showStartupMudAnimation = true;
 
     // PlayerCleanupDays moved to Settings → Other per user direction.
     // GlobalSettings.PlayerCleanupDays remains the canonical store —
@@ -255,6 +256,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             BackupOnSave = BackupOnSave,
             ScaleTerminalToWindow = ScaleTerminalToWindow,
             TypeToTerminalFromOtherWindows = TypeToTerminalFromOtherWindows,
+            ShowStartupMudAnimation = ShowStartupMudAnimation,
             // Store null when the default is selected so the delta stays clean
             // and follows the app default if it ever changes (the picker label
             // literally reads "{default}").
@@ -347,6 +349,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         BackupOnSave         = dto.BackupOnSave;
         ScaleTerminalToWindow = dto.ScaleTerminalToWindow;
         TypeToTerminalFromOtherWindows = dto.TypeToTerminalFromOtherWindows;
+        ShowStartupMudAnimation = dto.ShowStartupMudAnimation;
 
         SelectedFontFamily = FontFamilyOptions.FirstOrDefault(o => o.Uri == dto.TerminalFontFamily)
                              ?? FontFamilyOptions[0];
@@ -470,6 +473,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnBackupOnSaveChanged(bool value)           => Dirty();
     partial void OnScaleTerminalToWindowChanged(bool value)  => Dirty();
     partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();
+    partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
     partial void OnSelectedFontFamilyChanged(FontFamilyOption? value) => Dirty();
     partial void OnSelectedFontSizeChanged(FontSizeOption? value)     => Dirty();
     partial void OnAmAutoCombatChanged(bool value)           => Dirty();

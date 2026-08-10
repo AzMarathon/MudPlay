@@ -2,9 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.1.0
+## 3.2.0
 
 - New Help → About window: program name + version, a clickable link to the repo, a tab per bundled license (MudPlay, Avalonia, JetDatabaseReader, and the bundled fonts — MIT / SIL OFL 1.1 / CC BY-SA 4.0, shown verbatim), and a thank-you to the MajorMUD community and the tools it built (MegaMUD, Nightmare Redux, MajorMUD Explorer)
+- New animated startup splash on the terminal — a figure hurls mud at the "lens", it splats and slides slowly off, revealing the "MudPlay" / "Created By Fujin" header, then loops; toggle it in Settings → General (the title/byline stay either way); never written to the backscroll log
+- Updating from a 2.x build now carries your data over: profiles, BBS folders, settings, and imported game data migrate from the old FujinTerm folder into MudPlay on first launch (non-destructive, one-time) — fixes profiles appearing missing after the 3.0 rename
 
 ## 3.0.0
 
