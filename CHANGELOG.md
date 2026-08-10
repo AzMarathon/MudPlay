@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 2.39.4
+
+- Death now clears the client's condition tracker, so a knockdown / held ("flat on your back") state whose in-game recovery line never arrived can't survive the death and leave navigation stuck "Paused by: Held" while the character is free to move
+- Combat now falls back to your alternate attack command when a spell used as your attack command draws "no effect" (e.g. priest `harm` vs an acid slime immune to it) — previously only attack *spells* fell back, so a spell in the command slot kept firing uselessly
+- Attack-spell cascade now swaps primary → alternate spell (e.g. `harm` → `hamm`) on the same round the primary is found immune, instead of idling a round until the next tick — the weapon fallback was already instant, only the spell fallback lagged
+- Game Data → monster "Override Attack Spell" is now "Override Attack" and accepts either a spell number or a plain command/cast-code (`attack`, `bash`, `harm`): a typed command now saves (it was silently dropped before) and is forced against that monster over the normal combat flow
+- bug reports addressed: paradigm-20260809-114444, paradigm-20260809-131642, paradigm-20260809-162350
+
 ## 2.39.0
 
 - Keep typing at the terminal while other windows are open: keystrokes typed with a settings/editor window focused now fall through to the terminal, so you can keep sending commands without clicking back — unless you're editing a text field in that window, or the key is one the window needs (Tab, Escape, menu shortcuts)

@@ -1,12 +1,11 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.39.0**
-> - Keep typing at the terminal while other windows are open: keystrokes typed with a settings/editor window focused fall through to the terminal, so you can keep sending commands without clicking back — unless you're editing a text field in that window, or the key is one the window needs (Tab, Escape, menu shortcuts)
-> - Forwarded keys run the terminal's real input path (macros, local line editing, command history, escape-sequence mapping), identical to typing directly in the terminal
-> - New Settings → General toggle "Keep typing directed at the terminal when other windows are open" (on by default)
-> - End Game Trainer quest defs refreshed: base level 65, "Episode"→"Part", slash map/room refs, rewritten advice, a condensed sphere guide + reworked Part 5 level gate (paradigm 75+/stock 66+), and per-realm trainer notes on the Part 4 halls
-> - Quest defs follow the tier model: bundled seed → read-only Global copy (re-synced on launch, reseeded if missing); your quest edits live at the BBS tier and win over the seed (was a per-game-data-set overlay), so shipped guide updates reach you without deleting data files
+> **Version 2.39.4**
+> - Death now clears the client's condition tracker, so a knockdown / held ("flat on your back") state whose recovery line never arrived can't survive the death and leave navigation stuck "Paused by: Held"
+> - Combat falls back to your alternate attack command when a spell used as your attack command draws "no effect" (e.g. priest `harm` vs an immune acid slime) — previously only attack spells fell back
+> - Attack-spell cascade swaps primary → alternate spell (e.g. `harm` → `hamm`) on the same round the primary is found immune, instead of losing a round waiting for the next tick
+> - Game Data monster "Override Attack Spell" is now "Override Attack" and accepts a spell number OR a plain command (`attack`, `bash`, `harm`): a typed command now saves and is forced against that monster over the normal combat flow
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

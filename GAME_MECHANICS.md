@@ -425,6 +425,15 @@ it isn't here and you're unsure, ask.
   out-of-mana.** So an attack spell drains mana every round it repeats whether it lands or misses; a
   "but fail" round is a spent round (mana down, zero damage), not a free retry. The client must not
   treat this line as an out-of-mana / interrupt signal.
+- **[CONFIRMED]** *(2026-08-09, user)* **"Your spell has no effect on <monster>." spends NO round — it's
+  free.** A no-effect cast (the living-only / immunity mismatch) doesn't consume the combat round, so
+  you can cast a *different* spell that same round. The client therefore swaps the attack cascade's
+  primary → alternate attack spell **immediately** on the no-effect line, the same round, rather than
+  idling until the next ~5s tick (report `paradigm-20260809-162350`: `harm`→`hamm` was losing a round
+  because only the weapon fallback swung immediately while the alternate *spell* waited a tick). The
+  primary probe itself is still the unavoidable reactive detection (living-only immunity isn't
+  pre-emptable from data — see the immunity section below), and the swap is one cascade step per round
+  because the alternate's own no-effect can't arrive until it has cast next round.
 - **[CONFIRMED]** **Martial-arts strikes (Punch / Kick / Jumpkick) are class-innate abilities, not a
   function of the trained Martial Arts skill.** A class grants a strike by listing its ability id in
   an `Abil-0..9` slot: **Punch = 29, Kick = 30, Jumpkick = 35** (Mystic carries all three at value 1
@@ -442,23 +451,36 @@ behaviour — how the client's auto-combat interprets the per-monster overrides)
   actionable monster to backstab; a flagged monster is only chosen when **every** actionable
   monster in the room is flagged, in which case the room is **still cleared** — the opener just
   falls through to a normal attack instead of `bs` (never skip the room over the flag).
-- **Override attack spell / Override pre-attack spell** — a per-monster spell (stored as a
-  `Spells.Number`, resolved to the `Spells.Short` cast-code) that **substitutes** for the global
-  Combat-tab choice **for that species only**. The attack override occupies the *Normal Attack
-  Spell* rung; the pre-attack override occupies the *Single-Target Debuff* rung (cast through the
-  in-between window). Because only two single-target chooser slots exist, this mapping is
-  structurally forced.
+- **Override Attack / Override pre-attack** — a per-monster attack that **substitutes** for the
+  global Combat-tab choice **for that species only**. The **Override Attack** field takes EITHER:
+  - a **`Spells.Number`** (resolved to the `Spells.Short` cast-code) — routed through the *Normal
+    Attack Spell* rung with its mana floor + per-room cast cap; OR
+  - a **raw command / cast-code** ("attack", "bash", "harm") sent **verbatim** as the attack verb,
+    forced over the whole spell/weapon flow, with **no** rung gating (the server auto-repeats it
+    like any attack command). The editor keeps the two mutually exclusive — a positive integer is
+    the spell id, any other non-empty text is the command (this is what lets a plain command like
+    `attack` persist; an earlier int-only parse silently dropped it). The pre-attack override
+    stays spell-only and occupies the *Single-Target Debuff* rung.
   - **Gate bypass:** when an override is set the client **bypasses the effectiveness gates**
     (observed "no effect" immunity, SpellImmu level-block, and ≥100% elemental resist) — the
-    rationale is that a user who hand-picks a spell for a specific monster has done the due
-    diligence that it works. The **physical constraints still apply**: the rung's mana floor,
-    the once-per-target guard (pre-attack), and the override's own per-room cast cap.
-  - **Count = per-room cast cap.** The override's configured count is the cap; the overlay
-    documents **null = 0**, so a spell set with **no positive count is treated as inactive** and
-    the client falls back to the global slot (likewise if the number doesn't resolve to a known
-    cast-code). This "null/zero count ⇒ fall back to global" reading is the client's
-    interpretation of the ambiguous count field — **flag for user confirmation** if override
-    behaviour is ever questioned.
+    rationale is that a user who hand-picks the attack for a specific monster has done the due
+    diligence that it works. So a forced command is **never** second-guessed by the "no effect"
+    fallback below. The **physical constraints still apply** for the spell-id form: the rung's
+    mana floor, the once-per-target guard (pre-attack), and the override's own per-room cast cap.
+  - **Count = per-room cast cap** (spell-id form only). The override's configured count is the cap;
+    the overlay documents **null = 0**, so a spell set with **no positive count is treated as
+    inactive** and the client falls back to the global slot (likewise if the number doesn't resolve
+    to a known cast-code). The command form carries no count — it's active whenever the text is
+    non-blank. This "null/zero count ⇒ fall back to global" reading is the client's interpretation
+    of the ambiguous count field — **flag for user confirmation** if override behaviour is ever questioned.
+- **Attack-command "no effect" fallback.** A spell driven through the **attack-command** slot
+  (`NormalAttackCommand = "harm"`, not the attack-*spell* rung) draws the same
+  `Your spell has no effect on <monster>.` immunity line, but reaches the wire as a plain command,
+  so the spell-slot cascade can't see it. The client falls the COMMAND path back the same way it
+  does a physical weapon's "no effect": it marks the species failed vs the normal command (the next
+  pick prefers `AlternateAttackCommand`) and re-sends the alternate command this round; with no
+  distinct alternate it concedes the species and re-picks. (Report `paradigm-20260809-131642` —
+  priest `harm` command vs an acid slime never dropped to `attack`.)
 
 ## Monster aggression — who opens on you unprovoked
 
@@ -724,6 +746,18 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   - the character is **teleported to the graveyard room** appropriate to the **map** they died on.
 - Graveyard rooms are **per-map**; two known graveyards are **`1/2189`** (map 1, room 2189) and
   **`16/542`** (map 16, room 542).
+
+**Death fully clears all effects** *([CONFIRMED] 2026-08-09, user)*
+- Death **wipes every ailment, status effect, buff, and debuff** off the character — poison, disease,
+  blindness, confusion, held/knockdown, and every positive buff alike. This holds on **both stock and
+  Paradigm** (realm-independent); the character respawns at the graveyard with a clean effect slate.
+- **Client implication:** `ConditionTracker` is an observation log driven by the server's applied /
+  wear-off lines, and death teleports you out **without emitting those wear-off lines** — so a
+  condition latched at the moment of death (most dangerously *MovementPrevented*, whose stale flag
+  keeps `MovementCoordinator.HeldGate` asserted and strands the walker "Paused by: Held") never
+  auto-clears. Because the game clears *everything* on death, the client mirrors it with a full
+  `ConditionTracker.ClearAll("death")` on `RoomTracker.PlayerDeathObserved` — no per-flag scoping —
+  matching the mechanic exactly (report `paradigm-20260809-114444`, fixed v2.39.1).
 - **[CONFIRMED]** (2026-08-03, user + captures) **The deathpile is a `corpse` object, recovered with
   one `recover corpse <given-name>` command — NOT a per-item `get`.** (This corrects an earlier note
   that said stock drops items loose to the ground; it does not.)

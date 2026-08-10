@@ -17,9 +17,10 @@ namespace FujinTerm.Models.GameData;
 // stored.
 //
 // What IS overridable — per-monster automation behaviour: display name,
-// relationship, target priority, per-monster spell preferences (the
-// override-pre-attack and override-attack-spell slots take priority over
-// the global Combat-tab spell choices for this specific monster), plus the
+// relationship, target priority, per-monster attack preferences (the
+// override-pre-attack and override-attack slots take priority over the
+// global Combat-tab choices for this specific monster — the attack slot
+// takes either a Spell.Number or a raw command verb), plus the
 // DontBackstab flag. All fields nullable so a partial-tier
 // override only carries the keys the user actually set — the resolver
 // overlays them onto the next-lower tier's values, preserving lower-tier
@@ -48,11 +49,23 @@ public sealed record MonsterOverlay
 
     // Override attack spell — Spell.Number to cast as the primary attack on
     // this monster, regardless of the global Combat-tab attack-spell
-    // choice. null = no per-monster override (use the global setting).
+    // choice, routed through the mana-gated attack-spell rung. null = no
+    // per-monster override (use the global setting).
     public int? OverrideAttackSpellId { get; init; }
 
     // Cast count for OverrideAttackSpellId; null = 0.
     public int? OverrideAttackCount { get; init; }
+
+    // Override attack COMMAND — a raw verb ("attack", "bash") or spell
+    // cast-code ("harm") sent verbatim as this monster's attack, forced over
+    // the whole normal spell/weapon flow. Unlike OverrideAttackSpellId it
+    // carries no cast-rung gating (no mana floor, no per-room cap): it goes
+    // out like a weapon command and the server auto-repeats it each round. The
+    // user hand-picked it, so it also bypasses the "no effect" fallback — it's
+    // never second-guessed. null/blank = no command override. The editor keeps
+    // these two mutually exclusive: a numeric entry sets OverrideAttackSpellId,
+    // any other text sets this. See MonsterEditDialogViewModel.ParseAttackOverride.
+    public string? OverrideAttackCommand { get; init; }
 
     // Suppress auto-BS attempts on this target.
     public bool? DontBackstab { get; init; }

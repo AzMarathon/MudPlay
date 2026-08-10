@@ -2499,7 +2499,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // condition (no AppliedEndsWith) and any live buff timer
                 // must not survive the disconnect and suppress a recast
                 // on the next session.
-                AppServices.Current.Conditions.ClearAll();
+                AppServices.Current.Conditions.ClearAll("disconnect");
                 AppServices.Current.CastDirector.ResetBuffTracking();
                 AppServices.Current.ManaRegen.Reset();
 
@@ -4295,7 +4295,7 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ResetStates()
     {
-        AppServices.Current.Conditions.ClearAll();
+        AppServices.Current.Conditions.ClearAll("reset");
 
         Game.PartyManager party = AppServices.Current.Party;
         if (party.LocalCharacterName is { Length: > 0 } me)

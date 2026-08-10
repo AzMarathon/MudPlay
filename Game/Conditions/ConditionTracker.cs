@@ -134,13 +134,16 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     }
 
     // Force-clear all conditions. Wire on disconnect / death / session reset —
-    // server state changes reset the truth, our observation log is stale.
-    public void ClearAll()
+    // server state changes reset the truth, our observation log is stale. This is
+    // a safe over-clear: the tracker is an observation log, so any condition still
+    // true after the reset re-latches on its next matching server line. reason is
+    // the program-log breadcrumb naming what triggered the clear.
+    public void ClearAll(string reason = "reset")
     {
         if (_active.Count == 0) return;
         _active.Clear();
         ActiveFlags = MessageFlags.None;
-        _log?.Info(LogCategory, "all conditions cleared (manual)");
+        _log?.Info(LogCategory, $"all conditions cleared ({reason})");
     }
 
     // The store fires one Reset for a bulk (re)load, so this rebuilds once per set

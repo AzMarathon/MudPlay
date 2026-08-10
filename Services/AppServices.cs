@@ -4368,6 +4368,19 @@ public sealed class AppServices
         // ordering above, so it stays a plain post-death subscriber.
         RoomTracker.PlayerDeathObserved += () => RoomClassifier.NoteRoomChanged();
 
+        // Reset the condition observation log on death. Death is a full server-side
+        // state reset (respawn at the graveyard clears knockdown / held / debuffs),
+        // but a latched condition whose wear-off line we never received — most
+        // dangerously MovementPrevented ("flat on your back") — otherwise survives
+        // the death and stays asserted forever: SelfHeldResponder keeps HeldGate up
+        // off the stale flag, so the walker sits "Paused by: Held" while the
+        // character is free to move in-game (report paradigm-20260809-114444).
+        // ClearAll is the same cascade the manual Reset States button uses; it's a
+        // safe over-clear because any condition still genuinely active re-latches on
+        // its next server line. Wired here (not in PlayerDeathMovementHalt, whose
+        // concern is the movement engines) since the reset spans all conditions.
+        RoomTracker.PlayerDeathObserved += () => Conditions.ClearAll("death");
+
         // Party-death roster-cleanup bridge. Leader-side: when an active party
         // member dies mid-route it lingers as an [Invited] par slot; we uninvite
         // that phantom once combat clears so the loop / walk-to doesn't stall on

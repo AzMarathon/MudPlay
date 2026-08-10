@@ -555,12 +555,42 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: acid slime.");                 // primary attack spell
         Assert.Equal("firebolt acid slime", h.LastSent);
 
-        h.Feed("Your spell has no effect on acid slime."); // firebolt immune
-        h.Tick();                                          // heartbeat → alternate
+        // A round passes (firebolt repeats server-side; its result comes back next
+        // round). The immunity line then swaps to the alternate SPELL *on the same
+        // line* — no extra round burned (report paradigm-20260809-162350). This is
+        // the fix: previously the spell branch idled until the NEXT tick, so the
+        // assert here needed a Tick() after the no-effect line.
+        h.Tick();
+        h.Feed("Your spell has no effect on acid slime."); // firebolt immune → instant icebolt
         Assert.Equal("icebolt acid slime", h.LastSent);
 
-        h.Feed("Your spell has no effect on acid slime."); // icebolt immune → weapon now
+        // Next round, the alternate is also immune → the cascade reaches the weapon.
+        h.Tick();
+        h.Feed("Your spell has no effect on acid slime."); // icebolt immune → weapon
         Assert.Equal("a acid slime", h.LastSent);
+    }
+
+    [Fact]
+    public void SpellNoEffect_SameRoundBurst_SwapsOnceNotStraightToWeapon()
+    {
+        // The attack casts several times per round, so an immune target draws a
+        // burst of "no effect" lines. The first swaps primary→alternate; the rest
+        // of the burst (same round, no tick) must be ignored — else the alternate
+        // we just chose is itself mis-marked immune and the cascade skips straight
+        // to the weapon, never actually trying the alternate spell.
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "firebolt" };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "icebolt" };
+        h.AddMonster(1, "acid slime");
+
+        h.Feed("Also here: acid slime.");
+        h.Tick();
+        h.Feed("Your spell has no effect on acid slime.");   // firebolt immune → icebolt
+        Assert.Equal("icebolt acid slime", h.LastSent);
+
+        h.Feed("Your spell has no effect on acid slime.");   // leftover burst line, same round
+        Assert.Equal("icebolt acid slime", h.LastSent);      // still icebolt — NOT "a acid slime"
+        Assert.DoesNotContain("a acid slime", h.AllSent);
     }
 
     [Fact]
