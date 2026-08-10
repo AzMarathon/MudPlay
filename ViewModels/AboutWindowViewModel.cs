@@ -40,10 +40,9 @@ public sealed partial class AboutWindowViewModel : ObservableObject
     // game + reference client this app targets; the others are long-standing
     // community tools worth thanking by name.
     public string Acknowledgements =>
-        "MudPlay stands on the shoulders of the MajorMUD community — the players, "
-        + "guides, and realm operators who have kept the game alive for decades — and on "
-        + "the tools its community built and shared: MegaMUD, Nightmare Redux, and "
-        + "MajorMUD Explorer. Thank you.";
+        "Thank you to the MajorMUD community — the players, guides, and Sysops who "
+        + "have kept the game alive for decades. And thank you to those who made the "
+        + "tools that shaped the community: MegaMUD, Nightmare Redux, and MajorMUD Explorer.";
 
     public IReadOnlyList<LicenseEntry> Licenses { get; }
 
