@@ -53,6 +53,14 @@ public sealed class AutoModeController
     // KillSwitchEngaged; cleared on restore and on profile load.
     private bool _killEngaged;
 
+    // Fires when ToggleAll flips the kill state: true when a press engages the
+    // kill (engines snapshotted off), false when a press restores them. Lets
+    // consumers that aren't auto-engine flags ride the same switch — the
+    // navigation engines suspend on engage and resume on restore (AppServices
+    // bridges this to MovementController). NOT fired by ResetSnapshot: a profile
+    // load tears movement down on its own, so a spurious resume there is wrong.
+    public event Action<bool>? KillSwitchToggled;
+
     public AutoModeController(ProfileService profile, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -118,6 +126,7 @@ public sealed class AutoModeController
             _killEngaged = true;
             WriteGeneral(profile, general);
             _log?.Log(LogSeverity.Info, LogCategory, "Auto-All: every engine off (snapshot saved)");
+            KillSwitchToggled?.Invoke(true);
             return true;
         }
 
@@ -129,6 +138,7 @@ public sealed class AutoModeController
             _killEngaged = false;
             WriteGeneral(profile, general);
             _log?.Log(LogSeverity.Info, LogCategory, "Auto-All: restored snapshot");
+            KillSwitchToggled?.Invoke(false);
         }
         return AllWiredOff;
     }

@@ -29,7 +29,17 @@ public sealed class MovementController : IDisposable
     private readonly LoopRunner _loops;
     private readonly AutoLairManager _autoLair;
     private readonly MovementCoordinator _coordinator;
+    private readonly LogService? _log;
     private bool _disposed;
+
+    // True while the Auto-All kill switch paused a running engine — so a later
+    // release only resumes navigation WE suspended, never a nav the user had
+    // already paused (or a fresh one they started while the switch was engaged).
+    private bool _autoAllSuspended;
+
+    // Surfaced in the bug report so a "nav didn't resume after Auto-All" report
+    // shows whether the switch is holding the pause (vs the user's own).
+    public bool IsAutoAllSuspended => _autoAllSuspended;
 
     // Fires whenever State may have changed.
     public event Action? StateChanged;
@@ -38,7 +48,8 @@ public sealed class MovementController : IDisposable
         AutoWalkManager walker,
         LoopRunner loops,
         AutoLairManager autoLair,
-        MovementCoordinator coordinator)
+        MovementCoordinator coordinator,
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(walker);
         ArgumentNullException.ThrowIfNull(loops);
@@ -48,6 +59,7 @@ public sealed class MovementController : IDisposable
         _loops = loops;
         _autoLair = autoLair;
         _coordinator = coordinator;
+        _log = log;
 
         _walker.Event += OnWalkerEvent;
         _loops.Event += OnLoopEvent;
@@ -152,6 +164,38 @@ public sealed class MovementController : IDisposable
         if (_walker.State is WalkState.Walking or WalkState.Paused)
             _walker.Stop("user stop from toolbar");
         _coordinator.ClearGate(MovementCoordinator.UserGate, nameof(MovementController));
+    }
+
+    // Auto-All kill switch engaged: suspend an in-flight navigation the same way a
+    // user Pause does — retaining the loop's step / walk destination / lair target
+    // so ReleaseFromAutoAll picks it up exactly where it left off. Remembered only
+    // when we actually paused a running, not-already-user-paused engine, so the
+    // release can't resume a nav the user paused themselves or one they never had
+    // running. No-op (and nothing to resume later) when idle or already paused.
+    public void SuspendForAutoAll()
+    {
+        if (IsIdle || IsUserPaused)
+        {
+            _autoAllSuspended = false;
+            return;
+        }
+        Pause();
+        _autoAllSuspended = true;
+        _log?.Info(nameof(MovementController),
+            "Auto-All engaged — navigation suspended (resumes when Auto-All is restored).");
+    }
+
+    // Auto-All kill switch restored: resume the navigation we suspended, unless the
+    // user has since taken it over (manually resumed, stopped, or started a new one)
+    // — Resume itself is a no-op when the engine isn't user-paused, so a stale flag
+    // can't force an unwanted resume.
+    public void ReleaseFromAutoAll()
+    {
+        if (!_autoAllSuspended) return;
+        _autoAllSuspended = false;
+        Resume();
+        _log?.Info(nameof(MovementController),
+            "Auto-All restored — navigation resumed.");
     }
 
     private void OnWalkerEvent(WalkEvent _) => StateChanged?.Invoke();

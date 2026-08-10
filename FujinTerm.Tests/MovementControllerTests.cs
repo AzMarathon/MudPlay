@@ -258,6 +258,88 @@ public sealed class MovementControllerTests : IDisposable
     }
 
     [Fact]
+    public void SuspendForAutoAll_WhileWalking_Pauses_ReleaseResumes()
+    {
+        // Auto-All kill switch parks an in-flight walk (retaining the destination)
+        // and restores it exactly where it left off.
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+
+        h.Controller.SuspendForAutoAll();
+        Assert.Equal(MovementEngineState.Paused, h.Controller.State);
+        Assert.Equal(WalkState.Paused, h.Walker.State);
+
+        h.Controller.ReleaseFromAutoAll();
+        Assert.Equal(MovementEngineState.Running, h.Controller.State);
+        Assert.False(h.Coordinator.IsPaused);
+    }
+
+    [Fact]
+    public void SuspendForAutoAll_WhileAutoLair_RoutesThroughManager_ReleaseResumes()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.AutoLair.Mark(new RoomKey(1, 1));
+        h.AutoLair.Mark(new RoomKey(1, 3));
+        h.AutoLair.Start();
+
+        h.Controller.SuspendForAutoAll();
+        Assert.True(h.AutoLair.IsPaused);
+
+        h.Controller.ReleaseFromAutoAll();
+        Assert.False(h.AutoLair.IsPaused);
+        Assert.Equal(MovementEngineState.Running, h.Controller.State);
+    }
+
+    [Fact]
+    public void SuspendForAutoAll_WhenIdle_IsNoOp_ReleaseDoesNothing()
+    {
+        using Harness h = NewHarness();
+        h.Controller.SuspendForAutoAll();
+        Assert.Equal(MovementEngineState.Idle, h.Controller.State);
+        Assert.False(h.Coordinator.IsPaused);
+
+        h.Controller.ReleaseFromAutoAll();
+        Assert.Equal(MovementEngineState.Idle, h.Controller.State);
+    }
+
+    [Fact]
+    public void SuspendForAutoAll_RespectsPreExistingUserPause()
+    {
+        // The user paused the walk themselves before engaging Auto-All. Releasing
+        // Auto-All must NOT resume it — only the user's own Resume should.
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Controller.Pause();                     // user's own pause
+        Assert.True(h.Controller.IsUserPaused);
+
+        h.Controller.SuspendForAutoAll();         // no-op — already user-paused
+        h.Controller.ReleaseFromAutoAll();        // must not resume the user's pause
+
+        Assert.Equal(MovementEngineState.Paused, h.Controller.State);
+        Assert.True(h.Controller.IsUserPaused);
+    }
+
+    [Fact]
+    public void ReleaseFromAutoAll_AfterUserStopped_NoUnwantedResume()
+    {
+        // The user Stopped the walk while Auto-All was engaged. Restoring Auto-All
+        // must not revive a nav the user deliberately ended.
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Controller.SuspendForAutoAll();
+        h.Controller.Stop();                      // user ends it
+        Assert.Equal(MovementEngineState.Idle, h.Controller.State);
+
+        h.Controller.ReleaseFromAutoAll();
+        Assert.Equal(MovementEngineState.Idle, h.Controller.State);
+        Assert.False(h.Coordinator.IsPaused);
+    }
+
+    [Fact]
     public void StateChanged_FiresOnWalkerActivity()
     {
         using Harness h = NewHarness();

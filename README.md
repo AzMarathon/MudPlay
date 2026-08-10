@@ -1,11 +1,8 @@
 # FujinTerm
 
 <!-- current-version:start -->
-> **Version 2.39.4**
-> - Death now clears the client's condition tracker, so a knockdown / held ("flat on your back") state whose recovery line never arrived can't survive the death and leave navigation stuck "Paused by: Held"
-> - Combat falls back to your alternate attack command when a spell used as your attack command draws "no effect" (e.g. priest `harm` vs an immune acid slime) — previously only attack spells fell back
-> - Attack-spell cascade swaps primary → alternate spell (e.g. `harm` → `hamm`) on the same round the primary is found immune, instead of losing a round waiting for the next tick
-> - Game Data monster "Override Attack Spell" is now "Override Attack" and accepts a spell number OR a plain command (`attack`, `bash`, `harm`): a typed command now saves and is forced against that monster over the normal combat flow
+> **Version 2.39.5**
+> - "All auto off" now also parks navigation: engaging it suspends any in-flight walk / loop / auto-lair, and toggling it back on resumes exactly where it left off (a manual pause/stop you make in between is respected)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
