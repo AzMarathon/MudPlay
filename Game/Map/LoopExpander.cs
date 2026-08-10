@@ -89,6 +89,12 @@ public static class LoopExpander
         List<LoopStep> steps,
         List<(RoomKey From, RoomKey To)> unreachable)
     {
+        // A zero-length leg — the same room listed twice in a row — is a deliberate
+        // "stay put": no movement, just run the next waypoint's command in place. So
+        // it's valid, NOT unreachable. Users add it to fire several commands in one
+        // room (e.g. hand pies to the barmaid, then convert the coin, without leaving).
+        if (from.Equals(to)) return;
+
         IReadOnlyList<Direction>? path = bfs.FindPath(from, to, filter);
         if (path is null || path.Count == 0)
         {

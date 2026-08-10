@@ -272,6 +272,25 @@ public sealed class LoopManagerTests : IDisposable
     }
 
     [Fact]
+    public void ExpandWaypoints_ConsecutiveSameRoom_IsZeroMoves_NotUnreachable()
+    {
+        // The same room twice in a row is a deliberate "stay put": 0 moves for that
+        // leg (NOT flagged unreachable), and BOTH waypoints' commands fire — so a
+        // loop can run several commands in one room (hand in pies, then convert coin).
+        LoopManager m = NewManager();
+        (var steps, var unreach) = m.ExpandWaypoints(new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "give", 0),
+            new LoopWaypoint(new RoomKey(1, 1), "convert", 0),
+        });
+
+        Assert.Empty(unreach);
+        Assert.Equal(2, steps.Count);
+        Assert.Equal("give",    ((CommandLoopStep)steps[0]).Command);
+        Assert.Equal("convert", ((CommandLoopStep)steps[1]).Command);
+    }
+
+    [Fact]
     public void ExpandWaypoints_FewerThan2_Empty()
     {
         LoopManager m = NewManager();

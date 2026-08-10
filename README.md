@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.3.1**
-> - Stat collection now arms on the `stat` abbreviations too (`st` / `sta`), not just the full word — the Player Workshop updates however you spell it
+> **Version 3.3.2**
+> - Loop building now allows the same room twice in a row (map-click loop mode and the create-loop editor) — a zero-length "stay put" step that runs another command in place (e.g. two barmaid steps: hand in pies, then convert the coin)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

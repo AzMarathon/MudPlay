@@ -55,9 +55,10 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     public void AddClick(RoomKey key)
     {
         if (_graph.GetRoom(key) is not { } room) return;
-        // Adjacent duplicate? Drop — clicking the same room twice in a
-        // row would gap-fill to nothing.
-        if (_clicks.Count > 0 && _clicks[^1].Equals(key)) return;
+        // The same room twice in a row is allowed on purpose: it's a zero-length
+        // "stay put" step that runs another command in place (e.g. two barmaid
+        // steps — hand in pies, then convert the coin). The expander treats it as
+        // 0 moves rather than an unreachable leg, so it saves + runs cleanly.
         _clicks.Add(key);
         // 1-based index matches the map's red numbered waypoint
         // markers + the post-edit RenumberRows pass. Clicks.Count is

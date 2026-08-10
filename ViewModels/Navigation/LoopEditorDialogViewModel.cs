@@ -321,15 +321,10 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
             return;
         }
 
-        // Duplicate-of-prior guard — same protection the builder
-        // applies; clicking the same room twice in a row produces
-        // a zero-length leg the expander would silently drop.
-        if (Waypoints.Count > 0 && Waypoints[^1].Key.Equals(resolved.Value))
-        {
-            AddWaypointError = "Same as the last waypoint; pick a different room.";
-            return;
-        }
-
+        // The same room twice in a row is allowed on purpose: a zero-length "stay
+        // put" leg that runs another command in place (e.g. two barmaid steps — hand
+        // in pies, then convert the coin). The expander treats it as 0 moves, so it
+        // saves + runs cleanly.
         Waypoints.Add(new LoopWaypointRowViewModel(
             new LoopWaypoint(resolved.Value), _graph));
         RenumberRows();
