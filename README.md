@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.2.6**
-> - `@loop <name>` matches a saved loop by a close-enough 1-of-1 name — every typed word, any order (e.g. `@loop godfrey bank` starts "Bank of Godfrey Loop")
-> - `@goto <name>` resolves a saved GOTO location by name (takes precedence over a raw room name), and as a last resort a boss name → the boss's closest listed room (stops one room short for StopBefore bosses)
-> - `@goto` coordinate destinations accept a full map/room with space, comma, or slash separators; a bare room number is rejected (the same number is a different room on each map)
-> - The Navigation search box and `@goto` no longer match monster lairs — both resolve places only: rooms, saved GOTO locations, and boss names from the boss table
+> **Version 3.3.0**
+> - The startup splash is now a rotating collection of animated ANSI scenes — a random one plays each loop, drawn from a shuffle-bag so every scene shows once before any repeats, swapping seamlessly on a clear lens
+> - Scenes: the original mud-throw plus a monster truck, mountain mudslide, mud pie, pig wallow, mud geyser, mud rain, windshield wiper, swamp monster, sinking goblin, and the "Mud!" seagulls
+> - Settings → General "show startup animation" still gates all of them (the title/byline header stays either way)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
