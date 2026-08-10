@@ -15,16 +15,16 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 
 ## Features
 
-- **Faithful terminal** — Telnet (RFC 854/855 with NAWS + TERM-TYPE), an explicit VT100/ANSI escape-sequence parser, and a CP437 cell grid rendered by a custom Avalonia control. No host TTY dependency.
-- **Combat automation** — attack rotations, target ordering, backstab handling, area/debuff spells, and per-room monster gating.
-- **Party play** — party tracking, remote `@`-commands over chat channels, leader-aware wait/invite logic, and coordinated healing/blessing.
-- **Navigation** — a room-graph map with go-to routing, repeatable movement loops, Auto-Lair hunting, and trap handling.
+- **Faithful terminal** — Telnet (RFC 854/855 with NAWS + TERM-TYPE), an explicit VT100/ANSI escape-sequence parser, and a CP437 cell grid rendered by a custom Avalonia control that scales crisply to fill the window. No host TTY dependency.
+- **Combat automation** — attack rotations, target ordering, backstab handling, area/debuff spells with an immunity-aware fallback cascade, and per-monster attack/priority overrides.
+- **Party play** — party tracking, coordinated healing/blessing, leader-aware wait/invite logic, and remote `@`-commands over chat channels: live intel (`@health`, `@level`, `@version`), reconnect recovery (`@comeback`), coin sharing (`@share`), and more.
+- **Navigation** — a room-graph map with go-to routing and starrable favourites, repeatable movement loops, Auto-Lair hunting, and trap handling. A single "all auto off" kill switch silences every engine — and parks any in-flight navigation, resuming it when switched back on.
 - **Healing & spells** — HP/mana thresholds, rest management, cures, buffs, and mana-regen roll-spell rerolling.
-- **Character Workshop** — a unified hub for stats, equipment sets with auto-equip triggers, CP allocation plans, and quest tracking.
+- **Character Workshop** — a unified hub for stats, equipment sets with auto-equip triggers, an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons, CP allocation plans, and quest tracking.
 - **Scripting** — macros, pattern triggers, and scheduled/lifecycle events.
-- **Game data** — import MajorMUD `.MDB` databases to JSON, then browse and override records (monsters, items, spells, rooms, shops, and more).
+- **Game data** — import MajorMUD `.MDB` databases to JSON, then browse and override records (monsters, items, spells, rooms, shops, and more) in the Game Data Browser.
 - **Layered settings** — a 4-tier hierarchy (installed defaults → all characters → per-BBS → per-character) where each tier stores only its deltas.
-- **Quality of life** — session statistics, scrollback + a searchable backscroll window, a conversation/chat pane, a configurable toolbar and statline, and a built-in bug reporter (see below).
+- **Quality of life** — session statistics, scrollback + a searchable backscroll window, a conversation/chat pane, a configurable toolbar and statline, type-through so keystrokes keep reaching the terminal while other windows are open, an animated startup splash (toggleable), and a built-in bug reporter (see below).
 
 ## Getting started
 
@@ -77,4 +77,14 @@ The more of that capture you include, the faster a fix lands. Review the file be
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MudPlay is licensed under the **MIT License** — see [`LICENSE`](LICENSE).
+
+It bundles third-party components under their own licenses. The full text of each is viewable in-app under **Help → About**:
+
+| Component | License |
+|---|---|
+| [Avalonia](https://avaloniaui.net/) | MIT |
+| [JetDatabaseReader](https://github.com/diegoripera/JetDatabaseReader) | MIT |
+| [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) font | SIL Open Font License 1.1 |
+| [IBM Plex Sans](https://github.com/IBM/plex) font | SIL Open Font License 1.1 |
+| Px437 / Mx437 (Oldschool PC Fonts) | CC BY-SA 4.0 |
