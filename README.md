@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.3.2**
+> **Version 3.3.3**
 > - Loop building now allows the same room twice in a row (map-click loop mode and the create-loop editor) — a zero-length "stay put" step that runs another command in place (e.g. two barmaid steps: hand in pies, then convert the coin)
+> - Program Log has a "Simulate Death button" toggle that reveals the Death Recovery tab's test button; off by default (and reset off each launch), so a normal session never shows it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

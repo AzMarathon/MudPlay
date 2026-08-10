@@ -88,6 +88,23 @@ public sealed class LogDiagnosticState
         }
     }
 
+    // Reveals the Death Recovery tab's "Simulate Death" button — a test-only
+    // affordance. Off by default and NOT persisted (session-only: it resets to
+    // off every launch), so a normal user never sees the button; a tester flips
+    // it on from the Log pane when they want to exercise the recovery flow. The
+    // button binds its visibility here; hidden while off.
+    private bool _showSimulateDeath;
+    public bool ShowSimulateDeath
+    {
+        get => _showSimulateDeath;
+        set
+        {
+            if (_showSimulateDeath == value) return;
+            _showSimulateDeath = value;
+            Changed?.Invoke();
+        }
+    }
+
     // Fires after any flag change so observers (the LogPane VM mirroring
     // state across windows; AppServices persisting the change to the active
     // character) can refresh.

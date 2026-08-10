@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Recovery;
@@ -18,6 +19,7 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
 {
     private readonly DeathRecoveryManager _recovery;
     private readonly ProfileService _profile;
+    private readonly LogDiagnosticState _diagnostics;
     private Control? _view;
 
     public override string Id => "death";
@@ -39,10 +41,20 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         ArgumentNullException.ThrowIfNull(profile);
         _recovery = recovery;
         _profile = profile;
+        _diagnostics = AppServices.Current.LogDiagnostics;
         _recovery.PropertyChanged += OnRecoveryChanged;
         _profile.ProfileLoaded += OnProfileChanged;
+        _diagnostics.Changed += OnDiagnosticsChanged;
         Refresh();
     }
+
+    // Reveal the test-only "Simulate Death" button — gated by the Log pane's
+    // "Simulate Death button" toggle so a normal user never sees it. Hidden by
+    // default (LogDiagnosticState.ShowSimulateDeath is off + session-only).
+    public bool ShowSimulateDeath => _diagnostics.ShowSimulateDeath;
+
+    private void OnDiagnosticsChanged() =>
+        Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(ShowSimulateDeath)));
 
     // Auto-grab a deathpile's lost items on re-entry. Two-way bound to the
     // manager's persisted per-character toggle. Inert on the actual grab until
@@ -166,5 +178,6 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
     {
         _recovery.PropertyChanged -= OnRecoveryChanged;
         _profile.ProfileLoaded -= OnProfileChanged;
+        _diagnostics.Changed -= OnDiagnosticsChanged;
     }
 }
