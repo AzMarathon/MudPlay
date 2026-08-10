@@ -156,6 +156,35 @@ public sealed class StatParserTests
         Assert.Equal(0, stats.Strength);
     }
 
+    [Theory]
+    [InlineData("st")]      // minimum abbreviation — displays the same stat screen
+    [InlineData("sta")]
+    [InlineData("stat")]    // full word
+    public void OutboundStatPrefix_ArmsGate(string command)
+    {
+        // Every prefix of "stat" from 2 chars up arms the scan window — MajorMUD
+        // shows the identical stat screen for `st`, `sta`, and `stat`.
+        PlayerStats stats = new();
+        StatParser parser = new(stats);
+        parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
+        parser.FeedTestLine("Strength: 60");
+        Assert.Equal(60, stats.Strength);
+    }
+
+    [Theory]
+    [InlineData("s")]       // 1-char — too short, ambiguous
+    [InlineData("sto")]     // shares "st" but diverges — not a prefix of "stat"
+    [InlineData("stand")]   // longer than "stat" and diverges
+    [InlineData("steal")]
+    public void OutboundNonStatCommand_DoesNotArmGate(string command)
+    {
+        PlayerStats stats = new();
+        StatParser parser = new(stats);
+        parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
+        parser.FeedTestLine("Strength: 60");
+        Assert.Equal(0, stats.Strength);
+    }
+
     [Fact]
     public void GateExpiresAfterWindow()
     {

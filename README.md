@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.3.0**
-> - The startup splash is now a rotating collection of animated ANSI scenes — a random one plays each loop, drawn from a shuffle-bag so every scene shows once before any repeats, swapping seamlessly on a clear lens
-> - Scenes: the original mud-throw plus a monster truck, mountain mudslide, mud pie, pig wallow, mud geyser, mud rain, windshield wiper, swamp monster, sinking goblin, and the "Mud!" seagulls
-> - Settings → General "show startup animation" still gates all of them (the title/byline header stays either way)
+> **Version 3.3.1**
+> - Stat collection now arms on the `stat` abbreviations too (`st` / `sta`), not just the full word — the Player Workshop updates however you spell it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
