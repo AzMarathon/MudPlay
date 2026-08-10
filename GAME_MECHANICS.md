@@ -425,6 +425,15 @@ it isn't here and you're unsure, ask.
   out-of-mana.** So an attack spell drains mana every round it repeats whether it lands or misses; a
   "but fail" round is a spent round (mana down, zero damage), not a free retry. The client must not
   treat this line as an out-of-mana / interrupt signal.
+- **[CONFIRMED]** *(2026-08-09, user)* **"Your spell has no effect on <monster>." spends NO round — it's
+  free.** A no-effect cast (the living-only / immunity mismatch) doesn't consume the combat round, so
+  you can cast a *different* spell that same round. The client therefore swaps the attack cascade's
+  primary → alternate attack spell **immediately** on the no-effect line, the same round, rather than
+  idling until the next ~5s tick (report `paradigm-20260809-162350`: `harm`→`hamm` was losing a round
+  because only the weapon fallback swung immediately while the alternate *spell* waited a tick). The
+  primary probe itself is still the unavoidable reactive detection (living-only immunity isn't
+  pre-emptable from data — see the immunity section below), and the swap is one cascade step per round
+  because the alternate's own no-effect can't arrive until it has cast next round.
 - **[CONFIRMED]** **Martial-arts strikes (Punch / Kick / Jumpkick) are class-innate abilities, not a
   function of the trained Martial Arts skill.** A class grants a strike by listing its ability id in
   an `Abil-0..9` slot: **Punch = 29, Kick = 30, Jumpkick = 35** (Mystic carries all three at value 1

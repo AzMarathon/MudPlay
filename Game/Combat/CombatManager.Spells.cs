@@ -106,6 +106,14 @@ public sealed partial class CombatManager
     // room-cleared.
     private CombatSpellAction? _lastCastAction;
 
+    // True once we've acted on an attack-immunity ("no effect") this round. The
+    // attack fires several times per round, so an immune target draws a BURST of
+    // "no effect" lines; we mark + re-decide on the first and ignore the rest of
+    // the burst, else the fallback we just switched to is itself mis-marked immune
+    // (or the command path concedes) by a leftover line meant for the primary.
+    // Reset each round at the top of OnCombatTick.
+    private bool _immunityHandledThisRound;
+
     // The attack-spell cast-code the server is currently auto-repeating for us (with
     // _castingSpellTarget as its target). CONFIRMED game mechanic: an announced spell
     // attack auto-repeats server-side every round — it fires next tick while the
@@ -279,6 +287,10 @@ public sealed partial class CombatManager
     public void OnCombatTick()
     {
         if (_disposed) return;
+
+        // New round — re-arm the once-per-round attack-immunity handler so the next
+        // round's "no effect" burst can drive the next cascade step.
+        _immunityHandledThisRound = false;
 
         // Engage-verification runs on every tick regardless of spell
         // wiring — a pure-weapon build still needs the stale-room CR
@@ -895,18 +907,32 @@ public sealed partial class CombatManager
     {
         if (!_isEnabled()) return;
 
-        // A spell placed in the ATTACK-COMMAND slot (NormalAttackCommand = "harm")
-        // reaches the wire via SendAttack, not a chooser cast, so _lastCastAction
-        // is null when its immunity line lands. The spell-slot cascade below can't
-        // act on it — fall the COMMAND path back instead (report
-        // paradigm-20260809-131642: priest `harm` as the attack command vs an acid
-        // slime never dropped to the alternate `attack` command).
-        if (_lastCastAction is null)
+        // Act on the first "no effect" of this round's burst only (see the field
+        // comment on _immunityHandledThisRound); the rest of the burst is a leftover
+        // from the primary and must not tear down the fallback we just switched to.
+        if (_immunityHandledThisRound) return;
+
+        // Command mode: a spell placed in the ATTACK-COMMAND slot (NormalAttackCommand
+        // = "harm") reaches the wire via SendAttack, not a chooser cast — no spell is
+        // in flight (_castingSpellTarget null) — so the spell-slot cascade below can't
+        // act on it. Fall the COMMAND path back to the alternate command instead
+        // (report paradigm-20260809-131642: priest `harm` as the attack command vs an
+        // acid slime never dropped to `attack`). Spell mode leaves _castingSpellTarget
+        // set, so this branch never eats a spell-cascade line.
+        if (_castingSpellTarget is null)
         {
-            FallBackToAlternateCommandOnImmunity();
+            if (_lastCastAction is null && _currentTarget is not null)
+            {
+                _immunityHandledThisRound = true;
+                FallBackToAlternateCommandOnImmunity();
+            }
             return;
         }
 
+        // Spell mode: attribute the immunity to the attack spell we last cast, then
+        // re-decide the cascade instantly (below). Only the two single-target attack
+        // spells gate down — a debuff / multi-attack no-effect isn't ours to act on
+        // (one immune mob doesn't mean a room spell isn't hitting the rest).
         if (!CombatSpellsWired) return;
         if (_lastCastAction is not (CombatSpellAction.NormalAttackSpell
                                   or CombatSpellAction.AlternateAttackSpell))
@@ -917,6 +943,7 @@ public sealed partial class CombatManager
             : ResolveSpeciesFromCurrentTarget();
         if (string.IsNullOrEmpty(species)) return;
 
+        _immunityHandledThisRound = true;
         if (!_attackSpellImmuneSpecies.TryGetValue(species, out HashSet<CombatSpellAction>? set))
         {
             set = new HashSet<CombatSpellAction>();
@@ -969,29 +996,22 @@ public sealed partial class CombatManager
         TrySendRoomRefresh($"attack command ineffective vs {species} — re-pick / move on");
     }
 
-    // After recording an immunity, re-run the chooser against the live room for
-    // the current spell target. If the cascade has reached the weapon command,
-    // swing immediately so the round isn't burned idle. If it still resolves to a
-    // spell (primary immune → alternate), stay in spell mode and let the
-    // heartbeat issue it next tick — the cast cooldown blocks an immediate
-    // re-cast this round. Clears _lastCastAction so a second no-effect line this
-    // round can't double-mark.
+    // After recording an immunity, re-dispatch this same target's round immediately.
+    // A "no effect" cast spent no round (CONFIRMED game mechanic, user 2026-08-09),
+    // so the cascade's next action fires THIS round via DispatchRoundAction's instant
+    // bypass-cooldown cast: the alternate attack SPELL now lands at once instead of
+    // idling until the next ~5s heartbeat tick (report paradigm-20260809-162350 —
+    // harm→hamm always lost a round; the weapon branch already swung immediately, only
+    // the spell branch waited). DispatchRoundAction re-runs the chooser against the
+    // now-immune-marked context, so it uniformly picks the alternate spell, the
+    // weapon, or (both out) concedes. The per-round guard in OnSpellNoEffect keeps
+    // this to once per round, so the alternate isn't re-marked by the same burst.
     private void ReDecideAfterImmunity(CombatSettings settings)
     {
         if (_castingSpellTarget is not { } target) return;
         if (_classifier.Current is not { } obs) return;
         if (!TargetPresent(obs, target)) return;
-
-        CombatSpellContext ctx = BuildContext(
-            settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
-        CombatSpellDecision decision = _spellChooser.Choose(settings, ctx);
-        if (decision.Action is CombatSpellAction.WeaponAttack or CombatSpellAction.Backstab)
-        {
-            bool useAlt = ShouldUseAlternateWeapon(
-                settings, ResolveSpeciesByName(target), ResolveMonsterNumber(obs, target));
-            SendWeaponAttack(settings, target, useAlt);
-            return;
-        }
-        _lastCastAction = null;
+        if (TryBuildCandidate(obs, target) is { } cand)
+            DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
     }
 }
