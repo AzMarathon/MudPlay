@@ -86,4 +86,4 @@ It bundles third-party components under their own licenses. The full text of eac
 | [JetDatabaseReader](https://github.com/diegoripera/JetDatabaseReader) | MIT |
 | [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) font | SIL Open Font License 1.1 |
 | [IBM Plex Sans](https://github.com/IBM/plex) font | SIL Open Font License 1.1 |
-| Px437 / Mx437 (Oldschool PC Fonts) | CC BY-SA 4.0 |
+| [Px437 / Mx437 (Oldschool PC Fonts)](https://int10h.org/oldschool-pc-fonts/) | CC BY-SA 4.0 |
