@@ -15,7 +15,7 @@ namespace MudPlay.Controls;
 // emulator — so nothing here reaches the scrollback log.
 public sealed class MudSplashAnimator : IDisposable
 {
-    public const int LoopFrames = 116;
+    public const int LoopFrames = 140;
     private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(80);
 
     // Phase boundaries (frame index within the loop). The slide gets the bulk of
@@ -24,8 +24,8 @@ public sealed class MudSplashAnimator : IDisposable
     private const int ThrowEnd  = 19;   // overhand swing; ball leaves the hand
     private const int FlyEnd    = 27;   // ball grows as it flies at the camera
     private const int SplatEnd  = 34;   // mud floods the viewport
-    private const int SlideEnd  = 106;  // it slides down and off (slow) — 72 frames
-    // 107..115: figure stands clean, ready to throw → loops back to windup.
+    private const int SlideEnd  = 130;  // it slides down and off (slow) — 96 frames
+    // 131..139: figure stands clean, ready to throw → loops back to windup.
 
     private const int TitleRows = 4;    // reserved for header; mud stays below.
 
@@ -217,27 +217,37 @@ public sealed class MudSplashAnimator : IDisposable
         int cx = s.Cols / 2, cy = (s.Rows + TitleRows) / 2;
         double maxR = MaxRadius(s);
         double p = (f - SplatEnd) / (double)(SlideEnd - SplatEnd);   // 0..1
-        // Push far enough that even the slowest column clears the splat's whole
+        // Push far enough that even the SLOWEST column clears the splat's whole
         // vertical extent by the end (so the last frame is truly clean — no abrupt
-        // cut before the loop). The 1.2 margin over-clears.
-        double baseOff = EaseInSoft(p) * (s.Rows + maxR) * 1.1;
+        // cut before the loop). The margin over-clears; it must exceed 0.5/minSpeed.
+        double baseOff = EaseInSoft(p) * (s.Rows + maxR) * 1.3;
         double residueFade = 1.0 - p;   // streaks wash away as the mud finishes running off
 
         for (int x = 0; x < s.Cols; x++)
         {
-            double speed = 0.60 + 0.75 * Noise(x, 991);   // stable per-column pace
+            // Wide per-column spread: some rivulets crawl, others rush — so the
+            // lines running down the "lens" are varied rather than a uniform sheet.
+            double speed = 0.42 + 1.25 * Noise(x, 991);
             int off = (int)Math.Round(baseOff * speed);
             int edgeY = TitleRows + off;                  // top of this column's mud
+
+            // Per-column character of the trailing rivulet: how runny, how thick.
+            double runny = Noise(x, 13);
+            char streakCh = runny > 0.85 ? '║' : '│';     // a few thick rivulets
 
             for (int y = TitleRows; y < s.Rows; y++)
             {
                 if (y < edgeY)
                 {
-                    // Residue streaks the mud left running down — denser near the
-                    // edge, thinning upward, and fading to nothing as it finishes.
+                    // The trail the mud left running down — denser near the edge,
+                    // thinning up, varied per column, fading as the slide finishes.
                     double nearEdge = 1.0 - (edgeY - y) / (double)Math.Max(1, off);
-                    if (Noise(x, 7) > 0.5 && Noise(x, y) < (0.12 + 0.5 * nearEdge) * residueFade)
-                        PutCell(s, x, y, '│', y > edgeY - 3 ? Brown : BrownDark);
+                    double prob = (0.05 + 0.55 * nearEdge) * residueFade * (0.35 + runny);
+                    if (runny > 0.25 && Noise(x, y) < prob)
+                    {
+                        CellAttributes c = y > edgeY - 2 ? BrownLite : y > edgeY - 6 ? Brown : BrownDark;
+                        PutCell(s, x, y, y > edgeY - 2 && Noise(x, y * 3) > 0.7 ? '•' : streakCh, c);
+                    }
                     continue;
                 }
                 int srcY = y - off;
