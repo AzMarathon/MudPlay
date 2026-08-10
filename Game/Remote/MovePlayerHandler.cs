@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using MudPlay.Game.Map;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.Navigation;
 
@@ -30,6 +31,9 @@ public sealed class MovePlayerHandler : IDisposable
     private readonly AutoLairManager _autoLair;
     private readonly MovementCoordinator _coordinator;
     private readonly MovementController _controller;
+    private readonly FavoritesStore _favorites;
+    private readonly BossStore _bosses;
+    private readonly BfsMapper _bfs;
     private bool _disposed;
 
     public MovePlayerHandler(
@@ -43,7 +47,10 @@ public sealed class MovePlayerHandler : IDisposable
         LairManager lairs,
         AutoLairManager autoLair,
         MovementCoordinator coordinator,
-        MovementController controller)
+        MovementController controller,
+        FavoritesStore favorites,
+        BossStore bosses,
+        BfsMapper bfs)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(search);
@@ -56,6 +63,9 @@ public sealed class MovePlayerHandler : IDisposable
         ArgumentNullException.ThrowIfNull(autoLair);
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(controller);
+        ArgumentNullException.ThrowIfNull(favorites);
+        ArgumentNullException.ThrowIfNull(bosses);
+        ArgumentNullException.ThrowIfNull(bfs);
         _engine = engine;
         _search = search;
         _graph = graph;
@@ -67,6 +77,9 @@ public sealed class MovePlayerHandler : IDisposable
         _autoLair = autoLair;
         _coordinator = coordinator;
         _controller = controller;
+        _favorites = favorites;
+        _bosses = bosses;
+        _bfs = bfs;
 
         Register("@goto", OnGoto);
         Register("@loop", OnLoop);
@@ -95,8 +108,17 @@ public sealed class MovePlayerHandler : IDisposable
         string query = string.Join(' ', ctx.Args).Trim();
         if (query.Length == 0) { ctx.Reply("@goto requires a destination"); return; }
 
-        // Acronyms (FCCO-style) are the only @goto-specific tier; the
-        // rest mirrors the Navigation search box behaviour.
+        // A coordinate query (1/297, 1,297, 1 297, bare 297) is explicit — never let
+        // a favourite / boss NAME hijack it; route straight to the coordinate/room
+        // search below. TryParseCoordinate splits on space / comma / slash.
+        bool isCoordQuery = RoomSearchService.TryParseCoordinate(query) is not (null, null);
+
+        // Tier 1: a saved GOTO location matched by label. It takes precedence over a
+        // raw room name — a place the user bookmarked is almost always what they mean.
+        if (!isCoordQuery && TryGotoFavorite(ctx, query)) return;
+
+        // Tier 2: the shared coordinate / acronym / room-name / monster search —
+        // mirrors the Navigation search box behaviour 1:1.
         IReadOnlyList<RoomSearchResult> matches = _search.Search(
             query, source: null, cap: 50, includeAcronyms: true);
 
@@ -119,7 +141,113 @@ public sealed class MovePlayerHandler : IDisposable
         }
 
         List<RoomSearchResult> monsterMatches = walkable.Where(m => m.MonsterTag is not null).ToList();
-        DispatchMonsterMatches(ctx, query, monsterMatches);
+        if (monsterMatches.Count > 0)
+        {
+            DispatchMonsterMatches(ctx, query, monsterMatches);
+            return;
+        }
+
+        // Tier 3: boss table — last resort. Walk to the boss's closest listed room
+        // (one room short of it when the boss is flagged StopBefore).
+        if (!isCoordQuery && TryGotoBoss(ctx, query)) return;
+
+        ctx.Reply($"no match for '{query}'");
+    }
+
+    // Resolve a saved GOTO favourite by its label: an exact (case-insensitive) label
+    // wins outright, else a 1-of-1 token match (every typed word appears in the
+    // label). Returns true when it handled the command — walked, or reported an
+    // ambiguity — and false when no favourite matched so @goto falls through to the
+    // room / monster / boss tiers.
+    private bool TryGotoFavorite(RemoteCommandContext ctx, string query)
+    {
+        FavoriteRoom? exact = _favorites.All.FirstOrDefault(f =>
+            string.Equals(f.Label, query, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null) { DispatchFavoriteGoto(ctx, exact); return true; }
+
+        List<FavoriteRoom> fuzzy = _favorites.All
+            .Where(f => RoomSearchService.NameMatchesTokens(f.Label, query))
+            .ToList();
+        switch (fuzzy.Count)
+        {
+            case 1:
+                DispatchFavoriteGoto(ctx, fuzzy[0]);
+                return true;
+            case > 1:
+                ctx.Reply($"'{query}' matches {fuzzy.Count} GOTO locations: "
+                    + string.Join(", ", fuzzy.Take(4).Select(f => $"'{f.Label}'")));
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void DispatchFavoriteGoto(RemoteCommandContext ctx, FavoriteRoom fav)
+    {
+        RoomKey key = new(fav.Map, fav.Room);
+        string label = string.IsNullOrWhiteSpace(fav.Label)
+            ? (_graph.GetRoom(key)?.DisplayName ?? "?")
+            : fav.Label!;
+        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
+        ctx.Reply(_walker.WalkTo(key)
+            ? $"walking to GOTO '{label}' ({key.Map}/{key.Room})"
+            : $"no path to GOTO '{label}'");
+    }
+
+    // Resolve a boss name from the boss table and walk to its CLOSEST listed room
+    // (rooms are "map/room" strings). An exact name wins, else a 1-of-1 token match.
+    // Honours the boss's StopBefore flag by stopping one room outside. Returns true
+    // when it handled the command; false when no boss matched.
+    private bool TryGotoBoss(RemoteCommandContext ctx, string query)
+    {
+        IReadOnlyList<BossDef> bosses = _bosses.Resolve();
+        BossDef? boss = bosses.FirstOrDefault(b =>
+            string.Equals(b.Name, query, StringComparison.OrdinalIgnoreCase));
+        if (boss is null)
+        {
+            List<BossDef> fuzzy = bosses
+                .Where(b => RoomSearchService.NameMatchesTokens(b.Name, query))
+                .ToList();
+            if (fuzzy.Count == 1) boss = fuzzy[0];
+            else if (fuzzy.Count > 1)
+            {
+                ctx.Reply($"'{query}' matches {fuzzy.Count} bosses: "
+                    + string.Join(", ", fuzzy.Take(4).Select(b => b.Name)));
+                return true;
+            }
+            else return false;
+        }
+
+        // Parse the boss's "map/room" entries into keys that exist in the graph.
+        List<RoomKey> rooms = boss.Rooms
+            .Select(RoomSearchService.TryParseCoordinate)
+            .Where(c => c.Map is not null && c.Room is not null)
+            .Select(c => new RoomKey(c.Map!.Value, c.Room!.Value))
+            .Where(k => _graph.GetRoom(k) is not null)
+            .ToList();
+        if (rooms.Count == 0) { ctx.Reply($"{boss.Name} has no known room on this map"); return true; }
+
+        // Closest by hop count from the current room; fall back to the first listed
+        // when the tracker has no settled room to measure from.
+        RoomKey target = _tracker.State.CurrentRoom is { } here
+            ? rooms.OrderBy(k => _bfs.DistanceBetween(here.Key, k) ?? int.MaxValue).First()
+            : rooms[0];
+
+        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
+        if (boss.StopBefore)
+        {
+            RoomKey? wait = PickNeighbour(target);
+            if (wait is null) { ctx.Reply($"no neighbour to wait at for {boss.Name}"); return true; }
+            ctx.Reply(_walker.WalkTo(wait.Value)
+                ? $"walking outside boss {boss.Name} ({target.Map}/{target.Room})"
+                : $"no path to {boss.Name}");
+            return true;
+        }
+
+        ctx.Reply(_walker.WalkTo(target)
+            ? $"walking to boss {boss.Name} ({target.Map}/{target.Room})"
+            : $"no path to {boss.Name}");
+        return true;
     }
 
     private void DispatchRoomMatches(RemoteCommandContext ctx, string query, List<RoomSearchResult> rooms)
@@ -141,12 +269,6 @@ public sealed class MovePlayerHandler : IDisposable
 
     private void DispatchMonsterMatches(RemoteCommandContext ctx, string query, List<RoomSearchResult> monsters)
     {
-        if (monsters.Count == 0)
-        {
-            ctx.Reply($"no match for '{query}'");
-            return;
-        }
-
         // Collapse multiple spawns of the same monster into one group —
         // the user wants "this monster has N lairs", not N separate
         // "did you mean" entries for the same name.
@@ -253,12 +375,30 @@ public sealed class MovePlayerHandler : IDisposable
             return;
         }
 
+        // Exact name first, then a close-enough 1-of-1: every typed word must appear
+        // in the loop name (order-independent), and it has to single out exactly one
+        // loop — "godfrey bank" resolves to "Bank of Godfrey Loop" when it's the only
+        // loop carrying both words.
         Loop? saved = _loops.Loops.FirstOrDefault(l =>
             string.Equals(l.Name, raw, StringComparison.OrdinalIgnoreCase));
+        if (saved is null)
+        {
+            List<Loop> fuzzy = _loops.Loops
+                .Where(l => RoomSearchService.NameMatchesTokens(l.Name, raw))
+                .ToList();
+            if (fuzzy.Count == 1) saved = fuzzy[0];
+            else if (fuzzy.Count > 1)
+            {
+                ctx.Reply($"'{raw}' matches {fuzzy.Count} loops: "
+                    + string.Join(", ", fuzzy.Take(4).Select(l => $"'{l.Name}'")));
+                return;
+            }
+        }
+
         if (saved is null) { ctx.Reply($"no saved loop named '{raw}'"); return; }
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Loop);
         _loopRunner.Start(saved);
-        ctx.Reply($"looping '{saved.Name}' ({saved.Waypoints.Count} rooms)");
+        ctx.Reply($"starting loop '{saved.Name}' ({saved.Waypoints.Count} rooms)");
     }
 
     private void OnLair(RemoteCommandContext ctx)

@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.2.5
+
+- `@loop <name>` matches a saved loop by a close-enough 1-of-1 name — every typed word, any order (e.g. `@loop godfrey bank` starts "Bank of Godfrey Loop")
+- `@goto <name>` resolves a saved GOTO location by name (takes precedence over a raw room name), and as a last resort a boss name → the boss's closest listed room (stops one room short for StopBefore bosses)
+- `@goto` coordinate destinations accept space, comma, or slash separators
+
 ## 3.2.3
 
 - App data now lives directly in the MudPlay app folder (e.g. `~/.local/share/MudPlay/`) instead of a nested `Data/` subfolder

@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.2.3**
-> - App data now lives directly in the MudPlay app folder (e.g. `~/.local/share/MudPlay/`) instead of a nested `Data/` subfolder
-> - First launch after updating automatically lifts your existing data up and removes the empty `Data/` folder
+> **Version 3.2.5**
+> - `@loop <name>` matches a saved loop by a close-enough 1-of-1 name — every typed word, any order (e.g. `@loop godfrey bank` starts "Bank of Godfrey Loop")
+> - `@goto <name>` resolves a saved GOTO location by name (takes precedence over a raw room name), and as a last resort a boss name → the boss's closest listed room (stops one room short for StopBefore bosses)
+> - `@goto` coordinate destinations accept space, comma, or slash separators
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

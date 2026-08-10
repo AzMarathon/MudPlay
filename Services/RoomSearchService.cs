@@ -233,6 +233,18 @@ public sealed class RoomSearchService
         return keys;
     }
 
+    // True when every whitespace/punctuation-delimited word of `needle` appears in
+    // `name` (case-insensitive, order-independent) — the same token-subset rule the
+    // room-name search tier uses (tier 3), re-exported so the @loop / @goto handlers
+    // can single out a saved loop, a GOTO favourite label, or a boss name the same
+    // way: "godfrey bank" matches "Bank of Godfrey Loop". A null/blank name or needle
+    // never matches. It's the caller's job to require a 1-of-1 hit across candidates.
+    public static bool NameMatchesTokens(string? name, string? needle)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(needle)) return false;
+        return AllTokensMatch(name, TokenizeNeedle(needle.Trim()));
+    }
+
     // First letter of each whitespace-or-punctuation-delimited word, uppercased.
     // "Frozen Cavern, Cave Opening" → "FCCO".
     public static string ExtractAcronym(string text)
