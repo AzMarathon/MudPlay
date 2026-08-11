@@ -279,6 +279,26 @@ public sealed partial class CombatManager : IDisposable
     // misattributed.
     private static readonly TimeSpan CastInterruptResumeWindow = TimeSpan.FromSeconds(3);
 
+    // True when a between-round cast (survival heal / buff) just spent its round
+    // while we were mid attack-spell combat, and our attack spell hasn't gone back
+    // out since. Exposed to CastingDirector (IsSpellAttackOwed, wired to its
+    // attack-owed gate in AppServices) so it declines to fire ANOTHER survival cast
+    // until the owed attack round happens — the game allows exactly one cast per
+    // round, so back-to-back heal/buff rounds with no attack between them is a
+    // scheduling bug, not a losing fight: CastingDirector evaluates before
+    // CombatManager every tick and, with nothing to stop it, keeps re-claiming the
+    // round the instant HP dips again, which it always will while nothing is
+    // fighting back. Weapon-mode combat never sets this — a swing auto-repeats
+    // server-side and never competes with CastingDirector for the cast slot, only
+    // an attack SPELL does. Set in NoteBetweenRoundCast (only while
+    // _castingSpellTarget is live), cleared the moment a real attack goes back out
+    // (NoteAttackSent) or the room clears (OnRoomCleared).
+    private bool _spellAttackOwed;
+
+    // CastingDirector's view of _spellAttackOwed — the round belongs to the
+    // pending attack spell, not another survival cast.
+    public bool IsSpellAttackOwed => _spellAttackOwed;
+
     // When a monster death was last detected this burst (stamped by
     // NoteMonsterDied / NoteUnattributedDeath). The between-round-cast resume
     // must not fire when a kill just happened: a mob's dying *Combat Off* and a
@@ -1143,6 +1163,7 @@ public sealed partial class CombatManager : IDisposable
         _castingSpellTarget = null;
         _lastCastAction = null;
         _alternationRound = 0;
+        _spellAttackOwed = false;
         _attackSpellImmuneSpecies.Clear();
         _spellChooser.ResetForNewRoom();
 
@@ -2016,8 +2037,16 @@ public sealed partial class CombatManager : IDisposable
     // Signal from Spells.CastingDirector.CastFired that a between-round cast
     // (self-heal / cure / buff / debuff) just went to the server. Arms
     // OnCombatStatus to attribute the imminent *Combat Off* to that cast and
-    // resume the weapon attack promptly (see _betweenRoundCastAt).
-    public void NoteBetweenRoundCast() => _betweenRoundCastAt = DateTimeOffset.Now;
+    // resume the weapon attack promptly (see _betweenRoundCastAt). Also arms
+    // _spellAttackOwed while an attack spell was actively cycling — this cast just
+    // spent the round that owed us an attack, so CastingDirector must sit out the
+    // next one (see _spellAttackOwed).
+    public void NoteBetweenRoundCast()
+    {
+        _betweenRoundCastAt = DateTimeOffset.Now;
+        if (_castingSpellTarget is not null)
+            _spellAttackOwed = true;
+    }
 
     // "You gain N experience." — the prompt kill signal (see _lastExpGainAt). Only
     // a kill grants exp, and it lands just before the kill's *Combat Off*, so a
@@ -2130,6 +2159,18 @@ public sealed partial class CombatManager : IDisposable
                 && TargetPresent(liveSpell, spellTarget)
                 && TryBuildCandidate(liveSpell, spellTarget) is { } spellCand)
             {
+                // Clear the interrupt flag before attempting the re-announce, mirroring
+                // ResumeEngage's weapon-mode path — NOT only inside DispatchRoundAction's
+                // TryCast-succeeded branch. This attempt can lose the round's single cast
+                // slot to a survival heal firing the same instant (CastingDirector.Evaluate
+                // runs immediately on the HP change that triggered this whole interrupt, not
+                // just on the tick boundary), and DispatchRoundAction's own comment ("stay in
+                // spell mode and retry next tick") only holds if OnCombatTick's heartbeat can
+                // actually run next tick — it bails immediately while _combatOff is true. Left
+                // set here, a single lost race parks the engine in spell mode with no path back
+                // to a retry: the reported "won't re-engage after buffing/healing, sits there
+                // until manual input" stall.
+                _combatOff = false;
                 _announcedSpellCode = null;
                 DispatchRoundAction(_readSettings(), spellCand, CountEngageable(liveSpell), liveSpell);
             }
@@ -2334,6 +2375,10 @@ public sealed partial class CombatManager : IDisposable
         // a later cast-interrupt Off should resume, not stand down (see
         // _attackSentSinceDeath).
         _attackSentSinceDeath = true;
+        // The owed attack just went out — CastingDirector is clear to fire another
+        // survival cast next round (see _spellAttackOwed). No-op for a weapon swing,
+        // which never set this in the first place.
+        _spellAttackOwed = false;
         if (_engageConfirmed) return;
         _awaitingEngageSince ??= DateTimeOffset.Now;
     }

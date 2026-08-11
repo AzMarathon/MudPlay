@@ -345,6 +345,86 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("mmis giant rat", h.LastSent);
     }
 
+    // A between-round self-heal / buff drops *Combat Off* and the resume
+    // path re-engages the SAME still-alive monster — that must read as a
+    // continuation, not a new fight, or the phase counter restarts on every
+    // interrupt and a round-cycle build heavy on self-heals never reaches its
+    // spell phase (the reported "won't re-engage after buffing, confused
+    // which attack to use").
+    [Fact]
+    public void CustomRoundCycle_ResumeAfterInterrupt_DoesNotResetPhase()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.CustomRoundCycle;
+        h.Settings.CycleRoundsPhysical = 3;
+        h.Settings.CycleRoundsSpell = 0;   // spells till death once reached
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        // Round 0 (engage) — physical phase.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+
+        // Round 1 — still physical, mid-phase.
+        h.Tick();
+
+        // A between-round cast (self-heal) interrupts the swing.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.Equal("a giant rat", h.LastSent);   // resumed with a weapon swing, still physical
+
+        // Rounds 2–3 — the phase boundary must land on schedule (round 3),
+        // exactly as if the interrupt never happened. A phase-counter reset
+        // on the resume would still be mid-physical here.
+        h.Tick();
+        h.Tick();
+        Assert.Equal("harm giant rat", h.LastSent);
+    }
+
+    // The attack spell recasts IMMEDIATELY after the heal/buff that interrupted
+    // it — engage, attack, heal-or-buff, attack, heal-or-buff, ... — not after
+    // waiting out the round cooldown. An earlier attempt to fix a collision here
+    // by respecting the cooldown instead just forced a full extra round of the
+    // mob swinging free before the resume landed (a live capture caught it
+    // exactly: armr fires, *Combat Off*, one full round of silence — the mob's
+    // free swing — then harm finally resumes). CastingDirector's attack-owed gate
+    // (CombatManager.IsSpellAttackOwed) is what actually prevents the collision
+    // this used to guard against — it stops a SECOND heal/buff from contesting
+    // the round, so by the time this resume runs nothing else wants the slot.
+    //
+    // A synchronous test has zero elapsed time between the simulated heal/buff
+    // send and this resume attempt, which no real production call ever sees —
+    // there's always network latency between a cast going out and the server's
+    // *Combat Off* coming back. That trips MinRecastInterval (500ms, unconditional,
+    // a burst-absorb guard unrelated to this fix) regardless of the fix under test.
+    // So this asserts the FAILURE DETAIL when one occurs: "recast-interval" (that
+    // unrelated burst guard) is fine; "cast-blocked" (the round cooldown this fix
+    // bypasses) would mean the regression is back.
+    [Fact]
+    public void SpellMode_ResumeAfterInterrupt_RecastsImmediately_NoRoundOfSilence()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("harm giant rat", h.LastSent);
+
+        List<(CastFailureReason Reason, string Detail)> failures = new();
+        h.Cast.CastFailed += (reason, detail) => failures.Add((reason, detail));
+
+        // A survival cast (heal/buff) just went out, same instant.
+        h.Cast.NotifyExternalCastSent();
+
+        // Its *Combat Off* interrupt must resume the SAME target's attack spell
+        // right away — no waiting for the next tick.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+
+        Assert.DoesNotContain(failures, f => f.Detail == "cast-blocked");
+    }
+
     // ----- Auto-Nuke auto-engine gate ----------------------------------
 
     [Fact]

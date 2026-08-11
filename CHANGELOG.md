@@ -2,8 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.5.16
+## 3.5.21
 
+- An attack-spell build no longer gets stuck healing/buffing forever and never attacking — a survival cast can't fire again until the attack spell it interrupted has gone back out (a fixed attack / heal-or-buff alternation, not a heal-until-HP-is-comfortable loop)
+- A survival heal winning the round's single cast slot no longer permanently wedges combat out of retrying — no more sitting idle after a mid-fight heal until manual input
 - After auto-lighting a dark room the client now redisplays it (a bare CR) so a monster standing there unseen is engaged, instead of relying on it to swing first and walking past a passive one
 - Corpse-recovery auto-equip wields a held weapon with `eq` instead of `hold` (which only carried it in hand, never wielding it)
 - `@party go <text-exit>` (e.g. `go hole`) keeps its `go` verb when relayed to followers — only a real cardinal direction is sent as the bare token
@@ -16,7 +18,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - A room-wide attack spell no longer undercounts a monster whose number the client hasn't resolved, so a full room isn't held below its multi-attack threshold
 - Coins a post-combat `search` surfaces are now collected instead of skipped as "already handled this room visit"
 - Fixed the loop sitting forever after a `go path` step into a same-named room — the arrival now confirms the move instead of being mistaken for a passive re-look of the room just left
-- bug reports addressed: paradigm-20260811-063936, paradigm-20260811-065736, paradigm-20260811-090358, paradigm-20260811-094533, paradigm-20260811-063728, paradigm-20260811-104042, paradigm-20260811-081053, paradigm-20260811-081654, paradigm-20260811-103708, paradigm-20260811-135433, paradigm-20260811-092255, paradigm-20260811-122253
+- bug reports addressed: paradigm-20260811-063936, paradigm-20260811-065736, paradigm-20260811-090358, paradigm-20260811-094533, paradigm-20260811-063728, paradigm-20260811-104042, paradigm-20260811-081053, paradigm-20260811-081654, paradigm-20260811-103708, paradigm-20260811-135433, paradigm-20260811-092255, paradigm-20260811-122253, paradigm-20260811-080136, paradigm-20260811-102544, paradigm-20260811-102843, paradigm-20260811-104012, paradigm-20260811-105620
 
 ## 3.5.1
 

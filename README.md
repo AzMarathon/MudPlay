@@ -1,7 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.5.16**
+> **Version 3.5.21**
+> - An attack-spell build no longer gets stuck healing/buffing forever and never attacking — a survival cast can't fire again until the attack spell it interrupted has gone back out (a fixed attack / heal-or-buff alternation)
+> - A survival heal winning the round's single cast slot no longer permanently wedges combat out of retrying — no more sitting idle after a mid-fight heal until manual input
 > - After auto-lighting a dark room the client now redisplays it so a monster standing there unseen is engaged, instead of relying on it to swing first and walking past a passive one
 > - Corpse-recovery auto-equip wields a held weapon with `eq` instead of `hold`
 > - `@party go <text-exit>` (e.g. `go hole`) keeps its `go` verb when relayed to followers — only a real cardinal direction is sent as the bare token
