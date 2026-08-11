@@ -12,7 +12,8 @@ namespace MudPlay.Game.Map;
 public readonly record struct PendingMove(
     Direction? Cardinal,
     string? Command,
-    DateTimeOffset SentAt)
+    DateTimeOffset SentAt,
+    bool IsFollowDrag = false)
 {
     // Cardinal-only shorthand for the common case.
     public static PendingMove FromDirection(Direction d, DateTimeOffset when) =>
@@ -21,4 +22,13 @@ public readonly record struct PendingMove(
     // Text-exit move that doesn't map to a cardinal.
     public static PendingMove FromCommand(string command, DateTimeOffset when) =>
         new(null, command, when);
+
+    // A leader-follow drag — a party follower dragged one room in the leader's
+    // direction. Predicts like a cardinal move, but flagged so the tracker's
+    // passive-re-look guard (which assumes a real move is SLOWER than a stray
+    // same-room redisplay) does not discard its legitimately-instant arrival: the
+    // game drags a follower with no round-trip, and only ever redisplays on a real
+    // arrival, so a fast redisplay after a drag is never a re-look (see RoomTracker).
+    public static PendingMove FromFollowDrag(Direction d, DateTimeOffset when) =>
+        new(d, null, when, IsFollowDrag: true);
 }

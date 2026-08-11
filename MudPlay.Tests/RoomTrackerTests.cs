@@ -329,6 +329,33 @@ public sealed class RoomTrackerTests : IDisposable
     }
 
     [Fact]
+    public void Pending_FastFollowDrag_SameNameCorridor_ConfirmsNotReLook()
+    {
+        // Report paradigm-20260811-122610: a party follower dragged through an
+        // identical "Cleared Fields" {N,S} corridor. The game drags a follower with
+        // NO byte round-trip, so the confirming display lands almost instantly (8ms
+        // in the report) — exactly what the timing-based re-look guard above (the
+        // double-move test) discards. But a follow-drag never emits a stray re-look:
+        // the game only redisplays on a real arrival, so its fast redisplay IS the
+        // move. `NoteFollowMove` flags the pending move exempt from that guard, so it
+        // confirms the neighbour instead of stranding the anchor a room back and
+        // desyncing down the corridor. Same sequence + timing as the double-move test,
+        // opposite outcome — the difference is drag vs. self-typed move.
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.SetLocated(new RoomKey(4, 1), t0);          // Cleared Fields, {N, S}
+        tracker.NoteFollowMove(Direction.N, t0);            // dragged N → predicted 4/2
+
+        // Same-named neighbour redisplays 100ms later — under the floor, a re-look for
+        // a self-typed move but a real arrival for a follow-drag.
+        tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S),
+            t0.AddMilliseconds(100));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(4, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
     public void Pending_FastGoPath_SameNameNeighbour_DifferentExits_Confirms()
     {
         // Report paradigm-20260811-104042: a `go path` from a "Shadowed Vale" {W}

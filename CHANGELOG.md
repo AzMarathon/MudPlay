@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.5.22
+
+- As a party follower, the map now stays located through an identical same-named corridor (e.g. a run of "Slum Street") instead of discarding each leader-follow arrival as a stray re-look, desyncing, and needing repeated manual `rm`s — a follower's drag arrives instantly, which the map used to mistake for a passive redisplay
+- bug reports addressed: paradigm-20260811-122610
+
 ## 3.5.21
 
 - An attack-spell build no longer gets stuck healing/buffing forever and never attacking — a survival cast can't fire again until the attack spell it interrupted has gone back out (a fixed attack / heal-or-buff alternation, not a heal-until-HP-is-comfortable loop)
