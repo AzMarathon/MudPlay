@@ -4668,13 +4668,13 @@ public sealed class AppServices
             {
                 Log.Info("Startup",
                     $"Auto-load of last profile '{startup.Name}' on '{startup.Bbs}' failed " +
-                    $"({ex.GetType().Name}); opening a blank draft instead.");
-                Profile.LoadBlank();
+                    $"({ex.GetType().Name}); loading the default profile instead.");
+                Profile.LoadDefaultProfile();
             }
         }
         else
         {
-            Profile.LoadBlank();
+            Profile.LoadDefaultProfile();
         }
 
         // Track which profile was last loaded so "auto-load last" has a value to
