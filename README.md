@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.5.1**
-> - Startup animation preference is now install-wide — saved to the default profile and read at startup regardless of which character auto-loads, so turning it off stays off across relaunches and profile loads
-> - Fixed the animation briefly flashing when a named profile loads
+> **Version 3.5.5**
+> - Room-wide combat spells (multi-attack, area debuff) are now cast bare — `blad` / `stnk`, never `blad <mob>` (the targeted form the server rejected)
+> - Combat keeps its target and round-cycle / attack-spell progress across a mid-fight heal / bless / buff instead of restarting as a brand-new fight — no more "confused which attack to use" after an interrupt
+> - Coins a post-combat `search` surfaces are now collected instead of skipped as "already handled this room visit"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

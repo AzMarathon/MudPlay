@@ -169,8 +169,8 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: giant rat.");
 
-        // The cast-code is typed directly with the target appended.
-        Assert.Equal("blast giant rat", h.LastSent);
+        // A multi-attack (room-wide) spell is cast BARE — never "blast <mob>".
+        Assert.Equal("blast", h.LastSent);
         Assert.DoesNotContain("a giant rat", h.AllSent);
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
     }
@@ -201,7 +201,7 @@ public sealed class CombatManagerSpellsTests
 
         // Multi-target nuke is suppressed; the single-target weapon swing runs.
         Assert.Equal("a giant rat", h.LastSent);
-        Assert.DoesNotContain("blast giant rat", h.AllSent);
+        Assert.DoesNotContain("blast", h.AllSent);
     }
 
     [Fact]
@@ -371,7 +371,7 @@ public sealed class CombatManagerSpellsTests
         h.Tick();                             // server repeats — no re-send
         h.Tick();
 
-        Assert.Equal(1, h.AllSent.Count(s => s == "blast giant rat"));
+        Assert.Equal(1, h.AllSent.Count(s => s == "blast"));
         Assert.DoesNotContain("a giant rat", h.AllSent);
     }
 
@@ -391,7 +391,7 @@ public sealed class CombatManagerSpellsTests
         h.Tick();                             // round 2 of 2 — still repeating, no send
         h.Tick();                             // cap reached → switch to weapon
 
-        Assert.Equal(1, h.AllSent.Count(s => s == "blast giant rat"));   // announced once
+        Assert.Equal(1, h.AllSent.Count(s => s == "blast"));   // announced once
         Assert.Equal("a giant rat", h.LastSent);                          // switched to weapon
         h.Tick();                             // weapon mode — heartbeat quiet
         Assert.Equal("a giant rat", h.LastSent);
@@ -470,7 +470,7 @@ public sealed class CombatManagerSpellsTests
 
         h.Ma = 50;
         h.Feed("Also here: giant rat.");      // cast (50 >= 30)
-        Assert.Equal("blast giant rat", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
 
         h.Ma = 20;                            // now below the gate
         h.Tick();                             // mana too low → weapon
@@ -492,17 +492,17 @@ public sealed class CombatManagerSpellsTests
         // action that CastingDirector pulls from the engine (not under test
         // here — we drive the bridge directly).
         h.Feed("Also here: giant rat.");
-        Assert.Equal("blast giant rat", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
 
         (string Spell, string? Target)? debuff = h.Combat.PickInBetweenDebuff();
         Assert.Equal("curse", debuff?.Spell);
-        Assert.Equal("giant rat", debuff?.Target);
+        Assert.Null(debuff?.Target);   // area debuff is cast bare — never "curse <mob>"
         h.Combat.CommitInBetweenDebuff();
 
         Assert.Null(h.Combat.PickInBetweenDebuff());   // once per room
 
         h.Tick();                                       // combat action unchanged
-        Assert.Equal("blast giant rat", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
     }
 
     // ----- backstab gate -----------------------------------------------
@@ -519,7 +519,7 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat.");
 
         Assert.Equal("bs giant rat", h.LastSent);
-        Assert.DoesNotContain("blast giant rat", h.AllSent);
+        Assert.DoesNotContain("blast", h.AllSent);
     }
 
     // ----- room clear resets the chooser bookkeeping -------------------
@@ -533,13 +533,13 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");      // room 1 — cast (cap 1 reached)
-        Assert.Equal("blast giant rat", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
 
         h.Feed("Also here: Bob.");            // room cleared → chooser reset
         h.Tick();                             // round passes (clears cast cooldown)
         h.Feed("Also here: giant rat.");      // room 2 — cap reset, casts again
 
-        Assert.Equal(2, h.AllSent.Count(s => s == "blast giant rat"));
+        Assert.Equal(2, h.AllSent.Count(s => s == "blast"));
     }
 
     // ----- damage-immunity fallback (CS-c) -----------------------------
@@ -601,13 +601,13 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "acid slime");
 
         h.Feed("Also here: acid slime.");                 // multi-attack room spell
-        Assert.Equal("blast acid slime", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
 
         // One immune mob doesn't mean the room spell isn't damaging the
         // rest — multi-attack is never marked immune.
         h.Feed("Your spell has no effect on acid slime.");
         h.Tick();
-        Assert.Equal("blast acid slime", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
         Assert.DoesNotContain("a acid slime", h.AllSent);
     }
 

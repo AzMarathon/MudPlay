@@ -108,14 +108,31 @@ public sealed class CashManager : IDisposable
     // room we've left.
     private bool _cashPendingAfterCombat;
 
-    // Currencies whose ground pile we've already collected (or considered and skipped
-    // as gated) this room visit — the "decide once" latch. A room re-renders several
-    // times after combat (the game's own re-display + our post-combat `look`), and
-    // without this each re-render re-ran the collect: with drop-smaller-for-larger it
-    // re-swapped the same pile, shedding coin on the redundant attempts (report
-    // paradigm-20260804-143020). Cleared on room change; a fresh corpse-drop of a
-    // currency removes it so post-new-combat cash is collected again.
-    private readonly HashSet<string> _collectedGround = new(StringComparer.OrdinalIgnoreCase);
+    // Per-currency high-water mark of the ground pile we've already collected (or
+    // considered and skipped as gated) this room visit — the "decide once" latch. A
+    // room re-renders several times after combat (the game's own re-display + our
+    // post-combat `look`), and without this each re-render re-ran the collect: with
+    // drop-smaller-for-larger it re-swapped the same pile, shedding coin on the
+    // redundant attempts (report paradigm-20260804-143020). Keyed by amount, not just
+    // presence, so a re-render of the SAME (or smaller) pile is a no-op, but a `search`
+    // that reveals a LARGER pile than we took re-arms collection (report
+    // paradigm-20260811-065736 — coins a post-combat search surfaced went uncollected).
+    // Cleared on room change; a fresh corpse-drop of a currency removes it so
+    // post-new-combat cash is collected again.
+    private readonly Dictionary<string, int> _collectedGround = new(StringComparer.OrdinalIgnoreCase);
+
+    // True when this currency already had a collect issued this room visit for at
+    // least `count` coins — a passive re-render of the same/smaller pile skips, a
+    // reveal of more coins (search / fresh drop) falls through and re-collects.
+    private bool AlreadyCollected(string currency, int count)
+        => _collectedGround.TryGetValue(currency, out int had) && had >= count;
+
+    // Record a collect of `count` of this currency this visit, keeping the high mark.
+    private void MarkCollected(string currency, int count)
+    {
+        if (!_collectedGround.TryGetValue(currency, out int had) || count > had)
+            _collectedGround[currency] = count;
+    }
 
     // Holds the walker across the post-combat `look` round-trip (server latency
     // exceeds the gate's settle window, so the settle can't cover it). Fires once to
@@ -571,7 +588,7 @@ public sealed class CashManager : IDisposable
         // pile this visit → ignore the re-render (a passive re-display, or a second
         // "You notice" for cash we've taken). This is what stops drop-smaller-for-
         // larger re-swapping the same pile on every render.
-        if (_cashPendingAfterCombat || _collectedGround.Contains(currency)) return;
+        if (_cashPendingAfterCombat || AlreadyCollected(currency, count)) return;
 
         // Claim the pile now (so a concurrent re-render skips) and HOLD the walker
         // across the one-tick decision defer. The defer waits for the room-display
@@ -579,7 +596,7 @@ public sealed class CashManager : IDisposable
         // loop could otherwise step out of the room, firing the get into the room we
         // just left (which fails and stalls the loop, report -143321) or missing the
         // pile entirely (report -143150). Holding pins us in place until the decision.
-        _collectedGround.Add(currency);
+        MarkCollected(currency, count);
         _gate?.NoteDeferredPending(1);
         _post(() => CollectDecideHeld(count, currency));
     }
@@ -625,12 +642,14 @@ public sealed class CashManager : IDisposable
             return;
         }
         // Decide once per pile per room visit — a re-displayed "There are N here" of a
-        // pile we've handled must not re-collect it (see _collectedGround).
-        if (!_collectedGround.Add(currency))
+        // pile we've handled must not re-collect it (see _collectedGround). A search
+        // that reveals MORE than we took falls through and re-collects the new total.
+        if (AlreadyCollected(currency, count))
         {
-            _log?.Debug(LogCategory, $"collect skipped currency={currency} — already handled this room visit");
+            _log?.Debug(LogCategory, $"collect skipped currency={currency} — already handled ≥{count} this room visit");
             return;
         }
+        MarkCollected(currency, count);
         CollectCoins(count, currency);
     }
 
@@ -650,7 +669,7 @@ public sealed class CashManager : IDisposable
     public void OnRoomChanged()
     {
         if (_collectedGround.Count > 0)
-            _log?.Debug(LogCategory, $"room changed — resetting collect latch (was: {string.Join(", ", _collectedGround)})");
+            _log?.Debug(LogCategory, $"room changed — resetting collect latch (was: {string.Join(", ", _collectedGround.Keys)})");
         _collectedGround.Clear();
         CancelDeferredCollect("room changed");
     }

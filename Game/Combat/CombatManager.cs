@@ -163,6 +163,14 @@ public sealed partial class CombatManager : IDisposable
     // — the fallback's whole point is to make our OWN independent pick this round.
     private bool _followDeferBypass;
 
+    // Set only for the duration of ResumeEngage's re-dispatch so the "already
+    // engaged, server is still swinging → don't re-send" short-circuit is bypassed.
+    // The interrupt (heal/bless/buff) turned our auto-attack OFF, so the round's
+    // action MUST be re-sent — but we keep _currentTarget set (unlike the old
+    // clear-and-refresh) so DispatchRoundAction's new-target reset doesn't zero the
+    // round-cycle phase / attack-spell cascade on every interrupt.
+    private bool _resumeBypassEngagedGuard;
+
     // Backstab flee-on-failure action, bound in AppServices to
     // HealthManager.RunFromBackstabFailure. null until wired; even when wired it
     // fires only on a detected failure AND when CombatSettings.RunIfBackstabFails
@@ -849,8 +857,11 @@ public sealed partial class CombatManager : IDisposable
         // Server auto-attacks the specific named target each round;
         // re-sending the same command mid-fight would burn a swing.
         // If the exact RawName we last sent is still in the engageable
-        // list, keep going — the server is still swinging at it.
-        if (_currentTarget is { } current &&
+        // list, keep going — the server is still swinging at it. A resume
+        // re-dispatch (ResumeEngage) bypasses this: combat was turned OFF by the
+        // interrupt, so the server is NOT swinging and the round must be re-sent.
+        if (!_resumeBypassEngagedGuard &&
+            _currentTarget is { } current &&
             engageable.Any(e => string.Equals(e.RawName, current,
                                               StringComparison.OrdinalIgnoreCase)))
         {
@@ -1849,20 +1860,34 @@ public sealed partial class CombatManager : IDisposable
     {
         _combatOff = false;
         _log?.Combat(LogCategory, "combat resumed after interrupt — re-engaging room");
-        _currentTarget = null;     // force a fresh pick + equip
 
-        // Bypass the follow-announce hold on this re-pick. We only get here mid-
-        // fight (an interrupt turned OUR auto-attack off while already engaged),
-        // so the party has already converged and the followed leader is swinging
-        // at a mob it won't re-announce ("already engaged; no re-fire"). Leaving
-        // ShouldWaitForFollow armed would park us awaiting an announce that never
-        // comes, and OnCombatTick's fallback would only rescue us a full round
-        // later (the reported "re-attack missed a combat round" after a between-
-        // round heal). Picking our own target now lands on the same mob that
-        // fallback would have chosen, minus the wasted round.
+        // Do NOT clear _currentTarget here. A heal / bless / buff interrupt mid-fight
+        // is not a new engagement; dropping the target made DispatchRoundAction treat
+        // the same mob as brand-new and run its new-target reset — zeroing the custom
+        // round-cycle phase (_alternationRound) and wiping the attack-spell cascade
+        // (MaxCasts / immune / announce latches). That snapped the cycle back to its
+        // opening phase every interrupt ("confused which attack to use"). Keeping the
+        // target makes the re-dispatch a same-target re-announce, so the phase/cascade
+        // carry over. A target that died during the interrupt was already cleared by
+        // the death watcher, so this still re-picks a fresh mob when appropriate.
+        //
+        // The interrupt turned our auto-attack OFF, so the round's action must be
+        // re-sent — but keeping _currentTarget would otherwise trip the "already
+        // engaged, server is still swinging → don't re-send" short-circuit in
+        // OnEntitiesObserved. Bypass just that guard for this one re-dispatch.
+        //
+        // _followDeferBypass also lifts the follow-announce hold: we only get here
+        // mid-fight, so the party has already converged and the followed leader is
+        // swinging at a mob it won't re-announce — leaving ShouldWaitForFollow armed
+        // would park us awaiting an announce that never comes.
+        _resumeBypassEngagedGuard = true;
         _followDeferBypass = true;
         try { OnEntitiesObserved(live); }
-        finally { _followDeferBypass = false; }
+        finally
+        {
+            _resumeBypassEngagedGuard = false;
+            _followDeferBypass = false;
+        }
     }
 
     // Round-paced wrapper over ResumeEngage: re-engages at most once per

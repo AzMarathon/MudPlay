@@ -260,7 +260,13 @@ public sealed partial class CombatManager
                 // later changes. Set the bridge even when the cast is blocked so we
                 // stay in spell mode and retry next tick rather than swinging.
                 _castingSpellTarget = picked.RawName;
-                if (_cast!.TryCast(decision.Spell!, picked.RawName, bypassRoundCooldown: true))
+                // Room-wide multi-attack spells (e.g. dancing blades) hit every enemy
+                // and MUST be cast bare — `blad`, never `blad <mob>` (the server treats
+                // the targeted form as an unknown command). Single-target attack/debuff
+                // spells keep their mob; _castingSpellTarget still tracks the round's mob.
+                string? castTarget = decision.Action == CombatSpellAction.MultiAttack
+                    ? null : picked.RawName;
+                if (_cast!.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
                 {
                     _spellChooser.MarkCast(decision, picked.RawName);
                     _lastCastAction = decision.Action;
@@ -504,13 +510,14 @@ public sealed partial class CombatManager
             settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
         if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return null;
 
-        // The target name is appended to every combat-spell cast — matching
-        // the weapon engine's historical convention (area/multi room spells
-        // included). The combat action verb is re-sent after the in-between
-        // cast by the existing combat-off resume path.
+        // An area debuff (e.g. stinking cloud) blankets the room and MUST be cast
+        // bare — `stnk`, never `stnk <mob>`. A single-target debuff keeps its mob.
+        // The combat action verb is re-sent after the in-between cast by the
+        // existing combat-off resume path.
         _pendingDebuff = decision;
         _pendingDebuffTarget = target;
-        return (decision.Spell!, target);
+        return (decision.Spell!,
+            decision.Action == CombatSpellAction.AreaDebuff ? null : target);
     }
 
     // Confirm the in-between debuff the director just sent. Marks the stashed
