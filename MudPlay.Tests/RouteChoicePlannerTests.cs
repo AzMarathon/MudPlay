@@ -193,6 +193,31 @@ public sealed class RouteChoicePlannerTests
         ]
         """;
 
+    // Dest 1/9 sits BEHIND hazard room 1/5 (its only approach); a shop room 1/2
+    // hangs off the gate-free side. Sourcing a counter at the shop means scoring
+    // dist(cur→shop→dest), whose dest leg passes THROUGH the hazard — reachable
+    // only with the acquirable gates suspended (counter in hand).
+    private const string ShopBehindHazardRoomsJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Shop", "Spell": 0,
+            "Light": 0, "Shop": 3, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Hazard", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     // A CMD>0 room with an "(Item: N)" exit is the teleport pattern: TryReadRoom
     // promotes that exit to RoomExitHint.Teleport, which BFS crosses as a normal
     // short edge. Here 1/1's E teleports straight to 1/9 (1 hop), while the
@@ -530,6 +555,41 @@ public sealed class RouteChoicePlannerTests
             filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 5) ? 700 : 0;
             filter.InventoryReadyProbe = () => true;
             filter.ItemCarriedProbe = _ => false;   // no counter
+        });
+    }
+
+    // The hazard-counter shop resolver scores dist(cur→shop→dest), but the dest
+    // sits behind the very hazard the counter answers — so no shop qualifies with
+    // the hazard live. Guards ResolveHazardCounter's suspend scope: without it a
+    // buyable counter is silently never offered (the FCCO "buy a rope" bug).
+    [Fact]
+    public void HazardCounterShop_SelectableOnlyWithGatesSuspended()
+    {
+        WithGraph(ShopBehindHazardRoomsJson, (bfs, graph, filter) =>
+        {
+            Func<RoomKey, RoomKey, int?> dist = (a, b) => bfs.DistanceBetween(a, b, filter);
+            RoomKey[] shops = { new(1, 2) };
+
+            // Hazard live: the dest is unreachable from the shop, so nothing scores.
+            Assert.False(PathItemShopRouter.TrySelectShop(
+                shops, new RoomKey(1, 1), new RoomKey(1, 9), dist, out _));
+
+            // Gates suspended (counter in hand): the round-trip resolves, shop wins.
+            using (filter.SuspendAcquirableGates())
+            {
+                Assert.True(PathItemShopRouter.TrySelectShop(
+                    shops, new RoomKey(1, 1), new RoomKey(1, 9), dist, out RoomKey shop));
+                Assert.Equal(new RoomKey(1, 2), shop);
+            }
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 5) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;   // no counter carried
         });
     }
 

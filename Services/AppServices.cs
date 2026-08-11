@@ -5775,32 +5775,40 @@ public sealed class AppServices
         foreach (int id in counters)
             if (IsItemOnFloor(id)) return (id, "grab from the floor here", true);
 
-        foreach (int id in counters)
-            if (DeterministicGiveExists(id)
-                && Game.Map.PathItemGiveRouter.TrySelectGiver(
-                    GiveSourcesForItem(id), source, destination,
-                    (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.GiveSource giver))
-                return (id, $"ask {giver.GiverName}", false);
-
-        foreach (int id in counters)
+        // The destination is hazard-gated (that is WHY a counter is needed), so the
+        // shop/give/drop round-trip THROUGH it is only reachable with the acquirable
+        // gates suspended — otherwise dist(source→shop→dest) is infinite and every
+        // source is rejected. Suspend them for the whole resolution, matching the
+        // route we'd actually walk (counter in hand crosses the hazard).
+        using (Movement.SuspendAcquirableGates())
         {
-            System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
-            if (shops.Count > 0
-                && Game.Map.PathItemShopRouter.TrySelectShop(
-                    shops, source, destination,
-                    (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.RoomKey shop)
-                && RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName)
-                return (id, $"buy at {shopName}", false);
-        }
+            foreach (int id in counters)
+                if (DeterministicGiveExists(id)
+                    && Game.Map.PathItemGiveRouter.TrySelectGiver(
+                        GiveSourcesForItem(id), source, destination,
+                        (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.GiveSource giver))
+                    return (id, $"ask {giver.GiverName}", false);
 
-        foreach (int id in counters)
-        {
-            System.Collections.Generic.IReadOnlyList<Game.Map.MonsterDropSpawn> spawns = DropSpawnsForItem(id);
-            if (spawns.Count > 0
-                && Game.Map.MonsterDropRouter.SelectNearestSpawn(
-                    spawns, Bfs.ComputeDistancesFrom(source, Movement),
-                    out Game.Map.MonsterDropSpawn best, out _))
-                return (id, $"dropped by {best.MonsterName}", false);
+            foreach (int id in counters)
+            {
+                System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
+                if (shops.Count > 0
+                    && Game.Map.PathItemShopRouter.TrySelectShop(
+                        shops, source, destination,
+                        (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.RoomKey shop)
+                    && RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName)
+                    return (id, $"buy at {shopName}", false);
+            }
+
+            foreach (int id in counters)
+            {
+                System.Collections.Generic.IReadOnlyList<Game.Map.MonsterDropSpawn> spawns = DropSpawnsForItem(id);
+                if (spawns.Count > 0
+                    && Game.Map.MonsterDropRouter.SelectNearestSpawn(
+                        spawns, Bfs.ComputeDistancesFrom(source, Movement),
+                        out Game.Map.MonsterDropSpawn best, out _))
+                    return (id, $"dropped by {best.MonsterName}", false);
+            }
         }
 
         return null;
