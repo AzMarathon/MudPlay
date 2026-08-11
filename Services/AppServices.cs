@@ -3755,8 +3755,12 @@ public sealed class AppServices
             Needs,
             carriedCount: CountItemCarried,
             inventoryLoaded: () => Inventory.IsLoaded,
+            // The route picker's explicit "obtain then cross" pick forces a per-walk
+            // obtain regardless of the global search-if-needed preference — the pick
+            // IS the consent, so open the demand gate whenever a forced obtain is live.
             isEnabled: () =>
-                Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded,
+                Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded
+                || _forcedPathObtain.Count > 0,
             log: Log);
         Inventory.Changed += PathItemDemand.OnInventoryChanged;
 
@@ -4518,7 +4522,7 @@ public sealed class AppServices
             giveSourcesForItem: GiveSourcesForItem,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
-            distanceBetween: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            distanceBetween: PathItemDetourDistance,
             carriedCount: CountItemCarried,
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
@@ -4537,7 +4541,7 @@ public sealed class AppServices
             deterministicGiveExists: DeterministicGiveExists,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
-            distanceBetween: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            distanceBetween: PathItemDetourDistance,
             carriedCount: CountItemCarried,
             cashOnHand: PathItemCashOnHand,
             buyCost: PathItemBuyCost,
@@ -5757,6 +5761,18 @@ public sealed class AppServices
         if (itemId <= 0) return false;
         if (_forcedPathObtain.Contains(itemId)) return true;
         return ResolveItemOverlay(itemId).AutoObtainForPath ?? false;
+    }
+
+    // Distance used to SCORE a path-item give/shop detour. Suspends the acquirable
+    // gates so a SOLE-route gate — a hazard we'll counter, an item gate we'll buy —
+    // doesn't read as infinite and reject every source: the router prices the route
+    // the character walks WITH the sourced item in hand, which crosses that gate.
+    // For a gate a free route already bypasses this is a no-op; it only rescues the
+    // sole-route case (e.g. buying a rope to reach the hazard-gated FCCO cavern).
+    private int? PathItemDetourDistance(Game.Map.RoomKey a, Game.Map.RoomKey b)
+    {
+        using (Movement.SuspendAcquirableGates())
+            return Bfs.DistanceBetween(a, b, Movement);
     }
 
     // For a hazard's any-of counter set, pick the counter the run can most cheaply
