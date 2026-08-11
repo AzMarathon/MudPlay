@@ -43,10 +43,12 @@ public sealed class GeneralSettings
     // TerminalInputRouter.Enabled; surfaced in Settings → General.
     public bool TypeToTerminalFromOtherWindows { get; set; } = true;
 
-    // When on (the default), the animated mud-throw splash plays on the terminal
-    // at startup until a session begins. Off shows only the static header (the
-    // "MudPlay" title, byline, and hint) — those stay regardless. Surfaced in
-    // Settings → General; read at launch, so its Global-tier value applies.
+    // When on (the default), the animated splash plays on the terminal at startup
+    // until a session begins. Off shows only the static header (the "MudPlay"
+    // title, byline, and hint) — those stay regardless. Surfaced in Settings →
+    // General. Read at launch so its Global-tier value applies before a profile
+    // loads; also pushed live through DisplayConfig.SplashAnimate on Apply, so
+    // toggling it stops/starts a splash that's already on screen.
     public bool ShowStartupMudAnimation { get; set; } = true;
 
     // Terminal canvas font family as an avares:// URI. Null = the bundled MX437

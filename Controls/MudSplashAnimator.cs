@@ -52,7 +52,11 @@ public sealed class MudSplashAnimator : IDisposable
         Screen = new TerminalScreen(Clamp(cols, 40, 400), Clamp(rows, 15, 200));
         _canvas = new SplashCanvas(Screen);
         _scene = NextScene();
-        _timer = new DispatcherTimer { Interval = FrameInterval };
+        // Background priority: the attract splash is the lowest-value work on the
+        // UI thread, so it must yield to input and session rendering. On a slow
+        // machine this drops frames (the animation just gets choppier) instead of
+        // "lagging out" the client while it plays.
+        _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = FrameInterval };
         _timer.Tick += OnTick;
         RenderFrame(0);
     }
