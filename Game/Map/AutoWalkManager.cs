@@ -719,6 +719,21 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // shortcut) across the tracker-Pending deferral.
     private bool _deferredWalkAvoidTeleports;
 
+    // One-shot watchdog for the tracker-Pending deferral. A move the server
+    // refuses with no room redisplay leaves the tracker stuck Pending, so the
+    // Confirmed transition the deferral waits on never arrives and the walk would
+    // sit in Walking forever with no feedback (report paradigm-20260810-201953).
+    // When this fires the deferral is force-dispatched from the last-known room —
+    // the refused move means we never actually left it — so WalkToImmediate plans
+    // the route or fails with a real reason instead of hanging. Disposed on
+    // dispatch / Reset.
+    private IDisposable? _deferredWalkTimer;
+
+    // How long to wait for an in-flight move to settle before treating the
+    // deferral as stuck. Comfortably past a normal move's ~1-2s confirm so a
+    // legitimately slow settle isn't cut short.
+    private static readonly TimeSpan DeferredWalkTimeout = TimeSpan.FromSeconds(6);
+
     // The active walk's planning flags, captured when a route is committed in
     // WalkToImmediate and reset in Reset(). A mid-walk replan (TryReplanOrFail)
     // must re-issue WalkTo with these, or a no-teleport (or gate-planned) walk
@@ -778,6 +793,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _deferredWalkAvoidTeleports = avoidTeleports;
             _destination = destination;       // populated so status surfaces show the target
             State = WalkState.Walking;
+            // Watchdog: if the tracker never settles (the in-flight move was
+            // refused with no room redisplay), force the deferral through from the
+            // last-known room instead of hanging in Walking forever.
+            _deferredWalkTimer?.Dispose();
+            _deferredWalkTimer = _scheduleDelay?.Invoke(DeferredWalkTimeout, OnDeferredWalkDeadline);
             Raise(new WalkEvent(WalkEventKind.Started,
                 "deferred — waiting for in-flight moves to settle",
                 destination));
@@ -1699,6 +1719,45 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _log?.Info("Walker", $"{progress}{reasonForLog}");
     }
 
+    // Run the pending tracker-Pending deferral now (see _deferredWalkTarget). Called
+    // on the Confirmed transition it was waiting for, on a pause-resume, or by the
+    // watchdog when that transition never arrived. Captures the route picker's
+    // flags, clears the deferral + its watchdog, and hands off to WalkToImmediate —
+    // which plans from the current room or fails with a real reason. No-op if the
+    // deferral was already consumed / superseded.
+    private void DispatchDeferredWalk()
+    {
+        if (_deferredWalkTarget is not { } deferred
+            || State != WalkState.Walking || _path is not null)
+            return;
+
+        bool throughGates = _deferredWalkThroughGates;
+        bool armAcquisition = _deferredWalkArmAcquisition;
+        bool avoidTeleports = _deferredWalkAvoidTeleports;
+        _deferredWalkTarget = null;
+        _deferredWalkThroughGates = false;
+        _deferredWalkArmAcquisition = true;
+        _deferredWalkAvoidTeleports = false;
+        _deferredWalkTimer?.Dispose();
+        _deferredWalkTimer = null;
+        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports);
+    }
+
+    // Watchdog fire for a deferral whose Confirmed transition never arrived (the
+    // server refused the in-flight move with no room redisplay). Force it through
+    // from the last-known room so the walk fails with a reason (or plans) rather
+    // than hanging silently in Walking.
+    private void OnDeferredWalkDeadline()
+    {
+        _deferredWalkTimer?.Dispose();
+        _deferredWalkTimer = null;
+        if (_deferredWalkTarget is null || State != WalkState.Walking || _path is not null)
+            return;
+        _log?.Info("Walker",
+            "deferred walk: in-flight move never settled — planning from the last-known room");
+        DispatchDeferredWalk();
+    }
+
     private void OnTrackerStateChanged(RoomTransition transition)
     {
         // Deferred-plan dispatch — a WalkTo arrived while the tracker
@@ -1706,19 +1765,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // sitting in Walking state with _path == null waiting for a
         // Confirmed observation. Now we have one — plan + send from
         // the actually-settled current room.
-        if (_deferredWalkTarget is { } deferred
-            && transition.NewConfidence == RoomConfidence.Confirmed
+        if (transition.NewConfidence == RoomConfidence.Confirmed
+            && _deferredWalkTarget is not null
             && State == WalkState.Walking
             && _path is null)
         {
-            bool throughGates = _deferredWalkThroughGates;
-            bool armAcquisition = _deferredWalkArmAcquisition;
-            bool avoidTeleports = _deferredWalkAvoidTeleports;
-            _deferredWalkTarget = null;
-            _deferredWalkThroughGates = false;
-            _deferredWalkArmAcquisition = true;
-            _deferredWalkAvoidTeleports = false;
-            WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports);
+            DispatchDeferredWalk();
             return;
         }
 
@@ -1985,19 +2037,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // until some unrelated tracker event (which the user only forces via
             // a manual redisplay). If the settle move is still Pending, stay
             // deferred: State is Walking again, so the next Confirmed dispatches.
-            if (_deferredWalkTarget is { } deferred && _path is null)
+            if (_deferredWalkTarget is not null && _path is null)
             {
                 if (_tracker.State.Confidence == RoomConfidence.Confirmed)
-                {
-                    bool throughGates = _deferredWalkThroughGates;
-                    bool armAcquisition = _deferredWalkArmAcquisition;
-                    bool avoidTeleports = _deferredWalkAvoidTeleports;
-                    _deferredWalkTarget = null;
-                    _deferredWalkThroughGates = false;
-                    _deferredWalkArmAcquisition = true;
-                    _deferredWalkAvoidTeleports = false;
-                    WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports);
-                }
+                    DispatchDeferredWalk();
                 return;
             }
 
@@ -2154,6 +2197,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _boatTimer = null;
         _awaitingBoatArrival = false;
         _sailingPlace = null;
+        _deferredWalkTimer?.Dispose();
+        _deferredWalkTimer = null;
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;

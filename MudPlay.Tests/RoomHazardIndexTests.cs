@@ -129,6 +129,38 @@ public sealed class RoomHazardIndexTests : IDisposable
     }
 
     [Fact]
+    public void TextBlock_MinBaseEncodedTb_IsHazard()
+    {
+        // The ice-cavern shape (spells 1144/1145): a TextBlock spell whose
+        // AbilVal-0 is 0 — the TBInfo number lives in MinBase/MaxBase instead. The
+        // failitem counter (there, the rope+grapple) must still be indexed, or the
+        // route picker never offers it (report paradigm-20260810-202239).
+        RoomHazardIndex idx = NewIndex(
+            Room(700),
+            """ [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 0, "MinBase": 50, "MaxBase": 50 } ] """,
+            itemsJson: null,
+            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55" } ] """);
+
+        RoomHazardIndex.RoomHazard? h = idx.HazardForSpell(700);
+        Assert.NotNull(h);
+        Assert.Contains(55, h!.ProtectingItems);
+    }
+
+    [Fact]
+    public void TextBlock_ZeroAbilValAndNoBase_NotIndexed()
+    {
+        // AbilVal-0 = 0 with no MinBase/MaxBase → no TBInfo to reach, so nothing
+        // to index. Guards the fallback from inventing a hazard out of a base of 0.
+        RoomHazardIndex idx = NewIndex(
+            Room(700),
+            """ [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 0 } ] """,
+            itemsJson: null,
+            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55" } ] """);
+
+        Assert.Null(idx.HazardForSpell(700));
+    }
+
+    [Fact]
     public void TextBlock_CheckSpell_IsHazard()
     {
         RoomHazardIndex idx = NewIndex(

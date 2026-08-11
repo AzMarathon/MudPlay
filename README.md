@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.4.1**
-> - New Combat action order: "Custom round cycle" — spend N rounds attacking physically, then M rounds casting spells, repeating for as long as both are set; a round count of 0 means that phase runs for the rest of the fight (e.g. physical for 2 rounds, then spells till death)
-> - The cycle can open on either phase (physical or spell) via a "start on spell" toggle
+> **Version 3.4.3**
+> - Walking to an unreachable or gated room no longer hangs silently in "Walking" — a watchdog now surfaces the reason (missing key, level gate, no route) or plans from your last confirmed room when an in-flight move never settles
+> - Room hazards whose spell stores its check in MinBase/MaxBase are now detected — the ice-cavern rope & grapple, plus ~40 other areas the client was silently missing — so the route picker offers the protection (or warns of the damage route) instead of routing you through unprotected
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

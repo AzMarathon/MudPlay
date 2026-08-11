@@ -737,6 +737,38 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Walking, h.Walker.State);
     }
 
+    [Fact]
+    public void WalkTo_Deferred_WatchdogFiresWhenTrackerNeverSettles_PlansFromLastKnownRoom()
+    {
+        // The tracker-Pending deferral must not hang forever when the in-flight
+        // move is refused with no room redisplay — the tracker never reaches
+        // Confirmed, so the dispatch it waits on never fires. The watchdog force-
+        // plans from the last-known room instead (reports paradigm-20260810-201953
+        // / -202239: "Walking, step 1 of 0" stuck with no feedback).
+        List<System.Action> scheduled = new();
+        Harness h = NewHarness();
+        h.Walker.SetVoyageScheduler((_, cb) => { scheduled.Add(cb); return new NoopDisposable(); });
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));      // sends N; tracker now Pending
+        Assert.Single(h.Sent);
+
+        h.Walker.WalkTo(new RoomKey(1, 2));      // deferred — tracker still Pending
+        Assert.Single(h.Sent);                   // nothing sent while deferred
+        Assert.Contains(h.Events,
+            e => e.Kind == WalkEventKind.Started && e.Detail.Contains("deferred"));
+        Assert.Single(scheduled);                // the watchdog was armed
+
+        // The Confirmed transition never arrives — fire the watchdog.
+        scheduled[0]();
+
+        // Force-planned from the last-known room 1/1 (the refused move never
+        // moved us): BFS 1/1 -> 1/2 = [N], so a fresh step goes out instead of
+        // hanging.
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", System.Text.Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+    }
+
     // ----- avoided rooms --------------------------------------------
 
     [Fact]
