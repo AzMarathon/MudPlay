@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.4.0
+
+- The "default profile" (loaded when no character is chosen) is now a real profile saved in the Global folder: edit it, hit Save, and your changes — e.g. turning the splash off — persist and load on every startup
+- File → Save As copies it into a named character, so new profiles start from your defaults instead of the installed ones
+- File → Save (on the default profile) writes it back to the Global folder rather than prompting for a name
+
 ## 3.3.5
 
 - Unchecking "Show the mud-throwing startup animation" and hitting Apply now stops a splash that's already on screen, instead of only taking effect at the next launch

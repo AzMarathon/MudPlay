@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.3.5**
-> - Unchecking "Show the mud-throwing startup animation" and hitting Apply now stops a splash that's already on screen, instead of only taking effect at the next launch
-> - The splash frame timer runs at background priority so the attract animation yields to input and session rendering instead of lagging the client while it plays
-> - Removed the leftover unused "Mud Now." splash scene
+> **Version 3.4.0**
+> - The "default profile" (loaded when no character is chosen) is now a real profile saved in the Global folder: edit it, hit Save, and your changes — e.g. turning the splash off — persist and load on every startup
+> - File → Save As copies it into a named character, so new profiles start from your defaults instead of the installed ones
+> - File → Save (on the default profile) writes it back to the Global folder rather than prompting for a name
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

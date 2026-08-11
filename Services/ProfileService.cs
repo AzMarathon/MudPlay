@@ -13,8 +13,8 @@ namespace MudPlay.Services;
 public sealed class ProfileService
 {
     // The currently loaded character profile. Set on startup so settings edits
-    // always have a target — either the auto-loaded last-used profile, or a
-    // fresh in-memory blank one (see LoadBlank). Goes null only after an
+    // always have a target — either the auto-loaded last-used profile, or the
+    // default profile (see LoadDefaultProfile). Goes null only after an
     // explicit Close.
     public CharacterProfile? Current { get; private set; }
 
@@ -33,7 +33,15 @@ public sealed class ProfileService
     // SettingsResolver and AppServices.ResolveActiveBbs to decide the active BBS.
     public string? CurrentBbsName { get; private set; }
 
-    // True when Current is an unsaved blank draft (no name on disk yet).
+    // Whether the current no-name profile persists to the Global default-profile
+    // file on Save. LoadDefaultProfile sets it (the real default profile); the
+    // in-memory scratch draft from LoadBlank leaves it false so its Save is a
+    // no-op. Irrelevant once a named profile is loaded (Save keys on the name).
+    private bool _defaultProfilePersists;
+
+    // True when the loaded profile is the default profile (no named character) —
+    // it persists to the Global default-profile file rather than a per-character
+    // one, and gates File → Save's label + the "not a named character" UI.
     public bool IsBlankDraft => Current is not null && CurrentProfileName is null;
 
     // Late-bound system-log sink. Set by AppServices after construction so the
@@ -161,24 +169,18 @@ public sealed class ProfileService
         }
     }
 
-    // Replace Current with a fresh in-memory draft profile and fire
-    // ProfileLoaded. Used on app start when no last-used profile exists — every
-    // settings tab still has a target to read / write, and the user can keep
-    // editing freely until they explicitly save the draft under a name
-    // (File → Save profile).
-    //
-    // CurrentProfileName stays null for a draft, so Save is a no-op until the
-    // user names it. In-memory edits are lost if the user closes the app
-    // without naming + saving.
+    // Start a fresh, never-persisted in-memory draft profile and fire
+    // ProfileLoaded — a scratch profile whose edits stay in memory (Save is a
+    // no-op, see _defaultProfilePersists) until it's named via File → Save As.
+    // Distinct from LoadDefaultProfile, which loads the persisted Global default.
+    // Any outgoing profile is auto-saved first so per-session edits aren't dropped.
     public CharacterProfile LoadBlank()
     {
         string? outgoing = CurrentProfileName;
         if (Current is not null)
         {
-            // Auto-save the outgoing profile (no-op on drafts) so per-session
-            // edits aren't dropped by File → New.
             try { Save(); }
-            catch { /* swallow — LoadBlank shouldn't fail because the outgoing save did */ }
+            catch { /* swallow — a load shouldn't fail because the outgoing save did */ }
             Current = null;
             CurrentProfileName = null;
             ProfileClosed?.Invoke();
@@ -188,11 +190,68 @@ public sealed class ProfileService
         Current = draft;
         CurrentProfileName = null;
         CurrentBbsName = null;
+        _defaultProfilePersists = false;
         Log?.Info(LogCategory, outgoing is null
             ? "Started a blank draft profile (no character loaded)."
             : $"Closed profile '{outgoing}'; started a blank draft profile.");
         ProfileLoaded?.Invoke(draft);
         return draft;
+    }
+
+    // Load the "default profile" — the CharacterProfile persisted at
+    // AppPaths.DefaultProfileFile in the Global folder — and fire ProfileLoaded.
+    // Used on app start when no last-used named profile exists, and by File → New.
+    // When the file doesn't exist yet (fresh install) a new CharacterProfile
+    // (installed defaults) stands in; the first Save creates it.
+    //
+    // CurrentProfileName stays null: the default profile isn't a named character,
+    // so File → Save persists it back to the Global file (see Save) and File →
+    // Save As copies it into a named character. Any outgoing profile is auto-saved
+    // first so per-session edits aren't dropped.
+    public CharacterProfile LoadDefaultProfile()
+    {
+        string? outgoing = CurrentProfileName;
+        if (Current is not null)
+        {
+            try { Save(); }
+            catch { /* swallow — a load shouldn't fail because the outgoing save did */ }
+            Current = null;
+            CurrentProfileName = null;
+            ProfileClosed?.Invoke();
+        }
+
+        CharacterProfile profile = ReadDefaultProfileFile();
+        NormalizeForLoad(profile);
+        ProfileMigrations.Apply(profile);
+
+        Current = profile;
+        CurrentProfileName = null;
+        CurrentBbsName = null;
+        _defaultProfilePersists = true;
+        Log?.Info(LogCategory, outgoing is null
+            ? "Loaded the default profile (no character loaded)."
+            : $"Closed profile '{outgoing}'; loaded the default profile.");
+        ProfileLoaded?.Invoke(profile);
+        return profile;
+    }
+
+    // Deserialize the Global default-profile file, or a fresh CharacterProfile
+    // (installed defaults) when it's missing or unreadable — a corrupt default
+    // must never block startup.
+    private CharacterProfile ReadDefaultProfileFile()
+    {
+        if (!File.Exists(AppPaths.DefaultProfileFile)) return new CharacterProfile();
+        try
+        {
+            return JsonStore.Load<CharacterProfile>(AppPaths.DefaultProfileFile)
+                   ?? new CharacterProfile();
+        }
+        catch (Exception ex)
+        {
+            Log?.Warn(LogCategory,
+                $"Default profile at '{AppPaths.DefaultProfileFile}' was unreadable ({ex.Message}); using installed defaults.");
+            return new CharacterProfile();
+        }
     }
 
     // Pin a BBS onto the loaded blank draft so its credentials / overrides have
@@ -311,10 +370,26 @@ public sealed class ProfileService
     // in via the "Backup profile when making changes" toggle.
     public void Save(bool backup = false)
     {
-        // A draft with no name (CurrentProfileName) or no pinned BBS
-        // (CurrentBbsName) has nowhere to write — drafts must be named +
+        if (Current is null) return;
+
+        // The default profile (no named character) persists to the Global folder.
+        // That file is the install-wide defaults and the template File → Save As
+        // copies into named characters. A LoadBlank scratch draft leaves the flag
+        // false, so its Save stays a no-op (edits land only when it's named).
+        if (CurrentProfileName is null)
+        {
+            if (!_defaultProfilePersists) return;
+            ProfileSaving?.Invoke(Current);
+            Directory.CreateDirectory(Path.GetDirectoryName(AppPaths.DefaultProfileFile)!);
+            if (backup && File.Exists(AppPaths.DefaultProfileFile))
+                File.Copy(AppPaths.DefaultProfileFile, AppPaths.DefaultProfileFile + ".bak", overwrite: true);
+            JsonStore.Save(AppPaths.DefaultProfileFile, Current);
+            return;
+        }
+
+        // A named profile with no pinned BBS has nowhere to write — it's named +
         // BBS-pinned via the File → Save As / Settings → BBS Apply flow first.
-        if (Current is null || CurrentProfileName is null || CurrentBbsName is null) return;
+        if (CurrentBbsName is null) return;
         ProfileSaving?.Invoke(Current);
 
         Directory.CreateDirectory(AppPaths.ProfileFolder(CurrentBbsName, CurrentProfileName));
