@@ -405,6 +405,11 @@ it isn't here and you're unsure, ask.
   - **`MaxCasts` rounds elapsed** → switch to the next cascade action. Scope: **per-target** for the
     single-target slots (normal / alternate attack spell, single-target debuff); **per-room** for the
     two AoE slots (multi-attack, area debuff).
+- **[CONFIRMED]** *(2026-08-11, user + fix PR #271)* **Room-wide spells are cast BARE — no target.** The
+  two AoE slots (multi-attack e.g. `blad`/dancing blades, area debuff e.g. `stnk`/stinking cloud) hit the
+  whole room and must be cast as the bare cast-code (`blad`, `stnk`) — NEVER `blad <mob>`. The server
+  treats the targeted form of a room spell as an unknown command ("Combat Off / Combat Engaged" flip-flop,
+  no cast). Single-target attack/debuff spells DO take the mob name. Only these two slots omit it.
   - **Current spell unaffordable** (`MinManaPerCast` vs live mana) **or the target is immune** →
     switch down the cascade: alternate attack spell (if configured) → physical main weapon → physical
     alternate weapon (if configured) → can't hit.
