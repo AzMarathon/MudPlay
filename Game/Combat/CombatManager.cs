@@ -135,6 +135,14 @@ public sealed partial class CombatManager : IDisposable
     // window (see TrySendRoomRefresh). null until wired → fail-open (refreshes
     // send exactly as before).
     private Func<bool>? _isInDarkRoom;
+
+    // Reports whether a movement engine (walker / loop / auto-lair) is
+    // currently attached and driving us through rooms (EngineRecoveryGate.
+    // AttachedEngine is not null). Gates the Min/Max monsters skip below —
+    // see SetMovementActiveGate. null until wired → fail-open (the gate
+    // always applies, this check's original unconditional behavior).
+    private Func<bool>? _isMovementActive;
+
     private string? _currentTarget;
 
     // Guard-redirect memory. MajorMUD "guarded" monsters (a brigand chief guarded
@@ -219,6 +227,31 @@ public sealed partial class CombatManager : IDisposable
     // branch. Even rounds are the first phase (spell for AlternateSpellPhysical,
     // physical for AlternatePhysicalSpell). Unused by the fixed orders.
     private int _alternationRound;
+
+    // Real-time stamp of the last _alternationRound advance — see
+    // AlternationAdvanceMinGap. Reset to MinValue everywhere _alternationRound
+    // resets to 0, so a fresh fight's first phase flip is never blocked by a
+    // stale stamp from a previous one.
+    private DateTimeOffset _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
+
+    // Minimum real time between two _alternationRound advances. TickEngine's
+    // CombatTickElapsed — what drives the advance — fires on every hit/miss line
+    // (only 250ms-debounced), not once per true ~5s MajorMUD round: a monster's
+    // counter-swing line landing a beat after the player's own can each trip a
+    // separate tick within the SAME round. Without this guard that advances the
+    // phase twice in one round, flipping physical→spell (or back) mid-round
+    // instead of on the next real one — the reported "switched too fast, moved to
+    // attack then instantly wanted the spell". 4s sits comfortably below
+    // TickEngine.CombatTickInterval (5s) so the genuine next-round tick is never
+    // itself rejected, while safely rejecting the ~1-2s stray re-fire observed.
+    private static readonly TimeSpan AlternationAdvanceMinGap = TimeSpan.FromSeconds(4);
+
+    // Clock for AlternationAdvanceMinGap, mirroring CastingDirector.SetClock —
+    // tests inject a fake clock so a synchronous burst of Tick() calls can
+    // exercise multi-round phase timing without real elapsed wall-clock time.
+    // Scoped to just this one check; every other timestamp in this file still
+    // reads DateTimeOffset.Now directly.
+    private Func<DateTimeOffset> _now = () => DateTimeOffset.Now;
 
     private string? _lastAttackCommand;
     private DateTimeOffset _lastRoomRefreshAt = DateTimeOffset.MinValue;
@@ -486,6 +519,13 @@ public sealed partial class CombatManager : IDisposable
         _wireSender = sender;
     }
 
+    // Test-only clock override for AlternationAdvanceMinGap — see _now.
+    public void SetClock(Func<DateTimeOffset> now)
+    {
+        ArgumentNullException.ThrowIfNull(now);
+        _now = now;
+    }
+
     // Wire the dark-room probe (RoomTracker.IsInDarkRoom). With it set, the CR
     // "where am I" room re-displays are suppressed while we can't see — see
     // _isInDarkRoom / TrySendRoomRefresh. Until set, refreshes send unconditionally.
@@ -493,6 +533,15 @@ public sealed partial class CombatManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isInDarkRoom);
         _isInDarkRoom = isInDarkRoom;
+    }
+
+    // Wire the movement-active probe (EngineRecoveryGate.AttachedEngine is not
+    // null) — see _isMovementActive. Until set, the Min/Max monsters gate
+    // applies unconditionally, its original behavior.
+    public void SetMovementActiveGate(Func<bool> isMovementActive)
+    {
+        ArgumentNullException.ThrowIfNull(isMovementActive);
+        _isMovementActive = isMovementActive;
     }
 
     // Wire the gear actuator (EquipmentManager, the sole gear owner). swapWeapon
@@ -903,7 +952,20 @@ public sealed partial class CombatManager : IDisposable
         // than silently never engaging. The SeeHidden clear-override
         // bypasses the gate entirely — its whole point is clearing the
         // WHOLE room regardless of count so re-sneak is possible.
-        if (!seeHiddenOverride)
+        //
+        // The whole point of this gate is "don't STOP here while passing
+        // through" — it only makes sense while something is actually trying
+        // to move us past the room (a walker / loop / auto-lair route). Gated
+        // on _isMovementActive so it never applies while genuinely idle (no
+        // engine attached — logged in and standing, or manually parked): with
+        // nowhere to go anyway, standing undefended is strictly worse than
+        // fighting back regardless of room population (the reported "logged
+        // in, it buffed, but sat there doing nothing" against a 5-zombie room
+        // with Max=2 — releasing the walker gate doesn't help when there's no
+        // walker running to begin with). Unwired _isMovementActive fails open
+        // to the gate always applying, matching this check's original,
+        // unconditional behavior.
+        if (!seeHiddenOverride && (_isMovementActive?.Invoke() ?? true))
         {
             int min = Math.Max(0, settings.MinMonstersInRoom);
             int max = settings.MaxMonstersInRoom > 0 ? settings.MaxMonstersInRoom : int.MaxValue;
@@ -1163,6 +1225,7 @@ public sealed partial class CombatManager : IDisposable
         _castingSpellTarget = null;
         _lastCastAction = null;
         _alternationRound = 0;
+        _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
         _spellAttackOwed = false;
         _attackSpellImmuneSpecies.Clear();
         _spellChooser.ResetForNewRoom();

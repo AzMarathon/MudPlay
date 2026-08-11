@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.5.23
+
+- Fixed the alternating action orders (Alternate Spell/Physical, Alternate Physical/Spell, and Custom round cycle) flipping their attack/spell phase mid-round instead of once per real round — a monster's counter-swing line landing a beat after the player's own could each independently trip the engine's round-boundary signal, so a fight could switch from a physical swing straight to a spell cast (or back) within the same round instead of waiting for the next one
+- Fixed a deadlock where a room with more hostiles than Combat → Max Monsters allowed left the character standing defenseless: CombatManager correctly declined to engage, but CombatStateTracker (which owns the walker's movement gate) didn't know about that window and held the walker there anyway — combat refusing to fight AND the walker unable to leave, absorbing hits from every monster in the room with no recourse
+- The Min/Max Monsters window now only applies while a walker / loop / auto-lair is actively moving you through a room — it's meant to stop you from stopping to fight mid-route, not to leave you standing undefended when you're simply idle (freshly logged in, nothing queued) and a hostile room is the only thing there. Idle now fights back regardless of room population
+- bug reports addressed: paradigm-20260811-130439, paradigm-20260811-133600, paradigm-20260811-134903
+
 ## 3.5.22
 
 - As a party follower, the map now stays located through an identical same-named corridor (e.g. a run of "Slum Street") instead of discarding each leader-follow arrival as a stray re-look, desyncing, and needing repeated manual `rm`s — a follower's drag arrives instantly, which the map used to mistake for a passive redisplay

@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.5.22**
-> - As a party follower, the map now stays located through an identical same-named corridor (e.g. a run of "Slum Street") instead of discarding each leader-follow arrival as a stray re-look, desyncing, and needing repeated manual `rm`s — a follower's drag arrives instantly, which the map used to mistake for a passive redisplay
+> **Version 3.5.23**
+> - Fixed the alternating action orders (Alternate Spell/Physical, Alternate Physical/Spell, and Custom round cycle) flipping their attack/spell phase mid-round instead of once per real round — a monster's counter-swing line landing a beat after the player's own could each independently trip the engine's round-boundary signal, so a fight could switch from a physical swing straight to a spell cast (or back) within the same round instead of waiting for the next one
+> - Fixed a deadlock where a room with more hostiles than Combat → Max Monsters allowed left the character standing defenseless: CombatManager correctly declined to engage, but CombatStateTracker (which owns the walker's movement gate) didn't know about that window and held the walker there anyway — combat refusing to fight AND the walker unable to leave, absorbing hits from every monster in the room with no recourse
+> - The Min/Max Monsters window now only applies while a walker / loop / auto-lair is actively moving you through a room — idle (freshly logged in, nothing queued) now fights back regardless of room population instead of standing undefended
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -183,6 +183,7 @@ public sealed partial class CombatManager
         {
             _spellChooser.ResetForNewTarget();
             _alternationRound = 0;
+            _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
         }
 
         // A per-monster forced attack COMMAND wins over the entire normal flow
@@ -384,6 +385,9 @@ public sealed partial class CombatManager
                 _castingSpellTarget = null;
                 return;
             }
+            // Not yet a real round boundary — see AlternationAdvanceMinGap.
+            if (_now() - _lastAlternationAdvanceAt < AlternationAdvanceMinGap) return;
+            _lastAlternationAdvanceAt = _now();
             _alternationRound++;
             if (TryBuildCandidate(altObs, altTarget) is { } altCand)
                 DispatchRoundAction(settings, altCand, CountEngageable(altObs), altObs);
@@ -413,6 +417,9 @@ public sealed partial class CombatManager
                 _castingSpellTarget = null;
                 return;
             }
+            // Not yet a real round boundary — see AlternationAdvanceMinGap.
+            if (_now() - _lastAlternationAdvanceAt < AlternationAdvanceMinGap) return;
+            _lastAlternationAdvanceAt = _now();
             _alternationRound++;
             if (CustomCyclePreferSpell(settings) && _castingSpellTarget is null)
             {

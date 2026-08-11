@@ -2406,6 +2406,44 @@ public sealed class CombatManagerTests
         Assert.Empty(h.Sent);
     }
 
+    // The Min/Max window is meant to stop a walker/loop from parking in a
+    // too-crowded room mid-route — it must not also leave an idle character
+    // (nothing moving it, freshly logged in or manually parked) standing
+    // undefended against a room the exact same shape would otherwise decline
+    // to fight. Reproduces the report: log in, land on a 5-hostile room with
+    // Max=2, "it buffed, but sat there doing nothing."
+    [Fact]
+    public void MaxMonsters_AboveThreshold_NoMovementActive_AttacksAnyway()
+    {
+        using Harness h = new();
+        h.Settings.MaxMonstersInRoom = 2;
+        h.Combat.SetMovementActiveGate(() => false);   // no walker/loop attached — idle
+        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(2, "kobold", killable: true);
+        h.AddMonster(3, "goblin", killable: true);
+
+        h.Feed("Also here: giant rat, kobold, goblin.");
+
+        List<string> lines = h.Sent.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
+        Assert.Contains(lines, l => l.StartsWith("a "));
+    }
+
+    [Fact]
+    public void MaxMonsters_AboveThreshold_MovementActive_StillSkips()
+    {
+        using Harness h = new();
+        h.Settings.MaxMonstersInRoom = 2;
+        h.Combat.SetMovementActiveGate(() => true);   // a walker/loop IS driving us through
+        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(2, "kobold", killable: true);
+        h.AddMonster(3, "goblin", killable: true);
+
+        h.Feed("Also here: giant rat, kobold, goblin.");
+
+        // Still skips — the window applies while genuinely passing through.
+        Assert.Empty(h.Sent);
+    }
+
     [Fact]
     public void MinMonsters_InRange_AttacksNormally()
     {
