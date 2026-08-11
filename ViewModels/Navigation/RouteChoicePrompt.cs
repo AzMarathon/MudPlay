@@ -114,6 +114,26 @@ public static class RouteChoicePrompt
             choice.GatedPath, services.AutoLair.TravelCostModel,
             services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled);
 
+        // Sole hazard-only route: resolve which counter the run would obtain and
+        // how (floor grab / free give / shop buy / drop hunt), so the picker can
+        // offer "obtain then cross" and Go forces that counter through the acquire
+        // pipeline — an explicit pick, so no AutoObtainForPath flag is needed.
+        List<int> floorCounters = new();     // grabbed in place with a `get`
+        List<int> detourCounters = new();    // sourced via the give/shop/drop pipeline
+        List<string> hazardSources = new();
+        bool soleHazardOnly = !choice.HasFreeRoute && choice.Kind != RouteChoiceKind.Teleport
+            && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
+        if (soleHazardOnly)
+            foreach (RouteRequirement req in choice.Requirements)
+                if (services.ResolveHazardCounter(req.ItemIds, source, destination) is { } r)
+                {
+                    List<int> bucket = r.OnFloor ? floorCounters : detourCounters;
+                    if (!bucket.Contains(r.ItemId)) bucket.Add(r.ItemId);
+                    if (!hazardSources.Contains(r.Source)) hazardSources.Add(r.Source);
+                }
+        string? hazardCounterSource = hazardSources.Count > 0
+            ? string.Join("; ", hazardSources) : null;
+
         var vm = new RouteChoiceDialogViewModel(
             choice,
             DestinationLabel(services, destination),
@@ -132,7 +152,8 @@ public static class RouteChoicePrompt
             // (which otherwise only surfaces as a prompt once the walk starts).
             itemId => services.PathItemDropName(itemId, source),
             freeEta,
-            gatedEta);
+            gatedEta,
+            hazardCounterSource);
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and
@@ -181,6 +202,16 @@ public static class RouteChoicePrompt
                 CommitWalk(services, destination, gated: false);
                 break;
             case RouteChoiceResult.Gated:
+                // Hazard "obtain then cross". A counter already on the floor is
+                // grabbed in place; the rest are forced through the acquire pipeline
+                // (give/shop/drop) even when unflagged — the explicit pick is the
+                // consent. The walk still plans gated (the counter isn't carried
+                // yet at plan time) and crosses safely once it's in hand.
+                foreach (int id in floorCounters)
+                    if (services.ItemNames.GetName(id) is { Length: > 0 } n)
+                        services.SendGameCommand($"get {n}");
+                if (detourCounters.Count > 0)
+                    services.ForcePathObtain(detourCounters);
                 CommitWalk(services, destination, gated: true);
                 break;
             case RouteChoiceResult.GatedNoAcquire:

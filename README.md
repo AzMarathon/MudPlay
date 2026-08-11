@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.4.3**
-> - Walking to an unreachable or gated room no longer hangs silently in "Walking" — a watchdog now surfaces the reason, naming the specific barrier (e.g. missing key, or "1/1420 (Marble Passage) needs level 40+"), or plans from your last confirmed room when an in-flight move never settles
-> - Room hazards whose spell stores its check in MinBase/MaxBase are now detected — the ice-cavern rope & grapple, plus ~40 other areas the client was silently missing — so the route picker offers the protection (or warns of the damage route) instead of routing you through unprotected
+> **Version 3.5.0**
+> - The route picker for a hazard you can't cross yet now offers an "Obtain, then cross" route — it grabs a counter off the current room's floor, or buys / asks / hunts one en route (e.g. the ice-cavern rope & grapple), naming where — instead of only "carry, buy, or use a counter yourself"
+> - Picking it fetches the counter even when the item isn't flagged auto-obtain (the explicit choice is the consent); a "cross unprotected — take the damage" option and Cancel remain
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

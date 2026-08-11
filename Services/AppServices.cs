@@ -3790,6 +3790,11 @@ public sealed class AppServices
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
 
+        // Per-walk forced-obtain (the route picker's "obtain then cross" choice):
+        // drop an item from the override once it's acquired. The abandon-clear on
+        // Walker.Event is wired after the walker is constructed (see below).
+        Inventory.Changed += () => _forcedPathObtain.RemoveWhere(IsItemCarried);
+
         // Party-level probe + tracker. The probe broadcasts @level and
         // persists each reply into the players table (RecordLevel) — the sole
         // @level recorder, so a level (from the route-gate probe, the once-a-day
@@ -3984,15 +3989,22 @@ public sealed class AppServices
         // unchanged.
         Walker.SetPathItemAnnouncer(PartyPathItemGate.OnPathItemsRequired);
 
-        // Fold each entered hazard room's mandatory counter into the same
-        // walk-start item announce, so a route the user chose to run through a
-        // hazard room provisions its counter like an Item/Ticket gate. Only the
-        // single-counter (no-substitute) items are announced — any-of hazard
-        // groups can't be expressed to the each-required demand pipeline, so
-        // they stay a manual choice the route picker surfaces.
-        Walker.SetHazardItemResolver(key =>
-            RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0)?.MandatoryItems
-                ?? Array.Empty<int>());
+        // Fold each entered hazard room's counter into the same walk-start item
+        // announce, so a route the user chose to run through a hazard room
+        // provisions its counter like an Item/Ticket gate. Single-counter
+        // (no-substitute) items always announce; an any-of group's counter
+        // announces only when the user forced one via the route picker's "obtain
+        // then cross" choice (otherwise the group stays a manual counter choice).
+        Walker.SetHazardItemResolver(HazardAnnounceItems);
+
+        // Clear the per-walk forced-obtain override when a walk is abandoned, so a
+        // forced flag never leaks into a later unrelated walk. (The per-item drop
+        // on acquisition is wired to Inventory.Changed above.)
+        Walker.Event += e =>
+        {
+            if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed)
+                _forcedPathObtain.Clear();
+        };
 
         // Boss "stop before" rooms — the walker halts one room short of any boss
         // room flagged StopBefore on the active realm. Resolved live so realm swaps
@@ -5717,15 +5729,114 @@ public sealed class AppServices
             number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ItemOverlaySeed.GetOverlay(number));
 
-    // Per-item on-demand path acquisition gate: the single AutoObtainForPath
-    // opt-in on the item's overlay. Checked means every acquisition method is in
-    // play (party redistribute, textblock give, shop buy, bank withdraw, drop
-    // reroute). Backs all three path-item routers' isEnabled predicates and the
-    // picker's name helpers.
+    // Items the user explicitly chose to obtain for the current walk via the route
+    // picker's "obtain then cross" option — a per-walk override of the persistent
+    // AutoObtainForPath flag. An explicit pick is consent, so these source through
+    // the same give/shop/drop pipeline without needing the item pre-flagged.
+    // Entries are removed as they're acquired and cleared on a Stop (see the wiring
+    // in the ctor); replaced wholesale on each fresh obtain-pick.
+    private readonly HashSet<int> _forcedPathObtain = new();
+
+    // Set (replacing any prior) the items the next walk should obtain for its path
+    // regardless of their AutoObtainForPath flag. Called by RouteChoicePrompt when
+    // the user picks the hazard "obtain then cross" route.
+    public void ForcePathObtain(IEnumerable<int> itemIds)
+    {
+        ArgumentNullException.ThrowIfNull(itemIds);
+        _forcedPathObtain.Clear();
+        foreach (int id in itemIds) if (id > 0) _forcedPathObtain.Add(id);
+    }
+
+    // Per-item on-demand path acquisition gate: the persistent AutoObtainForPath
+    // opt-in on the item's overlay, OR a per-walk forced-obtain override. Checked
+    // means every acquisition method is in play (party redistribute, textblock
+    // give, shop buy, bank withdraw, drop reroute). Backs all three path-item
+    // routers' isEnabled predicates and the picker's name helpers.
     private bool IsAutoObtainForPath(int itemId)
     {
         if (itemId <= 0) return false;
+        if (_forcedPathObtain.Contains(itemId)) return true;
         return ResolveItemOverlay(itemId).AutoObtainForPath ?? false;
+    }
+
+    // For a hazard's any-of counter set, pick the counter the run can most cheaply
+    // obtain and describe how — preferring one already on the current room's floor
+    // (free + here), then a free give, a shop buy, then a monster drop. Unlike the
+    // PathItem*Name picker helpers this is FLAG-INDEPENDENT: the picker's "obtain
+    // then cross" choice is explicit consent, so it offers a counter the run can
+    // source whether or not it's flagged AutoObtainForPath. Returns the chosen
+    // counter id + a source phrase, or null when none is sourceable.
+    public (int ItemId, string Source, bool OnFloor)? ResolveHazardCounter(
+        IReadOnlyList<int> counters, Game.Map.RoomKey source, Game.Map.RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(counters);
+        // On the current floor — grabbed in place, so it never routes through the
+        // detour pipeline (the caller issues a `get`); flagged OnFloor to say so.
+        foreach (int id in counters)
+            if (IsItemOnFloor(id)) return (id, "grab from the floor here", true);
+
+        foreach (int id in counters)
+            if (DeterministicGiveExists(id)
+                && Game.Map.PathItemGiveRouter.TrySelectGiver(
+                    GiveSourcesForItem(id), source, destination,
+                    (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.GiveSource giver))
+                return (id, $"ask {giver.GiverName}", false);
+
+        foreach (int id in counters)
+        {
+            System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
+            if (shops.Count > 0
+                && Game.Map.PathItemShopRouter.TrySelectShop(
+                    shops, source, destination,
+                    (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.RoomKey shop)
+                && RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName)
+                return (id, $"buy at {shopName}", false);
+        }
+
+        foreach (int id in counters)
+        {
+            System.Collections.Generic.IReadOnlyList<Game.Map.MonsterDropSpawn> spawns = DropSpawnsForItem(id);
+            if (spawns.Count > 0
+                && Game.Map.MonsterDropRouter.SelectNearestSpawn(
+                    spawns, Bfs.ComputeDistancesFrom(source, Movement),
+                    out Game.Map.MonsterDropSpawn best, out _))
+                return (id, $"dropped by {best.MonsterName}", false);
+        }
+
+        return null;
+    }
+
+    // Items to provision for entering a hazard room: its single-counter mandatory
+    // items always, plus any any-of counter the user forced via the route picker's
+    // "obtain then cross" choice (so that one counter is sourced like a gate item).
+    private System.Collections.Generic.IReadOnlyList<int> HazardAnnounceItems(Game.Map.RoomKey key)
+    {
+        RoomHazardIndex.RoomHazard? hazard =
+            RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0);
+        if (hazard is null) return System.Array.Empty<int>();
+        if (_forcedPathObtain.Count == 0) return hazard.MandatoryItems;
+
+        System.Collections.Generic.List<int> items = new(hazard.MandatoryItems);
+        foreach (System.Collections.Generic.IReadOnlyList<int> group in hazard.RequirementGroups)
+            if (group.Count > 1)
+                foreach (int id in group)
+                    if (_forcedPathObtain.Contains(id) && !items.Contains(id))
+                        items.Add(id);
+        return items;
+    }
+
+    // Is item `id` lying on the current room's floor? Matched by name against the
+    // ground survey (which stores the noun phrases parsed from "You notice … here."),
+    // leniently both ways so an article/qualifier on either side still matches.
+    private bool IsItemOnFloor(int id)
+    {
+        string? name = ItemNames.GetName(id);
+        if (string.IsNullOrEmpty(name)) return false;
+        foreach (string floor in GroundItems.Items)
+            if (floor.Contains(name, StringComparison.OrdinalIgnoreCase)
+                || name.Contains(floor, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     // Sole-route auto-obtain decision. Given the requirements of a route that has
