@@ -4700,6 +4700,12 @@ public sealed class AppServices
             Profile.LoadDefaultProfile();
         }
 
+        // Install-global startup-animation preference: seed the splash ONCE here from
+        // the Global default profile, whichever profile the block above loaded. Sourcing
+        // it from the default profile (not the loaded, possibly auto-loaded named one)
+        // is what makes "turn the splash off" stick across launches and profiles.
+        Display.SplashAnimate = Profile.ReadDefaultProfileStartupAnimation();
+
         // Track which profile was last loaded so "auto-load last" has a value to
         // read next launch.
         Profile.ProfileLoaded += OnProfileLoaded;
@@ -6254,7 +6260,11 @@ public sealed class AppServices
             : general.NavTooltipFontFamily;
         Display.NavTooltipFontSize = general.NavTooltipFontSize ?? DisplayConfig.DefaultNavTooltipFontSize;
         Display.ScaleToWindow = general.ScaleTerminalToWindow;
-        Display.SplashAnimate = general.ShowStartupMudAnimation;
+        // SplashAnimate is deliberately NOT seeded here: it's an install-global
+        // attract-screen preference, sourced once at startup from the Global default
+        // profile (see the seed after the startup profile load). Re-seeding it per
+        // profile-load would let an auto-loaded named profile re-enable the splash the
+        // user turned off, and flash the animation for a beat before connect.
         TerminalInput.Enabled = general.TypeToTerminalFromOtherWindows;
 
         // Game-menu commands are BBS-tier too — HangupHandler consumes
@@ -6278,7 +6288,9 @@ public sealed class AppServices
         Display.FontSize = DisplayConfig.DefaultFontSize;
         Display.NavTooltipFontFamily = DisplayConfig.DefaultFontFamily;
         Display.NavTooltipFontSize = DisplayConfig.DefaultNavTooltipFontSize;
-        Display.SplashAnimate = true;
+        // SplashAnimate is intentionally left untouched — it's install-global (seeded
+        // once at startup from the Global default profile), so a profile close/swap
+        // must not reset it back on.
         Display.ScrollbackLines = defaults.ScrollbackLines;
         Display.BackscrollWheelLines = defaults.BackscrollWheelLines;
         Display.TerminalCols = defaults.TerminalCols;

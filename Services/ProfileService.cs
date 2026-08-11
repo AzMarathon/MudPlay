@@ -254,6 +254,54 @@ public sealed class ProfileService
         }
     }
 
+    // The startup-animation preference is install-global, sourced from the Global
+    // default profile — an attract screen shown before any character is active, so it
+    // must not depend on which profile "auto-load last" happened to open. Reads
+    // Current when the default profile is the loaded one, else the persisted file.
+    public bool ReadDefaultProfileStartupAnimation()
+        => ReadGeneralSection(CurrentProfileName is null && Current is not null
+            ? Current
+            : ReadDefaultProfileFile()).ShowStartupMudAnimation;
+
+    // Persist the install-global startup-animation flag onto the Global default
+    // profile. When the default profile is the loaded one, edit it in place and Save
+    // (that path writes the Global file); otherwise load-modify-save the Global file
+    // directly, leaving any loaded named profile untouched.
+    public void WriteDefaultProfileStartupAnimation(bool value)
+    {
+        if (CurrentProfileName is null && Current is not null)
+        {
+            GeneralSettings live = ReadGeneralSection(Current);
+            live.ShowStartupMudAnimation = value;
+            WriteGeneralSection(Current, live);
+            Save();
+            return;
+        }
+        CharacterProfile profile = ReadDefaultProfileFile();
+        GeneralSettings general = ReadGeneralSection(profile);
+        general.ShowStartupMudAnimation = value;
+        WriteGeneralSection(profile, general);
+        Directory.CreateDirectory(Path.GetDirectoryName(AppPaths.DefaultProfileFile)!);
+        JsonStore.Save(AppPaths.DefaultProfileFile, profile);
+    }
+
+    private static GeneralSettings ReadGeneralSection(CharacterProfile profile)
+    {
+        if (profile.Settings is { } settings
+            && settings.TryGetValue("General", out JsonElement json))
+        {
+            try { return JsonSerializer.Deserialize<GeneralSettings>(json) ?? new(); }
+            catch { return new(); }
+        }
+        return new();
+    }
+
+    private static void WriteGeneralSection(CharacterProfile profile, GeneralSettings general)
+    {
+        profile.Settings ??= new();
+        profile.Settings["General"] = JsonSerializer.SerializeToElement(general);
+    }
+
     // Pin a BBS onto the loaded blank draft so its credentials / overrides have
     // a home before the draft is named. No-op (and ignored) for a named profile
     // — those re-home via ReHome instead, since the folder already exists on

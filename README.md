@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.5.0**
-> - The route picker for a hazard you can't cross yet now offers an "Obtain, then cross" route — it grabs a counter off the current room's floor, or buys / asks / hunts one en route (e.g. the ice-cavern rope & grapple), naming where — instead of only "carry, buy, or use a counter yourself"
-> - Picking it fetches the counter even when the item isn't flagged auto-obtain (the explicit choice is the consent); a "cross unprotected — take the damage" option and Cancel remain
+> **Version 3.5.1**
+> - Startup animation preference is now install-wide — saved to the default profile and read at startup regardless of which character auto-loads, so turning it off stays off across relaunches and profile loads
+> - Fixed the animation briefly flashing when a named profile loads
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

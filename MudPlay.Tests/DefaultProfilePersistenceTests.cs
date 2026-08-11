@@ -56,6 +56,43 @@ public sealed class DefaultProfilePersistenceTests
         finally { DeleteDefaultProfileFile(); }
     }
 
+    // The startup-animation preference is install-global: written to the Global
+    // default profile and read back from it regardless of which profile is loaded.
+    // A reader with no profile loaded takes the SAME ReadDefaultProfileFile() branch
+    // an auto-loaded NAMED profile would, so this pins the "always the Global default,
+    // never the loaded character" contract that the fix hinges on.
+    [Fact]
+    public void StartupAnimation_WriteThenRead_RoundTripsThroughGlobalDefaultFile()
+    {
+        DeleteDefaultProfileFile();
+        try
+        {
+            ProfileService writer = new();
+            writer.LoadDefaultProfile();                       // default is Current
+            writer.WriteDefaultProfileStartupAnimation(false); // edits Current + Saves the Global file
+            Assert.False(writer.ReadDefaultProfileStartupAnimation()); // Current branch
+
+            // A separate service with NO profile loaded reads the Global file — the
+            // same branch a loaded named profile would take.
+            ProfileService reader = new();
+            Assert.False(reader.ReadDefaultProfileStartupAnimation());
+        }
+        finally { DeleteDefaultProfileFile(); }
+    }
+
+    [Fact]
+    public void StartupAnimation_DefaultsToOn_WhenNoGlobalDefaultFile()
+    {
+        DeleteDefaultProfileFile();
+        try
+        {
+            ProfileService svc = new();
+            // Absent default file → installed default (animation on).
+            Assert.True(svc.ReadDefaultProfileStartupAnimation());
+        }
+        finally { DeleteDefaultProfileFile(); }
+    }
+
     private static void DeleteDefaultProfileFile()
     {
         if (File.Exists(AppPaths.DefaultProfileFile)) File.Delete(AppPaths.DefaultProfileFile);

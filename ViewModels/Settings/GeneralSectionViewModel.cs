@@ -329,6 +329,10 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         AppServices.Current.Display.NavTooltipFontSize =
             SelectedNavTooltipFontSize?.Value ?? DisplayConfig.DefaultNavTooltipFontSize;
         AppServices.Current.Display.SplashAnimate = ShowStartupMudAnimation;
+        // The splash is install-global — persist it onto the Global default profile
+        // (regardless of which profile is loaded), so it holds across launches and
+        // profile swaps rather than living on this character's tier.
+        _profile.WriteDefaultProfileStartupAnimation(ShowStartupMudAnimation);
 
         ClearDirty();
     }
@@ -372,7 +376,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         BackupOnSave         = dto.BackupOnSave;
         ScaleTerminalToWindow = dto.ScaleTerminalToWindow;
         TypeToTerminalFromOtherWindows = dto.TypeToTerminalFromOtherWindows;
-        ShowStartupMudAnimation = dto.ShowStartupMudAnimation;
+        // The splash is install-global — always reflect the Global default profile's
+        // value, not the loaded profile's (possibly stale) copy of the field.
+        ShowStartupMudAnimation = _profile.ReadDefaultProfileStartupAnimation();
 
         SelectedFontFamily = FontFamilyOptions.FirstOrDefault(o => o.Uri == dto.TerminalFontFamily)
                              ?? FontFamilyOptions[0];
