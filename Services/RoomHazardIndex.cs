@@ -159,7 +159,7 @@ public sealed class RoomHazardIndex
         // Only spells that actually appear as a Room.Spell are candidates — this
         // excludes the (damaging) attack-spell table from the harmful scan.
         HashSet<int> roomSpells = CollectRoomSpells(rooms);
-        Dictionary<int, (int[] Abil, int[] Val)> spellAbils = ReadSpellAbils(spells);
+        Dictionary<int, (int[] Abil, int[] Val, int TbBase)> spellAbils = ReadSpellAbils(spells);
         Dictionary<int, int> durationSecondsBySpell = ReadSpellDurations(spells);
         Dictionary<int, List<int>> negatorsBySpell = new();
         Dictionary<int, List<int>> castersBySpell = new();
@@ -188,7 +188,7 @@ public sealed class RoomHazardIndex
     // a counter nor gates on a held item.
     private RoomHazard? BuildHazard(
         int rootSpell,
-        Dictionary<int, (int[] Abil, int[] Val)> spellAbils,
+        Dictionary<int, (int[] Abil, int[] Val, int TbBase)> spellAbils,
         Dictionary<int, List<int>> negatorsBySpell,
         Dictionary<int, List<int>> castersBySpell,
         Dictionary<int, string> tbActions,
@@ -228,11 +228,11 @@ public sealed class RoomHazardIndex
     // member deals damage; appends every TextBlock (Abil 148) target it reaches.
     private bool WalkSpellChain(
         int spell, int depth,
-        Dictionary<int, (int[] Abil, int[] Val)> spellAbils,
+        Dictionary<int, (int[] Abil, int[] Val, int TbBase)> spellAbils,
         HashSet<int> chain, List<int> textBlocks)
     {
         if (depth > MaxChainDepth || spell <= 0 || !chain.Add(spell)) return false;
-        if (!spellAbils.TryGetValue(spell, out (int[] Abil, int[] Val) ab)) return false;
+        if (!spellAbils.TryGetValue(spell, out (int[] Abil, int[] Val, int TbBase) ab)) return false;
 
         bool damaging = false;
         for (int k = 0; k < SpellAbilSlots; k++)
@@ -242,8 +242,15 @@ public sealed class RoomHazardIndex
             if (a == AbilDamage) damaging = true;
             else if (a == AbilEndCast && v > 0)
                 damaging |= WalkSpellChain(v, depth + 1, spellAbils, chain, textBlocks);
-            else if (a == AbilTextBlock && v > 0 && !textBlocks.Contains(v))
-                textBlocks.Add(v);
+            else if (a == AbilTextBlock)
+            {
+                // AbilVal names the TBInfo block for most TextBlock spells; when
+                // it's 0 the block number lives in MinBase/MaxBase (ab.TbBase) —
+                // see ReadSpellAbils. A base that isn't a real TB simply resolves
+                // to nothing in ScanTextBlock, so the fallback is safe.
+                int tb = v > 0 ? v : ab.TbBase;
+                if (tb > 0 && !textBlocks.Contains(tb)) textBlocks.Add(tb);
+            }
         }
         return damaging;
     }
@@ -410,9 +417,9 @@ public sealed class RoomHazardIndex
         return set;
     }
 
-    private static Dictionary<int, (int[] Abil, int[] Val)> ReadSpellAbils(JsonDocument spells)
+    private static Dictionary<int, (int[] Abil, int[] Val, int TbBase)> ReadSpellAbils(JsonDocument spells)
     {
-        Dictionary<int, (int[], int[])> map = new();
+        Dictionary<int, (int[], int[], int)> map = new();
         foreach (JsonElement row in spells.RootElement.EnumerateArray())
         {
             if (row.ValueKind != JsonValueKind.Object) continue;
@@ -425,7 +432,17 @@ public sealed class RoomHazardIndex
                 TryReadInt(row, $"Abil-{k}", out abil[k]);
                 TryReadInt(row, $"AbilVal-{k}", out val[k]);
             }
-            map[number] = (abil, val);
+
+            // A TextBlock spell (Abil 148) names its TBInfo block in AbilVal for
+            // most spells, but a large class of room-entry hazards (the ice
+            // cavern's rope+grapple check, blackwood, graveyard, the highlands /
+            // farms, ...) leave AbilVal 0 and stash the block number in the spell's
+            // MinBase/MaxBase instead. Capture that base so WalkSpellChain can fall
+            // back to it — otherwise those hazards' failitem / checkspell counters
+            // are never scanned and the router can't offer their protection.
+            TryReadInt(row, "MinBase", out int minBase);
+            TryReadInt(row, "MaxBase", out int maxBase);
+            map[number] = (abil, val, minBase > 0 ? minBase : maxBase);
         }
         return map;
     }

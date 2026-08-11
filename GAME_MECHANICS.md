@@ -1266,6 +1266,21 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
      *wooden skiff* / 1181 *silverbark canoe* are the boats; holding any one aborts before `cast 754`.
      (`failitem` is used 139× across TBInfo — many are quest "don't re-give" guards like
      `failitem 622:giveitem 622`; only the ones ending in a harmful `cast` are hazards.)
+     - **[CONFIRMED by user 2026-08-10, reports `paradigm-20260810-201953` / `-202239`] Ice cavern
+       (Frozen Cavern) up/down slide** — the descent rooms (`10/276`–`10/295`) cast `Spell:1144` "ice
+       cavern level 1" / `Spell:1145` "level 2", which check for a **rope & grapple** (item **191**): hold
+       it and the slide is safe, lack it and you're **teleported down and take heavy damage**. In the data
+       the entry spell's TextBlock is **9407** (`failitem 191:failitem 930:random 9408`; `9408` does the
+       `teleport … cast 1142` damage). The room-hazard machinery already handles this `failitem` shape —
+       but see the encoding gotcha next.
+     - **DATA ENCODING GOTCHA — a TextBlock spell's TB number is NOT always in `AbilVal`.** Most room-entry
+       hazard spells put the `TBInfo.Number` in the `Abil 148` slot's `AbilVal` (e.g. desert 683 → 2653,
+       river 753 → 2750). But a **large class** (~40 spells: the ice cavern 1144/1145, blackwood 1040,
+       graveyard 1126, bone dock 1152, fungus 1205, the highlands/farms 5500-series, caverns 5788/5789, …)
+       leave `AbilVal-0 = 0` and stash the TB number in the spell's **`MinBase`/`MaxBase`** instead
+       (ice cavern 1144 → MinBase `9407`). `RoomHazardIndex.WalkSpellChain` now falls back to `MinBase`/
+       `MaxBase` when the Abil-148 `AbilVal` is 0 — before that fix every one of these hazards was invisible
+       to the router, so no protection was ever offered (the ice-cavern route picker never surfaced).
 
   3. **TextBlock action guarded by a buff check — `checkspell` OR `failspell`** (a buff check, not an item
      check). `checkspell S T` = "if buff S is active, branch to TBInfo T (safe); else fall through
