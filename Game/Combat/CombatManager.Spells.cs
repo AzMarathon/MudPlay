@@ -533,11 +533,14 @@ public sealed partial class CombatManager
         _pendingDebuffTarget = null;
     }
 
-    // Count engageable monsters in the observation using the SAME filter as the
-    // candidate build in OnEntitiesObserved (Monster + known MonsterNumber +
-    // Enemy relationship) so the chooser's MinEnemies math matches the initial
-    // cast decision. Distinct from HasEngageable, which treats unknown-number
-    // monsters as engageable for its stale-room safety net.
+    // Count engageable monsters in the observation, matching the candidate build in
+    // OnEntitiesObserved AND HasEngageable: every Monster counts except one whose
+    // KNOWN number resolves to a non-Enemy relationship. An unknown-number monster
+    // is counted (fail-open) — the candidate build already adds it (sentinel -1), and
+    // a room-wide AoE hits it regardless of whether we resolved its number. Excluding
+    // it here undercounted the MinEnemies gate and skipped rooming a full room (report
+    // paradigm-20260811-063728: a 5-mob wrapped "Also here:" where a "dark goblin
+    // archer" variant's number didn't resolve counted as 4, below MinEnemies=5).
     private int CountEngageable(RoomEntitiesObservation obs)
     {
         int count = 0;
@@ -545,7 +548,11 @@ public sealed partial class CombatManager
         {
             RoomEntity e = obs.Entities[i];
             if (e.Kind != EntityKind.Monster) continue;
-            if (e.MonsterNumber is not int n) continue;
+            if (e.MonsterNumber is not int n)
+            {
+                count++;   // unknown number → assume engageable (room-nuke hits it)
+                continue;
+            }
             MonsterOverlay overlay = ResolveOverlay(n);
             if ((overlay.Relationship ?? MonsterRelationship.Enemy) == MonsterRelationship.Enemy)
                 count++;

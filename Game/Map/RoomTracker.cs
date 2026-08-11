@@ -879,8 +879,20 @@ public sealed class RoomTracker
                 // (stay Pending) so the move's real outcome a round-trip later still
                 // confirms here. Confirming it instead phantom-advanced the loop and
                 // fired the next step from the source room (the "double move").
+                // Exit-set discriminator: a passive re-look shows the SAME exits the
+                // source last displayed. When a genuine move lands in a same-named
+                // neighbour whose exits DIFFER (report paradigm-20260811-104042: a
+                // `go path` from a "Darkwood Forest" {W,SW} into a "Darkwood Forest"
+                // {N} — the source's CUMULATIVE graph mask still covers {N} from an
+                // earlier visit, so the subset match above passes), the redisplay's
+                // exits won't match the last live display, so it's the move's real
+                // outcome, not a re-look. Only hold Pending when the exits are
+                // unchanged (or there's no prior display to compare — the pure
+                // identically-named-AND-exited corridor, where timing is the only
+                // tell and the double-move guard must still hold).
                 if (MatchesPredicted(source, observation)
-                    && when - head.SentAt < AmbiguousRedisplayFloor)
+                    && when - head.SentAt < AmbiguousRedisplayFloor
+                    && RedisplayExitsUnchanged(observation))
                 {
                     _log?.Log(LogSeverity.Debug, "RoomTracker",
                         $"Fast redisplay ({(when - head.SentAt).TotalMilliseconds:F0}ms < " +
@@ -1259,6 +1271,27 @@ public sealed class RoomTracker
 
         // Subset: every observed exit is present in the graph.
         return (observedMask & target.ExitMask) == observedMask;
+    }
+
+    // True when this observation shows the SAME name + exits as the last one we
+    // fully processed — i.e. it could be a passive re-look of the room we were
+    // already in. A missing prior display counts as unchanged: with nothing to
+    // compare, we can't prove a move happened, so the timing-based ambiguity guard
+    // stays in force (the identically-named-AND-exited corridor case). When the
+    // exits differ, the room's content changed — a real move — so the guard must
+    // not swallow it. Compares live-display exit SETS (not the cumulative graph
+    // mask), which is what separates a re-look from a same-named neighbour.
+    private bool RedisplayExitsUnchanged(RoomObservation observation)
+    {
+        if (_lastObservation is not { } prev) return true;
+        if (!string.Equals(prev.Name, observation.Name, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        uint prevMask = 0;
+        foreach (Direction d in prev.Exits) prevMask |= 1u << (int)d;
+        uint obsMask = 0;
+        foreach (Direction d in observation.Exits) obsMask |= 1u << (int)d;
+        return prevMask == obsMask;
     }
 
     // Subset-only match against a null-name target. Used by the null-name

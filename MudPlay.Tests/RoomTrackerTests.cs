@@ -100,6 +100,14 @@ public sealed class RoomTrackerTests : IDisposable
           { "Map Number": 4, "Room Number": 3, "Name": "Cleared Fields",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
             "N": "4/1", "S": "4/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 5, "Room Number": 1, "Name": "Shadowed Vale",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "5/3", "S": "5/2 (Text: go path)", "E": "0", "W": "5/4",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 5, "Room Number": 2, "Name": "Shadowed Vale",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "5/1", "S": "0", "E": "0", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
         ]
         """;
@@ -318,6 +326,35 @@ public sealed class RoomTrackerTests : IDisposable
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(4, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void Pending_FastGoPath_SameNameNeighbour_DifferentExits_Confirms()
+    {
+        // Report paradigm-20260811-104042: a `go path` from a "Shadowed Vale" {W}
+        // into a same-named "Shadowed Vale" {N} redisplayed 164ms later — under the
+        // ambiguity floor. The source's CUMULATIVE graph mask covers N (an earlier
+        // visit walked it), so BOTH source and predicted target subset-match the {N}
+        // redisplay, and the old timing-only guard mistook the real arrival for a
+        // passive re-look and stayed Pending forever (the loop sat until the player
+        // forced a redisplay). The redisplay's exits {N} DIFFER from the source's
+        // last live display {W}, so it's a genuine move — the go-path target confirms.
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.SetLocated(new RoomKey(5, 1), t0);            // Shadowed Vale, graph {N,S,W}
+
+        // Source's live display shows only {W} — the last-observation baseline the
+        // exit-set discriminator compares against.
+        tracker.NoteRoomObserved(Obs("Shadowed Vale", Direction.W), t0);
+        Assert.Equal(new RoomKey(5, 1), tracker.State.CurrentRoom!.Key);
+
+        tracker.NoteMoveSent("go path", whenUtc: t0.AddMilliseconds(10));   // → 5/2
+
+        // Fast redisplay of the same-named neighbour with different exits {N}.
+        tracker.NoteRoomObserved(Obs("Shadowed Vale", Direction.N), t0.AddMilliseconds(174));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(5, 2), tracker.State.CurrentRoom!.Key);
     }
 
     [Fact]

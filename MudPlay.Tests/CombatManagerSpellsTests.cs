@@ -70,9 +70,26 @@ public sealed class CombatManagerSpellsTests
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
             Combat.SetSpellShortResolver(
                 n => SpellShorts.TryGetValue(n, out string? s) ? s : null);
+            // Store the settle callback instead of running a real timer so a test
+            // controls when the window elapses (FireSettle). Only arms on arrival
+            // observations, so the existing Also-Here tests are unaffected.
+            Combat.SetArrivalSettleScheduler((_, cb) => PendingSettle = cb);
             if (wireCaster)
                 Combat.SetCombatSpellCaster(Cast, () => (Ma, MaxMa));
         }
+
+        // The pending arrival-settle callback (see CombatManager). FireSettle runs
+        // it, simulating the debounce window elapsing with no room re-display.
+        public Action? PendingSettle { get; private set; }
+        public void FireSettle() => PendingSettle?.Invoke();
+
+        // Simulate a mid-room monster arrival ("A giant rat strides in …") — appends
+        // to the classifier's Current with Source=Arrival, the path RoomEntryWatcher
+        // drives in production.
+        public void Arrive(string name)
+            => Classifier.AppendArrivalEntity(
+                Classifier.Classify(name),
+                rawWireLine: $"A {name} strides in from the west.");
 
         public void SetOverlay(int monsterNumber, MonsterAttackPriority? priority = null,
                                MonsterRelationship? relationship = null)
@@ -98,6 +115,28 @@ public sealed class CombatManagerSpellsTests
                 FlavorPrefixes: Array.Empty<string>(),
                 AllowNoPrefix: true,
                 Links: new[] { new GameDataLink("Monsters", number) }));
+
+        // A monster the classifier recognises by name (so it's EntityKind.Monster)
+        // but which carries no Monsters-table link, so its number never resolves —
+        // the real-world case where the server colours a variant hostile whose
+        // flavored name isn't in game data. Mirrors ResolveMonsterNumber returning
+        // null; the room-nuke still hits it, so it must count toward MinEnemies.
+        public void AddUnnumberedMonster(string name)
+            => Monsters.Messages.Add(new MonsterMessageRecord(
+                Id: $"U-{name}",
+                Name: name,
+                HitYou: Array.Empty<string>(),
+                HitOther: Array.Empty<string>(),
+                DeathLine: new[] { $"The {name} dies." },
+                ArmorBlockYou: Array.Empty<string>(),
+                ArmorBlockOther: Array.Empty<string>(),
+                DodgeYou: Array.Empty<string>(),
+                DodgeOther: Array.Empty<string>(),
+                MissYou: Array.Empty<string>(),
+                MissOther: Array.Empty<string>(),
+                FlavorPrefixes: Array.Empty<string>(),
+                AllowNoPrefix: true,
+                Links: Array.Empty<GameDataLink>()));
 
         public void Feed(string line)
         {
@@ -185,6 +224,79 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat.");
 
         Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    // Report paradigm-20260811-063728: a wrapped 5-mob "Also here:" where one
+    // occupant's flavored name didn't resolve to a Monsters number was counted as
+    // 4 by the heartbeat's engageable count, held below MinEnemies=5, so the room
+    // spell never took over from the single-target cascade. The room-nuke hits
+    // every monster regardless of whether we resolved its number, so an unknown-
+    // number monster must count toward MinEnemies — matching the initial dispatch's
+    // fail-open candidate build.
+    [Fact]
+    public void Heartbeat_CountsUnknownNumberMonster_TowardMinEnemies_RoomsBare()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");        // resolvable
+        h.AddUnnumberedMonster("dark stalker");   // Monster kind, number never resolves
+
+        // One resolvable mob → below MinEnemies=2 → single-target attack spell.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("nuke giant rat", h.LastSent);
+
+        // A second mob arrives whose number we can't resolve. The "already engaged"
+        // guard blocks a re-dispatch here (giant rat still current), so the switch
+        // is the heartbeat's job — and its count must include the unknown mob.
+        h.Feed("Also here: giant rat, dark stalker.");
+        h.Tick();
+
+        // Count reached MinEnemies → room spell, cast BARE (never "blast <mob>").
+        Assert.Equal("blast", h.LastSent);
+    }
+
+    // Simultaneous-arrival settle (report paradigm-20260811-063728 + a live report):
+    // three monsters stride in on one wire flush, then the room re-displays. Engaging
+    // the first arrival single-target used to strand the room below its multi-attack
+    // threshold. The burst must HOLD until the room re-display drives one decision on
+    // the whole group, so a qualifying room nukes on its first action.
+    [Fact]
+    public void SimultaneousArrivalBurst_RoomsOnRedisplay_NoSingleTargetFirst()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 3 };
+        h.AddMonster(1, "giant rat");
+
+        // Burst of arrivals — the first engage is held, nothing goes out yet.
+        h.Arrive("giant rat");
+        h.Arrive("giant rat");
+        h.Arrive("giant rat");
+        Assert.Equal(string.Empty, h.LastSent);
+
+        // Authoritative room re-display of the whole group → rooms bare, first action.
+        h.Feed("Also here: giant rat, giant rat, giant rat.");
+        Assert.Equal("blast", h.LastSent);
+        Assert.DoesNotContain("nuke giant rat", h.AllSent);
+    }
+
+    // The other side of the settle: a LONE spawn with no room re-display still engages,
+    // just a beat later when the window elapses. Below the multi-attack threshold, so
+    // it's the single-target cascade — the burst hold must not strand a solo arrival.
+    [Fact]
+    public void LoneArrival_EngagesSingleTarget_WhenSettleElapses()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 3 };
+        h.AddMonster(1, "giant rat");
+
+        h.Arrive("giant rat");
+        Assert.Equal(string.Empty, h.LastSent);   // held during the window
+
+        h.FireSettle();                            // window elapsed, no re-display
+        Assert.Equal("nuke giant rat", h.LastSent);
     }
 
     // ----- Auto-Nuke auto-engine gate ----------------------------------

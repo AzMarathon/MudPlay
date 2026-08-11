@@ -1,10 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.5.5**
+> **Version 3.5.7**
 > - Room-wide combat spells (multi-attack, area debuff) are now cast bare — `blad` / `stnk`, never `blad <mob>` (the targeted form the server rejected)
 > - Combat keeps its target and round-cycle / attack-spell progress across a mid-fight heal / bless / buff instead of restarting as a brand-new fight — no more "confused which attack to use" after an interrupt
+> - Rooms several monsters enter at once now nuke the whole group on the first action instead of committing to a single-target cast and rooming a beat late — combat briefly waits for the arrivals + room re-display to settle
+> - A room-wide attack spell no longer undercounts a monster whose number the client hasn't resolved, so a full room isn't held below its multi-attack threshold
 > - Coins a post-combat `search` surfaces are now collected instead of skipped as "already handled this room visit"
+> - Fixed the loop sitting forever after a `go path` step into a same-named room — the arrival now confirms the move instead of being mistaken for a passive re-look of the room just left
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

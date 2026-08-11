@@ -2,12 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.5.5
+## 3.5.7
 
 - Room-wide combat spells (multi-attack, area debuff) are now cast bare — `blad` / `stnk`, never `blad <mob>` (the targeted form the server rejected)
 - Combat keeps its target and round-cycle / attack-spell progress across a mid-fight heal / bless / buff instead of restarting as a brand-new fight — no more "confused which attack to use" after an interrupt
+- Rooms several monsters enter at once now nuke the whole group on the first action instead of committing to a single-target cast and rooming a beat late — combat briefly waits for the arrivals + room re-display to settle
+- A room-wide attack spell no longer undercounts a monster whose number the client hasn't resolved, so a full room isn't held below its multi-attack threshold
 - Coins a post-combat `search` surfaces are now collected instead of skipped as "already handled this room visit"
-- bug reports addressed: paradigm-20260811-063936, paradigm-20260811-065736, paradigm-20260811-090358, paradigm-20260811-094533
+- Fixed the loop sitting forever after a `go path` step into a same-named room — the arrival now confirms the move instead of being mistaken for a passive re-look of the room just left
+- bug reports addressed: paradigm-20260811-063936, paradigm-20260811-065736, paradigm-20260811-090358, paradigm-20260811-094533, paradigm-20260811-063728, paradigm-20260811-104042
 
 ## 3.5.1
 

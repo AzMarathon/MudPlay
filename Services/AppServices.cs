@@ -2848,6 +2848,17 @@ public sealed class AppServices
         Combat.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
         CombatTracker.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
 
+        // Simultaneous-arrival settle: a UI-thread one-shot so a burst of "strides
+        // in" arrivals + the room re-display resolve to one engage decision on the
+        // full group (rooms nuke-first instead of pecking single-target). Same shape
+        // as the walker's voyage scheduler — keeps the Game/Combat layer UI-free.
+        Combat.SetArrivalSettleScheduler((delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+        });
+
         // HealthManager. Master on/off is
         // GeneralSettings.AutoMode.AutoHealRest (shared with the
         // Settings → General checkbox + toolbar Toggle button). When

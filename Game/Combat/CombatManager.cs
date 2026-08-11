@@ -171,6 +171,19 @@ public sealed partial class CombatManager : IDisposable
     // round-cycle phase / attack-spell cascade on every interrupt.
     private bool _resumeBypassEngagedGuard;
 
+    // Simultaneous-arrival settle (see the long note at the arm site in
+    // OnEntitiesObserved). _arrivalSettleArmed latches while a burst's first engage
+    // is held; _arrivalSettleBypass is set only for the settle callback's re-entrant
+    // OnEntitiesObserved so it dispatches instead of re-arming. _scheduleArrivalSettle
+    // is the injected UI-thread one-shot (null in tests that don't opt in → the old
+    // immediate-engage path). The window only needs to span the synchronous
+    // processing of a burst + its room re-display; it doubles as the (rare) lone-spawn
+    // engage latency, so keep it short.
+    private static readonly TimeSpan ArrivalSettleWindow = TimeSpan.FromMilliseconds(350);
+    private bool _arrivalSettleArmed;
+    private bool _arrivalSettleBypass;
+    private Action<TimeSpan, Action>? _scheduleArrivalSettle;
+
     // Backstab flee-on-failure action, bound in AppServices to
     // HealthManager.RunFromBackstabFailure. null until wired; even when wired it
     // fires only on a detected failure AND when CombatSettings.RunIfBackstabFails
@@ -656,6 +669,30 @@ public sealed partial class CombatManager : IDisposable
                    refireReason: "@kill retarget");
     }
 
+    // Inject the UI-thread one-shot that defers a simultaneous-arrival burst's first
+    // engage. Shaped like the walker's voyage scheduler so the Game layer stays
+    // UI-free and tests drive a fake clock. Wired in AppServices to a DispatcherTimer;
+    // left null in tests that don't exercise the settle (they keep the immediate path).
+    public void SetArrivalSettleScheduler(Action<TimeSpan, Action> schedule)
+        => _scheduleArrivalSettle = schedule;
+
+    // The arrival-settle window elapsed with no authoritative room re-display having
+    // superseded it. Re-run the engage decision against whatever the room now holds —
+    // the whole burst has landed, so a room that met the multi-attack threshold rooms
+    // on this first action. No-ops if a room display already engaged us (arm cleared)
+    // or the room emptied out from under us.
+    private void OnArrivalSettleElapsed()
+    {
+        if (_disposed || !_arrivalSettleArmed) return;
+        _arrivalSettleArmed = false;
+        if (_classifier.Current is not { } cur) return;
+        _log?.Combat(LogCategory,
+            "arrival-settle: window elapsed with no room re-display — engaging the accumulated room");
+        _arrivalSettleBypass = true;
+        try { OnEntitiesObserved(cur); }
+        finally { _arrivalSettleBypass = false; }
+    }
+
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
         CombatSettings settings = _readSettings();
@@ -664,6 +701,14 @@ public sealed partial class CombatManager : IDisposable
         // previous observation is stale. Re-evaluated below once we know the
         // engageable set (a re-observe of the SAME room re-arms it if still apt).
         _awaitingFollowAnnounce = false;
+
+        // An authoritative non-arrival observation (the room re-display, a room
+        // change, a death resync) supersedes a pending simultaneous-arrival settle:
+        // it carries the full roster, so it drives the decision now and the settle
+        // callback that fires later finds nothing armed and no-ops. Skipped on the
+        // settle's own re-entrant call (bypass) so it can proceed to dispatch.
+        if (!_arrivalSettleBypass && obs.Source != RoomObservationSource.Arrival)
+            _arrivalSettleArmed = false;
 
         // A confirmed room change re-opens the surprise round for the room we're
         // entering. The pre-move hook (PrepBackstabForMove) already resets the
@@ -844,6 +889,35 @@ public sealed partial class CombatManager : IDisposable
                 _currentTarget = null;
                 return;
             }
+        }
+
+        // Simultaneous-arrival settle. When several monsters stride in on the same
+        // wire flush ("A goblin strides in." ×3 then the room re-displays), each
+        // "strides in" line fires its own arrival observation. Engaging the FIRST
+        // one commits us to a single-target action, and the full-room re-display
+        // that follows can't upgrade it — the "already engaged" guard below sends us
+        // straight back out — so a room that met the multi-attack threshold gets
+        // pecked with single-target casts instead of nuked. Hold the first engage of
+        // a burst for a short window: the authoritative room re-display (AlsoHere) or
+        // the accumulated arrivals then drive one decision against the whole group,
+        // so a room that qualifies rooms on its first action. Only the initial engage
+        // debounces (_currentTarget is null); a mob wandering in mid-fight is handled
+        // by the guard / heartbeat as before, and a lone spawn just engages a beat
+        // later. No-op until a scheduler is wired (tests without one keep the old
+        // immediate path); the settle callback re-enters with _arrivalSettleBypass so
+        // it dispatches instead of re-arming.
+        if (obs.Source == RoomObservationSource.Arrival && _currentTarget is null
+            && _scheduleArrivalSettle is not null && !_arrivalSettleBypass)
+        {
+            if (!_arrivalSettleArmed)
+            {
+                _arrivalSettleArmed = true;
+                _log?.Combat(LogCategory,
+                    $"arrival-settle: holding first engage {ArrivalSettleWindow.TotalMilliseconds:F0}ms " +
+                    "so a simultaneous burst + room re-display decide together");
+                _scheduleArrivalSettle(ArrivalSettleWindow, OnArrivalSettleElapsed);
+            }
+            return;
         }
 
         // Sort by Priority asc (First=0 highest, Last=4 lowest), then
