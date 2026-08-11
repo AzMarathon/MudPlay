@@ -480,9 +480,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel()
     {
-        // Splash animation preference (Global tier applies before a profile loads).
-        _splashAnimate = AppServices.Current.Resolver
-            .Resolve<Models.Profile.GeneralSettings>("General").ShowStartupMudAnimation;
+        // Install-global startup-animation preference, seeded from the Global default
+        // profile during AppServices.Initialize (which runs before this ctor).
+        _splashAnimate = AppServices.Current.Display.SplashAnimate;
 
         Lines = new LineExtractor(Emulator);
         Capture = new CaptureSession(Emulator.Screen.Scrollback);

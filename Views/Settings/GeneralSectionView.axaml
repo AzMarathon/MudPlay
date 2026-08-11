@@ -164,7 +164,7 @@
                 <CheckBox Margin="0,2,0,0"
                           IsChecked="{Binding ShowStartupMudAnimation, Mode=TwoWay}"
                           Content="Show the mud-throwing startup animation"
-                          ToolTip.Tip="When checked (default), an animated scene plays on the terminal at startup until you connect or load a profile. When unchecked, only the static startup header (the MudPlay title and byline) shows. Applies immediately on Apply — a splash that's currently playing stops on the spot — and gates the animation at the next launch too. Save at the &quot;for all characters&quot; tier so it takes effect before a profile loads."/>
+                          ToolTip.Tip="When checked (default), an animated scene plays on the terminal at startup until you connect or load a profile. When unchecked, only the static startup header (the MudPlay title and byline) shows. This is an install-wide preference — it's saved to the default profile and read at startup regardless of which character auto-loads, so turning it off stays off across launches and profiles. Applies immediately on Apply — a splash that's currently playing stops on the spot."/>
 
                 <TextBlock Classes="SectionHeader" Text="Initial"/>
 
