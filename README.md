@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.5.7**
+> **Version 3.5.11**
+> - Combat re-engages the next monster right after a kill instead of re-attacking the corpse and stalling a round — the kill is inferred from the exp gain on its `*Combat Off*` (each realm's custom per-monster death messages can't be matched), gated so a mid-fight heal (or party share-exp) isn't misread as a kill
 > - Room-wide combat spells (multi-attack, area debuff) are now cast bare — `blad` / `stnk`, never `blad <mob>` (the targeted form the server rejected)
 > - Combat keeps its target and round-cycle / attack-spell progress across a mid-fight heal / bless / buff instead of restarting as a brand-new fight — no more "confused which attack to use" after an interrupt
 > - Rooms several monsters enter at once now nuke the whole group on the first action instead of committing to a single-target cast and rooming a beat late — combat briefly waits for the arrivals + room re-display to settle

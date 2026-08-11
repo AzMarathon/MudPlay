@@ -299,6 +299,52 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("nuke giant rat", h.LastSent);
     }
 
+    // Post-kill re-engage race (reports 081053, 081654, 103708, 135433). Each realm
+    // gives monsters custom death messages we can't map to the flavored target, so
+    // the specific-death matcher misses and combat used to re-cast at the corpse on
+    // the kill's *Combat Off* ("You don't see X here!"), then idle a round. The exp
+    // gain that precedes a kill's Off — with no between-round cast to explain the
+    // Off — marks it as our kill, so spell mode drops and no corpse re-cast goes out.
+    [Fact]
+    public void KillInferredFromExp_DropsSpellTarget_NoCorpseRecast()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("mmis giant rat", h.LastSent);   // engaged, spell mode
+        int sentAfterEngage = h.Sent.Count;
+
+        // Wire order of a kill: (custom death line we can't match) → exp → Off.
+        h.Feed("You gain 100 experience.");
+        h.Feed("*Combat Off*");
+
+        // The corpse is not re-cast at — spell mode was dropped on the inferred kill.
+        Assert.Equal(sentAfterEngage, h.Sent.Count);
+    }
+
+    // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even
+    // with an exp gain sitting nearby, e.g. party share-exp) is NOT a kill — the
+    // resume must still re-announce the spell rather than dropping a live target.
+    [Fact]
+    public void BetweenRoundCastOff_WithNearbyExp_StillResumes_NotTreatedAsKill()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("mmis giant rat", h.LastSent);
+
+        h.Feed("You gain 100 experience.");   // e.g. a partymate's kill
+        h.Combat.NoteBetweenRoundCast();       // our own heal broke combat this round
+        h.Feed("*Combat Off*");
+
+        // Not a kill (a cast explains the Off) → the live target is re-announced.
+        Assert.Equal("mmis giant rat", h.LastSent);
+    }
+
     // ----- Auto-Nuke auto-engine gate ----------------------------------
 
     [Fact]

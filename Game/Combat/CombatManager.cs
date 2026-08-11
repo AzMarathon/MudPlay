@@ -95,6 +95,7 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _spellNoEffectSub;
     private readonly IDisposable _commandNoEffectSub;
     private readonly IDisposable _combatStatusSub;
+    private readonly IDisposable _expGainSub;
     private readonly IDisposable _monsterProtectSub;
     private readonly IDisposable _bsResolveHitsSub;
     private readonly IDisposable _bsResolveMissesSub;
@@ -308,6 +309,21 @@ public sealed partial class CombatManager : IDisposable
     // re-observe swing can land on the same DateTimeOffset.Now tick.
     private bool _attackSentSinceDeath;
 
+    // Prompt kill signal. A kill emits "You gain N experience." immediately before
+    // its *Combat Off* (wire order: death line → exp → Off). Each realm gives its
+    // monsters CUSTOM death messages that overlap across species and aren't in our
+    // game data, so we can't match a death line to the flavored target we were
+    // fighting — the specific-death matcher misses and only the lagging exp+Off
+    // fallback correlation (a separate watcher) eventually drops it, a beat AFTER
+    // this handler's resume already re-attacked the corpse ("You don't see X
+    // here!", then a full round idle). Stamping the exp here lets OnCombatStatus
+    // treat an Off that a fresh exp explains — and that NO between-round survival
+    // cast explains — as our kill's Off, dropping the dead target before the resume
+    // fires. Consumed on use so a stale exp from an earlier identical-exp kill can't
+    // mark a later non-kill Off (a thrown weapon emits one per strike).
+    private DateTimeOffset _lastExpGainAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan ExpKillWindow = TimeSpan.FromSeconds(3);
+
     // Server-confirmed engagement, driven ONLY by the wire *Combat Engaged* /
     // *Combat Off* lines — unlike _combatOff (optimistically cleared on every
     // attack send), this stays a faithful mirror of what the server actually told
@@ -429,6 +445,7 @@ public sealed partial class CombatManager : IDisposable
         _spellNoEffectSub  = router.Subscribe(KnownPatterns.SpellNoEffect,  OnSpellNoEffect);
         _commandNoEffectSub = router.Subscribe(KnownPatterns.CommandNoEffect, OnCommandNoEffect);
         _combatStatusSub   = router.Subscribe(KnownPatterns.CombatStatus,   OnCombatStatus);
+        _expGainSub        = router.Subscribe(KnownPatterns.UserGainExperience, OnUserGainExperience);
         _monsterProtectSub = router.Subscribe(KnownPatterns.MonsterMovesToProtect, OnMonsterProtect);
 
         // Backstab surprise-round resolution rides on our own hit / miss lines.
@@ -2002,6 +2019,11 @@ public sealed partial class CombatManager : IDisposable
     // resume the weapon attack promptly (see _betweenRoundCastAt).
     public void NoteBetweenRoundCast() => _betweenRoundCastAt = DateTimeOffset.Now;
 
+    // "You gain N experience." — the prompt kill signal (see _lastExpGainAt). Only
+    // a kill grants exp, and it lands just before the kill's *Combat Off*, so a
+    // fresh stamp here lets OnCombatStatus recognise that Off as our kill's.
+    private void OnUserGainExperience(MatchResult _) => _lastExpGainAt = DateTimeOffset.Now;
+
     // Track *Combat On*/*Combat Off*. Off arms the resume-after-interrupt path
     // (see _combatOff); Engaged means the server is swinging for us again, so we
     // disarm it.
@@ -2013,6 +2035,30 @@ public sealed partial class CombatManager : IDisposable
         {
             _combatOff = true;
             _engageConfirmed = false;
+
+            // Prompt kill drop. A fresh exp gain explains this Off (wire: death →
+            // exp → Off) while NO between-round survival cast does — so it's our
+            // kill's Off, not a mid-fight heal's. The custom per-monster death
+            // message didn't match, so without this the resume paths below re-attack
+            // the corpse ("You don't see X here!") and stall a round waiting out the
+            // recovery — the reported "won't re-engage after a kill until the next
+            // NPC attacks." Arm the existing death-suppression guards (stamp
+            // _lastDeathAt) and drop spell mode so the heartbeat can't re-cast at the
+            // corpse; the death→re-observe re-picks the survivor. The no-between-
+            // round-cast gate keeps a heal's Off — or a party share-exp landing
+            // beside one — from being misread as a kill (that path resumes below).
+            if (_currentTarget is not null
+                && DateTimeOffset.Now - _lastExpGainAt < ExpKillWindow
+                && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow)
+            {
+                _lastExpGainAt = DateTimeOffset.MinValue;   // consume — a later non-kill Off must not reuse it
+                _lastDeathAt = DateTimeOffset.Now;
+                _attackSentSinceDeath = false;
+                _castingSpellTarget = null;
+                _log?.Combat(LogCategory,
+                    "kill inferred from exp + *Combat Off* (no between-round cast) — " +
+                    "dropping target so the resume can't re-attack the corpse");
+            }
 
             // If this Off is the server's response to a between-round cast
             // we just fired (self-heal / cure / buff), re-issue the weapon
@@ -2335,6 +2381,7 @@ public sealed partial class CombatManager : IDisposable
         _spellNoEffectSub.Dispose();
         _commandNoEffectSub.Dispose();
         _combatStatusSub.Dispose();
+        _expGainSub.Dispose();
         _monsterProtectSub.Dispose();
         _bsResolveHitsSub.Dispose();
         _bsResolveMissesSub.Dispose();
