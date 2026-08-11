@@ -1119,6 +1119,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         ExitBlockReason reasons = ExitBlockReason.None;
         List<int> missingItems = new();
+        // The first level-gated hop's target + window, so the message can name the
+        // actual barrier room and level instead of a bare "a level requirement".
+        (RoomKey Room, int Min, int Max)? levelGate = null;
         RoomKey cur = source;
         foreach (Direction dir in ungatedPath)
         {
@@ -1130,10 +1133,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 ExitBlockReason hop = f.DescribeExitBlock(in exit);
                 reasons |= hop;
                 if (hop.HasFlag(ExitBlockReason.Item)) CollectGateItems(in exit, missingItems);
+                if (hop.HasFlag(ExitBlockReason.Level) && levelGate is null)
+                    levelGate = (exit.Target, exit.MinLevel, exit.MaxLevel);
             }
             cur = exit.Target;
         }
-        return FormatBlockReasons(reasons, missingItems);
+        return FormatBlockReasons(reasons, missingItems, levelGate);
     }
 
     // Gather the item ids an Item/Ticket/multi-action exit demands, so the
@@ -1155,7 +1160,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         }
     }
 
-    private string FormatBlockReasons(ExitBlockReason reasons, IReadOnlyList<int> missingItems)
+    private string FormatBlockReasons(ExitBlockReason reasons, IReadOnlyList<int> missingItems,
+        (RoomKey Room, int Min, int Max)? levelGate)
     {
         // Classification came up empty (e.g. a bare IRoomFilter with no gate
         // model) — keep a truthful generic line rather than inventing a cause.
@@ -1163,7 +1169,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return "all routes blocked by an exit requirement";
 
         List<string> parts = new();
-        if (reasons.HasFlag(ExitBlockReason.Level)) parts.Add("a level requirement");
+        if (reasons.HasFlag(ExitBlockReason.Level)) parts.Add(DescribeLevelGate(levelGate));
         if (reasons.HasFlag(ExitBlockReason.Toll)) parts.Add("a toll you can't afford");
         if (reasons.HasFlag(ExitBlockReason.Class)) parts.Add("a class restriction");
         if (reasons.HasFlag(ExitBlockReason.LockedDoor)) parts.Add("a locked door you can't open (no key, pick, or bash)");
@@ -1171,6 +1177,20 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (reasons.HasFlag(ExitBlockReason.Door)) parts.Add("a door you can't pick or bash");
         if (reasons.HasFlag(ExitBlockReason.Hazard)) parts.Add("a room hazard you can't survive");
         return "all routes blocked by " + string.Join(" or ", parts);
+    }
+
+    // "a level requirement (1/1420 (Marble Passage) needs level 30+)" — names the
+    // barrier room and its level window so the user knows exactly what/where.
+    private string DescribeLevelGate((RoomKey Room, int Min, int Max)? gate)
+    {
+        if (gate is not { } g) return "a level requirement";
+        string? name = _graph.GetRoom(g.Room)?.Name;
+        string where = string.IsNullOrEmpty(name) ? g.Room.ToString() : $"{g.Room} ({name})";
+        string need = g.Min > 0 && g.Max > 0 ? $"level {g.Min}-{g.Max}"
+            : g.Min > 0 ? $"level {g.Min}+"
+            : g.Max > 0 ? $"level {g.Max} or lower"
+            : "a different level";
+        return $"a level requirement ({where} needs {need})";
     }
 
     // Name the item(s) an Item-gated hop needs, when the game-data name resolver

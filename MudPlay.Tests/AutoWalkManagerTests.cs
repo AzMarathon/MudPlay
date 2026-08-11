@@ -1653,6 +1653,52 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.DoesNotContain("a level requirement", failed.Detail);
     }
 
+    // The only route is level-gated — the failure names the barrier room + its
+    // level window, not a bare "a level requirement" (user feedback: "say
+    // specifically the gate and room").
+    private const string SingleLevelGateGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/4 (Level: 40 to 0)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Marble Passage",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void BlockedRoute_LevelGate_NamesGateRoomAndLevel()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), SingleLevelGateGraphJson);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        BfsMapper bfs = new(graph);
+        RoomTracker tracker = new(graph);
+        MovementCoordinator coord = new();
+        ProfileService profile = new();
+        MovementFilter filter = new(profile)
+        {
+            LevelProvider = () => 22,               // below the 40+ floor on 1/4
+            InventoryReadyProbe = () => true,
+            ItemCarriedProbe = _ => false,
+        };
+        AutoWalkManager walker = new(graph, bfs, tracker, coord, filter);
+        var events = new List<WalkEvent>();
+        walker.Event += events.Add;
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.False(walker.WalkTo(new RoomKey(1, 4)));
+
+        WalkEvent failed = events.Single(e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains("1/4 (Marble Passage) needs level 40+", failed.Detail);
+    }
+
     // ----- boss "stop before" ---------------------------------------
 
     [Fact]

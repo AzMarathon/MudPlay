@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.4.3**
-> - Walking to an unreachable or gated room no longer hangs silently in "Walking" — a watchdog now surfaces the reason (missing key, level gate, no route) or plans from your last confirmed room when an in-flight move never settles
+> - Walking to an unreachable or gated room no longer hangs silently in "Walking" — a watchdog now surfaces the reason, naming the specific barrier (e.g. missing key, or "1/1420 (Marble Passage) needs level 40+"), or plans from your last confirmed room when an in-flight move never settles
 > - Room hazards whose spell stores its check in MinBase/MaxBase are now detected — the ice-cavern rope & grapple, plus ~40 other areas the client was silently missing — so the route picker offers the protection (or warns of the damage route) instead of routing you through unprotected
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
