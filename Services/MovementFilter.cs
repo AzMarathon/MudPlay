@@ -173,7 +173,7 @@ public sealed class MovementFilter : IRoomFilter
         _profile.ProfileClosed  += OnProfileClosed;
 
         // Pick up the already-loaded profile, if any (AppServices
-        // wires this filter after ProfileService.LoadBlank fires).
+        // wires this filter after ProfileService.LoadDefaultProfile fires).
         if (_profile.Current is { } current) OnProfileLoaded(current);
     }
 

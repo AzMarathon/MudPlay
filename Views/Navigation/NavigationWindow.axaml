@@ -689,6 +689,9 @@
                     IsHitTestVisible="False"
                     ZIndex="100"
                     MaxWidth="540">
+                <!-- Font/size here are design-time defaults; the runtime font is
+                     set live per hover from DisplayConfig (Settings → General →
+                     Navigation tooltip font). See OnMapRoomHovered. -->
                 <TextBlock Name="HoverTooltipText"
                            Text=""
                            FontFamily="{StaticResource FontTerminal}"

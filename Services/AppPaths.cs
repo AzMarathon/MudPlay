@@ -51,6 +51,13 @@ public static class AppPaths
     // Global-tier settings file (one per install).
     public static string GlobalSettingsFile { get; }
 
+    // The "default profile" — a full CharacterProfile persisted in the Global
+    // folder, loaded on startup / File → New when no named character is chosen.
+    // Its settings are the install-wide defaults (what loads before any profile),
+    // and File → Save As copies it into named profiles, so a new character starts
+    // from these defaults. Distinct from GlobalSettingsFile (the settings tier).
+    public static string DefaultProfileFile { get; }
+
     // BBS-tier files (one per BBS).
     public static string BbsDir { get; }
 
@@ -128,6 +135,7 @@ public static class AppPaths
 
         GameDataRoot       = Path.Combine(DataRoot, "game data");
         GlobalSettingsFile = Path.Combine(DataRoot, "Global", "global.json");
+        DefaultProfileFile = Path.Combine(DataRoot, "Global", "default-profile.json");
         BbsDir             = Path.Combine(DataRoot, "BBS");
         LogsDir            = Path.Combine(DataRoot, "Logs");
 

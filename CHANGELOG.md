@@ -2,10 +2,28 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.4.0
+## 3.4.1
 
 - New Combat action order: "Custom round cycle" — spend N rounds attacking physically, then M rounds casting spells, repeating for as long as both are set; a round count of 0 means that phase runs for the rest of the fight (e.g. physical for 2 rounds, then spells till death)
 - The cycle can open on either phase (physical or spell) via a "start on spell" toggle
+
+## 3.4.0
+
+- The "default profile" (loaded when no character is chosen) is now a real profile saved in the Global folder: edit it, hit Save, and your changes — e.g. turning the splash off — persist and load on every startup
+- File → Save As copies it into a named character, so new profiles start from your defaults instead of the installed ones
+- File → Save (on the default profile) writes it back to the Global folder rather than prompting for a name
+
+## 3.3.5
+
+- Unchecking "Show the mud-throwing startup animation" and hitting Apply now stops a splash that's already on screen, instead of only taking effect at the next launch
+- The splash frame timer runs at background priority so the attract animation yields to input and session rendering instead of lagging the client while it plays
+- Removed the leftover unused "Mud Now." splash scene
+
+## 3.3.4
+
+- Loop building now allows the same room twice in a row (map-click loop mode and the create-loop editor) — a zero-length "stay put" step that runs another command in place (e.g. two barmaid steps: hand in pies, then convert the coin)
+- Program Log has a "Simulate Death button" toggle that reveals the Death Recovery tab's test button; off by default (and reset off each launch), so a normal session never shows it
+- Settings → General now has a Navigation-tooltip font + size picker under the terminal font, defaulting to the map room-tooltip's current look
 
 ## 3.3.1
 

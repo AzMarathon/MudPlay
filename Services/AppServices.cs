@@ -4668,13 +4668,13 @@ public sealed class AppServices
             {
                 Log.Info("Startup",
                     $"Auto-load of last profile '{startup.Name}' on '{startup.Bbs}' failed " +
-                    $"({ex.GetType().Name}); opening a blank draft instead.");
-                Profile.LoadBlank();
+                    $"({ex.GetType().Name}); loading the default profile instead.");
+                Profile.LoadDefaultProfile();
             }
         }
         else
         {
-            Profile.LoadBlank();
+            Profile.LoadDefaultProfile();
         }
 
         // Track which profile was last loaded so "auto-load last" has a value to
@@ -6107,7 +6107,12 @@ public sealed class AppServices
             ? DisplayConfig.DefaultFontFamily
             : general.TerminalFontFamily;
         Display.FontSize = general.TerminalFontSize ?? DisplayConfig.DefaultFontSize;
+        Display.NavTooltipFontFamily = string.IsNullOrWhiteSpace(general.NavTooltipFontFamily)
+            ? DisplayConfig.DefaultFontFamily
+            : general.NavTooltipFontFamily;
+        Display.NavTooltipFontSize = general.NavTooltipFontSize ?? DisplayConfig.DefaultNavTooltipFontSize;
         Display.ScaleToWindow = general.ScaleTerminalToWindow;
+        Display.SplashAnimate = general.ShowStartupMudAnimation;
         TerminalInput.Enabled = general.TypeToTerminalFromOtherWindows;
 
         // Game-menu commands are BBS-tier too — HangupHandler consumes
@@ -6129,6 +6134,9 @@ public sealed class AppServices
         Models.Settings.BbsProfile defaults = new();
         Display.FontFamily = DisplayConfig.DefaultFontFamily;
         Display.FontSize = DisplayConfig.DefaultFontSize;
+        Display.NavTooltipFontFamily = DisplayConfig.DefaultFontFamily;
+        Display.NavTooltipFontSize = DisplayConfig.DefaultNavTooltipFontSize;
+        Display.SplashAnimate = true;
         Display.ScrollbackLines = defaults.ScrollbackLines;
         Display.BackscrollWheelLines = defaults.BackscrollWheelLines;
         Display.TerminalCols = defaults.TerminalCols;

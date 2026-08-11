@@ -21,6 +21,10 @@ public sealed partial class DisplayConfig : ObservableObject
 
     public const double DefaultFontSize = 16.0;
 
+    // The size the Navigation map hover-tooltip has always rendered at (the
+    // FontSize="13" the tooltip's XAML hard-coded before it became configurable).
+    public const double DefaultNavTooltipFontSize = 13.0;
+
     [ObservableProperty] private double _fontSize = DefaultFontSize;
     [ObservableProperty] private int _scrollbackLines = 4_000;
     [ObservableProperty] private int _terminalCols = 80;
@@ -39,4 +43,19 @@ public sealed partial class DisplayConfig : ObservableObject
     // Auto-fit the terminal font to the window (keeping the fixed cell grid).
     // Sourced from the char-tier GeneralSettings.ScaleTerminalToWindow.
     [ObservableProperty] private bool _scaleToWindow;
+
+    // Whether the startup attract splash animates. Sourced from the char-tier
+    // GeneralSettings.ShowStartupMudAnimation; MainWindowViewModel forwards it to
+    // TerminalControl.SplashAnimate so a Settings change stops/starts the running
+    // splash live (unchecking + Apply now takes effect immediately instead of only
+    // at the next launch). Default true.
+    [ObservableProperty] private bool _splashAnimate = true;
+
+    // Navigation map hover-tooltip font, sourced from the char-tier
+    // GeneralSettings.NavTooltip* deltas. The Navigation window reads these live
+    // when it populates a room tooltip, so a Settings change takes effect on the
+    // next hover without reopening the window. Default to the same MX437 face +
+    // size 13 the tooltip has always used.
+    [ObservableProperty] private string _navTooltipFontFamily = DefaultFontFamily;
+    [ObservableProperty] private double _navTooltipFontSize = DefaultNavTooltipFontSize;
 }

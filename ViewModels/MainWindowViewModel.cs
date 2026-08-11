@@ -1342,6 +1342,13 @@ public partial class MainWindowViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(ScaleTerminalToWindow));
         }
+        else if (e.PropertyName == nameof(Services.DisplayConfig.SplashAnimate))
+        {
+            // Setting the bound property flips TerminalControl.SplashAnimate,
+            // whose class handler rebuilds the animator — so unchecking the
+            // startup-animation toggle stops the running splash on the spot.
+            SplashAnimate = AppServices.Current.Display.SplashAnimate;
+        }
         else if (e.PropertyName == nameof(Services.DisplayConfig.ScrollbackLines))
         {
             int newCapacity = AppServices.Current.Display.ScrollbackLines;
@@ -3063,7 +3070,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     public string SaveProfileLabel => HasNamedProfile
         ? $"_Save profile  ·  {AppServices.Current.Profile.CurrentProfileName}"
-        : "_Save profile…";
+        : "_Save default profile";
 
     // True while it's safe to swap the active profile — only when the wire
     // is down. Loading a different (or blank) profile mid-session would fire
@@ -3073,15 +3080,15 @@ public partial class MainWindowViewModel : ObservableObject
     // Save / Save-as don't swap the active profile, so they stay available.
     private bool CanSwapProfile => IsDisconnected;
 
-    // Blank-slate the running profile. The outgoing profile is auto-saved
-    // first (handled inside ProfileService.LoadBlank), then Current is
-    // replaced with a fresh in-memory draft. The user names + persists it
-    // later via File → Save profile (which routes to Save As since the
-    // draft has no name yet).
+    // Return to the default profile. The outgoing profile is auto-saved first
+    // (handled inside ProfileService.LoadDefaultProfile), then Current is
+    // replaced with the Global default profile — the user's saved defaults, or
+    // installed defaults on a fresh install. From there File → Save As names a
+    // copy as an actual character; File → Save persists edits back to the default.
     [RelayCommand(CanExecute = nameof(CanSwapProfile))]
     private void NewProfile()
     {
-        AppServices.Current.Profile.LoadBlank();
+        AppServices.Current.Profile.LoadDefaultProfile();
         SyncProfileMenuState();
     }
 
@@ -3109,8 +3116,11 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    // File → Save. Persists the loaded profile in place: a named character to its
+    // own file, the default profile to the Global default-profile file. Naming a
+    // brand-new character is the separate File → Save As command.
     [RelayCommand]
-    private async Task SaveProfileAsync()
+    private void SaveProfile()
     {
         ProfileService profile = AppServices.Current.Profile;
         if (profile.Current is null)
@@ -3118,13 +3128,10 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Log.Warn("Profile", "Nothing to save — no profile loaded.");
             return;
         }
-        if (profile.IsBlankDraft)
-        {
-            await SaveProfileAsAsync();
-            return;
-        }
         profile.Save();
-        AppServices.Current.Log.Info("Profile", $"Saved profile '{profile.CurrentProfileName}'.");
+        AppServices.Current.Log.Info("Profile", profile.CurrentProfileName is { } name
+            ? $"Saved profile '{name}'."
+            : "Saved the default profile.");
     }
 
     [RelayCommand]

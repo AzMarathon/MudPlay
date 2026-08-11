@@ -92,12 +92,14 @@ public sealed class LoopBuilderSessionTests : IDisposable
     }
 
     [Fact]
-    public void AddClick_AdjacentDuplicate_Dropped()
+    public void AddClick_AdjacentDuplicate_Kept()
     {
+        // The same room twice in a row is a deliberate "stay put" step (run another
+        // command in place), so both clicks are kept.
         (LoopBuilderSessionViewModel s, _) = NewSession();
         s.AddClick(new RoomKey(1, 1));
         s.AddClick(new RoomKey(1, 1));
-        Assert.Single(s.Clicks);
+        Assert.Equal(2, s.Clicks.Count);
     }
 
     [Fact]

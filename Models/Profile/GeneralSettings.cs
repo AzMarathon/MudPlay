@@ -43,10 +43,12 @@ public sealed class GeneralSettings
     // TerminalInputRouter.Enabled; surfaced in Settings → General.
     public bool TypeToTerminalFromOtherWindows { get; set; } = true;
 
-    // When on (the default), the animated mud-throw splash plays on the terminal
-    // at startup until a session begins. Off shows only the static header (the
-    // "MudPlay" title, byline, and hint) — those stay regardless. Surfaced in
-    // Settings → General; read at launch, so its Global-tier value applies.
+    // When on (the default), the animated splash plays on the terminal at startup
+    // until a session begins. Off shows only the static header (the "MudPlay"
+    // title, byline, and hint) — those stay regardless. Surfaced in Settings →
+    // General. Read at launch so its Global-tier value applies before a profile
+    // loads; also pushed live through DisplayConfig.SplashAnimate on Apply, so
+    // toggling it stops/starts a splash that's already on screen.
     public bool ShowStartupMudAnimation { get; set; } = true;
 
     // Terminal canvas font family as an avares:// URI. Null = the bundled MX437
@@ -57,6 +59,16 @@ public sealed class GeneralSettings
     // Terminal canvas font size in points. Null = 16 (the default). Char-tier;
     // relocated here from the per-BBS Display settings.
     public double? TerminalFontSize { get; set; }
+
+    // Navigation map hover-tooltip font family as an avares:// URI. Null = the
+    // bundled MX437 CP437 bitmap font (the FontTerminal resource the tooltip has
+    // always used). Independent of the terminal-canvas font above so the map
+    // tooltip can be tuned on its own. Char-tier.
+    public string? NavTooltipFontFamily { get; set; }
+
+    // Navigation map hover-tooltip font size in points. Null = 13 (the size the
+    // tooltip has always rendered at). Char-tier.
+    public double? NavTooltipFontSize { get; set; }
 
     // Master on/off state for every auto-engine. Each flag gates whether the
     // matching engine actually fires: AutoActionDefaults.AutoCombat gates

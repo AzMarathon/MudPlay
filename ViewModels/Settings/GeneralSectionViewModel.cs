@@ -38,6 +38,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         "Auto-connect", "Default task", "Do nothing",
         "Begin loop", "Begin Auto-Lair", "Backup profile",
         "Terminal font", "Font", "Font family", "Font size",
+        "Navigation tooltip font", "Navigation tooltip", "Map tooltip font",
         "Scale terminal to window",
         "Manual-Mode Defaults", "Auto-Mode Defaults",
         "Auto-Engines enabled on start",
@@ -122,10 +123,23 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // bare family name (both are valid FontFamily inputs).
     public IReadOnlyList<FontFamilyOption> FontFamilyOptions { get; } = BuildFontFamilyOptions();
 
-    public IReadOnlyList<FontSizeOption> FontSizeOptions { get; } = BuildFontSizeOptions();
+    public IReadOnlyList<FontSizeOption> FontSizeOptions { get; } =
+        BuildFontSizeOptions(DisplayConfig.DefaultFontSize);
 
     [ObservableProperty] private FontFamilyOption? _selectedFontFamily;
     [ObservableProperty] private FontSizeOption? _selectedFontSize;
+
+    // ----- Navigation map hover-tooltip font (char-tier) -----
+    // The map room tooltip's font + size. Shares the terminal font's family list
+    // (its default is the same MX437 face the tooltip has always rendered with,
+    // tagged "{default}"); the size list tags 13 instead of 16 as the default.
+    // Independent selections so the tooltip can be tuned separately from the
+    // terminal canvas.
+    public IReadOnlyList<FontSizeOption> NavTooltipFontSizeOptions { get; } =
+        BuildFontSizeOptions(DisplayConfig.DefaultNavTooltipFontSize);
+
+    [ObservableProperty] private FontFamilyOption? _selectedNavTooltipFontFamily;
+    [ObservableProperty] private FontSizeOption? _selectedNavTooltipFontSize;
 
     private static IReadOnlyList<FontFamilyOption> BuildFontFamilyOptions()
     {
@@ -150,13 +164,13 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         return list;
     }
 
-    private static IReadOnlyList<FontSizeOption> BuildFontSizeOptions()
+    private static IReadOnlyList<FontSizeOption> BuildFontSizeOptions(double defaultSize)
     {
         double[] sizes = { 8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32 };
         List<FontSizeOption> list = new(sizes.Length);
         foreach (double s in sizes)
             list.Add(new FontSizeOption(
-                s == DisplayConfig.DefaultFontSize ? $"{s:0} {{default}}" : $"{s:0}", s));
+                s == defaultSize ? $"{s:0} {{default}}" : $"{s:0}", s));
         return list;
     }
 
@@ -264,6 +278,10 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
                 && ff.Uri != DisplayConfig.DefaultFontFamily ? ff.Uri : null,
             TerminalFontSize = SelectedFontSize is { } fs
                 && fs.Value != DisplayConfig.DefaultFontSize ? fs.Value : null,
+            NavTooltipFontFamily = SelectedNavTooltipFontFamily is { } nff
+                && nff.Uri != DisplayConfig.DefaultFontFamily ? nff.Uri : null,
+            NavTooltipFontSize = SelectedNavTooltipFontSize is { } nfs
+                && nfs.Value != DisplayConfig.DefaultNavTooltipFontSize ? nfs.Value : null,
             AutoMode   = SnapshotAuto(),
             AllowHangupInAllOffMode         = AllowHangupInAllOffMode,
             ReEnableAutoCombatOnReconnect   = ReEnableAutoCombatOnReconnect,
@@ -306,6 +324,11 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             SelectedFontFamily?.Uri ?? DisplayConfig.DefaultFontFamily;
         AppServices.Current.Display.FontSize =
             SelectedFontSize?.Value ?? DisplayConfig.DefaultFontSize;
+        AppServices.Current.Display.NavTooltipFontFamily =
+            SelectedNavTooltipFontFamily?.Uri ?? DisplayConfig.DefaultFontFamily;
+        AppServices.Current.Display.NavTooltipFontSize =
+            SelectedNavTooltipFontSize?.Value ?? DisplayConfig.DefaultNavTooltipFontSize;
+        AppServices.Current.Display.SplashAnimate = ShowStartupMudAnimation;
 
         ClearDirty();
     }
@@ -356,6 +379,13 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         double size = dto.TerminalFontSize ?? DisplayConfig.DefaultFontSize;
         SelectedFontSize = FontSizeOptions.FirstOrDefault(o => o.Value == size)
                            ?? FontSizeOptions.First(o => o.Value == DisplayConfig.DefaultFontSize);
+
+        SelectedNavTooltipFontFamily =
+            FontFamilyOptions.FirstOrDefault(o => o.Uri == dto.NavTooltipFontFamily)
+            ?? FontFamilyOptions[0];
+        double navSize = dto.NavTooltipFontSize ?? DisplayConfig.DefaultNavTooltipFontSize;
+        SelectedNavTooltipFontSize = NavTooltipFontSizeOptions.FirstOrDefault(o => o.Value == navSize)
+                           ?? NavTooltipFontSizeOptions.First(o => o.Value == DisplayConfig.DefaultNavTooltipFontSize);
 
         AutoActionDefaults a = dto.AutoMode;
         AmAutoCombat   = a.AutoCombat;
@@ -476,6 +506,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
     partial void OnSelectedFontFamilyChanged(FontFamilyOption? value) => Dirty();
     partial void OnSelectedFontSizeChanged(FontSizeOption? value)     => Dirty();
+    partial void OnSelectedNavTooltipFontFamilyChanged(FontFamilyOption? value) => Dirty();
+    partial void OnSelectedNavTooltipFontSizeChanged(FontSizeOption? value)     => Dirty();
     partial void OnAmAutoCombatChanged(bool value)           => Dirty();
     partial void OnAmAutoNukeChanged(bool value)             => Dirty();
     partial void OnAmAutoHealRestChanged(bool value)         => Dirty();

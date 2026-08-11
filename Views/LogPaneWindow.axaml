@@ -84,6 +84,11 @@
                           Foreground="{StaticResource ChromeFgSecBrush}"
                           FontSize="11"
                           ToolTip.Tip="Log one Info line per confirmed room hop with the measured wall-clock time + current encumbrance. Use it to tune the Auto-Lair travel-cost table against in-game truth, then turn off for normal play. Persisted per-character."/>
+                <CheckBox IsChecked="{Binding ShowSimulateDeath}"
+                          Content="Simulate Death button"
+                          Foreground="{StaticResource ChromeFgSecBrush}"
+                          FontSize="11"
+                          ToolTip.Tip="Reveal the 'Simulate Death' test button on the Character Workshop → Death Recovery tab. Off by default and reset off every launch, so a normal session never shows the test button."/>
             </StackPanel>
             </StackPanel>
         </Border>

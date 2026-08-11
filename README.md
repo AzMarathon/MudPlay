@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.4.0**
+> **Version 3.4.1**
 > - New Combat action order: "Custom round cycle" — spend N rounds attacking physically, then M rounds casting spells, repeating for as long as both are set; a round count of 0 means that phase runs for the rest of the fight (e.g. physical for 2 rounds, then spells till death)
 > - The cycle can open on either phase (physical or spell) via a "start on spell" toggle
 >
