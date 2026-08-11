@@ -398,6 +398,44 @@ public sealed class AutoWalkManagerTests : IDisposable
     }
 
     [Fact]
+    public void WalkTo_SupersedeSilently_RedirectsWithoutStopped()
+    {
+        // Regression: a path-item router redirects the in-flight walk to a shop
+        // via WalkTo. supersedeSilently keeps that redirect from raising a Stopped
+        // the router (subscribed to Walker.Event) reads as an external abort and
+        // resets its own detour on — the "walked to the shop, sat idle, never
+        // bought" bug. The redirect surfaces Started to a NEW destination, not Stopped.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        h.Events.Clear();
+
+        h.Walker.WalkTo(new RoomKey(1, 2), supersedeSilently: true);
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Stopped);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Started);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+    }
+
+    [Fact]
+    public void WalkTo_LoudSupersede_RaisesStopped()
+    {
+        // The contrast: a genuine external walk (default supersede) still Stops
+        // loudly, so a driving reroute knows the user / another engine took over.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        h.Events.Clear();
+
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Stopped);
+    }
+
+    [Fact]
     public void Walker_TrackerEntersLostMidStep_FailsCleanly()
     {
         // Lost clears the tracker's CurrentRoom — re-planning isn't

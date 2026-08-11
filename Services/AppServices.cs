@@ -4529,7 +4529,9 @@ public sealed class AppServices
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
-            walkTo: key => Walker.WalkTo(key),
+            // Silent supersede: the detour redirect is our own, not an external
+            // abort, so it must not fire a Stopped back into this router's OnWalkEvent.
+            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += PathItemGiveRouter.OnNeedPosted;
@@ -4551,7 +4553,11 @@ public sealed class AppServices
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
-            walkTo: key => Walker.WalkTo(key),
+            // Silent supersede: the shop / bank redirect is our own, not an external
+            // abort, so it must not fire a Stopped back into this router's OnWalkEvent
+            // (which would abandon the detour on arrival — the "sat idle at the shop,
+            // never bought" bug).
+            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += PathItemShopRouter.OnNeedPosted;
@@ -4583,7 +4589,8 @@ public sealed class AppServices
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
             confirm: (title, body) => Confirm.ConfirmAsync(title, body, "Reroute"),
-            walkTo: key => Walker.WalkTo(key),
+            // Silent supersede: the hunt reroute is our own, not an external abort.
+            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += MonsterDropRouter.OnNeedPosted;

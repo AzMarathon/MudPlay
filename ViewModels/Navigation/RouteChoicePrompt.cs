@@ -125,12 +125,20 @@ public static class RouteChoicePrompt
             && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
         if (soleHazardOnly)
             foreach (RouteRequirement req in choice.Requirements)
+            {
+                // A counter already chosen for an earlier hazard that also appears in
+                // THIS hazard's any-of set covers it too — both FCCO slide rooms accept
+                // rope-and-grapple OR climbing harness, so one rope answers both. Skip
+                // the redundant second source rather than buying a rope AND a harness.
+                if (req.ItemIds.Any(id => floorCounters.Contains(id) || detourCounters.Contains(id)))
+                    continue;
                 if (services.ResolveHazardCounter(req.ItemIds, source, destination) is { } r)
                 {
                     List<int> bucket = r.OnFloor ? floorCounters : detourCounters;
                     if (!bucket.Contains(r.ItemId)) bucket.Add(r.ItemId);
                     if (!hazardSources.Contains(r.Source)) hazardSources.Add(r.Source);
                 }
+            }
         string? hazardCounterSource = hazardSources.Count > 0
             ? string.Join("; ", hazardSources) : null;
 
