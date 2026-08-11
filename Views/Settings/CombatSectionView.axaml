@@ -81,8 +81,36 @@
                               SelectedValueBinding="{Binding Value}"
                               DisplayMemberBinding="{Binding Label}"
                               Width="260" HorizontalAlignment="Left"
-                              ToolTip.Tip="Spells first = cast the attack-spell cascade when applicable, else swing. Physical first = swing the weapon, reverting to spells only when neither the normal nor alternate weapon can damage the target. Alternate = flip the round's action every round (spell one round, swing the next); a phase that can't act falls back to the other type so the round never stalls."/>
+                              ToolTip.Tip="Spells first = cast the attack-spell cascade when applicable, else swing. Physical first = swing the weapon, reverting to spells only when neither the normal nor alternate weapon can damage the target. Alternate = flip the round's action every round (spell one round, swing the next); a phase that can't act falls back to the other type so the round never stalls. Custom round cycle = configurable-length phases (see below) instead of a fixed 1-round flip."/>
                 </Grid>
+
+                <!-- Custom round cycle — only meaningful when Action order above is
+                     'Custom round cycle', but stays visible (just disabled) the rest
+                     of the time so a tuned value isn't hidden when switching away. -->
+                <Grid ColumnDefinitions="180,110,16,110,16,180" Margin="0,4,0,0"
+                      IsEnabled="{Binding CycleFieldsEnabled}">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Round cycle"/>
+                    <NumericUpDown Grid.Column="1"
+                                   Value="{Binding CycleRoundsPhysical, Mode=TwoWay}"
+                                   Minimum="0" Maximum="999" FormatString="0" Increment="1"
+                                   HorizontalAlignment="Stretch"
+                                   ToolTip.Tip="Rounds to spend attacking physically before switching to spells. 0 = physical forever (the cycle never reaches the spell phase)."/>
+                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="/"/>
+                    <NumericUpDown Grid.Column="3"
+                                   Value="{Binding CycleRoundsSpell, Mode=TwoWay}"
+                                   Minimum="0" Maximum="999" FormatString="0" Increment="1"
+                                   HorizontalAlignment="Stretch"
+                                   ToolTip.Tip="Rounds to spend casting spells before switching back to physical. 0 = spells for the rest of the fight once reached ('spells till death') — the cycle never returns to physical."/>
+                    <CheckBox Grid.Column="5" Content="Start on spell"
+                              IsChecked="{Binding CycleStartOnSpell, Mode=TwoWay}"
+                              ToolTip.Tip="Unchecked (default): the cycle opens physical, e.g. '2 physical rounds, then spells'. Checked: the cycle opens on the spell instead, e.g. '1 spell round, then physical till death'."/>
+                </Grid>
+                <TextBlock Text="Physical rounds / Spell rounds. Only used when Action order is 'Custom round cycle'."
+                           IsEnabled="{Binding CycleFieldsEnabled}"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           FontStyle="Italic"
+                           Margin="180,2,0,0"/>
 
                 <Grid ColumnDefinitions="240,*" Margin="0,4,0,0">
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Normal weapon attack command"/>

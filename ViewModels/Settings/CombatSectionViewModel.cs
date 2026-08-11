@@ -46,6 +46,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     {
         "Combat",
         "Combat action order", "Spells first", "Physical first",
+        "Custom round cycle", "Physical rounds", "Spell rounds", "Spells till death",
+        "Start on spell",
         "Normal weapon attack command", "Alternate weapon attack command",
         "Attack command",
         "Do BS attacks", "Don't BS if multi-attack", "Run if BS fails",
@@ -83,7 +85,19 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             new ActionOrderOption(CombatActionOrder.PhysicalFirst, "Physical first"),
             new ActionOrderOption(CombatActionOrder.AlternateSpellPhysical, "Alternate — spell, then physical"),
             new ActionOrderOption(CombatActionOrder.AlternatePhysicalSpell, "Alternate — physical, then spell"),
+            new ActionOrderOption(CombatActionOrder.CustomRoundCycle, "Custom round cycle"),
         };
+
+    // ----- Round-cycle action order (ActionOrder = CustomRoundCycle) -----
+
+    [ObservableProperty] private int _cycleRoundsPhysical = 1;
+    [ObservableProperty] private int _cycleRoundsSpell = 1;
+    [ObservableProperty] private bool _cycleStartOnSpell;
+
+    // True when the round-cycle fields should be enabled — only meaningful for
+    // ActionOrder.CustomRoundCycle. The fields stay visible (not collapsed) so a
+    // user switching away and back doesn't lose sight of a value they tuned.
+    public bool CycleFieldsEnabled => ActionOrder == CombatActionOrder.CustomRoundCycle;
 
     // ----- Weapon slots --------------------------------------------
     // The weapon-swap matrix (normal / alternate / backstab + off-hands) is
@@ -309,6 +323,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             AlternateAttackCommand     = AlternateAttackCommand ?? "a",
 
             ActionOrder = ActionOrder,
+            CycleRoundsPhysical = ClampRounds(CycleRoundsPhysical),
+            CycleRoundsSpell    = ClampRounds(CycleRoundsSpell),
+            CycleStartOnSpell   = CycleStartOnSpell,
 
             // Weapon fields (NormalWeapon / AlternateWeapon / BackstabWeapon +
             // off-hands) are owned by the Equipment Manager gear sets and
@@ -405,6 +422,10 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // the editor's 0..100 range (0 = never cast).
     private static int? ClampCasts(int? value) => value is { } v ? Math.Clamp(v, 0, 100) : null;
 
+    // Round-cycle phase length: 0 (that phase never ends) up to 999 rounds — well
+    // past any fight that hasn't already ended some other way.
+    private static int ClampRounds(int value) => Math.Clamp(value, 0, 999);
+
     private void OnProfileChanged(CharacterProfile _) => ReloadAfterProfileSwap();
     private void OnProfileClosedExternally() => ReloadAfterProfileSwap();
 
@@ -427,6 +448,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         AlternateAttackCommand  = dto.AlternateAttackCommand ?? "a";
 
         ActionOrder = dto.ActionOrder;
+        CycleRoundsPhysical = dto.CycleRoundsPhysical;
+        CycleRoundsSpell    = dto.CycleRoundsSpell;
+        CycleStartOnSpell   = dto.CycleStartOnSpell;
 
         DoBackstab                  = dto.DoBackstab;
         SkipBackstabIfMultiAttack   = dto.SkipBackstabIfMultiAttack;
@@ -514,7 +538,14 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnAlternateAttackCommandChanged(string value)   => MarkDirty();
 
     // Combat action order
-    partial void OnActionOrderChanged(CombatActionOrder value)   => MarkDirty();
+    partial void OnActionOrderChanged(CombatActionOrder value)
+    {
+        OnPropertyChanged(nameof(CycleFieldsEnabled));
+        MarkDirty();
+    }
+    partial void OnCycleRoundsPhysicalChanged(int value)          => MarkDirty();
+    partial void OnCycleRoundsSpellChanged(int value)             => MarkDirty();
+    partial void OnCycleStartOnSpellChanged(bool value)           => MarkDirty();
 
     // BS options
     partial void OnDoBackstabChanged(bool value)                    => MarkDirty();

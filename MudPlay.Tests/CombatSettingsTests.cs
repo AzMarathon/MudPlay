@@ -29,6 +29,12 @@ public sealed class CombatSettingsTests
         Assert.Equal(CombatActionOrder.SpellsFirst, dto.ActionOrder);
         Assert.Equal(TargetOrder.Normal, dto.TargetOrder);
 
+        // Round-cycle fields (only consulted when ActionOrder is CustomRoundCycle)
+        // default to a plain 1/1 alternation opening on physical.
+        Assert.Equal(1, dto.CycleRoundsPhysical);
+        Assert.Equal(1, dto.CycleRoundsSpell);
+        Assert.False(dto.CycleStartOnSpell);
+
         // Target Priority defaults to following our own game data; no party
         // mirroring and no named member until the user opts in.
         Assert.Equal(TargetPriority.Default, dto.TargetPriority);
@@ -83,12 +89,16 @@ public sealed class CombatSettingsTests
     }
 
     [Fact]
-    public void CombatActionOrder_HasBothModes()
+    public void CombatActionOrder_HasAllFiveModes()
     {
-        // Locks the enum names + integer order — CombatSpellChooser keys off
-        // these identifiers and the JSON storage serialises them as strings.
-        Assert.Equal(CombatActionOrder.SpellsFirst,   (CombatActionOrder)0);
-        Assert.Equal(CombatActionOrder.PhysicalFirst, (CombatActionOrder)1);
+        // Locks the enum names + integer order — CombatSpellChooser /
+        // CombatManager key off these identifiers and the JSON storage
+        // serialises them as strings.
+        Assert.Equal(CombatActionOrder.SpellsFirst,           (CombatActionOrder)0);
+        Assert.Equal(CombatActionOrder.PhysicalFirst,         (CombatActionOrder)1);
+        Assert.Equal(CombatActionOrder.AlternateSpellPhysical, (CombatActionOrder)2);
+        Assert.Equal(CombatActionOrder.AlternatePhysicalSpell, (CombatActionOrder)3);
+        Assert.Equal(CombatActionOrder.CustomRoundCycle,       (CombatActionOrder)4);
     }
 
     [Fact]
@@ -107,7 +117,10 @@ public sealed class CombatSettingsTests
         {
             NormalAttackCommand        = "attack",
             AlternateAttackCommand     = "swing",
-            ActionOrder                = CombatActionOrder.PhysicalFirst,
+            ActionOrder                = CombatActionOrder.CustomRoundCycle,
+            CycleRoundsPhysical        = 2,
+            CycleRoundsSpell           = 0,
+            CycleStartOnSpell          = true,
             NormalWeapon               = "long sword",
             NormalOffHand              = "kite shield",
             AlternateWeapon            = "two-handed axe",
@@ -139,6 +152,9 @@ public sealed class CombatSettingsTests
         Assert.Equal(dto.NormalAttackCommand,       round!.NormalAttackCommand);
         Assert.Equal(dto.AlternateAttackCommand,    round.AlternateAttackCommand);
         Assert.Equal(dto.ActionOrder,               round.ActionOrder);
+        Assert.Equal(dto.CycleRoundsPhysical,        round.CycleRoundsPhysical);
+        Assert.Equal(dto.CycleRoundsSpell,           round.CycleRoundsSpell);
+        Assert.Equal(dto.CycleStartOnSpell,          round.CycleStartOnSpell);
         Assert.Equal(dto.NormalWeapon,              round.NormalWeapon);
         Assert.Equal(dto.NormalOffHand,             round.NormalOffHand);
         Assert.Equal(dto.AlternateWeapon,           round.AlternateWeapon);

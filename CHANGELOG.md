@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.4.1
+
+- New Combat action order: "Custom round cycle" — spend N rounds attacking physically, then M rounds casting spells, repeating for as long as both are set; a round count of 0 means that phase runs for the rest of the fight (e.g. physical for 2 rounds, then spells till death)
+- The cycle can open on either phase (physical or spell) via a "start on spell" toggle
+
 ## 3.4.0
 
 - The "default profile" (loaded when no character is chosen) is now a real profile saved in the Global folder: edit it, hit Save, and your changes — e.g. turning the splash off — persist and load on every startup

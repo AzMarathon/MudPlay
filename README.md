@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.4.0**
-> - The "default profile" (loaded when no character is chosen) is now a real profile saved in the Global folder: edit it, hit Save, and your changes — e.g. turning the splash off — persist and load on every startup
-> - File → Save As copies it into a named character, so new profiles start from your defaults instead of the installed ones
-> - File → Save (on the default profile) writes it back to the Global folder rather than prompting for a name
+> **Version 3.4.1**
+> - New Combat action order: "Custom round cycle" — spend N rounds attacking physically, then M rounds casting spells, repeating for as long as both are set; a round count of 0 means that phase runs for the rest of the fight (e.g. physical for 2 rounds, then spells till death)
+> - The cycle can open on either phase (physical or spell) via a "start on spell" toggle
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
