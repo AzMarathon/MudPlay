@@ -107,6 +107,22 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
         });
+
+        // Live-refresh the Bank picker when a stash room is marked / unmarked on the
+        // map (MovementFilter). Without this the picker only rebuilds on a profile
+        // swap, so a stash room added while Settings is open doesn't appear until the
+        // window is closed and reopened. Guarded for the design-time / test path where
+        // no AppServices (and no live map) exists.
+        try
+        {
+            MovementFilter movement = AppServices.Current.Movement;
+            movement.StashChanged += OnStashRoomsChanged;
+            OnDispose(() => movement.StashChanged -= OnStashRoomsChanged);
+        }
+        catch
+        {
+            // No AppServices — nothing to observe.
+        }
         _suppressDirty = true;
         LoadFromProfile();
         _suppressDirty = false;
@@ -323,6 +339,20 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     //     the user can pick a marked stash as the deposit destination (treating it
     //     as an offline bank for personal caches).
     // Returns an empty list when no game-data set is loaded.
+    // A stash room was marked / unmarked on the map. Rebuild the picker and keep the
+    // current pick by value (the old BankChoice instance is replaced). Suppress dirty
+    // so this passive refresh doesn't flag the tab as edited.
+    private void OnStashRoomsChanged()
+    {
+        string selectedValue = SelectedBank?.Value ?? BankRoomKey;
+        bool prev = _suppressDirty;
+        _suppressDirty = true;
+        RebuildBankChoices();
+        SelectedBank = BankChoices.FirstOrDefault(c =>
+            string.Equals(c.Value, selectedValue, StringComparison.OrdinalIgnoreCase));
+        _suppressDirty = prev;
+    }
+
     private void RebuildBankChoices()
     {
         // Explicit no-op first, so it's the default selection when no bank is set

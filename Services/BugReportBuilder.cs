@@ -22,10 +22,10 @@ namespace MudPlay.Services;
 public static class BugReportBuilder
 {
     // How many trailing transcript lines (scrollback + live screen) to include.
-    private const int ScrollbackLines = 500;
+    private const int ScrollbackLines = 750;
 
     // How many trailing program-log entries to include.
-    private const int LogLines = 250;
+    private const int LogLines = 750;
 
     // One captured section of the report — a heading and its pre-rendered Markdown body.
     public readonly record struct Section(string Heading, string Body);

@@ -300,7 +300,8 @@ public sealed class AutoLightProvisionerTests
         // path the predictive route planner misses on a loop lap / manual step.
         Harness h = new() { Snapshot = Snap(carried: new[] { "5 torch" }) };
         h.Dark();
-        Assert.Equal(new[] { "use torch" }, h.Sent);
+        // `use torch` then a bare CR to redisplay the now-lit room (reveals standing mobs).
+        Assert.Equal(new[] { "use torch", "" }, h.Sent);
     }
 
     [Fact]
@@ -362,7 +363,7 @@ public sealed class AutoLightProvisionerTests
             RoomLightSpellName = "starlight",
         };
         h.Dark();
-        Assert.Equal(new[] { "use torch" }, h.Sent);
+        Assert.Equal(new[] { "use torch", "" }, h.Sent);
         Assert.Empty(h.CastSpells);
     }
 
@@ -398,7 +399,7 @@ public sealed class AutoLightProvisionerTests
         // "torch": the provisioner readies whatever covering light appears.)
         h.Snapshot = Snap(carried: new[] { "torch" }, stamp: 2);
         h.Dark();
-        Assert.Equal(new[] { "use torch" }, h.Sent);
+        Assert.Equal(new[] { "use torch", "" }, h.Sent);
         Assert.Equal(new[] { "illuminate" }, h.CastSpells);   // no second cast
     }
 
@@ -410,7 +411,9 @@ public sealed class AutoLightProvisionerTests
         Harness h = new() { Snapshot = Snap(carried: new[] { "5 torch" }, stamp: 1) };
         h.Dark();
         h.Dark();
-        Assert.Equal(new[] { "use torch" }, h.Sent);
+        // First Dark: use + redisplay CR. Second Dark is pending-latched — no `use`,
+        // so no CR either (the CR is paired only with an actual light-up).
+        Assert.Equal(new[] { "use torch", "" }, h.Sent);
     }
 
     [Fact]
@@ -423,7 +426,7 @@ public sealed class AutoLightProvisionerTests
         h.Dark();
         h.Snapshot = Snap(carried: new[] { "lantern" }, stamp: 2);
         h.Dark();
-        Assert.Equal(new[] { "use lantern", "use lantern" }, h.Sent);
+        Assert.Equal(new[] { "use lantern", "", "use lantern", "" }, h.Sent);
     }
 
     [Fact]
@@ -436,7 +439,7 @@ public sealed class AutoLightProvisionerTests
         h.Dark();
         h.Snapshot = Snap(readied: new ReadiedLight("lantern", 200), stamp: 2);
         h.Dark();
-        Assert.Equal(new[] { "use lantern" }, h.Sent);
+        Assert.Equal(new[] { "use lantern", "" }, h.Sent);
     }
 
     [Fact]
@@ -464,7 +467,7 @@ public sealed class AutoLightProvisionerTests
             Snapshot = Snap(carried: new[] { "5 torch", "lantern" }),
         };
         h.Dark();
-        Assert.Equal(new[] { "use torch" }, h.Sent);
+        Assert.Equal(new[] { "use torch", "" }, h.Sent);
     }
 
     [Fact]
@@ -473,7 +476,7 @@ public sealed class AutoLightProvisionerTests
         // No preferred name → the strongest carried light (lantern 175 > torch 100).
         Harness h = new() { Snapshot = Snap(carried: new[] { "5 torch", "lantern" }) };
         h.Dark();
-        Assert.Equal(new[] { "use lantern" }, h.Sent);
+        Assert.Equal(new[] { "use lantern", "" }, h.Sent);
     }
 
     // ----- Predictive one-room lookahead (OnApproachingRoom) -------------------
@@ -625,7 +628,7 @@ public sealed class AutoLightProvisionerTests
         };
         h.Expire();
         h.Dark();
-        Assert.Equal(new[] { "use torch" }, h.Sent);
+        Assert.Equal(new[] { "use torch", "" }, h.Sent);
     }
 
     [Fact]
@@ -687,7 +690,7 @@ public sealed class AutoLightProvisionerTests
         h.Dark();       // readies the first torch, latches "torch"
         h.Expire();     // burnout clears the pending latch
         h.Dark();       // same snapshot — re-readies a carried spare
-        Assert.Equal(new[] { "use torch", "use torch" }, h.Sent);
+        Assert.Equal(new[] { "use torch", "", "use torch", "" }, h.Sent);
     }
 
     // ----- Stepping into a seeable room (OnRoomEntered) ------------------------
@@ -701,7 +704,7 @@ public sealed class AutoLightProvisionerTests
         Harness h = new() { Snapshot = Snap(carried: new[] { "5 torch" }) };
         h.Dark();
         h.Enter(0);
-        Assert.Equal(new[] { "use torch", "rem torch" }, h.Sent);
+        Assert.Equal(new[] { "use torch", "", "rem torch" }, h.Sent);
     }
 
     [Fact]
@@ -712,7 +715,7 @@ public sealed class AutoLightProvisionerTests
         Harness h = new() { Snapshot = Snap(carried: new[] { "5 torch" }) };
         h.Dark();
         h.Enter(-300);
-        Assert.Equal(new[] { "use torch" }, h.Sent);
+        Assert.Equal(new[] { "use torch", "" }, h.Sent);
     }
 
     [Fact]

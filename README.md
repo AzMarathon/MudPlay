@@ -1,7 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.5.11**
+> **Version 3.5.16**
+> - After auto-lighting a dark room the client now redisplays it so a monster standing there unseen is engaged, instead of relying on it to swing first and walking past a passive one
+> - Corpse-recovery auto-equip wields a held weapon with `eq` instead of `hold`
+> - `@party go <text-exit>` (e.g. `go hole`) keeps its `go` verb when relayed to followers — only a real cardinal direction is sent as the bare token
+> - Settings → Cash bank/stash picker updates live when a stash room is marked or unmarked on the map
+> - Bug report now captures more history — 750 lines of scrollback and 750 program-log entries
 > - Combat re-engages the next monster right after a kill instead of re-attacking the corpse and stalling a round — the kill is inferred from the exp gain on its `*Combat Off*` (each realm's custom per-monster death messages can't be matched), gated so a mid-fight heal (or party share-exp) isn't misread as a kill
 > - Room-wide combat spells (multi-attack, area debuff) are now cast bare — `blad` / `stnk`, never `blad <mob>` (the targeted form the server rejected)
 > - Combat keeps its target and round-cycle / attack-spell progress across a mid-fight heal / bless / buff instead of restarting as a brand-new fight — no more "confused which attack to use" after an interrupt
@@ -70,7 +75,7 @@ MudPlay has a **built-in bug reporter** that snapshots the client's state at the
 2. MudPlay writes a Markdown report to your **Desktop**, named `<realm>-<timestamp>.md`. It contains your player/inventory state, movement-engine status, relevant settings, the program log, and recent scrollback — with time-sensitive data frozen at click time.
 3. **File the issue** — open a new issue at **https://github.com/Tehshortbus/MudPlay/issues/new**, describe the problem, and **attach the generated `.md` file**.
 
-The bug report includes almost all of the info needed to isolate the problem but a good description helps me target it faster. You can review the bug report before submitting if you wish but please leave as much context in the report as possible. The bug report does include all your settings, your character name, stats, inventory, client info, the program log and ~250 lines of backscroll.  ***It DOES NOT include your BBS login name or password or your login menu navigation settings.***
+The bug report includes almost all of the info needed to isolate the problem but a good description helps me target it faster. You can review the bug report before submitting if you wish but please leave as much context in the report as possible. The bug report does include all your settings, your character name, stats, inventory, client info, the program log and ~750 lines of backscroll.  ***It DOES NOT include your BBS login name or password or your login menu navigation settings.***
 
 ## Contributing
 

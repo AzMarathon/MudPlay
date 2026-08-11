@@ -421,16 +421,21 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             total > 0 ? $"Recovered the corpse ({total} item(s))." : "Recovered the corpse.");
     }
 
-    // Re-wear every item worn at death after the corpse is recovered (Auto-Equip).
+    // Re-equip every item worn at death after the corpse is recovered (Auto-Equip).
     // The recover command drops everything back into the pack; this puts the worn
-    // half back on with its slot-correct verb (hold for a held weapon, else wear).
+    // half back on with its slot-correct verb. A held item (weapon / off-hand) is
+    // equipped with `eq` — matching EquipmentManager's wield path — NOT `hold`, which
+    // only carries the item in hand rather than wielding it (report: corpse recovery
+    // sent "hold platinum mace" for the weapon). Body armour uses `wear`. Lights
+    // never reach here: a readied light is tracked separately (not in the worn slot
+    // set), and it has its own `use` verb (see AutoLightProvisioner).
     private void ReequipAllWorn(DeathRecord record)
     {
         if (!AutoEquip || record.EquippedAtDeath is not { } worn) return;
         foreach (DeathItem item in worn)
         {
             if (string.IsNullOrWhiteSpace(item.Name)) continue;
-            string verb = item.IsHeld ? "hold" : "wear";
+            string verb = item.IsHeld ? "eq" : "wear";
             _log?.Info(LogCategory, $"auto-equip: {verb} {item.Name}");
             Send($"{verb} {item.Name}");
         }

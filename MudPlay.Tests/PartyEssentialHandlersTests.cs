@@ -676,6 +676,30 @@ public sealed class PartyEssentialHandlersTests
     }
 
     [Fact]
+    public void PartyGo_TextExit_KeepsGoVerb()
+    {
+        // Report paradigm-20260811-122253: "@party go hole" wrongly sent bare "hole".
+        // A non-cardinal target is a text exit — the bare token isn't a command, so
+        // the "go" verb must survive (drop it only for real cardinal directions).
+        var (engine, _, _, party, _, relay) = Setup();
+        SeedPartyMember(party, "Leader", isLeader: true);
+        engine.DispatchForTests(Say("Leader", "@party go hole"));
+
+        Assert.Equal("go hole\r", Encoding.Latin1.GetString(relay[0]));
+    }
+
+    [Fact]
+    public void PartyGo_LongDirectionWord_DropsGoVerb()
+    {
+        // A long-form direction word ("north") is still a cardinal — drop the "go".
+        var (engine, _, _, party, _, relay) = Setup();
+        SeedPartyMember(party, "Leader", isLeader: true);
+        engine.DispatchForTests(Say("Leader", "@party go north"));
+
+        Assert.Equal("north\r", Encoding.Latin1.GetString(relay[0]));
+    }
+
+    [Fact]
     public void PartyStat_PartyI_PartyPar_AllRelay()
     {
         var (engine, _, _, party, _, relay) = Setup();

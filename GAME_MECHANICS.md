@@ -167,6 +167,14 @@ it isn't here and you're unsure, ask.
 - **[CONFIRMED]** `use <item>` readies a light (torch, lantern); `rem <item>` removes it.
   Lights follow the same trade-places rule as `eq` — `use`-ing a new light swaps out the
   current one (if usable).
+- **[CONFIRMED, user 2026-08-11]** **`use <light>` only grants the ability to see — it does NOT
+  re-display the room.** After lighting in a dark room you must send a **bare carriage return** to
+  redisplay: if the light now lets you see, the full room prints (name / exits / `Also here:`,
+  revealing any monsters that were standing there unseen); if it's still too dark, the "can't see"
+  dark message prints again. This is the ONLY way to discover a *standing* (non-attacking) monster
+  in a just-lit room — the dark display never listed it, and `DarkRoomCombatWatcher` only catches a
+  monster that *swings* (its attack line). So auto-light must send the bare CR after readying the
+  light or it walks past passive mobs (the "lights a torch but doesn't re-check the room" report).
 - **[CONFIRMED, user 2026-07-24]** A **readied light is visible to other players** — an onlooker
   sees the lit source the way they see worn gear. So it counts as "shown," not hidden: the `@inv`
   remote report (carried items an onlooker can't see) deliberately excludes the readied light,

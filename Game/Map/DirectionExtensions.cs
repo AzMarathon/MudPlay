@@ -24,6 +24,30 @@ public static class DirectionExtensions
         _            => d.ToString(),
     };
 
+    // Parse a movement TOKEN — either the abbreviation (`n`, `ne`, `u`) or the
+    // long word (`north`, `northeast`, `up`) — to a Direction. This is the typed-
+    // command vocabulary (both forms honoured on the wire), distinct from
+    // TryFromLongName's prose-only forms. Returns false for a non-direction token
+    // (a text exit like `hole` / `path`), which the caller must send verbatim
+    // rather than as a bare direction. Case-insensitive.
+    public static bool TryFromToken(string? token, out Direction direction)
+    {
+        switch (token?.Trim().ToLowerInvariant())
+        {
+            case "n":  case "north":     direction = Direction.N;  return true;
+            case "s":  case "south":     direction = Direction.S;  return true;
+            case "e":  case "east":      direction = Direction.E;  return true;
+            case "w":  case "west":      direction = Direction.W;  return true;
+            case "ne": case "northeast": direction = Direction.NE; return true;
+            case "nw": case "northwest": direction = Direction.NW; return true;
+            case "se": case "southeast": direction = Direction.SE; return true;
+            case "sw": case "southwest": direction = Direction.SW; return true;
+            case "u":  case "up":        direction = Direction.U;  return true;
+            case "d":  case "down":      direction = Direction.D;  return true;
+            default:   direction = default;                        return false;
+        }
+    }
+
     // Inverse of ToLongName — the long-form word the game prints back to a
     // Direction. Used where a movement direction arrives as a game word rather
     // than a typed command (the party-follow drag line). Case-insensitive; only
