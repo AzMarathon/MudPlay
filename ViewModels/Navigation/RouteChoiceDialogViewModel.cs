@@ -72,7 +72,14 @@ public sealed partial class RouteChoiceDialogViewModel
     // route is the ONLY way there, the send-it/acquire split collapses to the
     // single acquire card (chunk-4 flag logic governs that case, not the picker).
     // A teleport choice has no acquisition, so it never shows the send-it card.
-    public bool ShowSendItCard => HasFreeRoute && !IsTeleportChoice;
+    // A sole hazard route with an obtainable counter also shows it — as the
+    // "cross unprotected (take the damage)" escape opposite "obtain then cross".
+    public bool ShowSendItCard => (HasFreeRoute || HazardObtain) && !IsTeleportChoice;
+
+    // True when this is a sole hazard-only route the caller resolved an obtainable
+    // counter for: Go fetches it then crosses (vs. "cross unprotected"). Drives the
+    // obtain wording + the send-it card in the sole-hazard case.
+    public bool HazardObtain { get; }
 
     // Which route the user has selected to preview. Null until they click one —
     // Go stays disabled until then, forcing the click-to-preview-then-Go flow.
@@ -95,14 +102,25 @@ public sealed partial class RouteChoiceDialogViewModel
         Func<int, string?>? shopNameForItem = null,
         Func<int, string?>? dropNameForItem = null,
         TimeSpan freeEta = default,
-        TimeSpan gatedEta = default)
+        TimeSpan gatedEta = default,
+        string? hazardCounterSource = null)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
 
         IsTeleportChoice = choice.Kind == RouteChoiceKind.Teleport;
         HasFreeRoute = choice.HasFreeRoute;
-        SendItSummary = $"Direct — send it — {StepsEta(choice.GatedStepCount, gatedEta)}";
+
+        // A sole hazard-only route the caller resolved an obtainable counter for:
+        // Go fetches it then crosses, and a "cross unprotected" card is offered as
+        // the take-the-damage escape.
+        bool soleHazardOnly = !HasFreeRoute && !IsTeleportChoice
+            && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
+        HazardObtain = soleHazardOnly && !string.IsNullOrEmpty(hazardCounterSource);
+
+        SendItSummary = HazardObtain
+            ? $"Cross unprotected — take the damage — {StepsEta(choice.GatedStepCount, gatedEta)}"
+            : $"Direct — send it — {StepsEta(choice.GatedStepCount, gatedEta)}";
 
         if (IsTeleportChoice)
         {
@@ -124,9 +142,6 @@ public sealed partial class RouteChoiceDialogViewModel
             // client can't auto-source — a door key, or an unflagged item. The
             // wording branches on which: a locked door isn't a "hazard you must
             // counter", it's a gate you clear by hand, so don't mislabel it.
-            bool soleHazardOnly = !HasFreeRoute
-                && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
-
             if (HasFreeRoute)
             {
                 Heading = $"Two routes to {destinationLabel}";
@@ -140,10 +155,20 @@ public sealed partial class RouteChoiceDialogViewModel
             {
                 Heading = $"Only route to {destinationLabel} crosses a hazard";
                 FreeSummary = "No hazard-free route — every path there crosses a hazard you must counter";
-                GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
-                Footnote = "Click the route to preview it on the map, then Go to walk it. "
-                    + "This is the only way there — Go walks it and stops at the hazard; "
-                    + "carry, buy, or use a counter to cross.";
+                if (HazardObtain)
+                {
+                    GatedSummary = $"Obtain, then cross — {StepsEta(choice.GatedStepCount, gatedEta)}";
+                    Footnote = "Click a route to preview it on the map, then Go to walk it. "
+                        + $"Go fetches a counter ({hazardCounterSource}) then crosses; "
+                        + "\"cross unprotected\" walks straight through and takes the damage.";
+                }
+                else
+                {
+                    GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
+                    Footnote = "Click the route to preview it on the map, then Go to walk it. "
+                        + "This is the only way there — Go walks it and stops at the hazard; "
+                        + "carry, buy, or use a counter to cross.";
+                }
             }
             else
             {

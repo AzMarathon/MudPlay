@@ -98,6 +98,44 @@ public sealed class RouteChoiceDialogViewModelTests
     }
 
     [Fact]
+    public void SoleHazard_WithObtainableCounter_OffersObtainThenCross()
+    {
+        // The caller resolved a sourceable counter for the any-of hazard set, so
+        // Go fetches it then crosses and a "cross unprotected" escape is offered.
+        var choice = SoleChoice(new RouteRequirement(
+            RouteRequirementKind.HazardProtection, new[] { 11, 12 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Frozen cavern (10/297)",
+            id => id == 11 ? "rope and grapple" : "climbing harness",
+            hazardCounterSource: "grab from the floor here");
+
+        Assert.True(vm.HazardObtain);
+        Assert.True(vm.ShowSendItCard);
+        Assert.Contains("Obtain, then cross", vm.GatedSummary);
+        Assert.Contains("grab from the floor here", vm.Footnote);
+        Assert.Contains("take the damage", vm.SendItSummary);
+        Assert.Equal("Requires rope and grapple or climbing harness", vm.RequirementSummary);
+    }
+
+    [Fact]
+    public void SoleHazard_NoObtainableCounter_KeepsManualCounterWording()
+    {
+        // No counter resolved (source null) — the picker stays the pre-feature
+        // "carry, buy, or use a counter" with no send-it escape.
+        var choice = SoleChoice(new RouteRequirement(
+            RouteRequirementKind.HazardProtection, new[] { 11, 12 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Frozen cavern (10/297)",
+            id => id == 11 ? "rope and grapple" : "climbing harness");
+
+        Assert.False(vm.HazardObtain);
+        Assert.False(vm.ShowSendItCard);
+        Assert.Contains("carry, buy, or use a counter", vm.Footnote);
+    }
+
+    [Fact]
     public void CarryItemGate_ShopWinsOverDrop_WhenBothResolve()
     {
         // Shop and drop both name a source — the buy tail wins (cheap,

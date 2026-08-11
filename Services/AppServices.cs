@@ -3755,8 +3755,12 @@ public sealed class AppServices
             Needs,
             carriedCount: CountItemCarried,
             inventoryLoaded: () => Inventory.IsLoaded,
+            // The route picker's explicit "obtain then cross" pick forces a per-walk
+            // obtain regardless of the global search-if-needed preference — the pick
+            // IS the consent, so open the demand gate whenever a forced obtain is live.
             isEnabled: () =>
-                Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded,
+                Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded
+                || _forcedPathObtain.Count > 0,
             log: Log);
         Inventory.Changed += PathItemDemand.OnInventoryChanged;
 
@@ -3789,6 +3793,11 @@ public sealed class AppServices
         // The leader coordinates redistribution once acquisition makes the
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
+
+        // Per-walk forced-obtain (the route picker's "obtain then cross" choice):
+        // drop an item from the override once it's acquired. The abandon-clear on
+        // Walker.Event is wired after the walker is constructed (see below).
+        Inventory.Changed += () => _forcedPathObtain.RemoveWhere(IsItemCarried);
 
         // Party-level probe + tracker. The probe broadcasts @level and
         // persists each reply into the players table (RecordLevel) — the sole
@@ -3984,15 +3993,22 @@ public sealed class AppServices
         // unchanged.
         Walker.SetPathItemAnnouncer(PartyPathItemGate.OnPathItemsRequired);
 
-        // Fold each entered hazard room's mandatory counter into the same
-        // walk-start item announce, so a route the user chose to run through a
-        // hazard room provisions its counter like an Item/Ticket gate. Only the
-        // single-counter (no-substitute) items are announced — any-of hazard
-        // groups can't be expressed to the each-required demand pipeline, so
-        // they stay a manual choice the route picker surfaces.
-        Walker.SetHazardItemResolver(key =>
-            RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0)?.MandatoryItems
-                ?? Array.Empty<int>());
+        // Fold each entered hazard room's counter into the same walk-start item
+        // announce, so a route the user chose to run through a hazard room
+        // provisions its counter like an Item/Ticket gate. Single-counter
+        // (no-substitute) items always announce; an any-of group's counter
+        // announces only when the user forced one via the route picker's "obtain
+        // then cross" choice (otherwise the group stays a manual counter choice).
+        Walker.SetHazardItemResolver(HazardAnnounceItems);
+
+        // Clear the per-walk forced-obtain override when a walk is abandoned, so a
+        // forced flag never leaks into a later unrelated walk. (The per-item drop
+        // on acquisition is wired to Inventory.Changed above.)
+        Walker.Event += e =>
+        {
+            if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed)
+                _forcedPathObtain.Clear();
+        };
 
         // Boss "stop before" rooms — the walker halts one room short of any boss
         // room flagged StopBefore on the active realm. Resolved live so realm swaps
@@ -4506,14 +4522,16 @@ public sealed class AppServices
             giveSourcesForItem: GiveSourcesForItem,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
-            distanceBetween: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            distanceBetween: PathItemDetourDistance,
             carriedCount: CountItemCarried,
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
-            walkTo: key => Walker.WalkTo(key),
+            // Silent supersede: the detour redirect is our own, not an external
+            // abort, so it must not fire a Stopped back into this router's OnWalkEvent.
+            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += PathItemGiveRouter.OnNeedPosted;
@@ -4525,7 +4543,7 @@ public sealed class AppServices
             deterministicGiveExists: DeterministicGiveExists,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
-            distanceBetween: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            distanceBetween: PathItemDetourDistance,
             carriedCount: CountItemCarried,
             cashOnHand: PathItemCashOnHand,
             buyCost: PathItemBuyCost,
@@ -4535,7 +4553,11 @@ public sealed class AppServices
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
-            walkTo: key => Walker.WalkTo(key),
+            // Silent supersede: the shop / bank redirect is our own, not an external
+            // abort, so it must not fire a Stopped back into this router's OnWalkEvent
+            // (which would abandon the detour on arrival — the "sat idle at the shop,
+            // never bought" bug).
+            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += PathItemShopRouter.OnNeedPosted;
@@ -4567,7 +4589,8 @@ public sealed class AppServices
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
             confirm: (title, body) => Confirm.ConfirmAsync(title, body, "Reroute"),
-            walkTo: key => Walker.WalkTo(key),
+            // Silent supersede: the hunt reroute is our own, not an external abort.
+            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += MonsterDropRouter.OnNeedPosted;
@@ -5717,15 +5740,134 @@ public sealed class AppServices
             number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ItemOverlaySeed.GetOverlay(number));
 
-    // Per-item on-demand path acquisition gate: the single AutoObtainForPath
-    // opt-in on the item's overlay. Checked means every acquisition method is in
-    // play (party redistribute, textblock give, shop buy, bank withdraw, drop
-    // reroute). Backs all three path-item routers' isEnabled predicates and the
-    // picker's name helpers.
+    // Items the user explicitly chose to obtain for the current walk via the route
+    // picker's "obtain then cross" option — a per-walk override of the persistent
+    // AutoObtainForPath flag. An explicit pick is consent, so these source through
+    // the same give/shop/drop pipeline without needing the item pre-flagged.
+    // Entries are removed as they're acquired and cleared on a Stop (see the wiring
+    // in the ctor); replaced wholesale on each fresh obtain-pick.
+    private readonly HashSet<int> _forcedPathObtain = new();
+
+    // Set (replacing any prior) the items the next walk should obtain for its path
+    // regardless of their AutoObtainForPath flag. Called by RouteChoicePrompt when
+    // the user picks the hazard "obtain then cross" route.
+    public void ForcePathObtain(IEnumerable<int> itemIds)
+    {
+        ArgumentNullException.ThrowIfNull(itemIds);
+        _forcedPathObtain.Clear();
+        foreach (int id in itemIds) if (id > 0) _forcedPathObtain.Add(id);
+    }
+
+    // Per-item on-demand path acquisition gate: the persistent AutoObtainForPath
+    // opt-in on the item's overlay, OR a per-walk forced-obtain override. Checked
+    // means every acquisition method is in play (party redistribute, textblock
+    // give, shop buy, bank withdraw, drop reroute). Backs all three path-item
+    // routers' isEnabled predicates and the picker's name helpers.
     private bool IsAutoObtainForPath(int itemId)
     {
         if (itemId <= 0) return false;
+        if (_forcedPathObtain.Contains(itemId)) return true;
         return ResolveItemOverlay(itemId).AutoObtainForPath ?? false;
+    }
+
+    // Distance used to SCORE a path-item give/shop detour. Suspends the acquirable
+    // gates so a SOLE-route gate — a hazard we'll counter, an item gate we'll buy —
+    // doesn't read as infinite and reject every source: the router prices the route
+    // the character walks WITH the sourced item in hand, which crosses that gate.
+    // For a gate a free route already bypasses this is a no-op; it only rescues the
+    // sole-route case (e.g. buying a rope to reach the hazard-gated FCCO cavern).
+    private int? PathItemDetourDistance(Game.Map.RoomKey a, Game.Map.RoomKey b)
+    {
+        using (Movement.SuspendAcquirableGates())
+            return Bfs.DistanceBetween(a, b, Movement);
+    }
+
+    // For a hazard's any-of counter set, pick the counter the run can most cheaply
+    // obtain and describe how — preferring one already on the current room's floor
+    // (free + here), then a free give, a shop buy, then a monster drop. Unlike the
+    // PathItem*Name picker helpers this is FLAG-INDEPENDENT: the picker's "obtain
+    // then cross" choice is explicit consent, so it offers a counter the run can
+    // source whether or not it's flagged AutoObtainForPath. Returns the chosen
+    // counter id + a source phrase, or null when none is sourceable.
+    public (int ItemId, string Source, bool OnFloor)? ResolveHazardCounter(
+        IReadOnlyList<int> counters, Game.Map.RoomKey source, Game.Map.RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(counters);
+        // On the current floor — grabbed in place, so it never routes through the
+        // detour pipeline (the caller issues a `get`); flagged OnFloor to say so.
+        foreach (int id in counters)
+            if (IsItemOnFloor(id)) return (id, "grab from the floor here", true);
+
+        // The destination is hazard-gated (that is WHY a counter is needed), so the
+        // shop/give/drop round-trip THROUGH it is only reachable with the acquirable
+        // gates suspended — otherwise dist(source→shop→dest) is infinite and every
+        // source is rejected. Suspend them for the whole resolution, matching the
+        // route we'd actually walk (counter in hand crosses the hazard).
+        using (Movement.SuspendAcquirableGates())
+        {
+            foreach (int id in counters)
+                if (DeterministicGiveExists(id)
+                    && Game.Map.PathItemGiveRouter.TrySelectGiver(
+                        GiveSourcesForItem(id), source, destination,
+                        (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.GiveSource giver))
+                    return (id, $"ask {giver.GiverName}", false);
+
+            foreach (int id in counters)
+            {
+                System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
+                if (shops.Count > 0
+                    && Game.Map.PathItemShopRouter.TrySelectShop(
+                        shops, source, destination,
+                        (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.RoomKey shop)
+                    && RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName)
+                    return (id, $"buy at {shopName}", false);
+            }
+
+            foreach (int id in counters)
+            {
+                System.Collections.Generic.IReadOnlyList<Game.Map.MonsterDropSpawn> spawns = DropSpawnsForItem(id);
+                if (spawns.Count > 0
+                    && Game.Map.MonsterDropRouter.SelectNearestSpawn(
+                        spawns, Bfs.ComputeDistancesFrom(source, Movement),
+                        out Game.Map.MonsterDropSpawn best, out _))
+                    return (id, $"dropped by {best.MonsterName}", false);
+            }
+        }
+
+        return null;
+    }
+
+    // Items to provision for entering a hazard room: its single-counter mandatory
+    // items always, plus any any-of counter the user forced via the route picker's
+    // "obtain then cross" choice (so that one counter is sourced like a gate item).
+    private System.Collections.Generic.IReadOnlyList<int> HazardAnnounceItems(Game.Map.RoomKey key)
+    {
+        RoomHazardIndex.RoomHazard? hazard =
+            RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0);
+        if (hazard is null) return System.Array.Empty<int>();
+        if (_forcedPathObtain.Count == 0) return hazard.MandatoryItems;
+
+        System.Collections.Generic.List<int> items = new(hazard.MandatoryItems);
+        foreach (System.Collections.Generic.IReadOnlyList<int> group in hazard.RequirementGroups)
+            if (group.Count > 1)
+                foreach (int id in group)
+                    if (_forcedPathObtain.Contains(id) && !items.Contains(id))
+                        items.Add(id);
+        return items;
+    }
+
+    // Is item `id` lying on the current room's floor? Matched by name against the
+    // ground survey (which stores the noun phrases parsed from "You notice … here."),
+    // leniently both ways so an article/qualifier on either side still matches.
+    private bool IsItemOnFloor(int id)
+    {
+        string? name = ItemNames.GetName(id);
+        if (string.IsNullOrEmpty(name)) return false;
+        foreach (string floor in GroundItems.Items)
+            if (floor.Contains(name, StringComparison.OrdinalIgnoreCase)
+                || name.Contains(floor, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     // Sole-route auto-obtain decision. Given the requirements of a route that has

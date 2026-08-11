@@ -758,18 +758,26 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // teleport route picker's "walk it, don't teleport" choice passes true;
     // every other caller keeps the default (false), which lets BFS take a
     // teleport hop as a normal short edge when it's the shortest route.
+    // supersedeSilently: when this WalkTo interrupts an in-progress walk, clear
+    // the old walk with a silent Reset instead of a loud Stopped. The path-item
+    // acquisition routers pass true when they redirect the walk to a shop / giver /
+    // bank en route: the redirect is their OWN doing, and the superseding Stopped
+    // (subscribed to via Walker.Event) would otherwise fire back into the same
+    // router's OnWalkEvent, which reads it as "user/another engine took over" and
+    // abandons the detour it just armed. A genuine user/engine walk stays loud.
     public bool WalkTo(
         RoomKey destination,
         bool planThroughAcquirableGates = false,
         bool armItemAcquisition = true,
-        bool avoidTeleports = false)
+        bool avoidTeleports = false,
+        bool supersedeSilently = false)
     {
         if (State is WalkState.Walking or WalkState.Paused)
         {
-            // Internal re-plan to the same destination: clear state silently so
-            // we don't emit a Stopped that reroute FSMs mistake for an external
-            // abort (see _replanningInPlace). A genuine new WalkTo Stops loudly.
-            if (_replanningInPlace)
+            // Internal re-plan to the same destination, or a router's own detour
+            // redirect: clear state silently so we don't emit a Stopped that reroute
+            // FSMs mistake for an external abort. A genuine new WalkTo Stops loudly.
+            if (_replanningInPlace || supersedeSilently)
                 Reset();
             else
                 Stop(reason: "superseded by new walk");

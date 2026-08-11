@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.5.0
+
+- The route picker for a hazard you can't cross yet now offers an "Obtain, then cross" route — it grabs a counter off the current room's floor, or buys / asks / hunts one en route (e.g. the ice-cavern rope & grapple), naming where — instead of only "carry, buy, or use a counter yourself"
+- Picking it fetches the counter even when the item isn't flagged auto-obtain (the explicit choice is the consent); a "cross unprotected — take the damage" option and Cancel remain
+
 ## 3.4.3
 
 - Walking to an unreachable or gated room no longer hangs silently in "Walking" — a watchdog now surfaces the reason, naming the specific barrier (e.g. missing key, or "1/1420 (Marble Passage) needs level 40+"), or plans from your last confirmed room when an in-flight move never settles
