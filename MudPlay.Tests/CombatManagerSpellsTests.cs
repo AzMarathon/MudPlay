@@ -50,6 +50,12 @@ public sealed class CombatManagerSpellsTests
         public bool Sneaking { get; set; }
         public HashSet<int> SeeHidden { get; } = new();
 
+        // Fake clock for CombatManager.SetClock — Tick() advances it by a full
+        // round each call, matching TickEngine.CombatTickInterval (5s), so
+        // AlternationAdvanceMinGap sees genuine round-to-round elapsed time
+        // instead of the zero real elapsed time a synchronous test call has.
+        private DateTimeOffset _clock = DateTimeOffset.UtcNow;
+
         public Harness(bool wireCaster = true)
         {
             DefaultPatterns.Seed(Router);
@@ -66,6 +72,7 @@ public sealed class CombatManagerSpellsTests
                 post: a => a(),                          // synchronous in tests
                 log: Log);
             Combat.SetWireSender(b => Sent.Add(b));
+            Combat.SetClock(() => _clock);
             Combat.SetBackstabHooks(() => Sneaking, n => SeeHidden.Contains(n));
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
             Combat.SetSpellShortResolver(
@@ -149,9 +156,11 @@ public sealed class CombatManagerSpellsTests
         /// <summary>One combat round. Mirrors the AppServices tick-subscription
         /// order: the coordinator clears its cooldown first, then the combat
         /// heartbeat re-decides. (CastingDirector sits between them in production but
-        /// isn't under test here.)</summary>
+        /// isn't under test here.) Advances the fake clock a full round first, so
+        /// AlternationAdvanceMinGap doesn't reject this as a same-round re-fire.</summary>
         public void Tick()
         {
+            _clock += TimeSpan.FromSeconds(5);
             Cast.OnCombatTick();
             Combat.OnCombatTick();
         }
@@ -897,6 +906,40 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("harm giant rat", h.LastSent);
 
         // Round 2 — physical again.
+        h.Tick();
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    // TickEngine.CombatTickElapsed fires on every hit/miss line (250ms-debounced),
+    // not once per true ~5s round — a monster's counter-swing line landing a beat
+    // after the player's own can trip a SECOND tick within the same round. That
+    // must not flip the alternation phase twice (the reported "switched too fast,
+    // moved to attack then instantly wanted the spell").
+    [Fact]
+    public void AlternatePhysicalSpell_RapidExtraTick_DoesNotDoubleAdvancePhase()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.AlternatePhysicalSpell;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        // Engage — round 0 = physical phase.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+
+        // A genuine round boundary — round 1 flips to spell.
+        h.Tick();
+        Assert.Equal("harm giant rat", h.LastSent);
+        int afterRound1 = h.Sent.Count;
+
+        // A stray extra tick lands a beat later — e.g. the mob's own counter-swing
+        // line independently tripping CombatTickElapsed — well short of a real
+        // round (the clock has NOT advanced). Must not flip the phase back.
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+        Assert.Equal(afterRound1, h.Sent.Count);
+
+        // The next GENUINE round correctly flips back to physical.
         h.Tick();
         Assert.Equal("a giant rat", h.LastSent);
     }

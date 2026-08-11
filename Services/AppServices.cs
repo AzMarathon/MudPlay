@@ -2848,6 +2848,15 @@ public sealed class AppServices
         Combat.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
         CombatTracker.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
 
+        // The Combat → Min/Max Monsters window only makes sense while a
+        // walker / loop / auto-lair is actively trying to move us past a
+        // room — standing here idle with nothing else going on (freshly
+        // logged in, no route queued) should fight back regardless of room
+        // population rather than stand undefended. Same probe wired to both
+        // so combat's engage decision and the walker's gate never disagree.
+        Combat.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
+        CombatTracker.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
+
         // Simultaneous-arrival settle: a UI-thread one-shot so a burst of "strides
         // in" arrivals + the room re-display resolve to one engage decision on the
         // full group (rooms nuke-first instead of pecking single-target). Same shape
@@ -3273,6 +3282,13 @@ public sealed class AppServices
         // standing in an unwinnable fight. Reuses CombatManager's deterministic
         // CanEngageMonster so the gate and the swing decision can't diverge.
         CombatTracker.SetActionabilityGate(n => Combat.CanEngageMonster(n));
+
+        // Keep the walker gate's room-population read in sync with
+        // CombatManager's own Min/Max monster skip, so a too-crowded room
+        // releases the walker instead of holding it while combat refuses to
+        // engage — see SetMonsterCountWindow.
+        CombatTracker.SetMonsterCountWindow(
+            () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat"));
 
         // Combat-off "clear hostiles when seen Hidden" override —
         // a stealth runner (AutoSneak on) sprinting a route with combat

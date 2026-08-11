@@ -2,6 +2,7 @@ using MudPlay.Game;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Map;
 using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using MudPlay.Terminal;
@@ -53,6 +54,16 @@ public sealed class CombatStateTrackerTests
 
         public void WireActionabilityGate() =>
             Tracker.SetActionabilityGate(n => !Unactionable.Contains(n));
+
+        // ----- monster count window (CombatManager parity) -----------
+        public CombatSettings Settings { get; } = new();
+        public bool MovementActive { get; set; } = true;
+
+        public void WireMonsterCountWindow() =>
+            Tracker.SetMonsterCountWindow(() => Settings);
+
+        public void WireMovementActiveGate() =>
+            Tracker.SetMovementActiveGate(() => MovementActive);
 
         // ----- break-before-run gate (auto-combat-off flee courtesy) -----
         // Commands the tracker pushes to the wire (decoded, trailing \r
@@ -753,6 +764,89 @@ public sealed class CombatStateTrackerTests
         h.AddMonster(1, "stone golem", killable: true);
 
         h.Feed("Also here: stone golem.");
+
+        Assert.True(h.CombatGateHeld);
+    }
+
+    // ----- monster count window (CombatManager parity) ----------------
+
+    // Reproduces the deadlock from a live capture: a room stuffed with more
+    // hostiles than CombatSettings.MaxMonstersInRoom allows, WHILE a walker
+    // is actively driving us through. CombatManager silently declines to
+    // engage such a room (its own min/max skip), but before this fix the
+    // tracker didn't know about that window at all — it held the walker gate
+    // for ANY actionable hostile regardless of room population. Combat
+    // refusing to fight + the walker unable to leave = the character stands
+    // there absorbing hits from every monster in the room with no recourse.
+    [Fact]
+    public void RoomOverMax_MovementActive_ReleasesGate()
+    {
+        using Harness h = new();
+        h.WireMonsterCountWindow();
+        h.WireMovementActiveGate();
+        h.MovementActive = true;
+        h.Settings.MaxMonstersInRoom = 2;
+        h.AddMonster(1, "zombie", killable: true);
+        h.AddMonster(2, "fierce zombie", killable: true);
+        h.AddMonster(3, "small skeleton", killable: true);
+
+        h.Feed("Also here: zombie, fierce zombie, small skeleton.");
+
+        // 3 hostiles > Max=2 → outside the window, same as CombatManager's own
+        // skip. A walker IS driving us through, so the gate must release to
+        // let it move past, not stand here.
+        Assert.False(h.CombatGateHeld);
+    }
+
+    // A second live capture caught the idle case: logging straight into the
+    // SAME over-populated room with no loop / walk-to queued (DefaultTask =
+    // Do Nothing). Releasing the walker gate accomplishes nothing when
+    // there's no walker running to move away — the character just stands
+    // there, unengaged AND undefended. The window must not apply while
+    // genuinely idle; fight back regardless of room population.
+    [Fact]
+    public void RoomOverMax_NotMovementActive_HoldsGate()
+    {
+        using Harness h = new();
+        h.WireMonsterCountWindow();
+        h.WireMovementActiveGate();
+        h.MovementActive = false;   // no walker/loop attached — idle
+        h.Settings.MaxMonstersInRoom = 2;
+        h.AddMonster(1, "zombie", killable: true);
+        h.AddMonster(2, "fierce zombie", killable: true);
+        h.AddMonster(3, "small skeleton", killable: true);
+
+        h.Feed("Also here: zombie, fierce zombie, small skeleton.");
+
+        Assert.True(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void RoomWithinWindow_HoldsGate()
+    {
+        using Harness h = new();
+        h.WireMonsterCountWindow();
+        h.WireMovementActiveGate();
+        h.MovementActive = true;
+        h.Settings.MaxMonstersInRoom = 2;
+        h.AddMonster(1, "giant rat", killable: true);
+
+        h.Feed("Also here: giant rat.");
+
+        Assert.True(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void Unwired_MonsterCountWindow_HoldsGateRegardlessOfCount()
+    {
+        using Harness h = new();
+        // No WireMonsterCountWindow — fail-open: room population never gates,
+        // exactly the pre-fix behavior.
+        h.AddMonster(1, "zombie", killable: true);
+        h.AddMonster(2, "fierce zombie", killable: true);
+        h.AddMonster(3, "small skeleton", killable: true);
+
+        h.Feed("Also here: zombie, fierce zombie, small skeleton.");
 
         Assert.True(h.CombatGateHeld);
     }

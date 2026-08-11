@@ -1,6 +1,7 @@
 using System.Text;
 using MudPlay.Game.Map;
 using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 
@@ -96,6 +97,22 @@ public sealed class CombatStateTracker : IDisposable
 
     private Action<byte[]>? _wireSender;
     private Func<bool>? _breakBeforeRunning;
+
+    // CombatSettings.MinMonstersInRoom / MaxMonstersInRoom reader — see
+    // SetMonsterCountWindow. Null (unwired) fails open: the gate asserts for any
+    // actionable hostile regardless of room population, matching this tracker's
+    // behavior before the window existed.
+    private Func<CombatSettings>? _readSettings;
+
+    // Reports whether a movement engine (walker / loop / auto-lair) is
+    // currently attached and driving us through rooms — see
+    // SetMovementActiveGate. The Min/Max window below only makes sense while
+    // something is actually trying to move us past this room; standing here
+    // with nowhere to go (no engine attached) should hold the gate and fight
+    // regardless of population. Null (unwired) fails open to "active" — the
+    // window applies unconditionally, matching this tracker's behavior before
+    // this gate existed.
+    private Func<bool>? _isMovementActive;
 
     // Reports whether we're standing in a too-dark room (RoomTracker.IsInDarkRoom).
     // Gates the idle-stall watchdog's resync CR: a CR in the dark re-emits no
@@ -246,6 +263,36 @@ public sealed class CombatStateTracker : IDisposable
     {
         ArgumentNullException.ThrowIfNull(canEngage);
         _canEngage = canEngage;
+    }
+
+    // Wire the CombatSettings.MinMonstersInRoom / MaxMonstersInRoom reader so
+    // this tracker's gate agrees with CombatManager's own min/max skip
+    // (OnEntitiesObserved's "min/max gate skip" branch) on whether a room is
+    // fightable. Without this the two disagreed: CombatManager silently
+    // declines to engage a room outside the window, but this tracker — which
+    // only reasoned about actionability, not room population — still held the
+    // walker gate for ANY actionable hostile regardless of count. That
+    // deadlocked the character in a too-crowded room: combat refusing to
+    // fight, the walker unable to leave, standing there absorbing hits from
+    // every monster in the room with no recourse. A room outside the window
+    // now takes the SAME "un-actionable, move past" path as a room full of
+    // monsters no weapon or spell can hit. Until set, every engageable
+    // hostile counts regardless of room population (fail-open — the gate
+    // behaves exactly as before this fix). See also SetMovementActiveGate —
+    // the window only applies while something is actually moving us through.
+    public void SetMonsterCountWindow(Func<CombatSettings> readSettings)
+    {
+        ArgumentNullException.ThrowIfNull(readSettings);
+        _readSettings = readSettings;
+    }
+
+    // Wire the movement-active probe (EngineRecoveryGate.AttachedEngine is not
+    // null) — see _isMovementActive. Until set, the Min/Max window (once
+    // SetMonsterCountWindow is also wired) applies unconditionally.
+    public void SetMovementActiveGate(Func<bool> isMovementActive)
+    {
+        ArgumentNullException.ThrowIfNull(isMovementActive);
+        _isMovementActive = isMovementActive;
     }
 
     // Wire path for the break-before-run disengage. Bound at connect time (the
@@ -425,7 +472,8 @@ public sealed class CombatStateTracker : IDisposable
         // latch is a combat-off concept, so drop it.
         _seeHiddenClearLatch = false;
 
-        if (actionable > 0)
+        bool withinCountWindow = IsWithinMonsterCountWindow(targetable);
+        if (actionable > 0 && withinCountWindow)
         {
             // A fresh observation still holding a killable monster is a live
             // fight — refresh the watchdog stamp (AssertGate early-outs when the
@@ -478,12 +526,18 @@ public sealed class CombatStateTracker : IDisposable
             //      pre-move hook now that both InCombat and HasEngageableHostiles
             //      read clear. Inlined rather than via ClearGate so InCombat can
             //      flip between the flag drop (1) and the coordinator release (3).
-            // targetable>0 means hostiles remain but none are killable — release
-            // and move past (the move-past rule); the "room cleared" wording is the
-            // genuine empty-room case.
-            string clearReason = targetable > 0
-                ? $"room un-actionable: {targetable} hostile(s), none hittable — moving on"
-                : "room cleared";
+            // targetable>0 means hostiles remain but either none are killable, or
+            // the room's population falls outside the configured Min/Max window
+            // while something is actively moving us through — either way, release
+            // and move past (the move-past rule); the "room cleared" wording is
+            // the genuine empty-room case.
+            string clearReason = targetable switch
+            {
+                > 0 when !withinCountWindow =>
+                    $"room outside Min/Max monster window: {targetable} hostile(s) — moving on",
+                > 0 => $"room un-actionable: {targetable} hostile(s), none hittable — moving on",
+                _ => "room cleared",
+            };
             bool wasAsserted = _gateAsserted;
             _gateAsserted = false;                                        // (1)
             if (_state.InCombat)
@@ -494,6 +548,28 @@ public sealed class CombatStateTracker : IDisposable
             if (wasAsserted)                                              // (3)
                 _coordinator.ClearGate(MovementCoordinator.CombatGate, AsserterName, clearReason);
         }
+    }
+
+    // Mirrors CombatManager.OnEntitiesObserved's own min/max skip so the two
+    // never disagree on whether a room is worth fighting — see
+    // SetMonsterCountWindow. The window itself only applies while a movement
+    // engine is actually attached (SetMovementActiveGate) — standing here idle
+    // with nowhere to go should fight regardless of population. Doesn't mirror
+    // the Party-tab MaxMonstersWhenPartying override CombatManager applies
+    // while partied (this tracker has no PartySettings reader); a partied cap
+    // tighter than the solo Combat-tab Max could still leave the two
+    // disagreeing in that one case. Unwired, not moving, or a misconfigured
+    // Min > Max, all fail open (every count passes — gate behaves exactly as
+    // before this fix).
+    private bool IsWithinMonsterCountWindow(int targetable)
+    {
+        if (_readSettings is null) return true;
+        if (!(_isMovementActive?.Invoke() ?? true)) return true;
+        CombatSettings settings = _readSettings();
+        int min = Math.Max(0, settings.MinMonstersInRoom);
+        int max = settings.MaxMonstersInRoom > 0 ? settings.MaxMonstersInRoom : int.MaxValue;
+        if (min > max) return true;                       // misconfig — no gate
+        return targetable >= min && targetable <= max;
     }
 
     // Engageable = MonsterOverlay.Relationship is Enemy (or null, which defaults
