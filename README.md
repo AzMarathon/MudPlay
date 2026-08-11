@@ -1,21 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.5.21**
-> - An attack-spell build no longer gets stuck healing/buffing forever and never attacking — a survival cast can't fire again until the attack spell it interrupted has gone back out (a fixed attack / heal-or-buff alternation)
-> - A survival heal winning the round's single cast slot no longer permanently wedges combat out of retrying — no more sitting idle after a mid-fight heal until manual input
-> - After auto-lighting a dark room the client now redisplays it so a monster standing there unseen is engaged, instead of relying on it to swing first and walking past a passive one
-> - Corpse-recovery auto-equip wields a held weapon with `eq` instead of `hold`
-> - `@party go <text-exit>` (e.g. `go hole`) keeps its `go` verb when relayed to followers — only a real cardinal direction is sent as the bare token
-> - Settings → Cash bank/stash picker updates live when a stash room is marked or unmarked on the map
-> - Bug report now captures more history — 750 lines of scrollback and 750 program-log entries
-> - Combat re-engages the next monster right after a kill instead of re-attacking the corpse and stalling a round — the kill is inferred from the exp gain on its `*Combat Off*` (each realm's custom per-monster death messages can't be matched), gated so a mid-fight heal (or party share-exp) isn't misread as a kill
-> - Room-wide combat spells (multi-attack, area debuff) are now cast bare — `blad` / `stnk`, never `blad <mob>` (the targeted form the server rejected)
-> - Combat keeps its target and round-cycle / attack-spell progress across a mid-fight heal / bless / buff instead of restarting as a brand-new fight — no more "confused which attack to use" after an interrupt
-> - Rooms several monsters enter at once now nuke the whole group on the first action instead of committing to a single-target cast and rooming a beat late — combat briefly waits for the arrivals + room re-display to settle
-> - A room-wide attack spell no longer undercounts a monster whose number the client hasn't resolved, so a full room isn't held below its multi-attack threshold
-> - Coins a post-combat `search` surfaces are now collected instead of skipped as "already handled this room visit"
-> - Fixed the loop sitting forever after a `go path` step into a same-named room — the arrival now confirms the move instead of being mistaken for a passive re-look of the room just left
+> **Version 3.5.22**
+> - As a party follower, the map now stays located through an identical same-named corridor (e.g. a run of "Slum Street") instead of discarding each leader-follow arrival as a stray re-look, desyncing, and needing repeated manual `rm`s — a follower's drag arrives instantly, which the map used to mistake for a passive redisplay
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

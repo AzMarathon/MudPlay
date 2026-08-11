@@ -43,7 +43,7 @@ public sealed class FollowMoveObserver : IDisposable
         if (result.Groups.Count == 0) return;
         if (!DirectionExtensions.TryFromLongName(result.Groups[0], out Direction direction)) return;
 
-        _tracker.NoteMoveSent(direction);
+        _tracker.NoteFollowMove(direction);
         _log?.Info(LogCategory, $"Follow-drag {direction} — recorded as a move so the map stays located.");
     }
 

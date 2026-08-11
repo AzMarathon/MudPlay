@@ -274,15 +274,31 @@ public sealed class RoomTracker
     // direct call also arms a consume-once echo claim so that echo is dropped
     // rather than enqueued as a phantom second move.
     public void NoteMoveSent(Direction direction, DateTimeOffset? whenUtc = null)
-        => NoteMoveSentCore(direction, isEngineAnnouncement: true, whenUtc ?? DateTimeOffset.UtcNow);
+        => NoteMoveSentCore(direction, isEngineAnnouncement: true, isFollowDrag: false,
+                            whenUtc ?? DateTimeOffset.UtcNow);
 
-    private void NoteMoveSentCore(Direction direction, bool isEngineAnnouncement, DateTimeOffset when)
+    // A party follower dragged one room in the leader's direction (FollowMoveObserver,
+    // off the " -- Following your Party leader <dir> -- " line). Predicts like a
+    // cardinal move, but the pending move is flagged IsFollowDrag so its arrival is
+    // never mistaken for a passive re-look (see ReconcileFromPending): the game drags
+    // a follower with no byte round-trip, so the confirming room display lands almost
+    // instantly — the very timing the re-look guard reads as "too fast to be a real
+    // move." No echo claim: a follower sends no movement bytes, so there is nothing to
+    // consume back.
+    public void NoteFollowMove(Direction direction, DateTimeOffset? whenUtc = null)
+        => NoteMoveSentCore(direction, isEngineAnnouncement: false, isFollowDrag: true,
+                            whenUtc ?? DateTimeOffset.UtcNow);
+
+    private void NoteMoveSentCore(Direction direction, bool isEngineAnnouncement, bool isFollowDrag,
+                                  DateTimeOffset when)
     {
         if (isEngineAnnouncement)
         {
             _cardinalEchoClaim = (direction, when + EchoClaimExpiry);
         }
-        EnqueuePending(PendingMove.FromDirection(direction, when));
+        EnqueuePending(isFollowDrag
+            ? PendingMove.FromFollowDrag(direction, when)
+            : PendingMove.FromDirection(direction, when));
         AppendStep(new DirectionDto(direction));
 
         if (State.Confidence is RoomConfidence.Confirmed or RoomConfidence.Pending)
@@ -318,7 +334,7 @@ public sealed class RoomTracker
                 $"Consumed engine echo of move {direction}; not re-enqueued.");
             return;
         }
-        NoteMoveSentCore(direction, isEngineAnnouncement: false, when);
+        NoteMoveSentCore(direction, isEngineAnnouncement: false, isFollowDrag: false, when);
     }
 
     // Echo-aware overload for OutboundMovementObserver's text-exit path. Mirrors
@@ -890,7 +906,19 @@ public sealed class RoomTracker
                 // unchanged (or there's no prior display to compare — the pure
                 // identically-named-AND-exited corridor, where timing is the only
                 // tell and the double-move guard must still hold).
-                if (MatchesPredicted(source, observation)
+                //
+                // A follow-drag is EXEMPT from this timing tell. The whole guard rests
+                // on "a real move is slower than a stray same-room redisplay," but the
+                // game drags a party follower with NO byte round-trip — its confirming
+                // room display lands almost instantly (8ms in the report), exactly what
+                // this reads as a re-look. And a follower never emits stray re-looks:
+                // the game only redisplays on a real arrival, so a fast redisplay after
+                // a drag is ALWAYS the move's outcome. Discarding it stranded the anchor
+                // one room back and desynced through an identical "Slum Street {N,S}"
+                // corridor (report paradigm-20260811-122610). Self-typed moves keep the
+                // guard — the double-move regression is theirs.
+                if (!head.IsFollowDrag
+                    && MatchesPredicted(source, observation)
                     && when - head.SentAt < AmbiguousRedisplayFloor
                     && RedisplayExitsUnchanged(observation))
                 {
