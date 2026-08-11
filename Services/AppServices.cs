@@ -6112,6 +6112,7 @@ public sealed class AppServices
             : general.NavTooltipFontFamily;
         Display.NavTooltipFontSize = general.NavTooltipFontSize ?? DisplayConfig.DefaultNavTooltipFontSize;
         Display.ScaleToWindow = general.ScaleTerminalToWindow;
+        Display.SplashAnimate = general.ShowStartupMudAnimation;
         TerminalInput.Enabled = general.TypeToTerminalFromOtherWindows;
 
         // Game-menu commands are BBS-tier too — HangupHandler consumes
@@ -6135,6 +6136,7 @@ public sealed class AppServices
         Display.FontSize = DisplayConfig.DefaultFontSize;
         Display.NavTooltipFontFamily = DisplayConfig.DefaultFontFamily;
         Display.NavTooltipFontSize = DisplayConfig.DefaultNavTooltipFontSize;
+        Display.SplashAnimate = true;
         Display.ScrollbackLines = defaults.ScrollbackLines;
         Display.BackscrollWheelLines = defaults.BackscrollWheelLines;
         Display.TerminalCols = defaults.TerminalCols;

@@ -328,6 +328,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             SelectedNavTooltipFontFamily?.Uri ?? DisplayConfig.DefaultFontFamily;
         AppServices.Current.Display.NavTooltipFontSize =
             SelectedNavTooltipFontSize?.Value ?? DisplayConfig.DefaultNavTooltipFontSize;
+        AppServices.Current.Display.SplashAnimate = ShowStartupMudAnimation;
 
         ClearDirty();
     }

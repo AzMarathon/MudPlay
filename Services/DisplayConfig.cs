@@ -44,6 +44,13 @@ public sealed partial class DisplayConfig : ObservableObject
     // Sourced from the char-tier GeneralSettings.ScaleTerminalToWindow.
     [ObservableProperty] private bool _scaleToWindow;
 
+    // Whether the startup attract splash animates. Sourced from the char-tier
+    // GeneralSettings.ShowStartupMudAnimation; MainWindowViewModel forwards it to
+    // TerminalControl.SplashAnimate so a Settings change stops/starts the running
+    // splash live (unchecking + Apply now takes effect immediately instead of only
+    // at the next launch). Default true.
+    [ObservableProperty] private bool _splashAnimate = true;
+
     // Navigation map hover-tooltip font, sourced from the char-tier
     // GeneralSettings.NavTooltip* deltas. The Navigation window reads these live
     // when it populates a room tooltip, so a Settings change takes effect on the

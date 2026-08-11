@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.3.4**
-> - Loop building now allows the same room twice in a row (map-click loop mode and the create-loop editor) — a zero-length "stay put" step that runs another command in place (e.g. two barmaid steps: hand in pies, then convert the coin)
-> - Program Log has a "Simulate Death button" toggle that reveals the Death Recovery tab's test button; off by default (and reset off each launch), so a normal session never shows it
-> - Settings → General now has a Navigation-tooltip font + size picker under the terminal font, defaulting to the map room-tooltip's current look
+> **Version 3.3.5**
+> - Unchecking "Show the mud-throwing startup animation" and hitting Apply now stops a splash that's already on screen, instead of only taking effect at the next launch
+> - The splash frame timer runs at background priority so the attract animation yields to input and session rendering instead of lagging the client while it plays
+> - Removed the leftover unused "Mud Now." splash scene
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

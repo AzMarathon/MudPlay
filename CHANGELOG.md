@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.3.5
+
+- Unchecking "Show the mud-throwing startup animation" and hitting Apply now stops a splash that's already on screen, instead of only taking effect at the next launch
+- The splash frame timer runs at background priority so the attract animation yields to input and session rendering instead of lagging the client while it plays
+- Removed the leftover unused "Mud Now." splash scene
+
 ## 3.3.4
 
 - Loop building now allows the same room twice in a row (map-click loop mode and the create-loop editor) — a zero-length "stay put" step that runs another command in place (e.g. two barmaid steps: hand in pies, then convert the coin)

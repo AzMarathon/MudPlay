@@ -1342,6 +1342,13 @@ public partial class MainWindowViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(ScaleTerminalToWindow));
         }
+        else if (e.PropertyName == nameof(Services.DisplayConfig.SplashAnimate))
+        {
+            // Setting the bound property flips TerminalControl.SplashAnimate,
+            // whose class handler rebuilds the animator — so unchecking the
+            // startup-animation toggle stops the running splash on the spot.
+            SplashAnimate = AppServices.Current.Display.SplashAnimate;
+        }
         else if (e.PropertyName == nameof(Services.DisplayConfig.ScrollbackLines))
         {
             int newCapacity = AppServices.Current.Display.ScrollbackLines;
