@@ -64,6 +64,11 @@ public sealed class AutoLightProvisioner
     private string? _pendingReadyName;
     private DateTimeOffset _pendingSnapshotTime;
 
+    // Whether the most recent ReadyLight call actually sent a `use` (vs. skipping it
+    // on the pending-latch). Read right after by the reactive dark-room path to
+    // decide whether to send the bare-CR redisplay — only a real light-up needs it.
+    private bool _readyJustSentUse;
+
     // The readied light instance we last fired a reorder for. A reorder is
     // requested at most once per instance — the readied charge only refreshes on
     // an `i` dump, so an unlatched reorder would re-detour on every dump while the
@@ -267,7 +272,21 @@ public sealed class AutoLightProvisioner
     public void OnDarkRoomObserved()
     {
         if (!_isEnabled()) return;
-        if (TryReadyBestCarried("dark room observed: ready carried light")) return;
+        if (TryReadyBestCarried("dark room observed: ready carried light"))
+        {
+            // `use <light>` only grants vision — it does NOT redisplay the room, so a
+            // monster standing here unseen stays off the (absent) `Also here:` line.
+            // Send a bare CR to force the redisplay: the now-lit room prints its
+            // `Also here:` (revealing standing mobs for the classifier + auto-combat),
+            // or the dark message again if the light didn't cover it. Confirmed
+            // mechanic (see GAME_MECHANICS "Light sources"). Without it we'd only ever
+            // catch a mob that swings (DarkRoomCombatWatcher) and walk past a passive
+            // one — the "lights a torch but doesn't re-check the room" report. Only
+            // after a `use` actually went out (not a pending-latch re-entry that sent
+            // nothing) so a repeated "can't see" doesn't spam bare CRs.
+            if (_readyJustSentUse) _wire.Send(string.Empty);
+            return;
+        }
 
         // Nothing carried can light this room. The room-light spell is the tier
         // above buying items (gear → spell → items): cast it. On a buff realm the
@@ -436,6 +455,8 @@ public sealed class AutoLightProvisioner
 
     private void ReadyLight(string name, string? readiedName, DateTimeOffset snapTime, string reason)
     {
+        _readyJustSentUse = false;
+
         // The pending `use` is still in flight (snapshot hasn't caught up) — don't
         // fire the same one again on this stale snapshot.
         if (_pendingReadyName is not null
@@ -449,6 +470,7 @@ public sealed class AutoLightProvisioner
             _wire.Send($"rem {readiedName}");
 
         _wire.Send($"use {name}");
+        _readyJustSentUse = true;
         _pendingReadyName = name;
         _pendingSnapshotTime = snapTime;
         // Track what we lit so OnRoomEntered can `rem` it once we reach a room that

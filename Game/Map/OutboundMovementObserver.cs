@@ -108,28 +108,10 @@ public sealed partial class OutboundMovementObserver
         // chain of same-named rooms (e.g. Stone Street corridors) —
         // ReconcileFromConfirmed assumes "obs matches current name"
         // means "server redisplay, no movement."
-        if (TryParseCardinal(cmd, out Direction d))
+        if (DirectionExtensions.TryFromToken(cmd, out Direction d))
         {
             _tracker.NoteMoveSentByObserver(d);
             _log?.Info("OutboundMovement", $"Cardinal move announced: '{cmd}' → {d}.");
-        }
-    }
-
-    private static bool TryParseCardinal(string cmd, out Direction d)
-    {
-        switch (cmd)
-        {
-            case "n":  case "north":     d = Direction.N;  return true;
-            case "s":  case "south":     d = Direction.S;  return true;
-            case "e":  case "east":      d = Direction.E;  return true;
-            case "w":  case "west":      d = Direction.W;  return true;
-            case "ne": case "northeast": d = Direction.NE; return true;
-            case "nw": case "northwest": d = Direction.NW; return true;
-            case "se": case "southeast": d = Direction.SE; return true;
-            case "sw": case "southwest": d = Direction.SW; return true;
-            case "u":  case "up":        d = Direction.U;  return true;
-            case "d":  case "down":      d = Direction.D;  return true;
-            default:   d = default;      return false;
         }
     }
 

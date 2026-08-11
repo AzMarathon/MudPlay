@@ -70,9 +70,26 @@ public sealed class CombatManagerSpellsTests
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
             Combat.SetSpellShortResolver(
                 n => SpellShorts.TryGetValue(n, out string? s) ? s : null);
+            // Store the settle callback instead of running a real timer so a test
+            // controls when the window elapses (FireSettle). Only arms on arrival
+            // observations, so the existing Also-Here tests are unaffected.
+            Combat.SetArrivalSettleScheduler((_, cb) => PendingSettle = cb);
             if (wireCaster)
                 Combat.SetCombatSpellCaster(Cast, () => (Ma, MaxMa));
         }
+
+        // The pending arrival-settle callback (see CombatManager). FireSettle runs
+        // it, simulating the debounce window elapsing with no room re-display.
+        public Action? PendingSettle { get; private set; }
+        public void FireSettle() => PendingSettle?.Invoke();
+
+        // Simulate a mid-room monster arrival ("A giant rat strides in …") — appends
+        // to the classifier's Current with Source=Arrival, the path RoomEntryWatcher
+        // drives in production.
+        public void Arrive(string name)
+            => Classifier.AppendArrivalEntity(
+                Classifier.Classify(name),
+                rawWireLine: $"A {name} strides in from the west.");
 
         public void SetOverlay(int monsterNumber, MonsterAttackPriority? priority = null,
                                MonsterRelationship? relationship = null)
@@ -98,6 +115,28 @@ public sealed class CombatManagerSpellsTests
                 FlavorPrefixes: Array.Empty<string>(),
                 AllowNoPrefix: true,
                 Links: new[] { new GameDataLink("Monsters", number) }));
+
+        // A monster the classifier recognises by name (so it's EntityKind.Monster)
+        // but which carries no Monsters-table link, so its number never resolves —
+        // the real-world case where the server colours a variant hostile whose
+        // flavored name isn't in game data. Mirrors ResolveMonsterNumber returning
+        // null; the room-nuke still hits it, so it must count toward MinEnemies.
+        public void AddUnnumberedMonster(string name)
+            => Monsters.Messages.Add(new MonsterMessageRecord(
+                Id: $"U-{name}",
+                Name: name,
+                HitYou: Array.Empty<string>(),
+                HitOther: Array.Empty<string>(),
+                DeathLine: new[] { $"The {name} dies." },
+                ArmorBlockYou: Array.Empty<string>(),
+                ArmorBlockOther: Array.Empty<string>(),
+                DodgeYou: Array.Empty<string>(),
+                DodgeOther: Array.Empty<string>(),
+                MissYou: Array.Empty<string>(),
+                MissOther: Array.Empty<string>(),
+                FlavorPrefixes: Array.Empty<string>(),
+                AllowNoPrefix: true,
+                Links: Array.Empty<GameDataLink>()));
 
         public void Feed(string line)
         {
@@ -169,8 +208,8 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: giant rat.");
 
-        // The cast-code is typed directly with the target appended.
-        Assert.Equal("blast giant rat", h.LastSent);
+        // A multi-attack (room-wide) spell is cast BARE — never "blast <mob>".
+        Assert.Equal("blast", h.LastSent);
         Assert.DoesNotContain("a giant rat", h.AllSent);
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
     }
@@ -187,6 +226,205 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("a giant rat", h.LastSent);
     }
 
+    // Report paradigm-20260811-063728: a wrapped 5-mob "Also here:" where one
+    // occupant's flavored name didn't resolve to a Monsters number was counted as
+    // 4 by the heartbeat's engageable count, held below MinEnemies=5, so the room
+    // spell never took over from the single-target cascade. The room-nuke hits
+    // every monster regardless of whether we resolved its number, so an unknown-
+    // number monster must count toward MinEnemies — matching the initial dispatch's
+    // fail-open candidate build.
+    [Fact]
+    public void Heartbeat_CountsUnknownNumberMonster_TowardMinEnemies_RoomsBare()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");        // resolvable
+        h.AddUnnumberedMonster("dark stalker");   // Monster kind, number never resolves
+
+        // One resolvable mob → below MinEnemies=2 → single-target attack spell.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("nuke giant rat", h.LastSent);
+
+        // A second mob arrives whose number we can't resolve. The "already engaged"
+        // guard blocks a re-dispatch here (giant rat still current), so the switch
+        // is the heartbeat's job — and its count must include the unknown mob.
+        h.Feed("Also here: giant rat, dark stalker.");
+        h.Tick();
+
+        // Count reached MinEnemies → room spell, cast BARE (never "blast <mob>").
+        Assert.Equal("blast", h.LastSent);
+    }
+
+    // Simultaneous-arrival settle (report paradigm-20260811-063728 + a live report):
+    // three monsters stride in on one wire flush, then the room re-displays. Engaging
+    // the first arrival single-target used to strand the room below its multi-attack
+    // threshold. The burst must HOLD until the room re-display drives one decision on
+    // the whole group, so a qualifying room nukes on its first action.
+    [Fact]
+    public void SimultaneousArrivalBurst_RoomsOnRedisplay_NoSingleTargetFirst()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 3 };
+        h.AddMonster(1, "giant rat");
+
+        // Burst of arrivals — the first engage is held, nothing goes out yet.
+        h.Arrive("giant rat");
+        h.Arrive("giant rat");
+        h.Arrive("giant rat");
+        Assert.Equal(string.Empty, h.LastSent);
+
+        // Authoritative room re-display of the whole group → rooms bare, first action.
+        h.Feed("Also here: giant rat, giant rat, giant rat.");
+        Assert.Equal("blast", h.LastSent);
+        Assert.DoesNotContain("nuke giant rat", h.AllSent);
+    }
+
+    // The other side of the settle: a LONE spawn with no room re-display still engages,
+    // just a beat later when the window elapses. Below the multi-attack threshold, so
+    // it's the single-target cascade — the burst hold must not strand a solo arrival.
+    [Fact]
+    public void LoneArrival_EngagesSingleTarget_WhenSettleElapses()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 3 };
+        h.AddMonster(1, "giant rat");
+
+        h.Arrive("giant rat");
+        Assert.Equal(string.Empty, h.LastSent);   // held during the window
+
+        h.FireSettle();                            // window elapsed, no re-display
+        Assert.Equal("nuke giant rat", h.LastSent);
+    }
+
+    // Post-kill re-engage race (reports 081053, 081654, 103708, 135433). Each realm
+    // gives monsters custom death messages we can't map to the flavored target, so
+    // the specific-death matcher misses and combat used to re-cast at the corpse on
+    // the kill's *Combat Off* ("You don't see X here!"), then idle a round. The exp
+    // gain that precedes a kill's Off — with no between-round cast to explain the
+    // Off — marks it as our kill, so spell mode drops and no corpse re-cast goes out.
+    [Fact]
+    public void KillInferredFromExp_DropsSpellTarget_NoCorpseRecast()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("mmis giant rat", h.LastSent);   // engaged, spell mode
+        int sentAfterEngage = h.Sent.Count;
+
+        // Wire order of a kill: (custom death line we can't match) → exp → Off.
+        h.Feed("You gain 100 experience.");
+        h.Feed("*Combat Off*");
+
+        // The corpse is not re-cast at — spell mode was dropped on the inferred kill.
+        Assert.Equal(sentAfterEngage, h.Sent.Count);
+    }
+
+    // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even
+    // with an exp gain sitting nearby, e.g. party share-exp) is NOT a kill — the
+    // resume must still re-announce the spell rather than dropping a live target.
+    [Fact]
+    public void BetweenRoundCastOff_WithNearbyExp_StillResumes_NotTreatedAsKill()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("mmis giant rat", h.LastSent);
+
+        h.Feed("You gain 100 experience.");   // e.g. a partymate's kill
+        h.Combat.NoteBetweenRoundCast();       // our own heal broke combat this round
+        h.Feed("*Combat Off*");
+
+        // Not a kill (a cast explains the Off) → the live target is re-announced.
+        Assert.Equal("mmis giant rat", h.LastSent);
+    }
+
+    // A between-round self-heal / buff drops *Combat Off* and the resume
+    // path re-engages the SAME still-alive monster — that must read as a
+    // continuation, not a new fight, or the phase counter restarts on every
+    // interrupt and a round-cycle build heavy on self-heals never reaches its
+    // spell phase (the reported "won't re-engage after buffing, confused
+    // which attack to use").
+    [Fact]
+    public void CustomRoundCycle_ResumeAfterInterrupt_DoesNotResetPhase()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.CustomRoundCycle;
+        h.Settings.CycleRoundsPhysical = 3;
+        h.Settings.CycleRoundsSpell = 0;   // spells till death once reached
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        // Round 0 (engage) — physical phase.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+
+        // Round 1 — still physical, mid-phase.
+        h.Tick();
+
+        // A between-round cast (self-heal) interrupts the swing.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.Equal("a giant rat", h.LastSent);   // resumed with a weapon swing, still physical
+
+        // Rounds 2–3 — the phase boundary must land on schedule (round 3),
+        // exactly as if the interrupt never happened. A phase-counter reset
+        // on the resume would still be mid-physical here.
+        h.Tick();
+        h.Tick();
+        Assert.Equal("harm giant rat", h.LastSent);
+    }
+
+    // The attack spell recasts IMMEDIATELY after the heal/buff that interrupted
+    // it — engage, attack, heal-or-buff, attack, heal-or-buff, ... — not after
+    // waiting out the round cooldown. An earlier attempt to fix a collision here
+    // by respecting the cooldown instead just forced a full extra round of the
+    // mob swinging free before the resume landed (a live capture caught it
+    // exactly: armr fires, *Combat Off*, one full round of silence — the mob's
+    // free swing — then harm finally resumes). CastingDirector's attack-owed gate
+    // (CombatManager.IsSpellAttackOwed) is what actually prevents the collision
+    // this used to guard against — it stops a SECOND heal/buff from contesting
+    // the round, so by the time this resume runs nothing else wants the slot.
+    //
+    // A synchronous test has zero elapsed time between the simulated heal/buff
+    // send and this resume attempt, which no real production call ever sees —
+    // there's always network latency between a cast going out and the server's
+    // *Combat Off* coming back. That trips MinRecastInterval (500ms, unconditional,
+    // a burst-absorb guard unrelated to this fix) regardless of the fix under test.
+    // So this asserts the FAILURE DETAIL when one occurs: "recast-interval" (that
+    // unrelated burst guard) is fine; "cast-blocked" (the round cooldown this fix
+    // bypasses) would mean the regression is back.
+    [Fact]
+    public void SpellMode_ResumeAfterInterrupt_RecastsImmediately_NoRoundOfSilence()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("harm giant rat", h.LastSent);
+
+        List<(CastFailureReason Reason, string Detail)> failures = new();
+        h.Cast.CastFailed += (reason, detail) => failures.Add((reason, detail));
+
+        // A survival cast (heal/buff) just went out, same instant.
+        h.Cast.NotifyExternalCastSent();
+
+        // Its *Combat Off* interrupt must resume the SAME target's attack spell
+        // right away — no waiting for the next tick.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+
+        Assert.DoesNotContain(failures, f => f.Detail == "cast-blocked");
+    }
+
     // ----- Auto-Nuke auto-engine gate ----------------------------------
 
     [Fact]
@@ -201,7 +439,7 @@ public sealed class CombatManagerSpellsTests
 
         // Multi-target nuke is suppressed; the single-target weapon swing runs.
         Assert.Equal("a giant rat", h.LastSent);
-        Assert.DoesNotContain("blast giant rat", h.AllSent);
+        Assert.DoesNotContain("blast", h.AllSent);
     }
 
     [Fact]
@@ -371,7 +609,7 @@ public sealed class CombatManagerSpellsTests
         h.Tick();                             // server repeats — no re-send
         h.Tick();
 
-        Assert.Equal(1, h.AllSent.Count(s => s == "blast giant rat"));
+        Assert.Equal(1, h.AllSent.Count(s => s == "blast"));
         Assert.DoesNotContain("a giant rat", h.AllSent);
     }
 
@@ -391,7 +629,7 @@ public sealed class CombatManagerSpellsTests
         h.Tick();                             // round 2 of 2 — still repeating, no send
         h.Tick();                             // cap reached → switch to weapon
 
-        Assert.Equal(1, h.AllSent.Count(s => s == "blast giant rat"));   // announced once
+        Assert.Equal(1, h.AllSent.Count(s => s == "blast"));   // announced once
         Assert.Equal("a giant rat", h.LastSent);                          // switched to weapon
         h.Tick();                             // weapon mode — heartbeat quiet
         Assert.Equal("a giant rat", h.LastSent);
@@ -470,7 +708,7 @@ public sealed class CombatManagerSpellsTests
 
         h.Ma = 50;
         h.Feed("Also here: giant rat.");      // cast (50 >= 30)
-        Assert.Equal("blast giant rat", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
 
         h.Ma = 20;                            // now below the gate
         h.Tick();                             // mana too low → weapon
@@ -492,17 +730,17 @@ public sealed class CombatManagerSpellsTests
         // action that CastingDirector pulls from the engine (not under test
         // here — we drive the bridge directly).
         h.Feed("Also here: giant rat.");
-        Assert.Equal("blast giant rat", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
 
         (string Spell, string? Target)? debuff = h.Combat.PickInBetweenDebuff();
         Assert.Equal("curse", debuff?.Spell);
-        Assert.Equal("giant rat", debuff?.Target);
+        Assert.Null(debuff?.Target);   // area debuff is cast bare — never "curse <mob>"
         h.Combat.CommitInBetweenDebuff();
 
         Assert.Null(h.Combat.PickInBetweenDebuff());   // once per room
 
         h.Tick();                                       // combat action unchanged
-        Assert.Equal("blast giant rat", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
     }
 
     // ----- backstab gate -----------------------------------------------
@@ -519,7 +757,7 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat.");
 
         Assert.Equal("bs giant rat", h.LastSent);
-        Assert.DoesNotContain("blast giant rat", h.AllSent);
+        Assert.DoesNotContain("blast", h.AllSent);
     }
 
     // ----- room clear resets the chooser bookkeeping -------------------
@@ -533,13 +771,13 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");      // room 1 — cast (cap 1 reached)
-        Assert.Equal("blast giant rat", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
 
         h.Feed("Also here: Bob.");            // room cleared → chooser reset
         h.Tick();                             // round passes (clears cast cooldown)
         h.Feed("Also here: giant rat.");      // room 2 — cap reset, casts again
 
-        Assert.Equal(2, h.AllSent.Count(s => s == "blast giant rat"));
+        Assert.Equal(2, h.AllSent.Count(s => s == "blast"));
     }
 
     // ----- damage-immunity fallback (CS-c) -----------------------------
@@ -601,13 +839,13 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "acid slime");
 
         h.Feed("Also here: acid slime.");                 // multi-attack room spell
-        Assert.Equal("blast acid slime", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
 
         // One immune mob doesn't mean the room spell isn't damaging the
         // rest — multi-attack is never marked immune.
         h.Feed("Your spell has no effect on acid slime.");
         h.Tick();
-        Assert.Equal("blast acid slime", h.LastSent);
+        Assert.Equal("blast", h.LastSent);
         Assert.DoesNotContain("a acid slime", h.AllSent);
     }
 

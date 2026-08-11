@@ -511,9 +511,14 @@ public sealed class PartyEssentialHandlers : IDisposable
         string local = sub switch
         {
             "meditate" => "medi",                                  // MajorMUD's canonical short form
-            // @party go <dir> — drop the "go", send the bare direction verb
-            // (MajorMUD moves on the direction token alone).
-            "go" when ctx.Args.Count >= 2 => string.Join(" ", ctx.Args.Skip(1)),
+            // @party go <dir> — a CARDINAL direction moves on the bare token, so drop
+            // the "go" (MajorMUD moves on the direction alone). A non-cardinal target
+            // is a TEXT exit (go hole / go path) that MUST keep its "go" verb — the
+            // bare token isn't a command (report: "@party go hole" wrongly sent
+            // "hole"). The non-cardinal "go" falls through to the verbatim default.
+            "go" when ctx.Args.Count >= 2
+                     && DirectionExtensions.TryFromToken(ctx.Args[1], out _)
+                => string.Join(" ", ctx.Args.Skip(1)),
             _ => string.Join(" ", ctx.Args),
         };
         byte[] bytes = Encoding.Latin1.GetBytes(local + "\r");

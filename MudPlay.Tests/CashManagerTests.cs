@@ -796,6 +796,30 @@ public sealed class CashManagerTests
         Assert.Equal(("gold", 50, CashPolicy.Collect), h.Dispatches[0]);
     }
 
+    // Report paradigm-20260811-065736: after a kill's corpse-drop is collected, a
+    // post-combat `search` reveals a LARGER floor pile — the old name-only latch
+    // skipped it ("already handled this room visit"), stranding the coins. The
+    // amount-keyed latch re-collects when the reveal exceeds what we took, while a
+    // re-render of the SAME pile stays a no-op (no re-collect spam).
+    [Fact]
+    public void SearchRevealsLargerPile_AfterCorpseCollect_ReCollects_ThenNoOpOnReRender()
+    {
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+
+        h.Feed("3 gold drop to the ground.");          // corpse-drop collected
+        Assert.Equal("get 3 gold crown", h.LastSent);
+        int afterCorpse = h.Sent.Count;
+
+        h.Feed("You notice 5 gold crowns here.");       // search surfaces more → re-collect
+        Assert.Equal("get 5 gold crown", h.LastSent);
+        Assert.True(h.Sent.Count > afterCorpse, "a larger revealed pile must re-collect");
+
+        int afterSearch = h.Sent.Count;
+        h.Feed("You notice 5 gold crowns here.");       // same pile re-displayed → no-op
+        Assert.Equal(afterSearch, h.Sent.Count);
+    }
+
     // A denomination-named item mixed in with real coin: the item is skipped, the
     // coin is collected — the filter is per-entry, not all-or-nothing.
     [Fact]

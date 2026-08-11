@@ -201,6 +201,25 @@ public sealed class DeathRecoveryManagerTests
     }
 
     [Fact]
+    public void AutoEquip_ReequipsHeldWeapon_WithEq_NotHold()
+    {
+        // Report: corpse recovery sent "hold platinum mace" for the weapon. A held
+        // item (Weapon Hand / Off-Hand) must be wielded with `eq`, matching the
+        // equipment manager — `hold` only carries it in hand, it doesn't wield it.
+        using GraphHarness h = new();
+        Die(h, new[] { new EquippedItem("platinum mace", "Weapon Hand") }, Array.Empty<string>());
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+
+        h.EnterGates();
+        h.FeedSurvey("corpse of Ermias");
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+
+        Assert.Contains("eq platinum mace", h.Sent);
+        Assert.DoesNotContain("hold platinum mace", h.Sent);
+    }
+
+    [Fact]
     public void GivenNameOnly_UsedForCorpseMatchAndCommand()
     {
         // The survey shows the GIVEN name only ("corpse of Ermias"), and the

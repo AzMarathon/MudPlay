@@ -95,6 +95,7 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _spellNoEffectSub;
     private readonly IDisposable _commandNoEffectSub;
     private readonly IDisposable _combatStatusSub;
+    private readonly IDisposable _expGainSub;
     private readonly IDisposable _monsterProtectSub;
     private readonly IDisposable _bsResolveHitsSub;
     private readonly IDisposable _bsResolveMissesSub;
@@ -162,6 +163,27 @@ public sealed partial class CombatManager : IDisposable
     // OnEntitiesObserved call so the defer branch doesn't re-latch and strand us
     // — the fallback's whole point is to make our OWN independent pick this round.
     private bool _followDeferBypass;
+
+    // Set only for the duration of ResumeEngage's re-dispatch so the "already
+    // engaged, server is still swinging → don't re-send" short-circuit is bypassed.
+    // The interrupt (heal/bless/buff) turned our auto-attack OFF, so the round's
+    // action MUST be re-sent — but we keep _currentTarget set (unlike the old
+    // clear-and-refresh) so DispatchRoundAction's new-target reset doesn't zero the
+    // round-cycle phase / attack-spell cascade on every interrupt.
+    private bool _resumeBypassEngagedGuard;
+
+    // Simultaneous-arrival settle (see the long note at the arm site in
+    // OnEntitiesObserved). _arrivalSettleArmed latches while a burst's first engage
+    // is held; _arrivalSettleBypass is set only for the settle callback's re-entrant
+    // OnEntitiesObserved so it dispatches instead of re-arming. _scheduleArrivalSettle
+    // is the injected UI-thread one-shot (null in tests that don't opt in → the old
+    // immediate-engage path). The window only needs to span the synchronous
+    // processing of a burst + its room re-display; it doubles as the (rare) lone-spawn
+    // engage latency, so keep it short.
+    private static readonly TimeSpan ArrivalSettleWindow = TimeSpan.FromMilliseconds(350);
+    private bool _arrivalSettleArmed;
+    private bool _arrivalSettleBypass;
+    private Action<TimeSpan, Action>? _scheduleArrivalSettle;
 
     // Backstab flee-on-failure action, bound in AppServices to
     // HealthManager.RunFromBackstabFailure. null until wired; even when wired it
@@ -257,6 +279,26 @@ public sealed partial class CombatManager : IDisposable
     // misattributed.
     private static readonly TimeSpan CastInterruptResumeWindow = TimeSpan.FromSeconds(3);
 
+    // True when a between-round cast (survival heal / buff) just spent its round
+    // while we were mid attack-spell combat, and our attack spell hasn't gone back
+    // out since. Exposed to CastingDirector (IsSpellAttackOwed, wired to its
+    // attack-owed gate in AppServices) so it declines to fire ANOTHER survival cast
+    // until the owed attack round happens — the game allows exactly one cast per
+    // round, so back-to-back heal/buff rounds with no attack between them is a
+    // scheduling bug, not a losing fight: CastingDirector evaluates before
+    // CombatManager every tick and, with nothing to stop it, keeps re-claiming the
+    // round the instant HP dips again, which it always will while nothing is
+    // fighting back. Weapon-mode combat never sets this — a swing auto-repeats
+    // server-side and never competes with CastingDirector for the cast slot, only
+    // an attack SPELL does. Set in NoteBetweenRoundCast (only while
+    // _castingSpellTarget is live), cleared the moment a real attack goes back out
+    // (NoteAttackSent) or the room clears (OnRoomCleared).
+    private bool _spellAttackOwed;
+
+    // CastingDirector's view of _spellAttackOwed — the round belongs to the
+    // pending attack spell, not another survival cast.
+    public bool IsSpellAttackOwed => _spellAttackOwed;
+
     // When a monster death was last detected this burst (stamped by
     // NoteMonsterDied / NoteUnattributedDeath). The between-round-cast resume
     // must not fire when a kill just happened: a mob's dying *Combat Off* and a
@@ -286,6 +328,21 @@ public sealed partial class CombatManager : IDisposable
     // _lastAttackSentAt > _lastDeathAt compare, because the death stamp and the
     // re-observe swing can land on the same DateTimeOffset.Now tick.
     private bool _attackSentSinceDeath;
+
+    // Prompt kill signal. A kill emits "You gain N experience." immediately before
+    // its *Combat Off* (wire order: death line → exp → Off). Each realm gives its
+    // monsters CUSTOM death messages that overlap across species and aren't in our
+    // game data, so we can't match a death line to the flavored target we were
+    // fighting — the specific-death matcher misses and only the lagging exp+Off
+    // fallback correlation (a separate watcher) eventually drops it, a beat AFTER
+    // this handler's resume already re-attacked the corpse ("You don't see X
+    // here!", then a full round idle). Stamping the exp here lets OnCombatStatus
+    // treat an Off that a fresh exp explains — and that NO between-round survival
+    // cast explains — as our kill's Off, dropping the dead target before the resume
+    // fires. Consumed on use so a stale exp from an earlier identical-exp kill can't
+    // mark a later non-kill Off (a thrown weapon emits one per strike).
+    private DateTimeOffset _lastExpGainAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan ExpKillWindow = TimeSpan.FromSeconds(3);
 
     // Server-confirmed engagement, driven ONLY by the wire *Combat Engaged* /
     // *Combat Off* lines — unlike _combatOff (optimistically cleared on every
@@ -408,6 +465,7 @@ public sealed partial class CombatManager : IDisposable
         _spellNoEffectSub  = router.Subscribe(KnownPatterns.SpellNoEffect,  OnSpellNoEffect);
         _commandNoEffectSub = router.Subscribe(KnownPatterns.CommandNoEffect, OnCommandNoEffect);
         _combatStatusSub   = router.Subscribe(KnownPatterns.CombatStatus,   OnCombatStatus);
+        _expGainSub        = router.Subscribe(KnownPatterns.UserGainExperience, OnUserGainExperience);
         _monsterProtectSub = router.Subscribe(KnownPatterns.MonsterMovesToProtect, OnMonsterProtect);
 
         // Backstab surprise-round resolution rides on our own hit / miss lines.
@@ -648,6 +706,30 @@ public sealed partial class CombatManager : IDisposable
                    refireReason: "@kill retarget");
     }
 
+    // Inject the UI-thread one-shot that defers a simultaneous-arrival burst's first
+    // engage. Shaped like the walker's voyage scheduler so the Game layer stays
+    // UI-free and tests drive a fake clock. Wired in AppServices to a DispatcherTimer;
+    // left null in tests that don't exercise the settle (they keep the immediate path).
+    public void SetArrivalSettleScheduler(Action<TimeSpan, Action> schedule)
+        => _scheduleArrivalSettle = schedule;
+
+    // The arrival-settle window elapsed with no authoritative room re-display having
+    // superseded it. Re-run the engage decision against whatever the room now holds —
+    // the whole burst has landed, so a room that met the multi-attack threshold rooms
+    // on this first action. No-ops if a room display already engaged us (arm cleared)
+    // or the room emptied out from under us.
+    private void OnArrivalSettleElapsed()
+    {
+        if (_disposed || !_arrivalSettleArmed) return;
+        _arrivalSettleArmed = false;
+        if (_classifier.Current is not { } cur) return;
+        _log?.Combat(LogCategory,
+            "arrival-settle: window elapsed with no room re-display — engaging the accumulated room");
+        _arrivalSettleBypass = true;
+        try { OnEntitiesObserved(cur); }
+        finally { _arrivalSettleBypass = false; }
+    }
+
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
         CombatSettings settings = _readSettings();
@@ -656,6 +738,14 @@ public sealed partial class CombatManager : IDisposable
         // previous observation is stale. Re-evaluated below once we know the
         // engageable set (a re-observe of the SAME room re-arms it if still apt).
         _awaitingFollowAnnounce = false;
+
+        // An authoritative non-arrival observation (the room re-display, a room
+        // change, a death resync) supersedes a pending simultaneous-arrival settle:
+        // it carries the full roster, so it drives the decision now and the settle
+        // callback that fires later finds nothing armed and no-ops. Skipped on the
+        // settle's own re-entrant call (bypass) so it can proceed to dispatch.
+        if (!_arrivalSettleBypass && obs.Source != RoomObservationSource.Arrival)
+            _arrivalSettleArmed = false;
 
         // A confirmed room change re-opens the surprise round for the room we're
         // entering. The pre-move hook (PrepBackstabForMove) already resets the
@@ -838,6 +928,35 @@ public sealed partial class CombatManager : IDisposable
             }
         }
 
+        // Simultaneous-arrival settle. When several monsters stride in on the same
+        // wire flush ("A goblin strides in." ×3 then the room re-displays), each
+        // "strides in" line fires its own arrival observation. Engaging the FIRST
+        // one commits us to a single-target action, and the full-room re-display
+        // that follows can't upgrade it — the "already engaged" guard below sends us
+        // straight back out — so a room that met the multi-attack threshold gets
+        // pecked with single-target casts instead of nuked. Hold the first engage of
+        // a burst for a short window: the authoritative room re-display (AlsoHere) or
+        // the accumulated arrivals then drive one decision against the whole group,
+        // so a room that qualifies rooms on its first action. Only the initial engage
+        // debounces (_currentTarget is null); a mob wandering in mid-fight is handled
+        // by the guard / heartbeat as before, and a lone spawn just engages a beat
+        // later. No-op until a scheduler is wired (tests without one keep the old
+        // immediate path); the settle callback re-enters with _arrivalSettleBypass so
+        // it dispatches instead of re-arming.
+        if (obs.Source == RoomObservationSource.Arrival && _currentTarget is null
+            && _scheduleArrivalSettle is not null && !_arrivalSettleBypass)
+        {
+            if (!_arrivalSettleArmed)
+            {
+                _arrivalSettleArmed = true;
+                _log?.Combat(LogCategory,
+                    $"arrival-settle: holding first engage {ArrivalSettleWindow.TotalMilliseconds:F0}ms " +
+                    "so a simultaneous burst + room re-display decide together");
+                _scheduleArrivalSettle(ArrivalSettleWindow, OnArrivalSettleElapsed);
+            }
+            return;
+        }
+
         // Sort by Priority asc (First=0 highest, Last=4 lowest), then
         // by appearance order for stable tiebreak.
         engageable.Sort((a, b) =>
@@ -849,8 +968,11 @@ public sealed partial class CombatManager : IDisposable
         // Server auto-attacks the specific named target each round;
         // re-sending the same command mid-fight would burn a swing.
         // If the exact RawName we last sent is still in the engageable
-        // list, keep going — the server is still swinging at it.
-        if (_currentTarget is { } current &&
+        // list, keep going — the server is still swinging at it. A resume
+        // re-dispatch (ResumeEngage) bypasses this: combat was turned OFF by the
+        // interrupt, so the server is NOT swinging and the round must be re-sent.
+        if (!_resumeBypassEngagedGuard &&
+            _currentTarget is { } current &&
             engageable.Any(e => string.Equals(e.RawName, current,
                                               StringComparison.OrdinalIgnoreCase)))
         {
@@ -1041,6 +1163,7 @@ public sealed partial class CombatManager : IDisposable
         _castingSpellTarget = null;
         _lastCastAction = null;
         _alternationRound = 0;
+        _spellAttackOwed = false;
         _attackSpellImmuneSpecies.Clear();
         _spellChooser.ResetForNewRoom();
 
@@ -1849,20 +1972,34 @@ public sealed partial class CombatManager : IDisposable
     {
         _combatOff = false;
         _log?.Combat(LogCategory, "combat resumed after interrupt — re-engaging room");
-        _currentTarget = null;     // force a fresh pick + equip
 
-        // Bypass the follow-announce hold on this re-pick. We only get here mid-
-        // fight (an interrupt turned OUR auto-attack off while already engaged),
-        // so the party has already converged and the followed leader is swinging
-        // at a mob it won't re-announce ("already engaged; no re-fire"). Leaving
-        // ShouldWaitForFollow armed would park us awaiting an announce that never
-        // comes, and OnCombatTick's fallback would only rescue us a full round
-        // later (the reported "re-attack missed a combat round" after a between-
-        // round heal). Picking our own target now lands on the same mob that
-        // fallback would have chosen, minus the wasted round.
+        // Do NOT clear _currentTarget here. A heal / bless / buff interrupt mid-fight
+        // is not a new engagement; dropping the target made DispatchRoundAction treat
+        // the same mob as brand-new and run its new-target reset — zeroing the custom
+        // round-cycle phase (_alternationRound) and wiping the attack-spell cascade
+        // (MaxCasts / immune / announce latches). That snapped the cycle back to its
+        // opening phase every interrupt ("confused which attack to use"). Keeping the
+        // target makes the re-dispatch a same-target re-announce, so the phase/cascade
+        // carry over. A target that died during the interrupt was already cleared by
+        // the death watcher, so this still re-picks a fresh mob when appropriate.
+        //
+        // The interrupt turned our auto-attack OFF, so the round's action must be
+        // re-sent — but keeping _currentTarget would otherwise trip the "already
+        // engaged, server is still swinging → don't re-send" short-circuit in
+        // OnEntitiesObserved. Bypass just that guard for this one re-dispatch.
+        //
+        // _followDeferBypass also lifts the follow-announce hold: we only get here
+        // mid-fight, so the party has already converged and the followed leader is
+        // swinging at a mob it won't re-announce — leaving ShouldWaitForFollow armed
+        // would park us awaiting an announce that never comes.
+        _resumeBypassEngagedGuard = true;
         _followDeferBypass = true;
         try { OnEntitiesObserved(live); }
-        finally { _followDeferBypass = false; }
+        finally
+        {
+            _resumeBypassEngagedGuard = false;
+            _followDeferBypass = false;
+        }
     }
 
     // Round-paced wrapper over ResumeEngage: re-engages at most once per
@@ -1900,8 +2037,21 @@ public sealed partial class CombatManager : IDisposable
     // Signal from Spells.CastingDirector.CastFired that a between-round cast
     // (self-heal / cure / buff / debuff) just went to the server. Arms
     // OnCombatStatus to attribute the imminent *Combat Off* to that cast and
-    // resume the weapon attack promptly (see _betweenRoundCastAt).
-    public void NoteBetweenRoundCast() => _betweenRoundCastAt = DateTimeOffset.Now;
+    // resume the weapon attack promptly (see _betweenRoundCastAt). Also arms
+    // _spellAttackOwed while an attack spell was actively cycling — this cast just
+    // spent the round that owed us an attack, so CastingDirector must sit out the
+    // next one (see _spellAttackOwed).
+    public void NoteBetweenRoundCast()
+    {
+        _betweenRoundCastAt = DateTimeOffset.Now;
+        if (_castingSpellTarget is not null)
+            _spellAttackOwed = true;
+    }
+
+    // "You gain N experience." — the prompt kill signal (see _lastExpGainAt). Only
+    // a kill grants exp, and it lands just before the kill's *Combat Off*, so a
+    // fresh stamp here lets OnCombatStatus recognise that Off as our kill's.
+    private void OnUserGainExperience(MatchResult _) => _lastExpGainAt = DateTimeOffset.Now;
 
     // Track *Combat On*/*Combat Off*. Off arms the resume-after-interrupt path
     // (see _combatOff); Engaged means the server is swinging for us again, so we
@@ -1914,6 +2064,30 @@ public sealed partial class CombatManager : IDisposable
         {
             _combatOff = true;
             _engageConfirmed = false;
+
+            // Prompt kill drop. A fresh exp gain explains this Off (wire: death →
+            // exp → Off) while NO between-round survival cast does — so it's our
+            // kill's Off, not a mid-fight heal's. The custom per-monster death
+            // message didn't match, so without this the resume paths below re-attack
+            // the corpse ("You don't see X here!") and stall a round waiting out the
+            // recovery — the reported "won't re-engage after a kill until the next
+            // NPC attacks." Arm the existing death-suppression guards (stamp
+            // _lastDeathAt) and drop spell mode so the heartbeat can't re-cast at the
+            // corpse; the death→re-observe re-picks the survivor. The no-between-
+            // round-cast gate keeps a heal's Off — or a party share-exp landing
+            // beside one — from being misread as a kill (that path resumes below).
+            if (_currentTarget is not null
+                && DateTimeOffset.Now - _lastExpGainAt < ExpKillWindow
+                && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow)
+            {
+                _lastExpGainAt = DateTimeOffset.MinValue;   // consume — a later non-kill Off must not reuse it
+                _lastDeathAt = DateTimeOffset.Now;
+                _attackSentSinceDeath = false;
+                _castingSpellTarget = null;
+                _log?.Combat(LogCategory,
+                    "kill inferred from exp + *Combat Off* (no between-round cast) — " +
+                    "dropping target so the resume can't re-attack the corpse");
+            }
 
             // If this Off is the server's response to a between-round cast
             // we just fired (self-heal / cure / buff), re-issue the weapon
@@ -1985,6 +2159,18 @@ public sealed partial class CombatManager : IDisposable
                 && TargetPresent(liveSpell, spellTarget)
                 && TryBuildCandidate(liveSpell, spellTarget) is { } spellCand)
             {
+                // Clear the interrupt flag before attempting the re-announce, mirroring
+                // ResumeEngage's weapon-mode path — NOT only inside DispatchRoundAction's
+                // TryCast-succeeded branch. This attempt can lose the round's single cast
+                // slot to a survival heal firing the same instant (CastingDirector.Evaluate
+                // runs immediately on the HP change that triggered this whole interrupt, not
+                // just on the tick boundary), and DispatchRoundAction's own comment ("stay in
+                // spell mode and retry next tick") only holds if OnCombatTick's heartbeat can
+                // actually run next tick — it bails immediately while _combatOff is true. Left
+                // set here, a single lost race parks the engine in spell mode with no path back
+                // to a retry: the reported "won't re-engage after buffing/healing, sits there
+                // until manual input" stall.
+                _combatOff = false;
                 _announcedSpellCode = null;
                 DispatchRoundAction(_readSettings(), spellCand, CountEngageable(liveSpell), liveSpell);
             }
@@ -2189,6 +2375,10 @@ public sealed partial class CombatManager : IDisposable
         // a later cast-interrupt Off should resume, not stand down (see
         // _attackSentSinceDeath).
         _attackSentSinceDeath = true;
+        // The owed attack just went out — CastingDirector is clear to fire another
+        // survival cast next round (see _spellAttackOwed). No-op for a weapon swing,
+        // which never set this in the first place.
+        _spellAttackOwed = false;
         if (_engageConfirmed) return;
         _awaitingEngageSince ??= DateTimeOffset.Now;
     }
@@ -2236,6 +2426,7 @@ public sealed partial class CombatManager : IDisposable
         _spellNoEffectSub.Dispose();
         _commandNoEffectSub.Dispose();
         _combatStatusSub.Dispose();
+        _expGainSub.Dispose();
         _monsterProtectSub.Dispose();
         _bsResolveHitsSub.Dispose();
         _bsResolveMissesSub.Dispose();
