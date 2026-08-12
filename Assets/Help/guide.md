@@ -58,7 +58,7 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 - **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging.
 - **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave.
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
-- **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character.
+- **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
 - **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — spell configuration, session counters, and raw wire I/O for troubleshooting.
 
 The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
@@ -273,6 +273,41 @@ Beyond the engines, you can script your own automation. All three editors live i
   - **Pattern** — the text or expression to match against each line. Any pieces you capture appear in the **Captures** row.
   - **Response** — what MudPlay sends back on a match. Drop a captured value in with `{name}`, split multiple lines with `^M` or `;`, or leave it blank to send a bare Enter.
   - **Sound** (optional) — a file picker is here, but sound playback isn't wired up yet, so it does nothing today.
+
+---
+
+# Game Data
+
+MudPlay's automation reads from **game data** — the monster, item, spell, room, and shop tables imported from a MajorMUD `.MDB` database. The **Game Data Browser** (press **F3**, or the toolbar's *Game Data Browser* button) lets you inspect all of it and override individual records for your character.
+
+## Importing and switching sets
+
+The top **Game Data** menu (in the menu bar) manages your data sets:
+
+- **Import .mdb…** — pick a MajorMUD `.MDB` file; MudPlay imports it as a new named set and switches to it. This populates the tables the engines read from — the terminal itself works without it.
+- **The set list** — every imported set appears at the top of the menu with a checkmark on the active one; click another to switch. The Browser's status bar shows *Set: <name>*.
+- **Manage Game Data…** — copy or move a set's saved loops and lairs into another set, or delete a set.
+- **Modify Blacklist…** — hide specific rooms (by map/room number) from the map and room search, and mark ones the walker should treat as unreachable.
+
+## Getting around the Browser
+
+The window is a sidebar plus a content pane:
+
+- The sidebar's **Search…** box filters the **section list**, not the rows — type "weapon" and unrelated sections drop away.
+- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Messages**. (The macro/alias/trigger editors are covered in the **Automation** section.)
+- **Imported tables** (bottom group) holds the game data: **Monsters, Items, Spells, Rooms, Lairs, Shops, Races, Classes, TextBlocks, Info, Unobtainable, Quest Flags.**
+
+Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
+
+## Overriding a record
+
+**Double-click a row to open it** — what happens depends on the table:
+
+- **Items** and **Monsters** open a real **override editor**: an editable pane on the left, the read-only **Other Info (from MDB)** on the right. For an item you can flip its automation flags (**Auto-collect, Auto-discard, Auto-buy, Auto-sell, Auto-stash**, and more), set **Min. to keep / Max to get**, and toggle **Auto-obtain for path**. For a monster you can set its **Relationship** and **Priority**, its pre-attack and override-attack spells, and the combat-message wording. The **Use** dropdown chooses where the override saves — **Character** (this character only), **BBS** (everyone on this BBS), or **Global** (the whole install) — then **OK** writes it and the row's Use column updates to match.
+- **Spells** — double-click edits the spell's player-cast **message** wording; the spell's own stats are read-only.
+- **Rooms** — double-click opens a read-only detail popup (exits, lighting, shop, placed monsters, room commands).
+- **Shops** — double-click jumps to the shop's room in the **Rooms** table.
+- The rest (Lairs, Races, Classes, and so on) are read-only reference.
 
 ---
 
