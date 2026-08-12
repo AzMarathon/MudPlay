@@ -166,6 +166,62 @@
                           Content="Show the mud-throwing startup animation"
                           ToolTip.Tip="When checked (default), an animated scene plays on the terminal at startup until you connect or load a profile. When unchecked, only the static startup header (the MudPlay title and byline) shows. This is an install-wide preference — it's saved to the default profile and read at startup regardless of which character auto-loads, so turning it off stays off across launches and profiles. Applies immediately on Apply — a splash that's currently playing stops on the spot."/>
 
+                <TextBlock Classes="SectionHeader" Text="Navigation line appearance"/>
+                <TextBlock Text="Colour and thickness for each route line drawn on the map. Applies to every character."
+                           Foreground="{StaticResource ChromeFgSecBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           TextWrapping="Wrap" Margin="0,0,0,6"/>
+                <ItemsControl ItemsSource="{Binding NavLineRows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NavLineStyleRowViewModel">
+                            <Grid ColumnDefinitions="210,Auto,Auto,Auto" Margin="0,3">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"
+                                           VerticalAlignment="Center"/>
+
+                                <!-- Colour picker: swatch button opens a ColorView flyout. -->
+                                <Button Grid.Column="1" Padding="2" VerticalAlignment="Center"
+                                        ToolTip.Tip="Line colour. Click to pick.">
+                                    <Border Width="46" Height="18"
+                                            Background="{Binding Swatch}"
+                                            BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource CornerSm}"/>
+                                    <Button.Flyout>
+                                        <Flyout>
+                                            <LayoutTransformControl>
+                                                <LayoutTransformControl.LayoutTransform>
+                                                    <ScaleTransform ScaleX="0.7" ScaleY="0.7"/>
+                                                </LayoutTransformControl.LayoutTransform>
+                                                <ColorView Color="{Binding Color, Mode=TwoWay}"
+                                                           IsAlphaEnabled="False"/>
+                                            </LayoutTransformControl>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+
+                                <!-- Thickness -->
+                                <NumericUpDown Grid.Column="2" Width="120" Margin="8,0,0,0"
+                                               VerticalAlignment="Center"
+                                               Minimum="{Binding MinThickness}"
+                                               Maximum="{Binding MaxThickness}"
+                                               Increment="0.5"
+                                               FormatString="0.0"
+                                               Value="{Binding Thickness, Mode=TwoWay}"
+                                               ToolTip.Tip="Line thickness in pixels."/>
+
+                                <Button Grid.Column="3" Content="Reset" Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding ResetCommand}"
+                                        ToolTip.Tip="Reset this line's colour and thickness to the default."/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Content="Restore Defaults" Margin="0,8,0,0"
+                        HorizontalAlignment="Left"
+                        Command="{Binding RestoreNavLineDefaultsCommand}"
+                        ToolTip.Tip="Reset every navigation line's colour and thickness to the factory defaults."/>
+
                 <TextBlock Classes="SectionHeader" Text="Initial"/>
 
                 <Grid ColumnDefinitions="120,*">

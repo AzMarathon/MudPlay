@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.5.23**
-> - Fixed the alternating action orders (Alternate Spell/Physical, Alternate Physical/Spell, and Custom round cycle) flipping their attack/spell phase mid-round instead of once per real round — a monster's counter-swing line landing a beat after the player's own could each independently trip the engine's round-boundary signal, so a fight could switch from a physical swing straight to a spell cast (or back) within the same round instead of waiting for the next one
-> - Fixed a deadlock where a room with more hostiles than Combat → Max Monsters allowed left the character standing defenseless: CombatManager correctly declined to engage, but CombatStateTracker (which owns the walker's movement gate) didn't know about that window and held the walker there anyway — combat refusing to fight AND the walker unable to leave, absorbing hits from every monster in the room with no recourse
-> - The Min/Max Monsters window now only applies while a walker / loop / auto-lair is actively moving you through a room — idle (freshly logged in, nothing queued) now fights back regardless of room population instead of standing undefended
+> **Version 3.6.0**
+> - Navigation line colours and thickness are now customizable in Settings → General — the go-to, loop, preview, loop-builder, and Auto-Lair route lines each get a colour picker and a thickness stepper (per-line Reset, plus a "Restore Defaults" for all of them); the current look is the default, saves install-wide, and the map repaints live on Apply
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

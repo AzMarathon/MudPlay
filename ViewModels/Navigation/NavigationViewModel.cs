@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
 using MudPlay.Services;
 
 namespace MudPlay.ViewModels.Navigation;
@@ -23,6 +24,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         ArgumentNullException.ThrowIfNull(services);
         _services = services;
+
+        // Seed the nav-line appearance from the Global settings and stay live off
+        // it — a Settings → General Apply raises GlobalSettingsChanged and repaints
+        // the map without reopening the window.
+        _navLineStyles = _services.Settings.Current.NavLines;
+        _services.Settings.GlobalSettingsChanged += OnGlobalSettingsChanged;
 
         // Reopen in the collapse mode the user last left. Set the backing field
         // directly (not the property) so this seeding doesn't loop back into
@@ -127,6 +134,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // in flight (see OnSailingTick / the Sailing walker event).
     private readonly DispatcherTimer _sailingTick;
 
+    // Global settings changed (a Settings → General Apply) — refresh the nav-line
+    // appearance so the map repaints with the new colours / thickness live.
+    private void OnGlobalSettingsChanged(MudPlay.Models.Settings.GlobalSettings settings)
+        => NavLineStyles = settings.NavLines;
+
     public void Dispose()
     {
         _lairTick.Stop();
@@ -134,6 +146,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _searchDebounce?.Stop();
         _loopFilterDebounce?.Stop();
         _gotoFilterDebounce?.Stop();
+        _services.Settings.GlobalSettingsChanged -= OnGlobalSettingsChanged;
         _services.RoomTracker.StateChanged -= OnTrackerStateChanged;
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
         _services.Walker.Event -= OnWalkerEvent;
@@ -802,6 +815,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [ObservableProperty] private RoomKey? _destinationRoomKey;
 
     [ObservableProperty] private RoomGraphManager? _graph;
+
+    // User-configured nav-line colours + thickness (Settings → General, Global
+    // tier). Bound to MapControl.NavLineStyles; kept live off the Global settings
+    // so an Apply in the Settings window repaints the map without a reopen. Null =
+    // factory pens (NavLineDefaults).
+    [ObservableProperty] private NavLineStyles? _navLineStyles;
+
     [ObservableProperty] private IReadOnlyList<RoomKey>? _walkPath;
     [ObservableProperty] private IReadOnlyList<RoomKey>? _loopPath;
 

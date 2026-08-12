@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
 using MudPlay.Services;
 using MudPlay.Views.Settings;
 
@@ -109,6 +110,11 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // Saved Auto-Lair names for the "Begin Auto-Lair" picker — same set-scoped
     // snapshot semantics as LoopNames.
     public ObservableCollection<string> AutoLairNames { get; } = new();
+
+    // Navigation-line appearance rows (Global tier — see NavLineDefaults). One row
+    // per map polyline; each edits colour + thickness. Built once, re-seeded from
+    // GlobalSettings on every LoadFromProfile, written back in Apply.
+    public ObservableCollection<NavLineStyleRowViewModel> NavLineRows { get; } = new();
 
     // ----- Terminal font (char-tier) -----
     // Font family + size the terminal canvas renders with. Both used to live in
@@ -251,8 +257,29 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             _profile.ProfileClosed -= OnProfileClosedExternally;
         });
 
+        foreach (NavLineKind kind in NavLineDefaults.All)
+            NavLineRows.Add(new NavLineStyleRowViewModel(kind, Dirty));
+
         LoadFromProfile();
         _suppressDirty = false;
+    }
+
+    // Reset every nav-line colour + thickness to its factory default (NavLineDefaults).
+    // Marks dirty via the rows' change callbacks; Apply persists the cleared deltas.
+    [RelayCommand]
+    private void RestoreNavLineDefaults()
+    {
+        foreach (NavLineStyleRowViewModel row in NavLineRows)
+            row.ResetCommand.Execute(null);
+    }
+
+    // Build the Global-tier delta from the rows, or null when every line is default.
+    private NavLineStyles? SnapshotNavLines()
+    {
+        NavLineStyles styles = new();
+        foreach (NavLineStyleRowViewModel row in NavLineRows)
+            styles.Set(row.Kind, row.ToOverride());
+        return styles.IsEmpty ? null : styles;
     }
 
     public override void Apply()
@@ -334,6 +361,12 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // profile swaps rather than living on this character's tier.
         _profile.WriteDefaultProfileStartupAnimation(ShowStartupMudAnimation);
 
+        // Nav-line appearance is install-global — persist to GlobalSettings and Save.
+        // Save fires GlobalSettingsChanged, so the live map (NavigationViewModel
+        // listens) repaints with the new colours / thickness immediately.
+        _globalSettings.Current.NavLines = SnapshotNavLines();
+        _globalSettings.Save();
+
         ClearDirty();
     }
 
@@ -379,6 +412,12 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // The splash is install-global — always reflect the Global default profile's
         // value, not the loaded profile's (possibly stale) copy of the field.
         ShowStartupMudAnimation = _profile.ReadDefaultProfileStartupAnimation();
+
+        // Nav-line appearance is Global-tier too — seed the rows from GlobalSettings
+        // (delta), not the loaded profile.
+        NavLineStyles? navLines = _globalSettings.Current.NavLines;
+        foreach (NavLineStyleRowViewModel row in NavLineRows)
+            row.Load(navLines?.Get(row.Kind));
 
         SelectedFontFamily = FontFamilyOptions.FirstOrDefault(o => o.Uri == dto.TerminalFontFamily)
                              ?? FontFamilyOptions[0];

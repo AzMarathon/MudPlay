@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using MudPlay.Game.Map;
+using MudPlay.Models.Settings;
 
 namespace MudPlay.Controls;
 
@@ -71,6 +72,13 @@ public sealed class MapControl : Control
     // arms a destination.
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> PreviewPathProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(PreviewPath));
+
+    // User-configured colour + thickness for each nav polyline (Settings → General,
+    // Global tier). Null = every line draws its factory pen (NavLineDefaults). Bound
+    // from NavigationViewModel, which keeps it live off the Global settings. Building
+    // the pens from this is cached (see EnsureNavPens) so Render stays allocation-free.
+    public static readonly StyledProperty<NavLineStyles?> NavLineStylesProperty =
+        AvaloniaProperty.Register<MapControl, NavLineStyles?>(nameof(NavLineStyles));
 
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> LoopPathProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(LoopPath));
@@ -249,6 +257,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(PreviewPathProperty);
         set => SetValue(PreviewPathProperty, value);
+    }
+
+    public NavLineStyles? NavLineStyles
+    {
+        get => GetValue(NavLineStylesProperty);
+        set => SetValue(NavLineStylesProperty, value);
     }
 
     public IReadOnlyList<RoomKey>? LoopPath
@@ -620,44 +634,48 @@ public sealed class MapControl : Control
     private static readonly IPen   DestinationDotPen  = new Pen(new SolidColorBrush(Color.Parse("#0A1E40")), 1.5);
     private static readonly IPen   PlayerDotPen   = new Pen(new SolidColorBrush(Color.Parse("#3A1F00")), 1.5);
     private static readonly IPen   PlayerOuterPen = new Pen(new SolidColorBrush(Color.Parse("#FFD24D")), 2.5);
-    private static readonly IPen   WalkPathPen    = new Pen(new SolidColorBrush(Color.Parse("#1E64DC")), 3.0)
-    {
-        LineCap = PenLineCap.Round,
-        LineJoin = PenLineJoin.Round,
-    };
-    // Active loop line — green to match the engine colour schema:
-    // walk-to blue, loop green, auto-lair orange (AccentGreenColor in
-    // the palette). The colour is reused by the Navigation rail's
-    // section headers + the Loops + Auto-Lairs list rows so the user
-    // gets one consistent "this is a loop" signal everywhere.
-    private static readonly IPen   LoopPathPen    = new Pen(new SolidColorBrush(Color.Parse("#7AB870")), 3.0)
-    {
-        LineCap = PenLineCap.Round,
-        LineJoin = PenLineJoin.Round,
-    };
-    // Solid red "where Run would walk" preview line for queued walk-to
-    // destinations. Drawn beneath the active walk so a live walk overlays it.
-    // Hue distinct from the trap red (TrapPen #DC3C3C) so the user reads them
-    // as different signals. Dashed-red is reserved for loop previews.
-    private static readonly IPen   PreviewPathPen = new Pen(new SolidColorBrush(Color.Parse("#E66C5A")), 3.0)
-    {
-        LineCap  = PenLineCap.Round,
-        LineJoin = PenLineJoin.Round,
-    };
+    // Nav-line pens — built from the bound NavLineStyles (user colour + thickness),
+    // falling back to NavLineDefaults for any unset line. Instance (not static) so
+    // each map reflects the live Global settings; cached and rebuilt only when the
+    // bound styles instance changes, so Render allocates no pens per frame. Default
+    // colour rationale lives in NavLineDefaults — the engine schema is walk-to blue,
+    // loop green, preview / loop-builder red, auto-lair orange, and the loop colour
+    // is echoed by the Navigation rail headers + Loops/Auto-Lairs list rows.
+    private NavLineStyles? _navPensBuiltFrom;
+    private bool _navPensReady;
+    private IPen _walkPathPen = null!;
+    private IPen _loopPathPen = null!;
+    private IPen _previewPathPen = null!;
+    private IPen _loopBuilderPen = null!;
+    private IPen _autoLairWalkPen = null!;
 
-    // Solid red polyline for the user's in-progress loop-builder gap-filled
-    // path. Shares hue with PreviewPathPen (queued walk-to) because both are
-    // "preview" overlays. Executing engines have their own per-engine colours
-    // (walk-to WalkPathPen blue, loop LoopPathPen green, auto-lair
-    // AutoLairWalkPen orange), so red unambiguously means "planned, not yet
-    // driving." Numbered waypoint markers (drawn separately) disambiguate
-    // build-preview from a single-leg walk-to preview when both could
-    // theoretically be visible.
-    private static readonly IPen   LoopBuilderPen = new Pen(new SolidColorBrush(Color.Parse("#E66C5A")), 3.0)
+    // Rebuild the five nav pens if the bound styles instance changed (or first draw).
+    private void EnsureNavPens()
     {
-        LineCap     = PenLineCap.Round,
-        LineJoin    = PenLineJoin.Round,
-    };
+        if (_navPensReady && ReferenceEquals(_navPensBuiltFrom, NavLineStyles)) return;
+        _navPensBuiltFrom = NavLineStyles;
+        _navPensReady = true;
+        _walkPathPen     = BuildNavPen(NavLineKind.Goto);
+        _loopPathPen     = BuildNavPen(NavLineKind.Loop);
+        _previewPathPen  = BuildNavPen(NavLineKind.Preview);
+        _loopBuilderPen  = BuildNavPen(NavLineKind.LoopBuilder);
+        _autoLairWalkPen = BuildNavPen(NavLineKind.AutoLair);
+    }
+
+    private IPen BuildNavPen(NavLineKind kind)
+    {
+        (string defHex, double defThick, _) = NavLineDefaults.For(kind);
+        (string hex, double thickness) = NavLineStyles is { } s ? s.Resolve(kind) : (defHex, defThick);
+        Color colour;
+        try { colour = Color.Parse(hex); }
+        catch { colour = Color.Parse(defHex); }   // hand-edited bad hex → fall back to default
+        double t = Math.Clamp(thickness, NavLineDefaults.MinThickness, NavLineDefaults.MaxThickness);
+        return new Pen(new SolidColorBrush(colour), t)
+        {
+            LineCap = PenLineCap.Round,
+            LineJoin = PenLineJoin.Round,
+        };
+    }
 
     // Fill brush for the per-waypoint numbered circle markers.
     private static readonly IBrush LoopBuilderWaypointFill =
@@ -740,11 +758,6 @@ public sealed class MapControl : Control
     {
         DashStyle = new DashStyle(new double[] { 3, 2 }, 0),
     };
-    private static readonly IPen   AutoLairWalkPen = new Pen(new SolidColorBrush(Color.Parse("#DC821E")), 3.0)
-    {
-        LineCap = PenLineCap.Round,
-        LineJoin = PenLineJoin.Round,
-    };
 
     // ----- lifecycle -------------------------------------------------
 
@@ -768,7 +781,8 @@ public sealed class MapControl : Control
             LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, LoopSequenceNumbersProperty,
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
             PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
-            BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty);
+            BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty,
+            NavLineStylesProperty);
 
         // Auto-centre on the player's current room every time it
         // changes — but only when the
@@ -1236,10 +1250,11 @@ public sealed class MapControl : Control
         // "this is a planned cycle"). Walk preview red on top of those.
         // Running loop / walk in blue on top of everything so the
         // user's primary signal is the active automation.
-        DrawPathPolyline(context, LoopBuilderPath,        LoopBuilderPen, tilePixels, cx, cy);
-        DrawPathPolyline(context, LoopApproachPreviewPath, LoopBuilderPen, tilePixels, cx, cy);
-        DrawPathPolyline(context, PreviewPath,            PreviewPathPen, tilePixels, cx, cy);
-        DrawPathPolyline(context, LoopPath,               LoopPathPen,    tilePixels, cx, cy);
+        EnsureNavPens();
+        DrawPathPolyline(context, LoopBuilderPath,        _loopBuilderPen, tilePixels, cx, cy);
+        DrawPathPolyline(context, LoopApproachPreviewPath, _loopBuilderPen, tilePixels, cx, cy);
+        DrawPathPolyline(context, PreviewPath,            _previewPathPen, tilePixels, cx, cy);
+        DrawPathPolyline(context, LoopPath,               _loopPathPen,    tilePixels, cx, cy);
         // When AutoLair is driving the walker, the dedicated approach
         // path renders the FULL leg in orange and stays stable across
         // walker sub-step shrinkage — suppress the per-step WalkPath
@@ -1248,11 +1263,11 @@ public sealed class MapControl : Control
         // property.
         if (AutoLairApproachPath is { Count: > 1 })
         {
-            DrawPathPolyline(context, AutoLairApproachPath, AutoLairWalkPen, tilePixels, cx, cy);
+            DrawPathPolyline(context, AutoLairApproachPath, _autoLairWalkPen, tilePixels, cx, cy);
         }
         else
         {
-            IPen walkPen = WalkPathIsAutoLair ? AutoLairWalkPen : WalkPathPen;
+            IPen walkPen = WalkPathIsAutoLair ? _autoLairWalkPen : _walkPathPen;
             DrawPathPolyline(context, WalkPath, walkPen, tilePixels, cx, cy);
         }
 
