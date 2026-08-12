@@ -415,11 +415,11 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 
 ## General
 
-Settings → General. Everything here is character-tier (follows the loaded character) except the navigation-line color block, which is Global-tier (applies to every character on the install). No character loaded means this whole tab shows a "load or create a profile" banner instead of controls.
+Settings → General. Everything here is character-tier (follows the loaded character) except two install-wide (Global-tier) items — the navigation-line color block and the startup-animation toggle — which apply to every character on the install. No character loaded means this whole tab shows a "load or create a profile" banner instead of controls.
 
 ### Data files (directory display)
 
-**What it does:** Shows the resolved path to MudPlay's data folder, with an "Open" button (opens it in your file browser) and a "Change…" button (relocates every file under that folder to a new location and restarts the app).
+**What it does:** Shows the resolved path to MudPlay's data folder, with an "Open Data folder…" button (opens it in your file browser) and a "Change…" button (relocates every file under that folder to a new location and restarts the app).
 **Important notes:** This is informational, not a saved setting. "Change…" triggers a full app restart at the new location; MudPlay validates the destination is empty, writable, and not nested inside the current folder before allowing the move.
 
 ### Terminal font (family + size)
@@ -463,7 +463,7 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **Available options:** Any RGB color via the color-picker; thickness 1.0–8.0 px in 0.5 steps.
 **What it does:** Sets the color and line thickness for each of the five distinct route lines the Navigation map draws — the active walk-to path, an active loop's route, a queued go-to preview, the in-progress loop-builder preview line, and an Auto-Lair run's route.
 **When you might change it:** Make the lines thicker or higher-contrast if you find the default map lines hard to see; give each route type a color you can tell apart at a glance.
-**Important notes:** This is a **Global-tier** setting — changing it changes the map for every character on the install, not just the current one. "Restore Defaults" resets every line at once. Applies live — the Navigation map repaints immediately with no restart.
+**Important notes:** This is a **Global-tier** setting — changing it changes the map for every character on the install, not just the current one. "Restore Defaults" resets every line at once, and each row has its own **Reset** button. Applies live — the Navigation map repaints immediately with no restart.
 
 ### Default task
 
@@ -484,23 +484,23 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **Default:** Off
 **What it does:** Before saving any change to this character (including from this very tab), copies the existing profile file to a `.json.bak` file first — a simple one-step-back safety net if a settings change goes wrong.
 
-### Auto-Engines enabled (10 checkboxes)
+### Auto-Engines base modes (11 checkboxes)
 
-**Default:** On — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Get-Items, Auto-Get-Cash, Auto-Sneak. Off — Auto-Light, Auto-Hide, Auto-Search, Auto-Train.
-**What it does:** Each checkbox is the master on/off switch for one entire automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal/Rest (healing and resting), Auto-Bless (buffing), Auto-Light (keeping a light lit), Auto-Get-Items (picking up ground loot), Auto-Get-Cash (picking up coin), Auto-Sneak/Auto-Hide (stealth), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
-**When you might change it:** Turn engines off if you want a character to log in with a specific automation posture already set — e.g. a scouting character that should never auto-fight.
-**Important notes:** Despite the "enabled on start" phrasing, these are **not** boot-only defaults — they're read live every time an engine checks whether it should act, and the same values are what the toolbar's individual engine-toggle buttons flip. In other words, this tab and the toolbar toggles are two views of the exact same live switches, not a "default" versus "current" pair.
+**Default:** On — Auto-Combat, Auto-Nuke, Auto-Heal / Rest, Auto-Bless, Auto-Get Items, Auto-Get Cash, Auto-Sneak. Off — Auto-Light, Auto-Hide, Auto-Search, Auto-Train.
+**What it does:** Each checkbox is the base on/off state for one automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal / Rest (healing and resting), Auto-Bless (buffing), Auto-Light (keeping a light lit), Auto-Get Items (picking up ground loot), Auto-Get Cash (picking up coin), Auto-Sneak and Auto-Hide (the two stealth engines), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
+**When you might change it:** Set the automation posture a character should return to — e.g. a scout that should never auto-fight, or a healer that should always rest.
+**Important notes:** These are your character's **base** engine states, not the live toolbar toggles. They're applied when the character loads, and the live toggles snap back to them at the start of a loop or Auto-Lair run — so you can flip an engine off to travel somewhere and have it return to your baseline when the circuit begins. See **Automation → Base modes** for the full picture.
 
 ### Allow hangup in all-off mode
 
 **Default:** Off
 **What it does:** Normally, if every Auto-* engine above is off, MudPlay does nothing at all — including the emergency low-HP hangup. Turning this on carves out one exception: even with everything off, MudPlay still disconnects you if your HP drops below the Health tab's "Hang up if below" threshold.
-**Important notes:** Depends on the Health tab's threshold to know when to fire. It's silenced entirely if the Other/toolbar "Disable hangups" toggle is on — that flag always wins.
+**Important notes:** Depends on the Health tab's threshold to know when to fire. It's silenced entirely if the toolbar's "Disable hangups" toggle is on — that flag always wins.
 
 ### Re-enable on reconnect (11 checkboxes)
 
 **Default:** Off (all)
-**What it does:** One checkbox per automation engine (the same list as above, plus Auto-Train). When you reconnect after having been disconnected mid-session (not the very first connect of an app session), each checked engine gets automatically turned back on — useful if you manually paused something, got dropped, and want your automation state to reset to "on" on redial rather than staying off.
+**What it does:** One checkbox per automation engine (the same 11 engines as above). When you reconnect after having been disconnected mid-session (not the very first connect of an app session), each checked engine gets automatically turned back on — useful if you manually paused something, got dropped, and want your automation state to reset to "on" on redial rather than staying off.
 **When you might change it:** Check the engines you always want running even through a flaky connection (e.g. Auto-Heal/Rest); leave off the ones you deliberately paused for a reason (e.g. Auto-Nuke while grinding a safe area).
 
 ---
@@ -835,14 +835,14 @@ Settings → Combat. Two switches live *outside* this tab and gate everything he
 ### Attack Order
 
 **Default:** `Default`
-**Available options:** `Default`, `Attack Last Party`, `Attack Last Room`, `Attack After`
+**Available options:** `Default`, `AttackLastParty`, `AttackLastRoom`, `AttackAfter` (shown verbatim in the dropdown).
 **What it does:** Pure timing — controls *when* you re-announce your own current target relative to other people's attacks, for coordinating who "goes" in what order. It never changes *what* you're targeting — that's Target Priority's job.
 **When you might change it:** A tank who wants to always commit their attack last, after everyone else in the party has already gone.
 
 ### Attack-after player name
 
 **Default:** empty
-**What it does:** The player Attack Order re-fires after, when Attack Order is set to `Attack After`.
+**What it does:** The player Attack Order re-fires after, when Attack Order is set to `AttackAfter`.
 
 ### Polite mode ⚠️ Not currently functional
 
@@ -928,7 +928,7 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 ### Spell type priority
 
 **Default order (highest priority first):** Minor party heal → Major party heal → Minor self heal → Major self heal → Curing → Buffing → Debuffing.
-**What it does:** Every tick, MudPlay checks all seven categories and casts the highest-priority one that has something ready to fire. Drag rows to reorder — the row position becomes the rank.
+**What it does:** Every tick, MudPlay checks all seven categories and casts the highest-priority one that has something ready to fire. Use the **▲ / ▼** arrows on each row to reorder them — higher in the list casts earlier.
 **When you might change it:** Move Curing above self-heals if you'd rather cure a debilitating ailment before topping off HP; move Debuffing higher if landing your debuff matters more to you than proactive buffing.
 **Important notes:** A downed ally rescue always jumps the queue no matter how you rank things — it's not part of this list and can't be demoted.
 
@@ -970,11 +970,11 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 **Default:** unset
 **What it does:** A spell automatically cast when you enter a dark room (works together with the light-item automation on the Auto-Light tab).
 
-### Bless slots
+### Bless spells
 
 **Default:** all empty (10 rows on a Stock realm, 15 on ParaMud)
-**What it does:** A ranked list of self-buffs MudPlay recasts whenever they aren't currently active. Row order is cast priority. Each row can hold a spell code or a `#item name` for a reusable buff item.
-**How the options work:** Each row has its own "recast within (seconds)" — how early before the buff's tracked expiry MudPlay proactively recasts it; `0` waits for it to actually wear off.
+**What it does:** A ranked list of self-buffs MudPlay recasts whenever they aren't currently active (the on-screen section is headed **Bless spells**, its rows labeled Bless 1, Bless 2, …). Row order is cast priority. Each row can hold a spell code or a `#item name` for a reusable buff item.
+**How the options work:** Each row has its own "recast within (seconds)" — how early before the buff's tracked expiry MudPlay proactively recasts it. It defaults to **15**; set it to `0` to wait for the buff to actually wear off before recasting.
 **Important notes:** The visible row count matches your active realm's buff-slot cap; extra picks beyond that cap aren't lost, they just wait until you load a realm that supports more.
 
 ### Bless self while resting / Bless self during combat
@@ -998,12 +998,12 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 
 ## Health
 
-Settings → Health. Two parallel columns — HP on the left, Mana/Kai on the right — each independently switchable between percentage and raw-number thresholds.
+Settings → Health. Two stacked sections — **Health (HP)** on top, **Mana / Kai** below — each independently switchable between percentage and raw-number thresholds.
 
 ### Percentage / Value (mode picker)
 
 **Default:** `Percentage` (both HP and Mana)
-**What it does:** Switches whether every threshold in that column means "a percentage of your max pool" or "an absolute number." Switching modes automatically converts your existing numbers into the new scale.
+**What it does:** Switches whether every threshold in that section means "a percentage of your max pool" or "an absolute number." Switching modes doesn't rescale the numbers you've entered — each value is simply re-read against the new scale (and switching to Percentage clamps anything above 100 down to 100). A small live readout beside each field shows the equivalent in the other scale.
 
 ### Rest max (HP / MA)
 
@@ -1036,7 +1036,7 @@ Settings → Health. Two parallel columns — HP on the left, Mana/Kai on the ri
 
 **Default:** 5%
 **What it does:** The absolute last resort: disconnects the game outright once HP falls to or below this value. Since 0 HP only "drops" you in MajorMUD rather than killing you outright, this threshold can go negative, all the way down to (but never past) the point your BBS's realm actually treats as death.
-**Important notes:** There's no "0 disables it" here — to fully disable the emergency hangup, use "Disable hangups" on the toolbar/Other tab instead.
+**Important notes:** There's no "0 disables it" here — to fully disable the emergency hangup, use the toolbar's "Disable hangups" toggle instead.
 
 ### Heal if above (rest/idle) / Heal if above (combat)
 
