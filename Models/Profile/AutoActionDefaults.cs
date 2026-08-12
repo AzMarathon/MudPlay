@@ -25,4 +25,35 @@ public sealed class AutoActionDefaults
     public bool AutoSneak    { get; set; } = true;
     public bool AutoHide     { get; set; }
     public bool AutoSearch   { get; set; }
+
+    // Independent copy — the base-modes reconcile clones the base onto the live
+    // AutoMode so the two never share a reference.
+    public AutoActionDefaults Clone() => new()
+    {
+        AutoCombat   = AutoCombat,
+        AutoNuke     = AutoNuke,
+        AutoHealRest = AutoHealRest,
+        AutoBless    = AutoBless,
+        AutoLight    = AutoLight,
+        AutoGetItems = AutoGetItems,
+        AutoGetCash  = AutoGetCash,
+        AutoSneak    = AutoSneak,
+        AutoHide     = AutoHide,
+        AutoSearch   = AutoSearch,
+    };
+
+    // Value equality over every engine flag — lets the reconcile skip a write
+    // when the live state already matches the base (no needless Save / log line).
+    public bool SameAs(AutoActionDefaults o) =>
+        o is not null
+        && AutoCombat   == o.AutoCombat
+        && AutoNuke     == o.AutoNuke
+        && AutoHealRest == o.AutoHealRest
+        && AutoBless    == o.AutoBless
+        && AutoLight    == o.AutoLight
+        && AutoGetItems == o.AutoGetItems
+        && AutoGetCash  == o.AutoGetCash
+        && AutoSneak    == o.AutoSneak
+        && AutoHide     == o.AutoHide
+        && AutoSearch   == o.AutoSearch;
 }

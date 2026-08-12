@@ -286,6 +286,12 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     {
         if (_profile.Current is not { } profile) return;
 
+        // The engine checkboxes edit the BASE modes, not the live toolbar state.
+        // Preserve whatever AutoMode the toolbar currently holds so saving the
+        // Settings tab never yanks the live engines around — the base takes effect
+        // at the next profile load / loop / auto-lair start, not on Save.
+        GeneralSettings existing = ReadOrDefault();
+
         GeneralSettings dto = new()
         {
             DefaultTask = IsTaskBeginLoop      ? InitialTask.BeginLoop
@@ -309,7 +315,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
                 && nff.Uri != DisplayConfig.DefaultFontFamily ? nff.Uri : null,
             NavTooltipFontSize = SelectedNavTooltipFontSize is { } nfs
                 && nfs.Value != DisplayConfig.DefaultNavTooltipFontSize ? nfs.Value : null,
-            AutoMode   = SnapshotAuto(),
+            AutoMode     = existing.AutoMode,   // live toolbar state — untouched by this Save
+            AutoModeBase = SnapshotAuto(),       // the base the checkboxes define
             AllowHangupInAllOffMode         = AllowHangupInAllOffMode,
             ReEnableAutoCombatOnReconnect   = ReEnableAutoCombatOnReconnect,
             ReEnableAutoNukeOnReconnect     = ReEnableAutoNukeOnReconnect,
@@ -432,7 +439,10 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         SelectedNavTooltipFontSize = NavTooltipFontSizeOptions.FirstOrDefault(o => o.Value == navSize)
                            ?? NavTooltipFontSizeOptions.First(o => o.Value == DisplayConfig.DefaultNavTooltipFontSize);
 
-        AutoActionDefaults a = dto.AutoMode;
+        // The checkboxes show the BASE modes. A character from before the
+        // base/live split has no AutoModeBase yet — fall back to the live AutoMode
+        // so their current setup seeds the base seamlessly on first open.
+        AutoActionDefaults a = dto.AutoModeBase ?? dto.AutoMode;
         AmAutoCombat   = a.AutoCombat;
         AmAutoNuke     = a.AutoNuke;
         AmAutoHealRest = a.AutoHealRest;
