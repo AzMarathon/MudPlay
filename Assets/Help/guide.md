@@ -155,6 +155,8 @@ The **EXP/HR ESTIMATOR** panel in the right rail projects how much experience a 
 
 En route, MudPlay handles closed and locked doors (key, pick, or bash), traps (search and disarm, or delegate to a capable party member), and hidden exits. A genuinely impassable obstacle halts the walk with a clear reason rather than looping on a door it can't open.
 
+**Marking a room Avoid** makes the pathfinder treat it as a wall — every route (GOTO, loops, Auto-Lair, auto-deposit, auto-train) plans around it. Toggling avoid on a room your **running loop doesn't pass through leaves the loop undisturbed** — it keeps circling without a restart. If a room *is* on the loop, the loop re-plans around it, keeping its session (no stats reset). And if an avoid ends up walling off your only route somewhere, MudPlay tells you which room is the culprit — a **GOTO** to a blocked destination reports *"only route is blocked by user set avoid in room (map/room)"*, while auto-deposit and auto-train quietly skip and log it rather than getting stuck.
+
 ---
 
 # Party Play

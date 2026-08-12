@@ -2,15 +2,17 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.8.10
+## 3.8.12
 
+- Toggling an avoid room that isn't on your running loop's path no longer disturbs the loop — it keeps circling instead of restarting into a stalled approach (avoiding an unrelated room used to Stop+Start the loop, reset session stats, and re-broadcast @reset every toggle); a loop whose path an avoid does block re-plans around it while keeping the same session
+- A GOTO/walk-here whose only route is walled off by your own avoid now says "only route is blocked by user set avoid in room (map/room)" instead of a bare "no path"; auto-deposit and auto-train log the blocking avoid room and skip cleanly instead of stalling
 - Route planning treats a key-only locked door as impassable without its key — the router no longer assumes a strength bash can open a door that only opens with a key, and surfaces the key requirement in the route picker
 - Reconnecting after an involuntary server drop (carrier lost / no response) auto-enters the game again: a stale suppress-entry flag left by an earlier deliberate hangup no longer leaks across the drop and strand you at the main menu
 - Auto-bless (self and party) is now controlled by the Auto-Bless toggle and nothing else — decoupled from both Auto-Combat and Auto-Rest/Heal, so turning either off no longer stops blessing (fixes a stuck InCombat that silenced it, and the survival loop no longer bails on the Auto-Rest/Heal master)
 - Bless "while resting" now means a *triggered* recovery rest (HP/MA fell below rest-if-below) — idle/standing resting always buffs; and both the "while resting" and "during combat" checkboxes are now opt-in overrides, off by default (self and party alike)
 - Startup splash redraws only the cells that change each frame (header/background drawn once), trimming per-frame render work
 - Help compendium filled out: a comprehensive Remote @-command reference (every command, its arguments, the permission model), plus the Party window, Action menu, Program Log, status-bar readouts, and the loop exp/hr estimator now documented; Program Log Debug/Combat tooltips corrected to "on by default"
-- bug reports addressed: paradigm-20260812-111920, paradigm-20260812-074651, paradigm-20260812-150324
+- bug reports addressed: paradigm-20260812-111920, paradigm-20260812-074651, paradigm-20260812-150324, paradigm-20260812-160212, paradigm-20260812-160829
 
 ## 3.8.4
 

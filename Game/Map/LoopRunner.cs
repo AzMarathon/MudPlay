@@ -799,31 +799,55 @@ public sealed class LoopRunner : IRecoverableEngine
         Raise(new LoopEvent(LoopEventKind.Stopped, $"{name}: {reason}"));
     }
 
-    // Avoided-rooms list mutated mid-loop. Stop the current run and re-Start with
-    // the same loop so the new filter applies to every BFS call (closest-waypoint
-    // pick + rotation + walker approach). The user effectively re-routes the loop
-    // without losing the definition.
+    // Avoided-rooms list mutated mid-loop. Re-plan with the new filter so it
+    // applies to every BFS call (closest-waypoint pick + rotation + walker
+    // approach). The user effectively re-routes the loop without losing the
+    // definition — and, crucially, without ending the SESSION: this is not a
+    // fresh run, so the one-shot ReachedFirstWaypoint stays consumed. Re-firing
+    // it (which the old Stop+Start path did, because Stop→Reset cleared the
+    // latch) reset the session statistics and re-broadcast a party @reset on
+    // every toggle — turning a route tweak into a "the loop restarted" event.
     //
-    // No-op when the runner is idle. Loops without UserWaypoints (legacy v1 loaded
-    // from disk) can't be re-expanded — those retain their original cached steps,
-    // so this method only triggers a re-Start when the loop has UserWaypoints to
-    // rotate from.
-    //
-    // Side effects of the Stop+Start cycle: the lap-history clears,
-    // ReachedFirstWaypoint fires again once the new approach (if any) settles. Same
-    // Stopped / Started event sequence the UI already handles for a user click on
-    // Stop + Run.
+    // No-op when the runner is idle. Loops without waypoints (legacy v1 loaded
+    // from disk) can't be re-expanded, so this only re-routes a waypointed loop.
     public void NotifyAvoidedChanged()
     {
         if (State == LoopState.Idle) return;
         if (_loop is null) return;
         if (_loop.Waypoints.Count == 0) return;
 
+        // Only a change that actually touches THIS loop's path matters. If none of
+        // the rooms the loop currently traverses is avoided, the toggle is for a
+        // room off the route — leave the running loop completely alone. Avoiding
+        // an unrelated room used to Stop+Start the loop (re-approach + session
+        // reset + party @reset), stranding it on the preview overlay.
+        if (!LoopPathCrossesAvoided())
+        {
+            _log?.Info("LoopRunner",
+                $"avoid-list changed but loop '{_loop.Name}' path is clear of avoided rooms; continuing uninterrupted");
+            return;
+        }
+
         Loop snapshot = _loop;
         _log?.Info("LoopRunner",
-            $"avoid-list changed; re-routing loop '{snapshot.Name}'");
-        Stop("avoided-rooms changed; re-routing");
-        Start(snapshot);
+            $"avoid-list changed; loop '{snapshot.Name}' path crosses an avoided room — re-routing around it");
+        // StartInternal supersede-stops the active run itself, so no explicit
+        // Stop() first (that path clears the first-waypoint latch). suppress=true
+        // keeps the same session across the re-route (no stats reset / @reset).
+        StartInternal(snapshot, isRecovery: false, suppressFirstWaypointEvent: true);
+    }
+
+    // True when any room the loop currently traverses sits on the avoided list —
+    // i.e. the avoid change actually blocks the live route. No filter means
+    // nothing is avoided; an unresolvable path (no circle start yet) errs toward
+    // re-routing so we never keep a stale route that walks into an avoid.
+    private bool LoopPathCrossesAvoided()
+    {
+        if (_filter is null) return false;
+        if (_circleStartRoom is not { } start) return true;
+        foreach (RoomKey key in ResolveLoopRoomKeys(start))
+            if (_filter.IsAvoided(key)) return true;
+        return false;
     }
 
     // Test seam — pretend the prompt scanner fired so command steps can advance.

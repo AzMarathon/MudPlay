@@ -278,7 +278,9 @@ public sealed class TrainerWalkManager : IDisposable
         }
         else
         {
-            Finish($"No path to trainer {t.Name} ({t.Map}/{t.Room}).");
+            Finish(_walker.AvoidBlockingRouteTo(room) is { } blocked
+                ? $"Route to trainer {t.Name} ({t.Map}/{t.Room}) blocked by your avoid in room {blocked.Map}/{blocked.Room} — skipping."
+                : $"No path to trainer {t.Name} ({t.Map}/{t.Room}).");
         }
     }
 
@@ -322,7 +324,9 @@ public sealed class TrainerWalkManager : IDisposable
         }
         else
         {
-            Finish($"No path to trainer {t.Name} ({t.Map}/{t.Room}).");
+            Finish(_walker.AvoidBlockingRouteTo(room) is { } blocked
+                ? $"Route to trainer {t.Name} ({t.Map}/{t.Room}) blocked by your avoid in room {blocked.Map}/{blocked.Room} — skipping."
+                : $"No path to trainer {t.Name} ({t.Map}/{t.Room}).");
         }
     }
 

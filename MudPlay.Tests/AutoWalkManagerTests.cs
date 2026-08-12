@@ -834,7 +834,10 @@ public sealed class AutoWalkManagerTests : IDisposable
         bool ok = walker.WalkTo(new RoomKey(1, 3));
 
         Assert.False(ok);
-        Assert.Contains(events, e => e.Kind == WalkEventKind.Failed && e.Detail == "no path");
+        // Avoiding the only intermediate walls off the destination — the walker
+        // names the offending avoid room rather than a bare "no path".
+        Assert.Contains(events, e => e.Kind == WalkEventKind.Failed
+            && e.Detail == "only route is blocked by user set avoid in room (1/2)");
     }
 
     private sealed class SimpleFilter : IRoomFilter

@@ -309,7 +309,9 @@ public sealed class AutoDepositManager : IDisposable
         _phase = DepositPhase.WalkingToDestination;
         if (!RerouteWalkTo(destination))
         {
-            _log?.Warn(LogCategory, $"can't reach {destination} — resuming");
+            _log?.Warn(LogCategory, _walker.AvoidBlockingRouteTo(destination) is { } blocked
+                ? $"can't reach {destination} — route blocked by your avoid in room {blocked.Map}/{blocked.Room}; skipping deposit and resuming"
+                : $"can't reach {destination} — resuming");
             _cash.NotifyAutoDepositAborted();
             Resume();
         }

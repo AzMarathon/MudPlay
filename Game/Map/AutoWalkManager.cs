@@ -934,7 +934,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 // acquirable-gate reasons on the front-door route's hops.
                 string reason = describePath is { Count: > 0 }
                     ? DescribeBlockedRoute(source.Key, describePath)
-                    : "no path";
+                    : DescribeNoPlainRoute(source.Key, destination);
                 Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
                 return false;
             }
@@ -1147,6 +1147,28 @@ public sealed class AutoWalkManager : IRecoverableEngine
             cur = exit.Target;
         }
         return FormatBlockReasons(reasons, missingItems, levelGate);
+    }
+
+    // No gated route resolved even with gates ignored. Before reporting a bare
+    // "no path", check whether the ONLY thing walling the destination off is a
+    // user-set avoid — if lifting the avoids opens a route, name the offending
+    // room so the user knows their own avoid is the block, not a map dead-end.
+    private string DescribeNoPlainRoute(RoomKey source, RoomKey destination)
+    {
+        if (_bfs.FirstAvoidBlockingRoute(source, destination, _filter) is { } blocked)
+            return $"only route is blocked by user set avoid in room ({blocked.Map}/{blocked.Room})";
+        return "no path";
+    }
+
+    // Reachability probe for callers (auto-train, auto-deposit) that need to
+    // explain a WalkTo which returned false. Returns the first user-avoided room
+    // blocking an otherwise-walkable route to `destination`, or null when the
+    // block isn't an avoid (disconnected, or reachable). Read-only — starts no
+    // walk; safe to call right after a failed WalkTo.
+    public RoomKey? AvoidBlockingRouteTo(RoomKey destination)
+    {
+        if (_tracker.State.CurrentRoom?.Key is not { } source) return null;
+        return _bfs.FirstAvoidBlockingRoute(source, destination, _filter);
     }
 
     // Gather the item ids an Item/Ticket/multi-action exit demands, so the

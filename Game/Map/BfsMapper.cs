@@ -294,6 +294,35 @@ public sealed class BfsMapper
         return path?.Count;
     }
 
+    // When a route can't be planned under the filter, report the first
+    // user-avoided room that blocks an otherwise-walkable path — or null when
+    // the destination is genuinely disconnected (not an avoid issue) or is in
+    // fact reachable. Lets a caller surface "blocked by your avoid in room X"
+    // instead of a bare "no path". Exit gates are ignored on both probes so the
+    // answer isolates the AVOID as the cause, not an incidental level/toll gate.
+    public RoomKey? FirstAvoidBlockingRoute(RoomKey source, RoomKey destination, IRoomFilter? filter)
+    {
+        if (filter is null) return null;
+        // Already reachable with avoids honoured → the block, if any, isn't an avoid.
+        if (FindPath(source, destination, filter, ignoreExitGates: true) is { Count: > 0 })
+            return null;
+        // Unreachable with avoids but reachable without → an avoided room is the wall.
+        IReadOnlyList<Direction>? open =
+            FindPath(source, destination, filter: null, ignoreExitGates: true);
+        if (open is null || open.Count == 0) return null;   // genuinely disconnected
+
+        RoomKey cursor = source;
+        foreach (Direction dir in open)
+        {
+            Room? room = _graph.GetRoom(cursor);
+            if (room is null) break;
+            if (!room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            cursor = exit.Target;
+            if (filter.IsAvoided(cursor)) return cursor;
+        }
+        return null;
+    }
+
     // True when the shortest route from source to destination crosses at
     // least one (Toll: N) exit under the supplied filter. Used at walk-start
     // to decide whether a party @wealth probe is worth firing: the probe only
