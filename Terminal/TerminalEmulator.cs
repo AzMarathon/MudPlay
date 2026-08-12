@@ -87,6 +87,10 @@ public sealed class TerminalEmulator
     // Process a chunk of incoming bytes from the host.
     public void Feed(ReadOnlySpan<byte> bytes)
     {
+        // Stamp every row this batch writes with one shared instant, so the
+        // transcript snapshot can timestamp on-screen rows without a per-cell
+        // clock read. One server read = one wall-clock time for its rows.
+        Screen.FeedTimestamp = DateTimeOffset.Now;
         foreach (byte b in bytes) FeedByte(b);
         Screen.Bump();
         ScreenUpdated?.Invoke();

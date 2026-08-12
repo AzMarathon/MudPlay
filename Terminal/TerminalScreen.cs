@@ -7,10 +7,24 @@ namespace MudPlay.Terminal;
 public sealed class TerminalScreen
 {
     private Cell[] _cells;
+    // Per-row wall-clock stamp of the most recent write into each row, kept in
+    // lockstep with _cells across every grid mutation (Put / scroll / clear /
+    // resize). default(DateTimeOffset) means "never written" (a blank row). The
+    // live screen is a mutable grid with no natural per-row time, so the
+    // transcript snapshot reads these to timestamp on-screen rows instead of
+    // leaving them blank — a scrolled-off row already carries its own capture
+    // time in the scrollback ring, but the rows still visible did not until now.
+    private DateTimeOffset[] _rowStamps;
     private uint _revision;
 
     public int Cols { get; private set; }
     public int Rows { get; private set; }
+
+    // Wall-clock time of the Feed batch currently being processed. The emulator
+    // sets this once per Feed so per-cell Put writes can stamp their row without
+    // each calling DateTimeOffset.Now on the parse hot path; all cells in one
+    // server read share the batch's instant.
+    public DateTimeOffset FeedTimestamp { get; set; }
 
     // Fixed-capacity ring of rows that have scrolled off the top. Rows are
     // pushed in ScrollUp whenever the scroll region starts at the top of the
@@ -35,6 +49,7 @@ public sealed class TerminalScreen
         Rows = rows;
         _cells = new Cell[cols * rows];
         Array.Fill(_cells, Cell.Blank);
+        _rowStamps = new DateTimeOffset[rows];
     }
 
     // Read a cell at (x, y). Caller is responsible for bounds.
@@ -42,6 +57,11 @@ public sealed class TerminalScreen
 
     // Get a row as a span — handy for renderers iterating left-to-right.
     public ReadOnlySpan<Cell> Row(int y) => _cells.AsSpan(y * Cols, Cols);
+
+    // The write time of row y, or null if the row was never written (a blank
+    // row). Used by the transcript snapshot to stamp live-screen rows.
+    public DateTimeOffset? RowTimestamp(int y) =>
+        (uint)y < (uint)Rows && _rowStamps[y] != default ? _rowStamps[y] : null;
 
     // Resize the buffer. Growing rows adds blank lines at the bottom;
     // shrinking rows drops the top-most lines (so the newest server content
@@ -53,6 +73,7 @@ public sealed class TerminalScreen
         if (cols == Cols && rows == Rows) return;
         var fresh = new Cell[cols * rows];
         Array.Fill(fresh, Cell.Blank);
+        var freshStamps = new DateTimeOffset[rows];
 
         int copyCols = Math.Min(cols, Cols);
         int copyRows = Math.Min(rows, Rows);
@@ -67,9 +88,13 @@ public sealed class TerminalScreen
             Scrollback.Append(_cells.AsSpan(y * Cols, Cols));
 
         for (int y = 0; y < copyRows; y++)
+        {
             Array.Copy(_cells, (y + dropFromTop) * Cols, fresh, y * cols, copyCols);
+            freshStamps[y] = _rowStamps[y + dropFromTop];
+        }
 
         _cells = fresh;
+        _rowStamps = freshStamps;
         Cols = cols;
         Rows = rows;
         CursorX = Math.Min(CursorX, cols - 1);
@@ -84,6 +109,7 @@ public sealed class TerminalScreen
     {
         if ((uint)x >= (uint)Cols || (uint)y >= (uint)Rows) return;
         _cells[y * Cols + x] = c;
+        _rowStamps[y] = FeedTimestamp;
     }
 
     // Clear the entire screen to a blank cell with the given attributes.
@@ -100,6 +126,7 @@ public sealed class TerminalScreen
         CaptureUpToLastNonBlank(0, Rows - 1);
         var blank = new Cell(' ', attr);
         Array.Fill(_cells, blank);
+        Array.Clear(_rowStamps);
         Bump();
     }
 
@@ -129,8 +156,11 @@ public sealed class TerminalScreen
         CaptureUpToLastNonBlank(fromRow, toRow);
         var blank = new Cell(' ', attr);
         for (int y = fromRow; y <= toRow; y++)
+        {
             for (int x = 0; x < Cols; x++)
                 _cells[y * Cols + x] = blank;
+            _rowStamps[y] = default;
+        }
     }
 
     private void CaptureUpToLastNonBlank(int fromRow, int toRow)
@@ -183,12 +213,18 @@ public sealed class TerminalScreen
         }
         // Move surviving rows up.
         for (int y = top; y + n <= bottom; y++)
+        {
             Array.Copy(_cells, (y + n) * Cols, _cells, y * Cols, Cols);
+            _rowStamps[y] = _rowStamps[y + n];
+        }
         // Blank the freshly-revealed rows at the bottom of the region.
         var blank = new Cell(' ', attr);
         for (int y = bottom - n + 1; y <= bottom; y++)
+        {
             for (int x = 0; x < Cols; x++)
                 _cells[y * Cols + x] = blank;
+            _rowStamps[y] = default;
+        }
     }
 
     // Inverse of ScrollUp — opens a gap at the top.
@@ -200,11 +236,17 @@ public sealed class TerminalScreen
         n = Math.Clamp(n, 0, region);
         if (n == 0) return;
         for (int y = bottom; y - n >= top; y--)
+        {
             Array.Copy(_cells, (y - n) * Cols, _cells, y * Cols, Cols);
+            _rowStamps[y] = _rowStamps[y - n];
+        }
         var blank = new Cell(' ', attr);
         for (int y = top; y < top + n; y++)
+        {
             for (int x = 0; x < Cols; x++)
                 _cells[y * Cols + x] = blank;
+            _rowStamps[y] = default;
+        }
     }
 
     // Mark the screen as dirty so observers know to redraw.

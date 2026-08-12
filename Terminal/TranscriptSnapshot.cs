@@ -8,9 +8,10 @@ namespace MudPlay.Terminal;
 // consistent view of "the last N lines the user saw".
 public static class TranscriptSnapshot
 {
-    // One captured transcript line. Timestamp is the wall-clock instant a
-    // scrolled-off row was captured; null for live-screen rows, which have no
-    // per-row time (they're the current grid, not yet aged into scrollback).
+    // One captured transcript line. Timestamp is the wall-clock instant the row
+    // was written: its scrollback capture time for a scrolled-off row, or its
+    // live per-row write stamp for a row still on screen. Null only for a blank
+    // row (no content was ever written, so there is no meaningful time).
     public readonly record struct Line(DateTimeOffset? Timestamp, string Text);
 
     // The last maxLines transcript lines, oldest → newest: every scrolled-off
@@ -26,7 +27,13 @@ public static class TranscriptSnapshot
 
         TerminalScreen screen = emulator.Screen;
         for (int y = 0; y < screen.Rows; y++)
-            lines.Add(new Line(null, RowText(screen.Row(y))));
+        {
+            string text = RowText(screen.Row(y));
+            // A blank live row has no meaningful write time — keep it null so the
+            // snapshot doesn't stamp empty spacing rows. Content rows carry their
+            // per-row write stamp.
+            lines.Add(new Line(text.Length == 0 ? null : screen.RowTimestamp(y), text));
+        }
 
         // Trim only trailing blank padding from the live screen; interior blanks
         // may be meaningful spacing the user actually saw.
