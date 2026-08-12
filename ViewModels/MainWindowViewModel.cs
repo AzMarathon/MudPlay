@@ -979,10 +979,14 @@ public partial class MainWindowViewModel : ObservableObject
         // After the exit command goes out, close the carrier ourselves rather
         // than waiting on the server to notice — see RequestHangupDisconnect.
         AppServices.Current.Health.SetHangupDisconnect(RequestHangupDisconnect);
-        // CastCoordinator's `c <spell> [target]` emits ride the same
-        // gate-wrapped pipeline so spell commands respect the
-        // suicide-password / trainer-menu lockouts upstream.
-        AppServices.Current.Cast.SetWireSender(engineSend);
+        // CastCoordinator's `c <spell> [target]` emits still respect the
+        // suicide-password / trainer-menu lockouts (gate-wrapped), but ride
+        // the raw send, NOT engineSend — engineSend funnels through
+        // SendUserInput, whose OutboundCastObserver exists to catch a
+        // hand-typed cast and would otherwise mistake the combat engine's own
+        // announce for one (see SendEngineWireRaw).
+        AppServices.Current.Cast.SetWireSender(
+            AppServices.Current.EngineGate.WrapEngineSender(SendEngineWireRaw));
         // Mana-regen reroll engine's `abil 145` query + cooldown-bypassing
         // recast ride the same gate-wrapped pipeline as the cast engine.
         AppServices.Current.SetEngineWireSender(engineSend);
@@ -2733,6 +2737,24 @@ public partial class MainWindowViewModel : ObservableObject
         // and are caught by the router's line sniff instead.
         AppServices.Current.Chat.ObserveOutbound(data);
         var t = _telnet;
+        if (t is not null) _ = FireSendAsync(t, data);
+    }
+
+    // Raw wire write for engine sends that must NOT re-enter SendUserInput's
+    // manual-input observers (TrainerMenu / SuicidePassword / Stats /
+    // OutboundMovement / OutboundCast / Chat). Those observers exist to
+    // interpret genuine keystrokes; feeding an engine-issued send back through
+    // them makes it indistinguishable from something the user just typed.
+    // OutboundCastObserver hit this: the combat engine's own attack-spell
+    // announce was being read as a hand-typed cast, arming the between-round
+    // resume signal, which re-announced the same spell on the *Combat Off*
+    // that announcing it always causes — a self-sustaining recast loop capped
+    // only by MaxCastsPerRoom (the reported "combat spamming hamm" bug). Still
+    // reaches the live socket exactly like SendUserInput's tail; only the
+    // observer fan-out is skipped.
+    private void SendEngineWireRaw(byte[] data)
+    {
+        TelnetClient? t = _telnet;
         if (t is not null) _ = FireSendAsync(t, data);
     }
 

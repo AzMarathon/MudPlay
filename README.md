@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.1**
-> - Filled in the Help compendium: added Getting Started, The Interface, Combat, Navigation & Looping, Party Play, Healing & Spells, Cash & Items, Player Workshop, Automation, Game Data, Conversation, Tools & Diagnostics, and Troubleshooting sections alongside the Settings Menu reference — concise explanations of how the client and its features actually work
-> - The interactive windows are written as step-by-step how-to's — the Navigation window, Player Workshop, the macro/alias/trigger editors, the Game Data Browser, the Conversation window, the Spell Book, and the Backscroll / Session Stats / Wire Inspector tools: how to open each, its menus and buttons, and the workflow to drive it
+> **Version 3.8.2**
+> - Fixed the combat engine spamming its attack spell (e.g. `hamm`) many times a second until MaxCastsPerRoom capped it: its own announce was mistaken for a hand-typed cast, arming an immediate re-attack on the *Combat Off* the announce itself always causes — a self-sustaining recast loop. Engine-issued casts now ride a raw send that skips that observer.
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
