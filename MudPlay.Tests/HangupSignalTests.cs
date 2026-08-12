@@ -70,4 +70,28 @@ public sealed class HangupSignalTests
         Assert.True(s.ConsumeDisconnectIntent());
         Assert.True(s.ConsumeSuppressEntry());
     }
+
+    [Fact]
+    public void AllowNextEntry_ClearsStaleSuppress_SoReconnectAutoEnters()
+    {
+        // A deliberate hangup armed suppress-entry, but it was never consumed
+        // (the manual reconnect's login walk didn't reach the entry latch).
+        // Then an involuntary host-side drop happens: AllowNextEntry clears the
+        // stale flag so the reconnect's Arm() sees it false and auto-enters.
+        HangupSignal s = new();
+        s.SignalHangup();
+        s.AllowNextEntry();
+        Assert.False(s.ConsumeSuppressEntry());
+    }
+
+    [Fact]
+    public void AllowNextEntry_LeavesDisconnectIntentUntouched()
+    {
+        // AllowNextEntry only governs the entry latch; it must not disturb the
+        // disconnect-intent flag (consumed earlier, in the Disconnected handler).
+        HangupSignal s = new();
+        s.SignalHangup();
+        s.AllowNextEntry();
+        Assert.True(s.ConsumeDisconnectIntent());
+    }
 }

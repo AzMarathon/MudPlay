@@ -1,9 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.4**
-> - Combat now fires a configured area/single-target debuff BEFORE the attack on engage (it used to land a round late): the debuff goes out first, then the attack re-announces on its *Combat Off* — while still deferring to a higher-priority survival cast per the Spells + Ailments spell-type priority
-> - Door-open no longer hangs the walker when a bash/pick/open draws no recognised response: a per-command watchdog treats the silence as a miss — retrying to the attempt cap, then failing over — so the walker replans instead of stalling
+> **Version 3.8.12**
+> - Toggling an avoid room that isn't on your running loop's path no longer disturbs the loop; a loop whose path an avoid does block re-plans around it while keeping the same session
+> - A GOTO blocked by your own avoid now names the blocking room ("only route is blocked by user set avoid in room (map/room)"); auto-deposit and auto-train log it and skip cleanly instead of stalling
+> - Route planning treats a key-only locked door as impassable without its key — no longer assuming a strength bash can open a key-only door, and surfacing the key requirement in the route picker
+> - Reconnecting after an involuntary server drop (carrier lost / no response) auto-enters the game again: a stale suppress-entry flag from an earlier deliberate hangup no longer strands you at the main menu
+> - Auto-bless (self and party) is controlled by the Auto-Bless toggle and nothing else — decoupled from Auto-Combat and Auto-Rest/Heal so neither stops blessing
+> - Bless "while resting" now means a triggered recovery rest (idle resting always buffs); the "while resting" and "during combat" checkboxes are now opt-in overrides, off by default
+> - Startup splash redraws only the cells that change each frame, trimming per-frame render work
+> - Help compendium filled out: a comprehensive Remote @-command reference, plus the Party window, Action menu, Program Log, status-bar readouts, and loop exp/hr estimator now documented
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

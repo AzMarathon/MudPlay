@@ -190,6 +190,55 @@ public sealed class BfsMapperTests : IDisposable
         Assert.Null(bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 3), filter));
     }
 
+    [Fact]
+    public void FirstAvoidBlockingRoute_NamesTheAvoidOnTheOnlyRoute()
+    {
+        // 1/1 → 1/6 (Pavilion) only routes through Plaza (1/2) and North Square
+        // (1/3). Avoiding Plaza walls it off — the detector names 1/2 as the block.
+        var (bfs, _) = NewMapper();
+        AvoidSet filter = new();
+        filter.Avoided.Add(new RoomKey(1, 2));
+
+        RoomKey? blocked = bfs.FirstAvoidBlockingRoute(
+            new RoomKey(1, 1), new RoomKey(1, 6), filter);
+
+        Assert.Equal(new RoomKey(1, 2), blocked);
+    }
+
+    [Fact]
+    public void FirstAvoidBlockingRoute_ReachableDespiteAvoid_ReturnsNull()
+    {
+        // 1/5 (Lookout) reaches via the east chain 1/1 → 1/4 → 1/5, untouched by
+        // avoiding Plaza — so the avoid isn't blocking this destination.
+        var (bfs, _) = NewMapper();
+        AvoidSet filter = new();
+        filter.Avoided.Add(new RoomKey(1, 2));
+
+        Assert.Null(bfs.FirstAvoidBlockingRoute(
+            new RoomKey(1, 1), new RoomKey(1, 5), filter));
+    }
+
+    [Fact]
+    public void FirstAvoidBlockingRoute_GenuinelyDisconnected_ReturnsNull()
+    {
+        // A room not in the graph is unreachable regardless of avoids — the block
+        // is a map dead-end, not the user's avoid list, so no room is named.
+        var (bfs, _) = NewMapper();
+        AvoidSet filter = new();
+        filter.Avoided.Add(new RoomKey(1, 2));
+
+        Assert.Null(bfs.FirstAvoidBlockingRoute(
+            new RoomKey(1, 1), new RoomKey(9, 9), filter));
+    }
+
+    [Fact]
+    public void FirstAvoidBlockingRoute_NullFilter_ReturnsNull()
+    {
+        var (bfs, _) = NewMapper();
+        Assert.Null(bfs.FirstAvoidBlockingRoute(
+            new RoomKey(1, 1), new RoomKey(1, 6), filter: null));
+    }
+
     // ----- Form-A level gates ----------------------------------------
 
     private sealed class LevelFilter(int? level) : IRoomFilter

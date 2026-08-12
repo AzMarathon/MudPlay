@@ -1129,17 +1129,76 @@ public sealed class CombatStateTrackerTests
     [Fact]
     public void IdleStallWatchdog_NoGate_NeverFires()
     {
-        // No gate held → nothing to resync. The watchdog must stay silent even
-        // long after any activity.
+        // No gate held AND not in combat → nothing to resync. The watchdog must
+        // stay silent even long after any activity (a player in the room is not a
+        // fight, so InCombat never latched).
         using Harness h = new();
         h.WireSender();
 
-        h.Feed("Also here: Bob.");                 // player only, no gate
+        h.Feed("Also here: Bob.");                 // player only, no gate, no InCombat
         Assert.False(h.CombatGateHeld);
+        Assert.False(h.State.InCombat);
 
         h.FakeNow = h.FakeNow.AddSeconds(60);
         h.Tracker.OnCombatTick();
         Assert.Empty(h.SentRaw);
+    }
+
+    [Fact]
+    public void IdleStallWatchdog_AutoAttackOff_ClearsStuckInCombat()
+    {
+        // Report paradigm-20260812-150324 ("buffs not happening while combat is
+        // off"): with auto-attack OFF, an incoming combat line latches InCombat
+        // true, but the only path that clears InCombat (OnEntitiesObserved's
+        // combat-off branch) runs on a room re-display that idle play never
+        // produces — so InCombat hangs, and because bless refuses to fire in
+        // combat, auto-bless silently stops. The watchdog must rescue this even
+        // with the Combat gate never asserted: after the stall window it resyncs
+        // and clears InCombat so bless resumes.
+        using Harness h = new();
+        h.WireSender();
+        h.AutoAttackEnabled = false;
+
+        h.Feed("The giant rat bites you for 3 damage!");   // InCombat true, gate NOT asserted
+        Assert.True(h.State.InCombat);
+        Assert.False(h.CombatGateHeld);
+
+        // A tick before the threshold leaves the stuck state alone.
+        h.FakeNow = h.FakeNow.AddSeconds(5);
+        h.Tracker.OnCombatTick();
+        Assert.Empty(h.SentRaw);
+        Assert.True(h.State.InCombat);
+
+        // Past the 6s threshold with no further activity → resync CR fires and the
+        // stuck InCombat clears, even though no Combat gate was ever held.
+        h.FakeNow = h.FakeNow.AddSeconds(2);               // 7s total
+        h.Tracker.OnCombatTick();
+        Assert.Contains("\r", h.SentRaw);
+        Assert.False(h.State.InCombat);
+        Assert.False(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void IdleStallWatchdog_AutoAttackOff_FreshHitDefersClear()
+    {
+        // The auto-attack-off rescue is still gated on the idle window: a fight
+        // that's live-but-slow (a mob swinging every few seconds) must NOT be
+        // torn down. Any fresh combat line refreshes the activity stamp, so the
+        // watchdog leaves an ongoing fight alone.
+        using Harness h = new();
+        h.WireSender();
+        h.AutoAttackEnabled = false;
+
+        h.Feed("The giant rat bites you for 3 damage!");   // InCombat true
+        Assert.True(h.State.InCombat);
+
+        h.FakeNow = h.FakeNow.AddSeconds(5);
+        h.Feed("The giant rat bites you for 4 damage!");   // fresh activity
+        h.FakeNow = h.FakeNow.AddSeconds(2);               // 7s since first, 2s since last
+        h.Tracker.OnCombatTick();
+
+        Assert.Empty(h.SentRaw);                           // not stalled — no CR
+        Assert.True(h.State.InCombat);                     // live fight left alone
     }
 
     [Fact]

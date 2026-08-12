@@ -41,11 +41,20 @@ public sealed class LoopRunnerTests : IDisposable
         ]
         """;
 
+    // Minimal in-memory IRoomFilter — a mutable avoided-room set the tests can
+    // toggle to drive NotifyAvoidedChanged. All other filter gates fail open.
+    private sealed class TestAvoidFilter : IRoomFilter
+    {
+        public HashSet<RoomKey> Avoided { get; } = new();
+        public bool IsAvoided(RoomKey key) => Avoided.Contains(key);
+    }
+
     private sealed class Harness : IDisposable
     {
         public required RoomTracker Tracker { get; init; }
         public required MovementCoordinator Coordinator { get; init; }
         public required LoopRunner Runner { get; init; }
+        public required TestAvoidFilter Filter { get; init; }
         // Present only when NewHarness(wireRecovery: true). ResyncReasons records
         // every reason NoteSuspectedMismatch handed to the (stubbed) Paradigm
         // resync hook, so a test can assert the stall watchdog escalated.
@@ -99,12 +108,13 @@ public sealed class LoopRunnerTests : IDisposable
             gate = new EngineRecoveryGate(graph, tracker);
             gate.TryResync = reason => { resyncReasons.Add(reason); return true; };
         }
+        TestAvoidFilter filter = new();
         LoopRunner runner = new(tracker, coord, graph: graph, recovery: gate, bfs: bfs,
-            postToUi: deferResume ? posted.Add : a => a());
+            filter: filter, postToUi: deferResume ? posted.Add : a => a());
         Harness h = new()
         {
             Tracker = tracker, Coordinator = coord, Runner = runner, Posted = posted,
-            Gate = gate, ResyncReasons = resyncReasons,
+            Gate = gate, ResyncReasons = resyncReasons, Filter = filter,
         };
         runner.SetWireSender(b => h.Sent.Add(b));
         runner.Event += e => h.Events.Add(e);
@@ -733,17 +743,43 @@ public sealed class LoopRunnerTests : IDisposable
     // ----- PR D: avoid-list re-expand ---------------------------------
 
     [Fact]
-    public void NotifyAvoidedChanged_TriggersStopAndRestart()
+    public void NotifyAvoidedChanged_RoomOffLoop_ContinuesUninterrupted()
     {
+        // Report 160212 / 160829: toggling avoid on a room the loop never
+        // traverses must NOT disturb the running loop — no Stop, no Start, no
+        // session reset. The AbCycle visits 1/1 and 1/2; room 1/3 is off-path.
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
         h.Events.Clear();
 
+        h.Filter.Avoided.Add(new RoomKey(1, 3));   // off the loop
         h.Runner.NotifyAvoidedChanged();
 
-        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Stopped);
-        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Started);
+        Assert.Empty(h.Events);                     // loop left completely alone
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
+    [Fact]
+    public void NotifyAvoidedChanged_RoomOnLoop_ReRoutesWithoutReFiringSessionStart()
+    {
+        // When the avoided room IS on the loop's path, re-plan around it — but
+        // still keep the SAME session: the one-shot ReachedFirstWaypoint (whose
+        // side effects are a session-stats reset + party @reset) must not re-fire.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.ReachedFirstWaypoint);
+        h.Events.Clear();
+
+        h.Filter.Avoided.Add(new RoomKey(1, 2));   // a waypoint the loop traverses
+        h.Runner.NotifyAvoidedChanged();
+
+        // A re-route was attempted (not the silent "path clear" no-op)…
+        Assert.Contains(h.Events, e =>
+            e.Kind is LoopEventKind.Started or LoopEventKind.Failed);
+        // …and it did not re-arm the session-start one-shot.
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.ReachedFirstWaypoint);
     }
 
     [Fact]

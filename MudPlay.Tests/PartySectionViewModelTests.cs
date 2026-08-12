@@ -58,11 +58,12 @@ public sealed class PartySectionViewModelTests
         // Party-scoped max-monsters default mirrors the Combat cap (no-op
         // until tightened).
         Assert.Equal(20,           dto.MaxMonstersWhenPartying);
-        // Party-bless gating defaults ON — the bless engine may cast on
-        // party members both while resting and during combat unless the
-        // user opts out.
-        Assert.True(dto.BlessWhileResting);
-        Assert.True(dto.BlessDuringCombat);
+        // Party-bless gating defaults OFF — both are opt-in overrides, matching
+        // self-bless. The normal cadence buffs the party while moving / idle /
+        // idly resting and holds only during combat and a triggered recovery
+        // rest unless the user opts in.
+        Assert.False(dto.BlessWhileResting);
+        Assert.False(dto.BlessDuringCombat);
     }
 
     [Fact]

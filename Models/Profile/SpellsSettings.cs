@@ -147,19 +147,20 @@ public sealed class SpellsSettings
     // ----- Self-bless timing gates ----------------------------------
     // Coarse gates the self-buff path (the bless slots above + the regen /
     // when-full downtime buffs) honors before it recasts. Mirror the party-bless
-    // gates on PartySettings, but scoped to OUR OWN buffs — a user hunting a solo
-    // loop stays in and out of combat quickly, so a self-bless that only fires
-    // between fights can be starved for a window. Defaults reproduce the prior
-    // hard-coded behaviour (self-buffs cast out of combat, including while
-    // resting), so an existing profile sees no change until it opts in.
+    // gates on PartySettings, but scoped to OUR OWN buffs. Both are opt-in
+    // overrides, OFF by default: the normal cadence buffs while moving / idle /
+    // idly resting and holds only during combat and during a triggered recovery
+    // rest — flip either on to also buff in that situation.
 
-    // When true (default), allow self-buff recasts while resting. Consumed by the
-    // self-buff path in Game.Spells.CastingDirector.
-    public bool SelfBlessWhileResting { get; set; } = true;
+    // Opt-in override: when true, allow self-buff recasts during a TRIGGERED
+    // recovery rest (HP/MA fell below rest-if-below). OFF by default — the normal
+    // cadence buffs while moving / idle / idly resting and defers only to an
+    // active recovery. Consumed by the self-buff path in Game.Spells.CastingDirector.
+    public bool SelfBlessWhileResting { get; set; }
 
-    // When true, allow self-buff recasts during combat — casting spends that
-    // round, so it's OFF by default (the historical behaviour). Consumed by the
-    // self-buff path in Game.Spells.CastingDirector.
+    // Opt-in override: when true, allow self-buff recasts during combat — casting
+    // spends that round, so it's OFF by default. Consumed by the self-buff path in
+    // Game.Spells.CastingDirector.
     public bool SelfBlessDuringCombat { get; set; }
 
     // ----- Ailment handling / coordination ------------------------------

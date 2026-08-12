@@ -39,15 +39,23 @@ The automation engines — Auto-Combat, Auto-Heal, Auto-Nuke, navigation looping
 
 # The Interface
 
-The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, or its **hotkey**, and press that same control again to close it. The terminal always stays live while you configure or check anything.
+The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, its **hotkey**, or the **terminal's right-click menu**, and press that same control again to close it. The terminal always stays live while you configure or check anything.
 
 ## The terminal and status bar
 
-Type, and your keystrokes go straight to the game. The status bar along the bottom shows the connection light (**red** idle · **yellow** connecting · **green** connected), your current room, and other live readouts. The **numpad** is pre-wired to compass movement out of the box.
+Type, and your keystrokes go straight to the game. The **numpad** is pre-wired to compass movement out of the box. **Right-click the terminal** for a quick menu: your starred GOTO **Favorites** (click one to walk there), quick-opens for Backscroll / Player Workshop / Party / Spell Book / Conversation / Navigation / Session Stats, **Reset States** (the recovery escape hatch — see Automation), and **Bug report…**.
+
+The status bar along the bottom packs several live readouts:
+
+- The **connection light** — **red** idle · **yellow** connecting · **green** connected (a reconnect countdown shows beside it while reconnecting).
+- An **engine-state badge** mirroring the Navigation one — **IDLE / WALKING / LOOPING / AUTO-LAIR** — whose border turns **yellow** then **red** as the engine-recovery gate escalates.
+- Your **location** (the map/room key) and the session's **exp/hr** rate.
+- A **look-target HP** readout that appears after you `look <monster>` — a coarse wound band × the monster's max HP, so you get an absolute HP range (invaluable on fast-regen bosses).
+- **Tick countdowns** — the combat round tick, the natural HP-regen tick, and the mana / meditate tick.
 
 ## The toolbar and menus
 
-A customizable **toolbar** of icon buttons sits under the menu bar (File · View · Tools · Help). You choose which buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**.
+A customizable **toolbar** of icon buttons sits under the menu bar. The full bar is **File · View · Action · Game Data · Tools · Help · Bug Report** — **Action** is your in-play on/off surface for the auto-engines and the manual one-shots (see **Automation**), **Game Data** switches imported data sets, and **Bug Report** captures client state to a file on your Desktop. You choose which toolbar buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**.
 
 ## The windows
 
@@ -56,7 +64,8 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 - **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
 - **Backscroll** (Alt+L) — scroll back through terminal history, with search and export. See **Tools & Diagnostics** for how to use it.
 - **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging. See the **Conversation** section for how to use it.
-- **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave.
+- **Party** (no default hotkey — View → Party, a toolbar button, or right-click → Open Party) — your live view of the party: each member's rank, health, status, and an uninvite button. See the **Party Play** section for how to use it.
+- **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave. See **Tools & Diagnostics** for its filters and toggles.
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
 - **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
@@ -132,6 +141,10 @@ Or build it off the map: **Navigation Management → New Loop** opens an editor 
 
 Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
 
+## Estimating a loop's exp/hour
+
+The **EXP/HR ESTIMATOR** panel in the right rail projects how much experience a prospective circuit would earn per hour *before* you commit to it — factoring in boss respawn timers and room summon rates, not just a flat monster count. Click **Start estimating**, then **click the rooms** on the map to sketch the circuit; the panel shows a running **exp/hr** figure as you add rooms. From there, **Save as loop** turns the sketch into a real loop, **Load loop…** pulls an existing loop in to evaluate it, **Clear rooms** starts over, and **Stop Estimating** exits the mode. Use it to compare two hunting circuits without walking either one.
+
 ## Auto-Lair
 
 **Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
@@ -142,11 +155,25 @@ Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `
 
 En route, MudPlay handles closed and locked doors (key, pick, or bash), traps (search and disarm, or delegate to a capable party member), and hidden exits. A genuinely impassable obstacle halts the walk with a clear reason rather than looping on a door it can't open.
 
+**Marking a room Avoid** makes the pathfinder treat it as a wall — every route (GOTO, loops, Auto-Lair, auto-deposit, auto-train) plans around it. Toggling avoid on a room your **running loop doesn't pass through leaves the loop undisturbed** — it keeps circling without a restart. If a room *is* on the loop, the loop re-plans around it, keeping its session (no stats reset). And if an avoid ends up walling off your only route somewhere, MudPlay tells you which room is the culprit — a **GOTO** to a blocked destination reports *"only route is blocked by user set avoid in room (map/room)"*, while auto-deposit and auto-train quietly skip and log it rather than getting stuck.
+
 ---
 
 # Party Play
 
 MudPlay coordinates multi-character parties — following a leader, healing each other, and taking remote `@`-commands from party members.
+
+## The Party window
+
+Open it from **View → Party**, a toolbar button, or **right-click the terminal → Open Party** (it has no default hotkey — you can assign one in Settings → Toolbar + Shortcuts). It's your live roster: one row per member, updated as their health and status broadcasts arrive. Each row shows —
+
+- a **★** on the party leader;
+- a colour-coded **rank chip** — **F** front, **M** mid, **B** back — the member's combat rank;
+- the member's **name and class**, and **HP / MA bars**;
+- **status chips** that light up as conditions apply — **REST** resting · **MED** meditating · **BLD** blinded · **PSN** poisoned · **DIS** diseased · **CNF** confused · **HELD** held · **WAIT** waiting · **INVITED** invite pending;
+- an **uninvite (⨯)** button — active only when *you* lead — that kicks a follower or withdraws a pending invitation.
+
+The healing, ranks, nags, and re-invite behaviour the window reflects are all configured on **Settings → Party**.
 
 ## Leaders and followers
 
@@ -158,7 +185,74 @@ With party heal spells configured (Settings → Party), members watch each other
 
 ## Remote @-commands
 
-Party members can drive each other with `@`-commands over telepath, gangpath, or say — `@goto`, `@loop`, `@stop`, `@health`, and more. What's allowed is gated per-character on Settings → Talk (disallow all remote control, just `@party` commands, or specific channels), and a denied command can optionally warn the sender.
+Party members can drive each other with `@`-commands sent over chat. Commands are accepted on three channels — **telepath**, **gangpath**, and **say (local)** — and the reply always comes back on the same channel it arrived on. (Gossip, yell, and broadcast are ignored for `@`-commands; there's no separate "page" channel — pages count as telepaths.)
+
+**What's allowed** is gated per character. Every remote command belongs to a permission *category* (query health, move me, alter settings, execute commands, and so on), and you grant those categories per player in **Game Data Browser → Players** — the edit dialog's permission grid, where the high-trust ones sit under "Elevated Commands." A never-seen player has no grants, so their commands are refused. On top of that, **Settings → Talk** has master and per-channel kill switches (disallow all remote control, or mute telepath / gangpath / say), a separate gate for `@party` directives, and a "warn on invalid/denied command" toggle that decides whether a refusal replies or stays silent. Active party members get a few things for free regardless of the grid: the party-coordination signals, the health queries (`@health` / `@status` / `@lives`), `@reset`, and a bare `@party` status check.
+
+### Query commands — they report; nothing changes
+
+| Command | Args | Replies with |
+|---|---|---|
+| `@version` | — | the app name + version |
+| `@help` | — | the commands *that sender* is allowed to use |
+| `@health` | — | HP / MA / Kai and resting-or-meditating state |
+| `@status` | — | what you're doing (walking / looping / fighting / resting), your room, and any ailments |
+| `@lives` | — | lives remaining |
+| `@exp` | — | session exp earned, exp/hour, and time-to-level |
+| `@level` | — | level, current exp, and exp to next |
+| `@where` | — | room name, map/room, and exits |
+| `@path` | — | the movement engine's activity and step progress |
+| `@who` | — | other players / monsters in your room |
+| `@timer` | — or `<name>` | boss respawn timers (all, or matching a name) |
+| `@what` | — | items on the room floor |
+| `@wealth` | — | your coins and total value |
+| `@enc` | — | encumbrance |
+| `@have` | `<item>` | whether you carry or wear a matching item |
+| `@inv` | — | your carried pack and keys |
+
+### Move me around
+
+| Command | Args | Does |
+|---|---|---|
+| `@goto` | `<destination>` | walks you to a saved GOTO favorite, a searched room (coords / name / acronym), or a boss |
+| `@loop` | `<name>` or ≥2 coords | starts a saved loop, or an ad-hoc coordinate loop |
+| `@lair` | `<name>` or coords | starts an Auto-Lair setup |
+| `@stop` | — | pauses your movement |
+| `@rego` | — | resumes it |
+
+### Change my settings
+
+- The auto-engine toggles — `@auto-combat`, `@auto-nuke`, `@auto-heal` (`@auto-rest` is the same flag), `@auto-bless`, `@auto-light`, `@auto-cash`, `@auto-get`, `@auto-sneak`, `@auto-hide`, `@auto-search` — each flips that engine (bare toggles it; add `on` or `off` to force it).
+- `@auto-all` — the kill switch: `off` stops every engine, `on` restores what was running. `@settings` — reports every engine's on/off state.
+- `@atkprio` — Target Priority: bare reports it; `1` Default, `2` follow-leader, `3 <name>` attack-what-player.
+- `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after.
+- `@divert <player>` — forwards your incoming telepaths to another player; bare `@divert` stops.
+- `@reset` — zeroes your Session Stats counters.
+
+### Do something on my behalf
+
+- `@do <command>` — sends the command verbatim to the game (the highest-trust command).
+- `@kill <target>` — retargets your combat onto the named monster this round.
+- `@heal` — asks a configured party healer to heal whoever's low (only a healer responds).
+- `@trap <dir>` — search and disarm a trap in that direction; `@trap stop` aborts.
+- `@train` — trains (and applies your CP plan, if Auto-train-stats is on) — assumes you're already at a trainer.
+- `@equip-<set>` — wears one of your saved gear sets by keyword (e.g. `@equip-backstab`; `@equip-all` applies the Default set).
+- `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin.
+- `@invite` / `@join` — ask you to invite the sender into your party, or to join theirs.
+
+### Party coordination — any active party member, no grant needed
+
+- `@wait` — hold: automation pauses until you `@ok` (which releases it).
+- `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
+- `@share` — splits your held coin evenly across the party.
+- `@party` — bare, it reports whether you're solo / following / leading. Sent on **say** *with* arguments, it relays whatever follows verbatim to your character as if you typed it (the party version of `@do`) — `@party rest`, `@party use chime`, and so on. The directive form only works on the say channel, and Settings → Talk can disallow it.
+
+### Irreversible and always-blocked
+
+- `@suicide` — forces your character's death, using the suicide password MudPlay captured from your in-game `set suicide`. It's an **Elevated Command**, and Settings → Other blocks it when your remaining lives are at or below your threshold.
+- A few things are **always refused, silently, no matter what's granted**: anything containing `reroll`, and `@party set suicide` — these can't be leaked or overridden.
+
+**Not commands:** the ailment broadcasts `@poisoned` / `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid.
 
 ## Reconnecting
 
@@ -180,7 +274,7 @@ When more than one spell wants to fire, the caster follows the priority order on
 
 ## Curing and blessing
 
-Configure cure spells for holds, poison, disease, and blindness, plus several bless (buff) slots that recast as they expire — while resting, and optionally during combat. You can also tell it to ignore, or not announce, specific ailments.
+Configure cure spells for holds, poison, disease, and blindness, plus several bless (buff) slots that recast as they expire. Auto-blessing — self *and* party — is controlled by the **Auto-Bless** toggle and nothing else (it's independent of Auto-Combat and Auto-Rest/Heal). By default the engine buffs while you're **moving or standing idle** (including an idle rest) and holds off **during combat** and **during a triggered recovery rest** (when HP or MA fell below your rest-if-below setting). Two opt-in checkboxes override those holds — one to also bless during a recovery rest, one to also bless while actively fighting. You can also tell it to ignore, or not announce, specific ailments.
 
 ## Mana regen
 
@@ -208,9 +302,11 @@ MudPlay collects coin and loot, banks your wealth, and manages your gear.
 
 With the collection engines on, MudPlay picks up coin and flagged items off the ground after a fight, following your per-currency rules (Settings → Cash) and the per-item flags in Game Data. It can skip a pickup that would push you into a heavier encumbrance band, and drop smaller coin to make room for larger.
 
+You don't have to wait for the engines, either: the **Action menu** (and the matching toolbar buttons) has **Get All**, **Drop All**, and **Equip All** to grab everything on the floor, drop everything unworn, or re-wear your Default set on demand — the local twins of the `@get-all` / `@drop-all` remote commands.
+
 ## Banking
 
-When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand. Set the bank and thresholds on Settings → Cash.
+When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand. Set the bank and thresholds on Settings → Cash. To bank right now regardless of the threshold, use **Action → Deposit All** (or its toolbar button / the `@deposit-all` remote command), which banks down to your keep-on-hand floor.
 
 ## Equipment sets
 
@@ -262,7 +358,14 @@ MudPlay's automation is a set of independent engines you switch on and off — c
 
 ## The auto-engines
 
-Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is a **toolbar toggle**. An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates all the combat/spell/health tuning.
+Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is an independent on/off switch. Your primary surface for them during play is the **Action menu** in the menu bar (the toolbar can also carry each as a button — add them in Settings → Toolbar + Shortcuts). An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
+
+## Manual one-shots and Reset States
+
+The **Action menu** also carries commands you fire once, on demand, rather than leaving running:
+
+- **Get All / Drop All / Equip All / Deposit All** — pick up everything on the floor, drop everything unworn, wear your Default gear set, or bank your wealth down to the keep-on-hand floor, right now. (These are the local twins of the `@get-all` / `@drop-all` / `@deposit-all` remote commands, and the toolbar Get / Drop / Equip / Deposit buttons drive the same actions.)
+- **Reset States** — the recovery escape hatch. Clears *your own* stuck ailments, waits, and movement holds and returns you to an idle state — reach for it when an engine looks wedged (e.g. the walker parked "held" or "waiting" with nothing actually happening). It's also on the terminal's right-click menu.
 
 ## Base modes
 
@@ -270,7 +373,7 @@ The Settings → General **"Auto-Engines base modes"** checkboxes are your chara
 
 ## The kill switch
 
-The **Auto-All** toggle (and the `@auto-all` remote command) flips every engine off in one press, remembering what was on so a second press restores it — a fast "stop everything" that doesn't lose your setup.
+The **All auto-responses** toggle at the top of the Action menu (and the `@auto-all` remote command) flips every engine off in one press, remembering what was on so a second press restores it — a fast "stop everything" that doesn't lose your setup. While it's off, auto-entry to the game is gated too.
 
 ## Macros, aliases, and triggers
 
@@ -356,6 +459,15 @@ The window keeps its history even after you close it, and replays your last sess
 # Tools & Diagnostics
 
 A few smaller windows for reviewing your session and troubleshooting. Each is modeless and toggles closed when you press its key again.
+
+## Program Log (F4)
+
+Press **F4** (or **Tools → Program Log…**) to open the **Program Log** — a running, timestamped record of what the engines are actually doing, and the first place to look when something automated didn't behave. Each row is tagged with a severity and the source engine.
+
+- **INF / WRN / ERR** — severity filters; tick the ones you want to see.
+- **Search** filters the rows by source or message text; **Clear** empties the view; **Auto-scroll** keeps it pinned to the newest row.
+- **Debug** and **Combat** are *generation* toggles (not just filters): they turn the verbose cross-engine trace and the combat-decision channel on or off across the whole app, and show those rows here. Both are **on by default** and persist per character — leave them on for the richest diagnostics; turn one off to quiet the noise. (These are the same two channels you'll see in a bug report.)
+- **Auto-collect logs** writes the program, memory, and combat-trace files to the Logs folder for the session (off by default, so a normal run leaves nothing behind). **Hop timing** logs one line per confirmed room hop with its measured wall-clock time — used to tune the Auto-Lair travel-cost table. **Simulate Death button** reveals a test button on the Player Workshop's Death Recovery tab (off by default, and reset off every launch).
 
 ## Backscroll (Alt+L)
 
@@ -992,9 +1104,9 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 
 ### Bless self while resting / Bless self during combat
 
-**Default:** Resting On, Combat Off
-**What it does:** Coarse timing gates for your own buffs. By default, self-buffs cast out of combat (including while resting) but never mid-fight, since casting spends that round.
-**When you might change it:** Turn on "during combat" for a fast hunting loop that rarely stays out of combat long enough to bless between fights.
+**Default:** both Off
+**What it does:** Two opt-in overrides for your own buffs. With both off (the default), the engine buffs while you're **moving or standing idle** — including an idle rest — and holds off **during combat** and **during a triggered recovery rest** (HP or MA fell below your rest-if-below setting and you're resting back up). "Bless while resting" lets it also buff during that recovery rest; "Bless during combat" lets it also buff mid-fight (casting spends that round). Note "while resting" means a *triggered recovery rest* only — idle resting always buffs.
+**When you might change it:** Turn on "during combat" for a fast hunting loop that rarely stays out of combat long enough to bless between fights; turn on "while resting" if you'd rather top off your buffs during recovery downtime than wait until you're back on your feet.
 
 ### Ignore poison / blindness / confusion / diseased
 
@@ -1124,8 +1236,8 @@ Settings → Party.
 
 ### Bless party while resting / Bless party during combat
 
-**Default:** both On
-**What it does:** Two gates the party-bless engine checks before casting anything — turning one off skips party bless casts in that situation (e.g. no blessing mid-fight).
+**Default:** both Off
+**What it does:** The party-bless mirror of the self-bless overrides. Party buffing runs under the same Auto-Bless toggle and the same rule: with both off (the default) it buffs the party while moving or standing idle (including an idle rest) and holds during combat and during a triggered recovery rest. "While resting" adds a triggered recovery rest; "during combat" adds mid-fight. As with self-bless, "while resting" means a *triggered recovery rest* — idle resting always buffs.
 
 ### Help leader open doors
 
@@ -1696,7 +1808,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
 | Room light | unset | spell code | `RoomLightSpell` | Models/Profile/SpellsSettings.cs |
 | Bless slots (1–10/15) + recast margin | empty / 15s default | spell code or `#item` / 0–999 | `BlessSlots` / `BlessSlotRecastMargins` | Models/Profile/SpellsSettings.cs |
-| Bless self while resting / during combat | true / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
+| Bless self while resting / during combat | false / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
 | Ignore / Don't announce poison, blindness, confusion, diseased | false (all) | bool | `IgnorePoison` etc. / `DoNotAnnouncePoison` etc. | Models/Profile/SpellsSettings.cs |
 | HP/MA threshold mode | `Percentage` (both) | Percentage / Absolute | `HpThresholdMode` / `MaThresholdMode` | Models/Profile/HealthSettings.cs |
 | Rest max / Rest if below (HP, MA) | 95/60/95/30 (%) | 0–100,000 | `RestMaxHp`, `RestIfBelowHp`, `RestMaxMa`, `RestIfBelowMa` | Models/Profile/HealthSettings.cs |
@@ -1716,7 +1828,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Minor/Major party heal (single/AOE) | blank (all 4) | spell code | `MinorPartyHealSpell` etc. | Models/Profile/PartySettings.cs |
 | Minor/Major heal threshold %, AOE min members | 70/40/2 | 0–100 / 2–6 | `MinorHealMemberThresholdPercent` etc. / `AoeMinMembers` | Models/Profile/PartySettings.cs |
 | Party bless slots (10) | empty | spell + class list + recast sec | `BlessSlots` | Models/Profile/PartySettings.cs |
-| Bless while resting / during combat | true / true | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
+| Bless while resting / during combat | false / false | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
 | Help leader open doors / Ignore @wait when leading / Reset stats on loop start | false/false/true | bool | `HelpLeaderOpenDoors`, `IgnoreWaitWhenLeading`, `ResetStatisticsOnLoopStart` | Models/Profile/PartySettings.cs |
 | Re-invite lost members / send @join nags / send @health nags / probe on join | true (all) | bool | `AutoInviteReconnecting`, `SendJoinToInvited`, `SendHealthToMembers`, `ProbeStatsOnPartyJoin` | Models/Profile/PartySettings.cs |
 | Nag initial delay / frequency / max window (s) | 5/10/55 | 1–60 / 1–60 / 5–600 | `JoinNagInitialDelaySec`, `JoinNagFrequencySec`, `JoinNagMaxTotalSec` | Models/Profile/PartySettings.cs |

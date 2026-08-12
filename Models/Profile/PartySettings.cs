@@ -147,17 +147,20 @@ public sealed class PartySettings
 
     // ----- Party bless gating ---------------------------------------
     // Two coarse gates the party-bless path honors before it casts a
-    // beneficial spell on a party member. Both default ON: blessing the
-    // party is the normal expectation, and a player who wants to hold
-    // casts under specific conditions opts out explicitly.
+    // beneficial spell on a party member. Party buffing follows the same mantra
+    // as self-blessing: it lives solely under the Auto-Bless toggle, and these
+    // two gates are opt-in overrides, OFF by default — the normal cadence buffs
+    // the party while moving / idle / idly resting and holds only during combat
+    // and during a triggered recovery rest.
 
-    // When true (default), allow party-bless casts while the character is
-    // resting. Consumed by the party-bless path in Game.Spells.CastingDirector.
-    public bool BlessWhileResting { get; set; } = true;
+    // Opt-in override: when true, allow party-bless casts during a triggered
+    // recovery rest. OFF by default. Consumed by the party-bless path in
+    // Game.Spells.CastingDirector.
+    public bool BlessWhileResting { get; set; }
 
-    // When true (default), allow party-bless casts during combat. Consumed by
-    // the party-bless path in Game.Spells.CastingDirector.
-    public bool BlessDuringCombat { get; set; } = true;
+    // Opt-in override: when true, allow party-bless casts during combat. OFF by
+    // default. Consumed by the party-bless path in Game.Spells.CastingDirector.
+    public bool BlessDuringCombat { get; set; }
 
     // ----- Party bless slots ----------------------------------------
 

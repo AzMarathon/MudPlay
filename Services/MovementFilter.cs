@@ -253,6 +253,16 @@ public sealed class MovementFilter : IRoomFilter
     private bool IsLockedDoorImpassable(in RoomExit exit, Func<int, bool> carries)
     {
         if (exit.KeyItemId > 0 && carries(exit.KeyItemId)) return false;   // have the key
+        // A keyed door with no stat requirement is KEY-ONLY: the door FSM sends it
+        // straight to the use-key path (KeyItemId > 0 && StatRequirement <= 0) and
+        // never bashes or picks. CanOpenByStat would wrongly clear it — IsAchievable
+        // reads a 0 requirement as a plain "(Door)" anyone can bash/pick — so
+        // without this the planner treats a key-only door as freely passable,
+        // collects no key requirement, and walks the crosser into a door they can
+        // only fail on (report paradigm-20260812-111920: no route-picker offer for a
+        // key-only door whose key we lack). Align with the FSM: key-only ⇒
+        // impassable without the key, so it surfaces as a DoorKey gate.
+        if (exit.KeyItemId > 0 && exit.StatRequirement <= 0) return true;
         return !CanOpenByStat(in exit);
     }
 

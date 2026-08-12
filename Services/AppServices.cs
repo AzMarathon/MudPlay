@@ -3091,6 +3091,7 @@ public sealed class AppServices
         // Auto-Bless auto-engine gate — when off, the Buffing category is
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));
+        CastDirector.SetTriggeredRestGate(() => Health.IsRecoveringRest);
         // Buff-strip-room gate — the current room casts a buff-removal spell on
         // entry (RemovesSpell / DispellMagic), so suppress buffs here rather than
         // burn mana on a buff the room tears straight back off.
