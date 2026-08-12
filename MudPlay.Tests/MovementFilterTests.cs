@@ -327,6 +327,41 @@ public sealed class MovementFilterTests
         Assert.False(filter.IsExitBlocked(GatedExit(0, 0)));
     }
 
+    // ----- IsExitBlocked: key-only door ------------------------------
+
+    private static RoomExit KeyOnlyDoor(int keyItemId) =>
+        // (Key: N) with no stat clause → StatRequirement 0, CanBash defaults true.
+        new(new RoomKey(1, 2), RoomExitHint.KeyLocked, RawHint: null,
+            StatRequirement: 0, KeyItemId: keyItemId);
+
+    [Fact]
+    public void IsExitBlocked_KeyOnlyDoor_NoKey_BlocksAsLockedDoor()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Str 127 / Picklocks 0, key not carried: a 0-requirement door reads as a
+        // plain "(Door)" anyone can bash, but this one is key-only — without the
+        // key it must block so the route picker surfaces the key requirement.
+        filter.StrengthProvider = () => 127;
+        filter.PicklocksProvider = () => 0;
+        filter.InventoryReadyProbe = () => true;
+        filter.ItemCarriedProbe = _ => false;
+        RoomExit door = KeyOnlyDoor(475);
+
+        Assert.True(filter.IsExitBlocked(door));
+        Assert.Equal(ExitBlockReason.LockedDoor, filter.DescribeExitBlock(door));
+    }
+
+    [Fact]
+    public void IsExitBlocked_KeyOnlyDoor_WithKey_Allows()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.StrengthProvider = () => 127;
+        filter.PicklocksProvider = () => 0;
+        filter.InventoryReadyProbe = () => true;
+        filter.ItemCarriedProbe = id => id == 475;   // carry the key
+        Assert.False(filter.IsExitBlocked(KeyOnlyDoor(475)));
+    }
+
     // ----- IsExitBlocked: party-bounds branch ------------------------
 
     [Fact]
