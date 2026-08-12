@@ -2067,7 +2067,17 @@ public sealed class AppServices
             maxBashableStrengthProvider:   () => MaxStrength.MaxAchievableStrength,
             // Read lazily at door-open time — Inventory is constructed after Door.
             holdsKeyItem:                  HoldsKeyItem,
-            log: Log);
+            log: Log,
+            // UI-thread one-shot so the door FSM's response watchdog fires on the
+            // same thread its router-driven handlers run on; keeps Game/Map UI-free
+            // (tests drive result lines synchronously and leave this null).
+            scheduleDelay: (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+                return new DispatcherTimerHandle(timer);
+            });
         // LeaderDoorAssistManager — observes the leader failing to bash a
         // door and pitches in. Reads the Party-tab toggle + the Other-tab
         // pick/bash preference live. Wire-sender bound by MainWindowVM

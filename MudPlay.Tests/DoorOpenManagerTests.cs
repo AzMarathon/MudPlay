@@ -41,8 +41,30 @@ public sealed class DoorOpenManagerTests
             Mgr = new DoorOpenManager(Router, Stats,
                 () => MaxBash, () => MaxPick, () => PicklocksOverBash,
                 itemNameLookup: id => Items.TryGetValue(id, out string? name) ? name : null,
-                holdsKeyItem: holdsKeyItem);
+                holdsKeyItem: holdsKeyItem,
+                scheduleDelay: Schedule);
             Mgr.SetWireSender(Sent.Add);
+        }
+
+        // Controllable stand-in for the UI-thread one-shot. Captures the latest
+        // armed watchdog callback; FireTimeout runs it, simulating a door command
+        // that drew no response. Never auto-fires, so tests that feed result lines
+        // (which disarm the watchdog) are unaffected.
+        private Action? _pendingTimeout;
+        private IDisposable Schedule(TimeSpan _, Action callback)
+        {
+            _pendingTimeout = callback;
+            return new FakeHandle(() =>
+            {
+                if (ReferenceEquals(_pendingTimeout, callback)) _pendingTimeout = null;
+            });
+        }
+        public bool HasWatchdogArmed => _pendingTimeout is not null;
+        public void FireTimeout() => _pendingTimeout?.Invoke();
+
+        private sealed class FakeHandle(Action onDispose) : IDisposable
+        {
+            public void Dispose() => onDispose();
         }
 
         // All bytes sent so far, decoded and trailing-CR trimmed — for asserting
@@ -80,6 +102,50 @@ public sealed class DoorOpenManagerTests
 
         Assert.IsType<DoorOpenResult.Opened>(result);
         Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
+    }
+
+    // ----- response watchdog (no-hang) ------------------------------
+
+    [Fact]
+    public void Watchdog_BashNoResponse_RetriesToCapThenFallsBackThenFails()
+    {
+        // A bash that draws NO recognised response used to sit in WaitingBash
+        // forever (the walker hangs waiting on our callback). The watchdog now
+        // treats the silence as a miss: retry to the cap, fall back to pick, then
+        // fail — so the walker gets a reply and replans instead of stalling.
+        using Harness h = new() { MaxBash = 2, MaxPick = 1 };
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.E, 0, canBash: true, "walker", r => result = r);
+
+        Assert.Equal("bash e", h.LastSent);              // attempt 1
+        Assert.True(h.HasWatchdogArmed);
+
+        h.FireTimeout();                                 // silence → retry
+        Assert.Equal(new[] { "bash e", "bash e" }, h.AllSent);
+
+        h.FireTimeout();                                 // bash cap → fall back to pick
+        Assert.Equal("pick e", h.LastSent);
+
+        h.FireTimeout();                                 // pick silent too → give up
+        Assert.IsType<DoorOpenResult.Failed>(result);    // a reply, not a hang
+        Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
+        Assert.False(h.HasWatchdogArmed);
+    }
+
+    [Fact]
+    public void Watchdog_RealResultDisarms_NoSpuriousTimeout()
+    {
+        using Harness h = new();
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.E, 0, canBash: true, "walker", r => result = r);
+        Assert.True(h.HasWatchdogArmed);
+
+        h.Line("With a roar, you bashed the door open!");   // real success disarms it
+        Assert.IsType<DoorOpenResult.Opened>(result);
+        Assert.False(h.HasWatchdogArmed);
+
+        h.FireTimeout();                                    // stale fire is a no-op
+        Assert.Single(h.AllSent);                           // only the one "bash e"
     }
 
     [Fact]

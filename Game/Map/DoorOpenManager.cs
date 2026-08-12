@@ -60,6 +60,19 @@ public sealed class DoorOpenManager : IDisposable
     private int _verbAttempts;
     private bool _triedFallbackVerb;
 
+    // Response watchdog. The FSM is event-driven on server result lines with no
+    // timer of its own, so a bash/pick/open/use that draws a response matching
+    // none of the recognised patterns (or a line lost in post-training prompt
+    // churn) would sit in its waiting state forever — and the walker, which only
+    // un-sticks on this manager's callback, hangs with it (report
+    // paradigm-20260812-050055: stuck WaitingBash after a training detour, not
+    // moving). Arm a one-shot after each command send; on expiry treat the wait
+    // as a miss so a wedge becomes a bounded retry + replan. Optional — until a
+    // scheduler is wired (tests drive result lines synchronously) it's inert.
+    private readonly Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
+    private IDisposable? _verbWatchdog;
+    private static readonly TimeSpan VerbResponseTimeout = TimeSpan.FromSeconds(8);
+
     // Current state — exposed for tests + diagnostics.
     public DoorState CurrentState => _state;
 
@@ -78,7 +91,8 @@ public sealed class DoorOpenManager : IDisposable
         Func<int, string?>? itemNameLookup = null,
         Func<int>? maxBashableStrengthProvider = null,
         Func<int, bool>? holdsKeyItem = null,
-        LogService? log = null)
+        LogService? log = null,
+        Func<TimeSpan, Action, IDisposable>? scheduleDelay = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(stats);
@@ -101,6 +115,7 @@ public sealed class DoorOpenManager : IDisposable
         // no opportunistic floor-grab; production wires the live inventory check.
         _holdsKeyItem = holdsKeyItem ?? (_ => true);
         _log = log;
+        _scheduleDelay = scheduleDelay;
 
         _bashOkSub      = _router.Subscribe(KnownPatterns.DoorBashSuccess,      OnBashSuccess);
         _bashFailSub    = _router.Subscribe(KnownPatterns.DoorBashFailure,      OnBashFailure);
@@ -125,6 +140,7 @@ public sealed class DoorOpenManager : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        DisarmWatchdog();
         _bashOkSub.Dispose();
         _bashFailSub.Dispose();
         _pickOkSub.Dispose();
@@ -191,6 +207,7 @@ public sealed class DoorOpenManager : IDisposable
     // callers receive a Failed("flow stopped") reply.
     public void StopAll()
     {
+        DisarmWatchdog();
         if (_current is { } cur)
         {
             cur.Reply(new DoorOpenResult.Failed("door flow stopped"));
@@ -284,6 +301,7 @@ public sealed class DoorOpenManager : IDisposable
         _wire.Send($"use {keyName} {cur.DirectionShort}");
         _log?.Info("Door",
             $"use {keyName} {cur.DirectionShort} (single-shot — keys have limited charges).");
+        ArmWatchdog();
     }
 
     private void StartVerb(string verb)
@@ -303,6 +321,7 @@ public sealed class DoorOpenManager : IDisposable
         int cap = _verb == "bash" ? _maxBashProvider() : _maxPickProvider();
         _log?.Info("Door",
             $"{_verb} {cur.DirectionShort} (attempt {_verbAttempts}/{cap}).");
+        ArmWatchdog();
     }
 
     private void SendOpen()
@@ -311,6 +330,48 @@ public sealed class DoorOpenManager : IDisposable
         _state = DoorState.WaitingOpen;
         _wire.Send($"open {cur.DirectionShort}");
         _log?.Info("Door", $"open {cur.DirectionShort} (after pick success).");
+        ArmWatchdog();
+    }
+
+    // Arm (replacing any prior) the response watchdog for the command just sent.
+    // Every send site re-arms and every terminal transition disarms via Reset, so
+    // at most one timer is ever live for the in-flight request.
+    private void ArmWatchdog()
+    {
+        _verbWatchdog?.Dispose();
+        _verbWatchdog = _scheduleDelay?.Invoke(VerbResponseTimeout, OnVerbTimeout);
+    }
+
+    private void DisarmWatchdog()
+    {
+        _verbWatchdog?.Dispose();
+        _verbWatchdog = null;
+    }
+
+    // No result line arrived for the in-flight door command within the window.
+    // Recover rather than hang: for a bash/pick, resend up to the attempt cap
+    // then fall back / fail; for the open/use-key follow-up, fail cleanly so the
+    // walker replans. A late-but-real reply that lands first leaves us Idle, so
+    // this is a no-op then.
+    private void OnVerbTimeout()
+    {
+        if (_disposed || _current is not { } cur) return;
+        switch (_state)
+        {
+            case DoorState.WaitingBash:
+            case DoorState.WaitingPick:
+                int cap = _verb == "pick" ? _maxPickProvider() : _maxBashProvider();
+                _log?.Info("Door",
+                    $"{_verb} {cur.DirectionShort}: no response in {VerbResponseTimeout.TotalSeconds:0}s " +
+                    $"(attempt {_verbAttempts}/{cap}) — treating as a miss.");
+                if (_verbAttempts < cap) { SendVerb(); return; }   // re-arms
+                TryFallbackOrFail($"{_verb} timed out with no response");
+                return;
+            case DoorState.WaitingOpen:
+            case DoorState.WaitingUseKey:
+                FailCurrent($"{_state.ToString().ToLowerInvariant()} timed out with no response");
+                return;
+        }
     }
 
     // ----- message handlers -------------------------------------------
@@ -495,6 +556,7 @@ public sealed class DoorOpenManager : IDisposable
 
     private void Reset()
     {
+        DisarmWatchdog();
         _current = null;
         _state = DoorState.Idle;
         _verb = null;

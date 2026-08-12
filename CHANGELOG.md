@@ -2,10 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.8.3
+## 3.8.4
 
 - Combat now fires a configured area/single-target debuff BEFORE the attack on engage (it used to land a round late): the debuff goes out first, then the attack re-announces on its *Combat Off* — while still deferring to a higher-priority survival cast per the Spells + Ailments spell-type priority
-- bug reports addressed: paradigm-20260812-052003
+- Door-open no longer hangs the walker when a bash/pick/open draws no recognised response (e.g. in the prompt churn right after a training detour): a per-command watchdog treats the silence as a miss — retrying to the attempt cap, then failing over — so the walker replans instead of stalling
+- bug reports addressed: paradigm-20260812-052003, paradigm-20260812-050055
 
 ## 3.8.2
 
