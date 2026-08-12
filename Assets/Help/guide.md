@@ -54,12 +54,12 @@ A customizable **toolbar** of icon buttons sits under the menu bar (File · View
 Each is modeless and toggles closed on its own key. Default hotkeys are shown; all are rebindable.
 
 - **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
-- **Backscroll** (Alt+L) — scroll back through terminal history, with search and export.
+- **Backscroll** (Alt+L) — scroll back through terminal history, with search and export. See **Tools & Diagnostics** for how to use it.
 - **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging. See the **Conversation** section for how to use it.
 - **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave.
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
-- **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — spell configuration, session counters, and raw wire I/O for troubleshooting.
+- **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
 
 The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
 
@@ -185,6 +185,18 @@ Configure cure spells for holds, poison, disease, and blindness, plus several bl
 ## Mana regen
 
 For mana-regen classes, the caster can rest to regen and — if configured — reroll a poor regen result up to a cap.
+
+## The Spell Book (F2)
+
+Press **F2** to open the **Spell Book** — a read-only reference to your class's spells. It's a lookup companion for the Spells settings, not a place you configure automation: use it to find a spell's cast-code and effect, then type that code into the pickers on **Settings → Spells**. F2 again closes it, and it updates itself as you play (type `spells` or `stat` in the game to refresh what it knows).
+
+The header names the class and level it's showing. The grid lists each spell with a **✓** if you've learned it, its **Code** (the cast-code you type), **Name**, **Lvl** (the level it unlocks), **Mana** cost, and **Effect** at your current level (hover the Effect cell for the raw scaling formula). Three controls up top narrow the list:
+
+- **Show all** — off by default (you see only spells you're high enough level to cast); tick it to preview the whole class list, reading the **Lvl** column for when each unlocks.
+- **Known only** — hides spells you haven't learned yet.
+- **Search** — filter by cast-code or name.
+
+If your class carries wands, scrolls, or potions that cast a spell, a **Cast-on-use items** section at the bottom lists what each one casts, its mana, and its charges.
 
 ---
 
@@ -338,6 +350,41 @@ Type into the input box at the bottom and press **Enter** (or click **Send**) to
 ## Logging and history
 
 The window keeps its history even after you close it, and replays your last session's chat when you reconnect. To save chat to a file, turn on **Settings → Talk → Log conversations** — it writes to the `Logs` folder, which you can open from **Tools → Open logs folder**. There's no clear button in the window itself; use **Tools → Clear chatlog** on the main window to wipe it. The chat font and channel colors are set on the Talk tab and take effect the next time you open the window.
+
+---
+
+# Tools & Diagnostics
+
+A few smaller windows for reviewing your session and troubleshooting. Each is modeless and toggles closed when you press its key again.
+
+## Backscroll (Alt+L)
+
+Press **Alt+L** to open **Backscroll** — the full terminal history, including lines that have scrolled off the top, on a timestamped transcript that opens at the newest line.
+
+- **Search** — type a term and press **Enter** (or **Find next**) to step through matches, newest to oldest, wrapping back to the top. The footer shows the line count and how many matches were found.
+- **Jump to end** — return to the newest line.
+- **Export…** — save the whole transcript to a text file, each line prefixed with its timestamp.
+- Drag to select a region and press **Ctrl+C** to copy it.
+
+Backscroll is a **snapshot taken when you open it**, not a live tail — to pick up newer output, close and reopen it (nothing is lost in the meantime).
+
+## Session Stats
+
+Open **Session Stats** from the **View** menu or its toolbar button (it has no default hotkey — you can assign one on Settings → Shortcuts). It tracks this session's performance in a stack of panels: **Kills/hour** and **Exp/hour** graphs, an **HP/MA per loop step** chart, and **Player Statistics**, **Time Analysis**, and **Session Statistics** tables (kills, experience, currency, and time spent moving, resting, and fighting).
+
+- **Right-click** the panel area to show or hide individual panels, and **drag a panel by its title** to reorder them — your layout is saved per character.
+- **Reset session** zeroes every counter and restarts the clocks; individual panels have their own **Reset** too. (These don't ask for confirmation.)
+- **Transaction history** and **Players Seen** open the detailed ledgers — coin banked and stashed this session, and every player you've encountered.
+
+## Wire Inspector (F5)
+
+Press **F5** to open the **Wire Inspector** — a troubleshooting view of the data the server sends, in two panes: **Raw** (with control codes made visible, e.g. `^[` for escape) and **Stripped** (the same stream with the ANSI escape sequences removed). It shows inbound server output only, and keeps the most recent 64 KB.
+
+- **Pause / Resume** freezes the view so you can read it; **Clear** empties the buffer.
+- **Auto-scroll** keeps both panes pinned to the newest bytes, and **Sync scroll** ties the two panes' scrolling together.
+- **Find next** locates a term in the Stripped pane, and **Export raw… / Export stripped…** save either pane to a file.
+
+Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire.
 
 ---
 
