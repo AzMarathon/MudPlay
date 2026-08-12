@@ -318,6 +318,10 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             AutoMode     = existing.AutoMode,   // live toolbar state — untouched by this Save
             AutoModeBase = SnapshotAuto(),       // the base the checkboxes define
             AllowHangupInAllOffMode         = AllowHangupInAllOffMode,
+            // Preserve the live "Disable hangups" toolbar toggle — this tab
+            // doesn't edit it, and Apply rebuilds GeneralSettings from scratch, so
+            // without carrying it forward a Save here would reset it to false.
+            DisableHangups                  = existing.DisableHangups,
             ReEnableAutoCombatOnReconnect   = ReEnableAutoCombatOnReconnect,
             ReEnableAutoNukeOnReconnect     = ReEnableAutoNukeOnReconnect,
             ReEnableAutoHealRestOnReconnect = ReEnableAutoHealRestOnReconnect,
