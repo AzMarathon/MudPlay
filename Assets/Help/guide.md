@@ -1327,6 +1327,7 @@ Settings → Auto-Light. Everything here only matters once the master **Auto-Lig
 **Available options:** 0–600
 **What it does:** When your lit light's remaining burn time drops below this, MudPlay detours to a shop, restocks back to your Carry-hours target, and returns to what it was doing.
 **When you might change it:** Lower it to squeeze more use out of what you're carrying before triggering a resupply detour.
+**Important notes:** A live readout at the bottom of the tab summarizes the current plan (e.g. how many of your chosen light it will stock for your Carry-hours target), or says provisioning is off.
 
 ---
 
@@ -1350,6 +1351,7 @@ Settings → Auto-Lair. This tab tunes the scheduler that loops between "lairs" 
 ### Engage timeout
 
 **Default:** `30` seconds
+**Available options:** 1–3600
 **What it does:** After walking into a lair, how long the scheduler assumes you're busy fighting/looting before it re-evaluates where to go next.
 **When you might change it:** Raise it for lairs where fights reliably take longer than 30 seconds so you're not yanked away mid-fight.
 
@@ -1374,7 +1376,7 @@ Settings → Auto-Trainer. Automates leveling up and (separately) spending banke
 ### Auto-train
 
 **Default:** Off
-**What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, walks to the nearest allowed trainer, trains every level you can, then resumes what it was doing.
+**What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, detours to an allowed trainer, trains every level you can, then resumes what it was doing.
 
 ### Auto-train stats
 
@@ -1398,13 +1400,13 @@ Settings → Auto-Trainer. Automates leveling up and (separately) spending banke
 
 **Default:** Off; channel defaults to `Gangpath`
 **Available channel options:** `Gangpath`, `Gossip`, `Yell`, `Say`
-**What it does:** When on, the moment you become able to train a new level, MudPlay sends a short "ready to train" message on the chosen chat channel — handy for letting a static party know it's time to regroup at a trainer.
+**What it does:** When on, the moment you become able to train a new level, MudPlay sends a short message on the chosen chat channel (`I can now train to level: N`) — handy for letting a static party know it's time to regroup at a trainer.
 **Important notes:** Deliberately doesn't spam on login — only a genuine in-session level-up crossing announces, never a backlog of levels you were already eligible for when you connected.
 
 ### Discovered trainers table
 
 **Default:** every discovered trainer allowed
-**What it does:** A list of every trainer found in your loaded game data, each with a checkbox controlling whether MudPlay is allowed to route to it. Uncheck a specific trainer to exclude it — useful if a trainer sits somewhere dangerous or inconvenient.
+**What it does:** A list of the trainers in your loaded game data that apply to you — the universal Training Room plus your own class's trainer — each with a checkbox controlling whether MudPlay is allowed to route to it. Uncheck a specific trainer to exclude it — useful if a trainer sits somewhere dangerous or inconvenient. A **Usable at my level** filter above the table narrows it to trainers whose level range covers your current level.
 
 ---
 
@@ -1430,7 +1432,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 **Default:** `5`
 **Available options:** 0–9
-**What it does:** Refuses to let a remote `@suicide` command through if your remaining lives are at or below this number — protects a near-dead character from a careless or malicious remote kill command. `0` disables the protection entirely.
+**What it does:** Refuses to let a remote `@suicide` command through if your remaining lives are at or below this number — protects a near-dead character from a careless or malicious remote kill command. `0` disables the protection entirely. (If MudPlay can't read your current life count, it blocks the command regardless of this threshold.)
 
 ### Utilize self or party members to disarm traps
 
@@ -1472,7 +1474,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **Default:** On
 **What it does:** If you're a follower who gets stranded behind a moving leader, MudPlay automatically sends the `@comeback` request on your behalf.
 
-### Enable the Great Pyramid climb solver / Enable the asylum (maze) solver
+### Enable the Great Pyramid climb solver / Enable the asylum (random-teleport maze) solver
 
 **Default:** both On
 **What it does:** Two Global-tier toggles for automated navigation through two of MajorMUD's notoriously tricky areas — the Great Pyramid's climbing puzzle and the Warped Asylum's random-teleport maze. On means walking to a destination inside either area drives the puzzle-solving automatically; off means a walk there just fails like any other unreachable spot, and you navigate manually.
