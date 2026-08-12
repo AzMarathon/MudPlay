@@ -57,7 +57,7 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 - **Backscroll** (Alt+L) — scroll back through terminal history, with search and export.
 - **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging.
 - **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave.
-- **Player Workshop** (F1) — your gear sets, the Item Finder, CP allocation plan, quest log, and death history.
+- **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character.
 - **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — spell configuration, session counters, and raw wire I/O for troubleshooting.
 
@@ -130,7 +130,7 @@ With party heal spells configured (Settings → Party), members watch each other
 
 ## Remote @-commands
 
-Party members can drive each other with `@`-commands over telepath, gangpath, or say — `@follow`, `@go`, `@health`, and more. What's allowed is gated per-character on Settings → Talk (disallow all remote control, just `@party` commands, or specific channels), and a denied command can optionally warn the sender.
+Party members can drive each other with `@`-commands over telepath, gangpath, or say — `@goto`, `@loop`, `@stop`, `@health`, and more. What's allowed is gated per-character on Settings → Talk (disallow all remote control, just `@party` commands, or specific channels), and a denied command can optionally warn the sender.
 
 ## Reconnecting
 
