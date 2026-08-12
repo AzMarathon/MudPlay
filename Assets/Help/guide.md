@@ -524,8 +524,8 @@ In-app tab title: "Toolbar + Shortcuts". The toolbar layout/visibility/keybinds 
 
 ### Toolbar layout (button/separator list)
 
-**Default:** The 13 standard buttons in their original order.
-**What it does:** An ordered list of buttons (and separators) that make up the toolbar. "Add to toolbar" promotes an action from the Shortcuts pool onto the toolbar; "Remove" demotes it back off (it can still carry a keybind); "Add separator" inserts a visual divider; "Move up"/"Move down" reorder the selected row; "Reset Toolbar to Default" restores the factory 13-button layout without touching your keybinds.
+**Default:** The standard button layout (17 buttons plus 3 separators) in its original order.
+**What it does:** An ordered list of buttons (and separators) that make up the toolbar. "Add to toolbar" promotes an action from the Shortcuts pool onto the toolbar; "Remove" demotes it back off (it can still carry a keybind); "Add separator" appends a visual divider to the end of the list; "Move up"/"Move down" reorder the selected row; "Reset Toolbar to Default" restores the factory layout without touching your keybinds.
 **When you might change it:** Trim the toolbar down to just the buttons you actually click, or reorder it to match your workflow.
 **Important notes:** Per-character — each character can have a different toolbar. Applies live.
 
@@ -564,25 +564,25 @@ Not its own Settings tab — the rebind editor is a small popup dialog opened fr
 
 ### What's rebindable
 
-Every built-in action that has (or can have) a keyboard shortcut: connection toggle, opening the Navigation/Backscroll/Conversation windows, movement start/pause/stop, capture toggle, the function-key row (Workshop, Spell Book, Game Data Browser, Log Pane, Wire Inspector), and the Ctrl-cluster File-menu actions (New/Open/Save/Save As profile, Quit). A few actions (Open Party, Open Session Stats, Open Settings) ship with **no** default shortcut — you can only reach them via their toolbar button or menu until you assign one yourself.
+Every built-in action that has (or can have) a keyboard shortcut: connection toggle, opening the Navigation/Backscroll/Conversation windows, movement start/pause/stop, capture toggle, the function-key row (Player Workshop, Spell Book, Game Data Browser, Program Log, Wire Inspector), and the Ctrl-cluster File-menu actions (New/Open/Save/Save As profile, Quit). A few actions (Open Party, Open Session Stats, Open Settings) ship with **no** default shortcut — you can only reach them via their toolbar button or menu until you assign one yourself.
 
 ### Default shortcuts out of the box
 
-| Action | Default key |
+| Action (as labeled in the list) | Default key |
 |---|---|
-| Toggle connection | Alt+H |
-| Open Navigation | Alt+M |
-| Movement start | Alt+V |
-| Movement pause | Alt+B |
-| Movement stop | Alt+N |
-| Open Backscroll | Alt+L |
-| Toggle capture | Alt+S |
-| Open Conversation | Alt+C |
-| Open Workshop | F1 |
-| Open Spell Book | F2 |
-| Open Game Data Browser | F3 |
-| Open Log Pane | F4 |
-| Open Wire Inspector | F5 |
+| Connect / Disconnect | Alt+H |
+| Navigation | Alt+M |
+| Start movement | Alt+V |
+| Pause movement | Alt+B |
+| Stop movement | Alt+N |
+| Backscroll | Alt+L |
+| Capture | Alt+S |
+| Conversation | Alt+C |
+| Player Workshop | F1 |
+| Spell Book | F2 |
+| Game Data Browser | F3 |
+| Program Log | F4 |
+| Wire Inspector | F5 |
 | New profile | Ctrl+N |
 | Open profile | Ctrl+O |
 | Save profile | Ctrl+S |
@@ -593,7 +593,7 @@ Every built-in action that has (or can have) a keyboard shortcut: connection tog
 
 **What it does:** Click **Capture**, then press the key combination you want — the dialog waits for you to release a non-modifier key (so you can hold Ctrl/Shift/Alt first, then land on the target key) to lock it in. Press **Esc** to cancel without changing anything. **Clear** removes the shortcut entirely, leaving that action with no keybind until you assign a new one.
 **Important notes:** A captured combo is checked live against several exclusion lists and shows a red error (blocking Save) if it collides with anything:
-1. Reserved keys — Enter, Escape, Tab, Backspace, Delete, and specifically the period key (`.`), which MudPlay always reserves for MajorMUD's `say slow` prefix.
+1. Reserved keys — Enter, Escape, Tab, Backspace, Delete, the lock and system keys (Caps Lock, Num Lock, etc.), and specifically the main-row period key (`.`), which MudPlay reserves because a leading period is MajorMUD's say-precursor. (The numpad period stays bindable.)
 2. System combos — Alt+F4, Ctrl+C, Ctrl+V can never be rebound.
 3. Another built-in shortcut already using that combo.
 4. A user-defined macro (see below) already using that combo — macros and keybinds share one conflict list; a combo can never be assigned to both.
@@ -750,7 +750,7 @@ Settings → "BBS + Display" — despite the plain "BBS" name in some places, th
 
 ## Confirmation Prompts
 
-Found at the bottom of the "BBS + Display" tab, under a "Confirmations" heading. All four are **Global-tier** — one shared preference across every BBS and every character on this install — and all default to **off**, so a fresh install has no nagging popups.
+Found near the bottom of the "BBS + Display" tab, under a "Show confirmations" heading. All four are **Global-tier** — one shared preference across every BBS and every character on this install — and all default to **off**, so a fresh install has no nagging popups.
 
 ### Confirm exit
 
@@ -765,12 +765,12 @@ Found at the bottom of the "BBS + Display" tab, under a "Confirmations" heading.
 ### Confirm save settings
 
 **Default:** Off
-**What it does:** Prompts "Save your changes?" before the Settings window's OK/Apply actually writes anything (and before some other saves, like Game Data browser edits). Answering "No" returns you to the editor with nothing saved and the window still open.
+**What it does:** Prompts "Save your changes?" before the Settings window's OK/Apply actually writes anything. Answering "No" returns you to the editor with nothing saved and the window still open. (Game Data browser edits save immediately and aren't gated by this prompt.)
 
 ### Confirm deletes
 
 **Default:** Off
-**What it does:** Prompts before destructive list-row deletions — removing a toolbar button, deleting a saved BBS profile, and similar.
+**What it does:** Prompts before destructive deletions — deleting a saved BBS profile, removing a navigation favorite or Game Data record, and similar. (Removing a toolbar button is not gated by this prompt.)
 
 **Important notes (all four):** Applies live the moment you click OK/Apply on Settings — no restart needed.
 
@@ -1502,10 +1502,10 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 **What it does:** A single master pause switch for every scheduled event on this character, without deleting or individually disabling each one.
 **Important notes:** Saves immediately on toggle — no separate Apply step.
 
-### Event list (New / Modify / Remove)
+### Event list (New… / Modify… / Remove)
 
-**What it does:** Shows every scheduled event you've defined, with its name, trigger, and action. Changes save to the profile immediately.
-**Important notes:** A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to manually re-enable it once you've fixed the reference.
+**What it does:** Shows every scheduled event you've defined, with its name, trigger, and action. **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
+**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference.
 
 ### Event editor — trigger types
 
