@@ -89,6 +89,7 @@ public sealed class CastingDirector : IDisposable
     private Func<string, int?>? _manaCostLookup;
     private Func<bool>? _autoBlessEnabled;
     private Func<bool>? _attackOwed;
+    private Func<bool>? _isTriggeredRest;
     private Func<string, long?>? _itemCastDuration;
     private Func<string, bool>? _executeItemCast;
     private Func<string, int?>? _itemCastManaCost;
@@ -280,6 +281,19 @@ public sealed class CastingDirector : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isAttackOwed);
         _attackOwed = isAttackOwed;
+    }
+
+    // Wire HealthManager.IsRecoveringRest. True only while an auto-rest recovery
+    // is in flight — HP or MA fell below its rest-if-below trigger and we're
+    // resting back up to rest-max. The bless "while resting" gate keys on THIS,
+    // not the raw Resting position: blessing runs while idle / moving / idly
+    // resting, and defers only to a triggered recovery rest unless the user opts
+    // in. Left unwired, this fails open (no triggered rest → bless never held on
+    // resting grounds).
+    public void SetTriggeredRestGate(Func<bool> isTriggeredRest)
+    {
+        ArgumentNullException.ThrowIfNull(isTriggeredRest);
+        _isTriggeredRest = isTriggeredRest;
     }
 
     // Wire the buff-strip-room gate. When the predicate returns true, the current
@@ -538,7 +552,16 @@ public sealed class CastingDirector : IDisposable
     // if nothing matched.
     public string? Evaluate()
     {
-        if (!_isEnabled()) return null;
+        // Two independent masters share this loop: the heal / cure / rest
+        // categories run under AutoHealRest (_isEnabled), buffing runs under
+        // AutoBless (_autoBlessEnabled), and each is gated separately in the
+        // category switch below. Bless is controlled by the Auto-Bless toggle and
+        // nothing else — so when AutoHealRest is off but AutoBless is on we must
+        // still fall through to the buffing category, not bail here. Only quit
+        // when BOTH are off (nothing in the switch could fire).
+        bool healRestEnabled = _isEnabled();
+        bool blessEnabled = _autoBlessEnabled?.Invoke() ?? true;
+        if (!healRestEnabled && !blessEnabled) return null;
         // A full-screen menu owns the keyboard (train-stats box): any cast text
         // would corrupt its form, so suppress every category until it closes.
         if (_inputCaptured?.Invoke() == true) return null;
@@ -563,16 +586,17 @@ public sealed class CastingDirector : IDisposable
         {
             CastCandidate? pick = category switch
             {
-                SpellCategory.DownedAllyHeal  => PickDownedAllyHeal(partySettings),
-                SpellCategory.MinorPartyHeal  => PickMinorPartyHeal(partySettings),
-                SpellCategory.MajorPartyHeal  => PickMajorPartyHeal(partySettings),
-                SpellCategory.MinorSelfHeal   => Wrap(PickMinorSelfHeal(spells, health)),
-                SpellCategory.MajorSelfHeal   => Wrap(PickMajorSelfHeal(spells, health)),
-                SpellCategory.Curing          => PickCure(spells),
-                SpellCategory.Buffing         => (_autoBlessEnabled?.Invoke() ?? true)
-                                                     ? PickBuff(spells, health, partySettings)
-                                                     : null,
-                SpellCategory.Debuffing       => PickDebuff(),
+                // Heal / cure / debuff stay under AutoHealRest; buffing under
+                // AutoBless. When only one master is on, the other's categories
+                // are skipped rather than the whole loop bailing.
+                SpellCategory.DownedAllyHeal  => healRestEnabled ? PickDownedAllyHeal(partySettings) : null,
+                SpellCategory.MinorPartyHeal  => healRestEnabled ? PickMinorPartyHeal(partySettings) : null,
+                SpellCategory.MajorPartyHeal  => healRestEnabled ? PickMajorPartyHeal(partySettings) : null,
+                SpellCategory.MinorSelfHeal   => healRestEnabled ? Wrap(PickMinorSelfHeal(spells, health)) : null,
+                SpellCategory.MajorSelfHeal   => healRestEnabled ? Wrap(PickMajorSelfHeal(spells, health)) : null,
+                SpellCategory.Curing          => healRestEnabled ? PickCure(spells) : null,
+                SpellCategory.Buffing         => blessEnabled ? PickBuff(spells, health, partySettings) : null,
+                SpellCategory.Debuffing       => healRestEnabled ? PickDebuff() : null,
                 _                              => null,
             };
 
@@ -1032,7 +1056,11 @@ public sealed class CastingDirector : IDisposable
     private CastCandidate? PickSelfBuff(SpellsSettings spells, bool manaBuffsAllowed)
     {
         if (_state.InCombat && !spells.SelfBlessDuringCombat) return null;
-        if (_state.Position == PlayerPosition.Resting && !spells.SelfBlessWhileResting) return null;
+        // "While resting" gates only a TRIGGERED recovery rest (HP/MA fell below
+        // rest-if-below and we're resting back up) — not idle / standing / idly
+        // resting. So the normal cadence buffs while moving and idle, and holds
+        // only during an active recovery unless the user opts in.
+        if ((_isTriggeredRest?.Invoke() ?? false) && !spells.SelfBlessWhileResting) return null;
 
         // Bless slots first (in priority = slot-index order), each carrying its
         // per-slot recast lead; then the mana-regen / "when full" downtime buffs,
@@ -1083,7 +1111,8 @@ public sealed class CastingDirector : IDisposable
         bool whileResting  = party.BlessWhileResting;
         bool duringCombat  = party.BlessDuringCombat;
         if (_state.InCombat && !duringCombat) return null;
-        if (_state.Position == PlayerPosition.Resting && !whileResting) return null;
+        // Same as self-bless: gate only a triggered recovery rest, not idle rest.
+        if ((_isTriggeredRest?.Invoke() ?? false) && !whileResting) return null;
 
         foreach (PartyBlessSlot slot in party.BlessSlots)
         {

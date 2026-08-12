@@ -272,7 +272,7 @@ When more than one spell wants to fire, the caster follows the priority order on
 
 ## Curing and blessing
 
-Configure cure spells for holds, poison, disease, and blindness, plus several bless (buff) slots that recast as they expire — while resting, and optionally during combat. You can also tell it to ignore, or not announce, specific ailments.
+Configure cure spells for holds, poison, disease, and blindness, plus several bless (buff) slots that recast as they expire. Auto-blessing — self *and* party — is controlled by the **Auto-Bless** toggle and nothing else (it's independent of Auto-Combat and Auto-Rest/Heal). By default the engine buffs while you're **moving or standing idle** (including an idle rest) and holds off **during combat** and **during a triggered recovery rest** (when HP or MA fell below your rest-if-below setting). Two opt-in checkboxes override those holds — one to also bless during a recovery rest, one to also bless while actively fighting. You can also tell it to ignore, or not announce, specific ailments.
 
 ## Mana regen
 
@@ -356,7 +356,7 @@ MudPlay's automation is a set of independent engines you switch on and off — c
 
 ## The auto-engines
 
-Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is an independent on/off switch. Your primary surface for them during play is the **Action menu** in the menu bar (the toolbar can also carry each as a button — add them in Settings → Toolbar + Shortcuts). An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates all the combat/spell/health tuning — but it does **not** gate Auto-Bless (blessing runs on its own toggle, out of combat).
+Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is an independent on/off switch. Your primary surface for them during play is the **Action menu** in the menu bar (the toolbar can also carry each as a button — add them in Settings → Toolbar + Shortcuts). An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
 
 ## Manual one-shots and Reset States
 
@@ -1102,9 +1102,9 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 
 ### Bless self while resting / Bless self during combat
 
-**Default:** Resting On, Combat Off
-**What it does:** Coarse timing gates for your own buffs. By default, self-buffs cast out of combat (including while resting) but never mid-fight, since casting spends that round.
-**When you might change it:** Turn on "during combat" for a fast hunting loop that rarely stays out of combat long enough to bless between fights.
+**Default:** both Off
+**What it does:** Two opt-in overrides for your own buffs. With both off (the default), the engine buffs while you're **moving or standing idle** — including an idle rest — and holds off **during combat** and **during a triggered recovery rest** (HP or MA fell below your rest-if-below setting and you're resting back up). "Bless while resting" lets it also buff during that recovery rest; "Bless during combat" lets it also buff mid-fight (casting spends that round). Note "while resting" means a *triggered recovery rest* only — idle resting always buffs.
+**When you might change it:** Turn on "during combat" for a fast hunting loop that rarely stays out of combat long enough to bless between fights; turn on "while resting" if you'd rather top off your buffs during recovery downtime than wait until you're back on your feet.
 
 ### Ignore poison / blindness / confusion / diseased
 
@@ -1234,8 +1234,8 @@ Settings → Party.
 
 ### Bless party while resting / Bless party during combat
 
-**Default:** both On
-**What it does:** Two gates the party-bless engine checks before casting anything — turning one off skips party bless casts in that situation (e.g. no blessing mid-fight).
+**Default:** both Off
+**What it does:** The party-bless mirror of the self-bless overrides. Party buffing runs under the same Auto-Bless toggle and the same rule: with both off (the default) it buffs the party while moving or standing idle (including an idle rest) and holds during combat and during a triggered recovery rest. "While resting" adds a triggered recovery rest; "during combat" adds mid-fight. As with self-bless, "while resting" means a *triggered recovery rest* — idle resting always buffs.
 
 ### Help leader open doors
 
@@ -1806,7 +1806,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
 | Room light | unset | spell code | `RoomLightSpell` | Models/Profile/SpellsSettings.cs |
 | Bless slots (1–10/15) + recast margin | empty / 15s default | spell code or `#item` / 0–999 | `BlessSlots` / `BlessSlotRecastMargins` | Models/Profile/SpellsSettings.cs |
-| Bless self while resting / during combat | true / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
+| Bless self while resting / during combat | false / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
 | Ignore / Don't announce poison, blindness, confusion, diseased | false (all) | bool | `IgnorePoison` etc. / `DoNotAnnouncePoison` etc. | Models/Profile/SpellsSettings.cs |
 | HP/MA threshold mode | `Percentage` (both) | Percentage / Absolute | `HpThresholdMode` / `MaThresholdMode` | Models/Profile/HealthSettings.cs |
 | Rest max / Rest if below (HP, MA) | 95/60/95/30 (%) | 0–100,000 | `RestMaxHp`, `RestIfBelowHp`, `RestMaxMa`, `RestIfBelowMa` | Models/Profile/HealthSettings.cs |
@@ -1826,7 +1826,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Minor/Major party heal (single/AOE) | blank (all 4) | spell code | `MinorPartyHealSpell` etc. | Models/Profile/PartySettings.cs |
 | Minor/Major heal threshold %, AOE min members | 70/40/2 | 0–100 / 2–6 | `MinorHealMemberThresholdPercent` etc. / `AoeMinMembers` | Models/Profile/PartySettings.cs |
 | Party bless slots (10) | empty | spell + class list + recast sec | `BlessSlots` | Models/Profile/PartySettings.cs |
-| Bless while resting / during combat | true / true | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
+| Bless while resting / during combat | false / false | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
 | Help leader open doors / Ignore @wait when leading / Reset stats on loop start | false/false/true | bool | `HelpLeaderOpenDoors`, `IgnoreWaitWhenLeading`, `ResetStatisticsOnLoopStart` | Models/Profile/PartySettings.cs |
 | Re-invite lost members / send @join nags / send @health nags / probe on join | true (all) | bool | `AutoInviteReconnecting`, `SendJoinToInvited`, `SendHealthToMembers`, `ProbeStatsOnPartyJoin` | Models/Profile/PartySettings.cs |
 | Nag initial delay / frequency / max window (s) | 5/10/55 | 1–60 / 1–60 / 5–600 | `JoinNagInitialDelaySec`, `JoinNagFrequencySec`, `JoinNagMaxTotalSec` | Models/Profile/PartySettings.cs |

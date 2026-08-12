@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.9**
+> **Version 3.8.10**
 > - Route planning treats a key-only locked door as impassable without its key — no longer assuming a strength bash can open a key-only door, and surfacing the key requirement in the route picker
 > - Reconnecting after an involuntary server drop (carrier lost / no response) auto-enters the game again: a stale suppress-entry flag from an earlier deliberate hangup no longer strands you at the main menu
-> - Auto-bless no longer stops when Auto-Combat is toggled off — a stuck InCombat was silencing blessing; the idle-stall watchdog now clears it once the room goes quiet
+> - Auto-bless (self and party) is controlled by the Auto-Bless toggle and nothing else — decoupled from Auto-Combat and Auto-Rest/Heal so neither stops blessing
+> - Bless "while resting" now means a triggered recovery rest (idle resting always buffs); the "while resting" and "during combat" checkboxes are now opt-in overrides, off by default
 > - Startup splash redraws only the cells that change each frame, trimming per-frame render work
 > - Help compendium filled out: a comprehensive Remote @-command reference, plus the Party window, Action menu, Program Log, status-bar readouts, and loop exp/hr estimator now documented
 >

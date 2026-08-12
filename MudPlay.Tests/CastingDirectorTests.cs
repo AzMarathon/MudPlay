@@ -535,6 +535,13 @@ public sealed class CastingDirectorTests
         public SpellsSettings Spells { get; set; } = new();
         public HealthSettings Health { get; set; } = new();
         public bool AutoBlessEnabled { get; set; } = true;
+        public bool AutoHealRestEnabled { get; set; } = true;
+
+        /// <summary>When true the triggered-rest gate reports an active recovery
+        /// rest (HP/MA below rest-if-below), so the bless "while resting" gate
+        /// engages. A bare Position=Resting does NOT set this — idle resting still
+        /// buffs.</summary>
+        public bool TriggeredRest { get; set; }
 
         /// <summary>When true the buff-strip-room gate reports the current room
         /// removes buffs on entry, so the Buffing category is suppressed.</summary>
@@ -563,9 +570,10 @@ public sealed class CastingDirectorTests
             Director = new CastingDirector(State, Cast, Conditions,
                 readSpells: () => Spells,
                 readHealth: () => Health,
-                isEnabled: () => true,
+                isEnabled: () => AutoHealRestEnabled,
                 log: Log);
             Director.SetAutoBlessGate(() => AutoBlessEnabled);
+            Director.SetTriggeredRestGate(() => TriggeredRest);
             Director.SetBuffStripRoomGate(() => BuffStripRoom);
             Director.SetClock(() => Now);
             // Self-buff confirmation: the condition's Name is the buff short
@@ -761,11 +769,16 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void Buff_Resting_WhileRestingOnByDefault_Casts()
+    public void Buff_IdleResting_CastsRegardlessOfWhileRestingFlag()
     {
+        // Idle resting (Position=Resting but NOT a triggered recovery rest) is not
+        // gated by "bless while resting" — the normal cadence buffs here even with
+        // the flag off (its default). Only a TRIGGERED rest engages that gate.
         using CureHarness h = new();
         h.State.InCombat = false;
         h.State.Position = PlayerPosition.Resting;
+        h.TriggeredRest = false;                 // idle rest, not a recovery rest
+        h.Spells.SelfBlessWhileResting = false;  // the new default
         h.Spells.BlessSlots[1] = "bless";
         h.Health.BlessIfAboveMa = 50;
         h.State.MaxMa = 100;
@@ -778,13 +791,14 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void Buff_Resting_WhileRestingOff_NoCast()
+    public void Buff_TriggeredRest_WhileRestingOff_NoCast()
     {
-        // Set Position + gate FIRST so the Ma cascade evaluates while resting,
-        // not through the default standing window.
+        // A triggered recovery rest (HP/MA fell below rest-if-below) with the
+        // "while resting" override off holds the buff — recovery comes first.
         using CureHarness h = new();
         h.State.InCombat = false;
         h.State.Position = PlayerPosition.Resting;
+        h.TriggeredRest = true;                  // active recovery rest
         h.Spells.SelfBlessWhileResting = false;
         h.Spells.BlessSlots[1] = "bless";
         h.Health.BlessIfAboveMa = 50;
@@ -794,6 +808,47 @@ public sealed class CastingDirectorTests
         h.Director.Evaluate();
 
         Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_TriggeredRest_WhileRestingOn_Casts()
+    {
+        // With the override on, a triggered recovery rest still buffs.
+        using CureHarness h = new();
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Resting;
+        h.TriggeredRest = true;
+        h.Spells.SelfBlessWhileResting = true;   // opt-in override
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void Buff_AutoHealRestOff_AutoBlessOn_StillCasts()
+    {
+        // Auto-bless is controlled by the Auto-Bless toggle and nothing else:
+        // with Auto-Rest/Heal off but Auto-Bless on, buffing still runs.
+        using CureHarness h = new();
+        h.AutoHealRestEnabled = false;           // Auto-Rest/Heal master off
+        h.AutoBlessEnabled = true;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bless", h.CastsSent[0]);
     }
 
     [Fact]
@@ -1902,6 +1957,11 @@ public sealed class CastingDirectorTests
         public HealthSettings Health { get; set; } = new();
         public PartySettings PartySettings { get; set; } = new();
 
+        /// <summary>When true the triggered-rest gate reports an active recovery
+        /// rest. A bare Position=Resting does NOT set this — idle resting still
+        /// buffs the party.</summary>
+        public bool TriggeredRest { get; set; }
+
         public DateTime Now { get; set; } =
             new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -1926,6 +1986,7 @@ public sealed class CastingDirectorTests
                 isEnabled: () => true,
                 log: Log);
             Director.SetClock(() => Now);
+            Director.SetTriggeredRestGate(() => TriggeredRest);
             Director.SetBuffDurationSources(
                 code => BuffInfo.TryGetValue(code, out (string Caster, long Duration) info)
                     ? (info.Caster, info.Duration)
@@ -2175,9 +2236,11 @@ public sealed class CastingDirectorTests
     [Fact]
     public void PartyBless_WhileRestingOff_NoCast()
     {
+        // A triggered recovery rest with the override off holds party-bless too.
         using PartyBlessHarness h = new();
         h.PartySettings.BlessWhileResting = false;
         h.State.Position = PlayerPosition.Resting;
+        h.TriggeredRest = true;                  // active recovery rest
         h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
         h.PartySettings.BlessSlots[0].Spell = "bles";
@@ -2190,10 +2253,33 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PartyBless_IdleResting_Casts()
+    {
+        // Idle resting (Position=Resting, not a triggered recovery) still buffs the
+        // party even with the "while resting" override off (its new default).
+        using PartyBlessHarness h = new();
+        h.PartySettings.BlessWhileResting = false;
+        h.State.Position = PlayerPosition.Resting;
+        h.TriggeredRest = false;                 // idle rest
+        h.Classes[1] = "Mage";
+        h.Health.BlessIfAboveMa = 0;
+        h.PartySettings.BlessSlots[0].Spell = "bles";
+        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin", "Mage");
+
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bles Raijin", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void PartyBless_DuringCombatOn_Casts()
     {
-        // Default gate is ON — party-bless fires even in combat.
+        // "During combat" is an opt-in override (off by default) — turn it on and
+        // party-bless fires even in combat.
         using PartyBlessHarness h = new();
+        h.PartySettings.BlessDuringCombat = true;
         h.State.InCombat = true;
         h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;

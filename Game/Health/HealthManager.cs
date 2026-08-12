@@ -384,6 +384,13 @@ public sealed class HealthManager : IDisposable
     // True while the MA gate is held.
     public bool MaGateAsserted => _maGateAsserted;
 
+    // True while an auto-rest recovery is in flight — HP or MA fell below its
+    // rest-if-below trigger and we're resting back up to rest-max. This is the
+    // "triggered rest" the auto-bless engine holds during (as opposed to idle /
+    // standing / idly resting), so blessing defers to recovery unless the user
+    // opts into "bless while resting."
+    public bool IsRecoveringRest => _hpGateAsserted || _maGateAsserted;
+
     // True between the rest emit and the corresponding stand emit.
     public bool RestInFlight => _restInFlight;
 
