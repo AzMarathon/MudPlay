@@ -614,7 +614,7 @@ Two per-character typing shortcuts, both managed in the **Game Data Browser** (F
 
 **Default:** none beyond the seeded numpad defaults (see below)
 **What it does:** Binds a key combination (with optional Ctrl/Shift/Alt) to a text command that's sent to the game instead of the literal keystroke, whenever you're focused on the terminal or the Conversation window's input box.
-**How it works:** A macro's command can contain several steps separated by `^M` or `;` — each piece is sent as its own line, with no delay in between. If you need actual pauses between steps, MudPlay's triggers system is the tool for that instead, not macros. Each macro also has its own Enabled flag; a disabled macro is skipped entirely.
+**How it works:** A macro's command can contain several steps separated by `^M` or `;` — each piece is sent as its own line, with no delay in between. There's no built-in timed pause between steps; if you need to wait for the game to respond before the next command, a trigger that fires on that response is the tool instead. Each macro also has its own Enabled flag; a disabled macro is skipped entirely.
 
 ### Default numpad macros
 
@@ -1412,15 +1412,15 @@ Settings → Auto-Trainer. Automates leveling up and (separately) spending banke
 
 ## Statline
 
-Settings → Statline. A single field, modeled on MegaMUD's Statline dialog. Statline is **server-owned** — this tab builds a text string that gets sent to the game with a `set statline` command on logon, and MudPlay's own screen parser is generated from that exact same string, so the two can never drift apart from each other.
+Settings → Statline, modeled on MegaMUD's Statline dialog. Statline is **server-owned** — this tab builds a text string that gets sent to the game with a `set statline` command, and MudPlay's own screen parser is generated from that same string, so the two stay in sync. The tab has three parts: a read-only **Current Statline** preview (how the prompt will look, using your live numbers when connected or sample numbers otherwise), the editable **Statline Command** field, and a **Customize** row for building the string from wildcards.
 
 ### Statline Command
 
-**Default:** blank, treated as `full` (a sensible class-appropriate default format)
+**Default:** `full` (a sensible class-appropriate default format)
 **Available options:** `full` (class default), a hand-built wildcard string, or `full custom <wildcards>`.
 **What it does:** Controls the exact text/format your character's status-line prompt uses in the game, which MudPlay then reads back to track your live HP/mana/etc.
-**How the options work:** Pick tokens from the "Customize" dropdown (current/max HP, current/max mana, resting flag, wealth, experience, color codes, and more) and click "Add" to build a custom string. "Default" resets back to `full`.
-**Important notes:** If you're connected when you change this and click Apply, MudPlay sends the updated `set statline` command to the game immediately. It also automatically re-sends this command on every connect and self-corrects (up to 3 retries) if it notices your live prompt doesn't match what your saved command should produce — so a fresh character or a server reset that lost your custom statline fixes itself without you having to do anything.
+**How the options work:** Pick tokens from the **Customize** dropdown (current/max HP, current/max mana, resting flag, wealth, experience, color codes, and more) and click **Add** to build a custom string. **Default** resets back to `full`.
+**Important notes:** When you change this and click OK/Apply while connected, MudPlay sends the updated `set statline` command to the game immediately. On each connect it also checks that the game's live prompt matches your saved statline and re-sends the command if it doesn't (self-correcting, up to 3 retries) — so a server reset that lost your custom statline fixes itself without you having to do anything.
 
 ---
 
@@ -1536,7 +1536,7 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 
 ## Diagnostics / Log Pane
 
-Not a Settings tab — these four toggles live in the **Log Pane** window (default shortcut F4), and are documented here for completeness since they're genuine per-character saved preferences. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
+Not a Settings tab — these four toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine per-character saved preferences. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
 
 ### Debug channel
 
@@ -1562,9 +1562,9 @@ Not a Settings tab — these four toggles live in the **Log Pane** window (defau
 
 ---
 
-## Equipment Sets (Character Workshop)
+## Equipment Sets (Player Workshop)
 
-Not a Settings-window tab. Your character's gear loadouts — a "Default" set (worn during normal combat), an "Alternate" set, a "Backstab" set, and others tied to specific triggers — are configured in the **Character Workshop**'s Equipment Manager, not in Settings. They're mentioned here because the Combat tab's weapon fields (Normal/Alternate/Backstab weapon) are actually populated from these sets rather than being typed in directly — see the note under [Combat → Weapon slots](#combat) above. Full documentation of the Equipment Manager's gear-set editor is outside the scope of this settings guide, since it's an inventory/loadout management tool rather than a simple settings screen.
+Not a Settings-window tab. Your character's gear loadouts — the four fixed sets **Default**, **Backstab**, **Pre-rest HP**, and **Pre-rest Mana** — are configured in the **Player Workshop**'s Equipment Manager, not in Settings. They're mentioned here because the Combat tab's weapon fields (Normal/Alternate/Backstab weapon) are actually populated from the Default and Backstab sets rather than being typed in directly — see the note under the Combat tab's weapon slots above. See the **Player Workshop** section for how to build and enable a set.
 
 ---
 
@@ -1602,7 +1602,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Auto-connect on profile load | `false` | bool | `AutoConnect` | Models/Profile/GeneralSettings.cs |
 | Backup profile on save | `false` | bool | `BackupOnSave` | Models/Profile/GeneralSettings.cs |
 | Auto-Combat / Auto-Nuke / Auto-Heal-Rest / Auto-Bless / Auto-Light / Auto-Get-Items / Auto-Get-Cash / Auto-Sneak / Auto-Hide / Auto-Search enabled | true/true/true/true/false/true/true/true/false/false | bool each | `AutoMode.AutoCombat` etc. | Models/Profile/AutoActionDefaults.cs |
-| Auto-Train enabled | `false` | bool | `AutoTrainerSettings.AutoTrain` (mirrored) | Models/Profile/GeneralSettings.cs |
+| Auto-Train enabled | `false` | bool | `AutoTrainerSettings.AutoTrain` (mirrored on the General tab) | Models/Profile/AutoTrainerSettings.cs |
 | Allow hangup in all-off mode | `false` | bool | `AllowHangupInAllOffMode` | Models/Profile/GeneralSettings.cs |
 | Re-enable on reconnect (11 flags) | `false` (all) | bool | `ReEnableAutoCombatOnReconnect` etc. | Models/Profile/GeneralSettings.cs |
 | Disable hangups (toolbar toggle) | `false` | bool | `DisableHangups` | Models/Profile/GeneralSettings.cs |
@@ -1633,7 +1633,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Redial pause (s) | `5` | 1–300 | `RedialPauseSeconds` | Models/Settings/BbsProfile.cs |
 | Infinite retries | `false` | bool | `InfiniteRetries` | Models/Settings/BbsProfile.cs |
 | Cleanup wait (m) | `0` | 0–600 | `CleanupPeriodMinutes` | Models/Settings/BbsProfile.cs |
-| No-response (s) | `0` | 0–3600 | `NoResponseTimeoutSeconds` | Models/Settings/BbsProfile.cs |
+| No-response (s) | `20` | 0–3600 | `NoResponseTimeoutSeconds` | Models/Settings/BbsProfile.cs |
 | Reconnect on failed connect / carrier lost / no response / after cleanup | `false` (all) | bool | `ReconnectOnFailedConnect` etc. | Models/Settings/BbsProfile.cs |
 | Game entry / exit command | `"E"` / `"=x"` | string | `GameEntryCommand` / `GameExitCommand` | Models/Settings/BbsProfile.cs |
 | Player dies at (HP) | `-25` | -999–0 | `PlayerDiesAtHp` | Models/Settings/BbsProfile.cs |
@@ -1661,8 +1661,8 @@ This section is a compact, technical lookup table for every setting documented a
 | Run if BS fails | `false` | bool | `RunIfBackstabFails` | Models/Profile/CombatSettings.cs |
 | Clear hostiles when seen hidden | `false` | bool | `ClearHostilesWhenSeenHidden` | Models/Profile/CombatSettings.cs |
 | Target order | `Normal` | Normal / Reverse | `TargetOrder` | Models/Profile/CombatSettings.cs |
-| Target Priority (+ member name) | `Default` / `""` | Default / FollowLeader / FollowMember | `TargetPriority` / `TargetPriorityMemberName` | Models/Profile/CombatSettings.cs |
-| Attack Order (+ after-player name) | `Default` / `""` | Default / AttackLastParty / AttackLastRoom / AttackAfter | `AttackTiming` / `AttackAfterPlayerName` | Models/Profile/CombatSettings.cs |
+| Target Priority (+ member name) | `Default` / `null` | Default / FollowLeader / FollowMember | `TargetPriority` / `TargetPriorityMemberName` | Models/Profile/CombatSettings.cs |
+| Attack Order (+ after-player name) | `Default` / `null` | Default / AttackLastParty / AttackLastRoom / AttackAfter | `AttackTiming` / `AttackAfterPlayerName` | Models/Profile/CombatSettings.cs |
 | Polite mode ⚠️ unwired | `Off` | Off / WaitForOthers / SkipRoom / AttackDifferent | `PoliteMode` | Models/Profile/CombatSettings.cs |
 | Min. / Max. monsters | 0 / 20 | 0–20 / 1–20 | `MinMonstersInRoom` / `MaxMonstersInRoom` | Models/Profile/CombatSettings.cs |
 | Run distance | `2` | 1–100 | `RunDistance` | Models/Profile/CombatSettings.cs |
@@ -1747,7 +1747,7 @@ This section is a compact, technical lookup table for every setting documented a
 | @comeback backtrack rooms / auto-request | 10 / true | 1–50 / bool | `MaxComebackBacktrackRooms` / `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |
 | Pyramid / Asylum solver enabled | true / true | bool (Global) | `GlobalSettings.PyramidSolverEnabled` / `AsylumSolverEnabled` | Models/Settings/GlobalSettings.cs |
 | Cleanup Player DB after N days | `90` | 0–3650 (Global) | `GlobalSettings.PlayerCleanupDays` | Models/Settings/GlobalSettings.cs |
-| Disable all events | `false` | bool | `CharacterProfile.EventsGloballyDisabled` | ViewModels/Settings/EventsSectionViewModel.cs |
+| Disable all events | `false` | bool | `CharacterProfile.EventsGloballyDisabled` | Models/Profile/CharacterProfile.cs |
 | Event (Name/Disabled/Trigger/Action fields) | see above | see above | `ScheduledEvent.*` | Models/GameData/ScheduledEvent.cs |
 
 ### Diagnostics / Log Pane / Equipment
