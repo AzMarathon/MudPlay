@@ -1,3 +1,201 @@
+# Getting Started
+
+New to MudPlay? Here's the short path from launch to playing — and where the rest of this help lives.
+
+## What MudPlay is
+
+A Telnet terminal client for **MajorMUD / MegaMUD**-style BBS door games. It renders a faithful CP437/ANSI terminal and layers a large, tunable automation suite on top — auto-combat, healing, spellcasting, navigation and looping, party coordination, and coin/item collection. Play it as a plain terminal, or turn on as much automation as you like.
+
+## Connecting to a BBS
+
+Two ways to connect:
+
+- **Quick Connect** (one-off) — **File → Quick Connect…**, type the board's host (name or IP) and port, and click **Connect**. Nothing is saved; it's the fastest way to try a board.
+- **A saved profile** (persistent) — set up a character profile so your login, macros, settings, and the board's details are remembered and reconnect on their own. This is how you'll normally play (see below).
+
+## Profiles
+
+A **profile** is one character's workspace — its BBS login, macros, triggers, equipment sets, favorites, quest state, and every per-character setting. One profile is loaded at a time.
+
+- **New profile** (Ctrl+N) starts a blank draft; set up its BBS + credentials (below), then **Save** (Ctrl+S) to name it.
+- **Open profile** (Ctrl+O) loads a saved one.
+- **Auto-load last profile** (Settings → General) reopens the profile you used last on every launch.
+
+Settings live in four tiers — **Defaults → Global → BBS → Character** — so a profile only records what differs from the tier beneath it. (The Settings Menu section notes each setting's tier.)
+
+## Setting up a BBS
+
+In **Settings → BBS + Display**, fill in the board's **name**, **host**, and **port**, your **username / password**, and — if the board needs it — the **automated logon** steps that walk you from the BBS menu into the game. Reconnect behavior and terminal size live here too. These are **BBS-tier**: shared by every character on that board.
+
+With that saved, **Connect** (Alt+H, or File → Connect) and MudPlay logs you in.
+
+## Playing, and turning on automation
+
+In the game, the terminal works like any MUD client — type a command and it's sent to the game. The **numpad is pre-wired to compass movement**, and you can add your own **macros** (key → command) and **aliases** (typed shortcuts). The startup splash plays until you connect or load a profile.
+
+The automation engines — Auto-Combat, Auto-Heal, Auto-Nuke, navigation looping, and more — are **toolbar toggles** whose behavior is tuned on the matching Settings tabs. Flip them on to let MudPlay fight, heal, and travel for you. The **Combat**, **Navigation & Looping**, **Party Play**, and **Healing & Spells** sections explain how each engine decides what to do.
+
+---
+
+# The Interface
+
+The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, or its **hotkey**, and press that same control again to close it. The terminal always stays live while you configure or check anything.
+
+## The terminal and status bar
+
+Type, and your keystrokes go straight to the game. The status bar along the bottom shows the connection light (**red** idle · **yellow** connecting · **green** connected), your current room, and other live readouts. The **numpad** is pre-wired to compass movement out of the box.
+
+## The toolbar and menus
+
+A customizable **toolbar** of icon buttons sits under the menu bar (File · View · Tools · Help). You choose which buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**.
+
+## The windows
+
+Each is modeless and toggles closed on its own key. Default hotkeys are shown; all are rebindable.
+
+- **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
+- **Backscroll** (Alt+L) — scroll back through terminal history, with search and export.
+- **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging.
+- **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave.
+- **Player Workshop** (F1) — your gear sets, the Item Finder, CP allocation plan, quest log, and death history.
+- **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character.
+- **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — spell configuration, session counters, and raw wire I/O for troubleshooting.
+
+The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
+
+---
+
+# Combat
+
+How MudPlay fights for you once **Auto-Combat** is on (its toolbar toggle, or Settings → General). The knobs live on **Settings → Combat** and **Settings → Spells**; this is what the engine does with them.
+
+## The round loop
+
+Each combat round the engine picks one main action — **cast an attack spell** or **swing your weapon** — following your **Action order**:
+
+- **Spells first** — try your attack spells; fall back to the weapon only when every spell fails to fire that round (out of mana, cast cap hit, target immune).
+- **Physical first** — swing first; turn to spells only when the weapon is proven useless against this target.
+- **Alternate** — flip the preferred action every round; a round whose preferred type can't fire falls back to the other, so no round is wasted.
+- **Custom round cycle** — spend a set number of rounds swinging, then a set number casting, on repeat.
+
+Two things always sit above that choice: a **backstab opener** fires first when eligible, and **debuff spells** are a separate extra action that can land the same round.
+
+## Targeting
+
+When several hostiles share a room, **Target order** and **Target priority** decide who gets hit first — the highest-priority monster by default, or a "follow the party's target" mode. Per-monster priority is ranked in Game Data.
+
+## Fighting a crowd
+
+Against several enemies MudPlay uses your **multi-attack** and **area-debuff** spell slots to hit the whole room, falling back to single-target attacks once the room thins below a slot's minimum-enemies setting. Those room spells are gated by **Auto-Nuke**; single-target attack spells aren't "nukes" and stay available regardless.
+
+## Backing off
+
+If your health drops past the thresholds on **Settings → Health**, the engine can **run** instead of fighting to the death — breaking combat first (if set), then moving a configured distance in a chosen direction. Healing and fleeing are covered under **Healing & Spells**.
+
+---
+
+# Navigation & Looping
+
+How MudPlay walks you around the world — one-off trips, repeating circuits, and lair camping — from the Navigation window (Alt+M), built on the imported room map.
+
+## Walking and GOTO
+
+Point MudPlay at any known room and it plots the shortest route and walks there, opening doors, disarming traps, and revealing hidden exits along the way. You can send it to a favorite, or a specific map/room.
+
+## Loops
+
+A loop is a saved circuit — a list of rooms MudPlay walks over and over, fighting and looting spawns as it goes. Queue a loop and, if you aren't already there, it first walks you to the loop's start, then begins the circuit. Combat, healing, and pickup all keep running while it moves.
+
+## Auto-Lair
+
+Auto-Lair camps a monster's lair: it travels there, waits out the respawn timer, enters to kill the spawn, then repeats. Tuned on Settings → Auto-Lair.
+
+## Obstacles
+
+En route MudPlay handles closed and locked doors (key, pick, or bash), traps (search and disarm, or delegate to a capable party member), and hidden exits (search to reveal). Rooms with a cast-on-enter hazard are routed around unless you carry a counter for it. A genuinely impassable obstacle halts the walk with a clear reason instead of looping on a door it can't open.
+
+---
+
+# Party Play
+
+MudPlay coordinates multi-character parties — following a leader, healing each other, and taking remote `@`-commands from party members.
+
+## Leaders and followers
+
+One character leads; the rest follow. A follower tracks the leader's movement and holds position; if the leader disconnects, the party disbands. A party is 2–6 characters.
+
+## Party healing
+
+With party heal spells configured (Settings → Party), members watch each other's health broadcasts and heal whoever drops below the minor/major thresholds — single-target, or an area heal once enough members qualify.
+
+## Remote @-commands
+
+Party members can drive each other with `@`-commands over telepath, gangpath, or say — `@follow`, `@go`, `@health`, and more. What's allowed is gated per-character on Settings → Talk (disallow all remote control, just `@party` commands, or specific channels), and a denied command can optionally warn the sender.
+
+## Reconnecting
+
+If a member drops, the party can auto-re-invite and reform on reconnect, and a member left behind can `@comeback` to rejoin the leader.
+
+---
+
+# Healing & Spells
+
+The health and spellcasting engines keep you alive and buffed — resting, healing, curing, and blessing on their own.
+
+## Health: rest, heal, flee
+
+Auto-Heal / Rest (its toolbar toggle, or Settings → General) watches your HP and mana. Below your rest thresholds it sits and rests (or meditates) back up; below your run thresholds it flees; below your hang-up threshold it can drop the connection as a last resort. Every threshold is set on Settings → Health, as a percentage or an absolute value.
+
+## Casting priorities
+
+When more than one spell wants to fire, the caster follows the priority order on Settings → Spells — party heals, self heals, curing, buffing, then debuffing — and won't cast if it would drop you below your mana floors.
+
+## Curing and blessing
+
+Configure cure spells for holds, poison, disease, and blindness, plus several bless (buff) slots that recast as they expire — while resting, and optionally during combat. You can also tell it to ignore, or not announce, specific ailments.
+
+## Mana regen
+
+For mana-regen classes, the caster can rest to regen and — if configured — reroll a poor regen result up to a cap.
+
+---
+
+# Cash & Items
+
+MudPlay collects coin and loot, banks your wealth, and manages your gear.
+
+## Collecting coin and loot
+
+With the collection engines on, MudPlay picks up coin and flagged items off the ground after a fight, following your per-currency rules (Settings → Cash) and the per-item flags in Game Data. It can skip a pickup that would push you into a heavier encumbrance band, and drop smaller coin to make room for larger.
+
+## Banking
+
+When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand. Set the bank and thresholds on Settings → Cash.
+
+## Equipment sets
+
+Gear is organized into named equipment sets in the **Player Workshop** — a Default set feeds your normal/alternate weapons and armor, a Backstab set feeds your stealth gear — and MudPlay swaps to the right set automatically (and re-equips after recovering a death pile). The **Item Finder** helps you build sets by browsing every equippable item with full stats.
+
+---
+
+# Automation
+
+MudPlay's automation is a set of independent engines you switch on and off — combat, healing, spells, pickup, movement, and more.
+
+## The auto-engines
+
+Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is a **toolbar toggle**. An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates all the combat/spell/health tuning.
+
+## Base modes
+
+The Settings → General **"Auto-Engines base modes"** checkboxes are your character's default engine states. They set the engines at login and — the key part — the live toolbar toggles **snap back to them at the start of a loop or Auto-Lair**. So you can flip combat off to travel somewhere and it returns to your defaults when the circuit begins.
+
+## The kill switch
+
+The **Auto-All** toggle (and the `@auto-all` remote command) flips every engine off in one press, remembering what was on so a second press restores it — a fast "stop everything" that doesn't lose your setup.
+
+---
+
 # Settings Menu
 
 MudPlay is a Telnet terminal client for MajorMUD / MegaMUD-style BBS door games. On top of a faithful terminal, it layers a large automation suite — auto-combat, auto-healing, auto-spellcasting, navigation/looping, party coordination, cash and item collection, and more — and almost every piece of that automation is tunable. This guide documents every one of those tunable settings: what it does, what happens when you change it, and where to find it.
@@ -1375,3 +1573,21 @@ The following were traced and confirmed to have **no** exposed setting — liste
 ---
 
 *This guide reflects the MudPlay source as of the `main` branch. Two settings in the Combat tab (Polite mode, Show combat round totals) and the entire Sounds tab are present in the UI but not currently wired to any runtime behavior — see their entries above for details. If a setting here stops matching what you see in the app, the code is the source of truth; please report the discrepancy.*
+
+---
+
+# Troubleshooting
+
+Common snags and how to deal with them.
+
+## Reconnecting
+
+MudPlay can auto-reconnect when a connect attempt fails, the carrier drops mid-session, or the server stops responding — each toggled per-BBS on Settings → BBS + Display, with a retry count (or infinite) and a redial pause. The **No-response** timeout controls how quickly a dead connection is noticed.
+
+## Something automated didn't behave
+
+Open the **Program Log** (F4) — it records what the engines decided and why. Turn on Debug / Combat diagnostics from the log pane for more detail when you're reproducing an issue.
+
+## Filing a bug report
+
+Use the menu-bar **Bug Report** button, or right-click the terminal → **Bug report…**. It writes a Markdown snapshot of your current state — movement, player, settings, program log, and scrollback — to your Desktop, ready to attach to a GitHub issue, so a problem can be diagnosed from the exact moment it happened.
