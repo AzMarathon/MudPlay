@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.8.14**
-> - Backscroll window: added a right-click Copy / Select all menu, and fixed copy so a selection reliably lands on the clipboard as plain text instead of silently failing (leaving a stale image) or not coming across
+> - Backscroll window: added a right-click Copy / Select all menu, and fixed both Ctrl+C and copy so a selection reliably lands on the clipboard as plain text instead of silently failing (leaving a stale image) or not coming across
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

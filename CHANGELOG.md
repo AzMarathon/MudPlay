@@ -4,7 +4,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.8.14
 
-- Backscroll window: added a right-click **Copy** / **Select all** menu, and made copy keep the clipboard flow on the UI thread — a selection copies as plain text now instead of silently failing (which left a stale image on the clipboard) or not coming across
+- Backscroll window: added a right-click **Copy** / **Select all** menu, and fixed both Ctrl+C and copy to reliably put the selection on the clipboard as plain text — the transcript now handles Ctrl+C itself (and is focused on open) and the write stays on the UI thread, instead of silently failing and leaving a stale image, or not coming across
 
 ## 3.8.13
 
