@@ -2,7 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.8.1**
-> - Filled in the Help compendium: added Getting Started, The Interface, Combat, Navigation & Looping, Party Play, Healing & Spells, Cash & Items, Automation, and Troubleshooting sections alongside the Settings Menu reference — concise explanations of how the client and its features actually work
+> - Filled in the Help compendium: added Getting Started, The Interface, Combat, Navigation & Looping, Party Play, Healing & Spells, Cash & Items, Player Workshop, Automation, and Troubleshooting sections alongside the Settings Menu reference — concise explanations of how the client and its features actually work
+> - Navigation & Looping and Player Workshop are written as step-by-step how-to's — how to open each window, its menus and buttons, and the workflow to drive it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

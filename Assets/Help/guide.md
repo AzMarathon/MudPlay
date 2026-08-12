@@ -57,7 +57,7 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 - **Backscroll** (Alt+L) — scroll back through terminal history, with search and export.
 - **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging.
 - **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave.
-- **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history.
+- **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character.
 - **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — spell configuration, session counters, and raw wire I/O for troubleshooting.
 
@@ -203,6 +203,44 @@ When your wealth crosses a threshold, MudPlay routes to a configured bank and de
 ## Equipment sets
 
 Gear is organized into named equipment sets in the **Player Workshop** — a Default set feeds your normal/alternate weapons and armor, a Backstab set feeds your stealth gear — and MudPlay swaps to the right set automatically (and re-equips after recovering a death pile). The **Item Finder** helps you build sets by browsing every equippable item with full stats.
+
+---
+
+# Player Workshop
+
+Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a tabbed window for managing your character: gear, leveling, quests, bosses, and deaths. There are no Save buttons anywhere in it; every edit auto-saves to your profile. Its tabs, most-used first:
+
+## Equipment Manager — gear sets
+
+Your gear lives in **four fixed sets**, each auto-equipped at a specific moment:
+
+- **Default** — your baseline loadout (and backstab fallback).
+- **Backstab** — worn for the opening backstab round.
+- **Pre-rest HP** / **Pre-rest Mana** — swapped in out of combat before resting.
+
+You don't create sets, you fill them. Pick a set on the left, then either click **Update from live** (fills it from what you're wearing) or type items into the **Item** boxes on the slot grid — each box only suggests gear your character can actually wear in that slot, and a blank slot means *{no change}* (left as-is). Click **Enable** so automation may use the set, and **Equip Now** to wear it at once. The **Equipment Bonuses** panel shows the set's projected AC and stat totals.
+
+## Item Finder
+
+The **Item Finder** button (in Equipment Manager) opens a searchable catalog of every equippable item, with columns for damage, AC, resists, stat bonuses, and more. Filter it by class, slot, level, or any stat, and sort by any column. It's a **reference tool**: double-click a row to see the item's full data record, and use the **Trial gearset** panel (with **Find Best**) to plan a loadout and read its projected stats. To actually equip something you found, note its name and type it into that slot's **Item** box back in Equipment Manager.
+
+## CP Allocation
+
+Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you. Two checkboxes mirror Settings → Auto-Trainer: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan).
+
+## Level Projection
+
+A read-only what-if table: pick a level **from–to** range (and optionally any **Race / Class**) to see the exp, training cost, HP, and mana at each level — reflecting your CP Allocation plan. **Reset to current** re-seeds it from your live character.
+
+## Quests, Bosses, and Deaths
+
+- **Quest Status** — a journal of the realm's quests. Expand a card for its requirements, reward, and step checklist; tick every step (or the **Complete** box) to fold its permanent bonus into your character. **Edit Quests…** lets you name, hide, or annotate them.
+- **Bosses** — a respawn-timer tracker. **Mark** or **Now** stamps a boss's kill time and the **100%** column counts down to its respawn; **Manage Bosses…** edits the list, and you can **Import / Export** a shared table. Tick **Stop before** to halt automation ahead of a boss.
+- **Death Recovery** — your death history. **How did I Die?** replays the backscroll from the moment of death, and **Recover Now** walks to the death room and grabs the pile (or toggle **Auto-Recover Deathpiles** to do it automatically).
+
+## Character Info and Calculators
+
+**Character Info** is your read-only character sheet — stats, skills, the attack table, and folded-in quest bonuses. **Calculators** holds what-if tools: Monster Matchup, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings.
 
 ---
 
