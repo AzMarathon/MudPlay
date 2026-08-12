@@ -158,7 +158,74 @@ With party heal spells configured (Settings → Party), members watch each other
 
 ## Remote @-commands
 
-Party members can drive each other with `@`-commands over telepath, gangpath, or say — `@goto`, `@loop`, `@stop`, `@health`, and more. What's allowed is gated per-character on Settings → Talk (disallow all remote control, just `@party` commands, or specific channels), and a denied command can optionally warn the sender.
+Party members can drive each other with `@`-commands sent over chat. Commands are accepted on three channels — **telepath**, **gangpath**, and **say (local)** — and the reply always comes back on the same channel it arrived on. (Gossip, yell, and broadcast are ignored for `@`-commands; there's no separate "page" channel — pages count as telepaths.)
+
+**What's allowed** is gated per character. Every remote command belongs to a permission *category* (query health, move me, alter settings, execute commands, and so on), and you grant those categories per player in **Game Data Browser → Players** — the edit dialog's permission grid, where the high-trust ones sit under "Elevated Commands." A never-seen player has no grants, so their commands are refused. On top of that, **Settings → Talk** has master and per-channel kill switches (disallow all remote control, or mute telepath / gangpath / say), a separate gate for `@party` directives, and a "warn on invalid/denied command" toggle that decides whether a refusal replies or stays silent. Active party members get a few things for free regardless of the grid: the party-coordination signals, the health queries (`@health` / `@status` / `@lives`), `@reset`, and a bare `@party` status check.
+
+### Query commands — they report; nothing changes
+
+| Command | Args | Replies with |
+|---|---|---|
+| `@version` | — | the app name + version |
+| `@help` | — | the commands *that sender* is allowed to use |
+| `@health` | — | HP / MA / Kai and resting-or-meditating state |
+| `@status` | — | what you're doing (walking / looping / fighting / resting), your room, and any ailments |
+| `@lives` | — | lives remaining |
+| `@exp` | — | session exp earned, exp/hour, and time-to-level |
+| `@level` | — | level, current exp, and exp to next |
+| `@where` | — | room name, map/room, and exits |
+| `@path` | — | the movement engine's activity and step progress |
+| `@who` | — | other players / monsters in your room |
+| `@timer` | — or `<name>` | boss respawn timers (all, or matching a name) |
+| `@what` | — | items on the room floor |
+| `@wealth` | — | your coins and total value |
+| `@enc` | — | encumbrance |
+| `@have` | `<item>` | whether you carry or wear a matching item |
+| `@inv` | — | your carried pack and keys |
+
+### Move me around
+
+| Command | Args | Does |
+|---|---|---|
+| `@goto` | `<destination>` | walks you to a saved GOTO favorite, a searched room (coords / name / acronym), or a boss |
+| `@loop` | `<name>` or ≥2 coords | starts a saved loop, or an ad-hoc coordinate loop |
+| `@lair` | `<name>` or coords | starts an Auto-Lair setup |
+| `@stop` | — | pauses your movement |
+| `@rego` | — | resumes it |
+
+### Change my settings
+
+- The auto-engine toggles — `@auto-combat`, `@auto-nuke`, `@auto-heal` (`@auto-rest` is the same flag), `@auto-bless`, `@auto-light`, `@auto-cash`, `@auto-get`, `@auto-sneak`, `@auto-hide`, `@auto-search` — each flips that engine (bare toggles it; add `on` or `off` to force it).
+- `@auto-all` — the kill switch: `off` stops every engine, `on` restores what was running. `@settings` — reports every engine's on/off state.
+- `@atkprio` — Target Priority: bare reports it; `1` Default, `2` follow-leader, `3 <name>` attack-what-player.
+- `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after.
+- `@divert <player>` — forwards your incoming telepaths to another player; bare `@divert` stops.
+- `@reset` — zeroes your Session Stats counters.
+
+### Do something on my behalf
+
+- `@do <command>` — sends the command verbatim to the game (the highest-trust command).
+- `@kill <target>` — retargets your combat onto the named monster this round.
+- `@heal` — asks a configured party healer to heal whoever's low (only a healer responds).
+- `@trap <dir>` — search and disarm a trap in that direction; `@trap stop` aborts.
+- `@train` — trains (and applies your CP plan, if Auto-train-stats is on) — assumes you're already at a trainer.
+- `@equip-<set>` — wears one of your saved gear sets by keyword (e.g. `@equip-backstab`; `@equip-all` applies the Default set).
+- `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin.
+- `@invite` / `@join` — ask you to invite the sender into your party, or to join theirs.
+
+### Party coordination — any active party member, no grant needed
+
+- `@wait` — hold: automation pauses until you `@ok` (which releases it).
+- `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
+- `@share` — splits your held coin evenly across the party.
+- `@party` — bare, it reports whether you're solo / following / leading. Sent on **say** *with* arguments, it relays whatever follows verbatim to your character as if you typed it (the party version of `@do`) — `@party rest`, `@party use chime`, and so on. The directive form only works on the say channel, and Settings → Talk can disallow it.
+
+### Irreversible and always-blocked
+
+- `@suicide` — forces your character's death, using the suicide password MudPlay captured from your in-game `set suicide`. It's an **Elevated Command**, and Settings → Other blocks it when your remaining lives are at or below your threshold.
+- A few things are **always refused, silently, no matter what's granted**: anything containing `reroll`, and `@party set suicide` — these can't be leaked or overridden.
+
+**Not commands:** the ailment broadcasts `@poisoned` / `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid.
 
 ## Reconnecting
 
