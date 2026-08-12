@@ -74,28 +74,71 @@ public sealed class TelnetClient : IAsyncDisposable
     {
         await _tcp.ConnectAsync(host, port, ct);
         _stream = _tcp.GetStream();
-        ApplyKeepAlive();
+        ApplyDeadConnectionTimeouts();
         _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _readLoop = Task.Run(() => ReadLoopAsync(_cts.Token));
         Connected?.Invoke();
     }
 
-    // Configure TCP-level keepalive on the connected socket, gated on
-    // NoResponseTimeoutSeconds. Cross-platform via .NET's
-    // SocketOptionName.TcpKeepAlive* (mapped to TCP_KEEPIDLE / INTVL / CNT on
-    // Linux, the equivalents on Windows + macOS). Best-effort: any platform
-    // that doesn't support a given option throws, which we swallow —
-    // keepalive is a defense, not a correctness requirement.
-    private void ApplyKeepAlive()
-    {
-        int idle = NoResponseTimeoutSeconds;
-        if (idle <= 0) return;
+    // How fast a dead connection is noticed when the user hasn't set a
+    // NoResponseTimeoutSeconds — a hard cap so a lost carrier can never take the
+    // OS default (~13 min of TCP retransmits) to surface. When they HAVE set one,
+    // it wins (plus the keepalive tail below).
+    private const int DefaultDeadConnectionCapSeconds = 60;
 
+    // Bound how long a dead socket can go unnoticed, two ways:
+    //
+    //   1. TCP keepalive (gated on NoResponseTimeoutSeconds) — probes an IDLE
+    //      socket: after `idle` seconds of quiet the OS sends 3 probes 10s apart,
+    //      declaring the socket dead within ~30s. Cross-platform via .NET's
+    //      SocketOptionName.TcpKeepAlive* (TCP_KEEPIDLE / INTVL / CNT on Linux).
+    //
+    //   2. TCP_USER_TIMEOUT (always, Linux) — keepalive alone is not enough: its
+    //      idle timer RESETS on every send, so a client mid-combat firing commands
+    //      into a vanished server never goes "idle" and the OS falls back to the
+    //      retransmit timeout — ~13 min on Linux (tcp_retries2=15), the reported
+    //      "13 minutes to notice the carrier dropped". TCP_USER_TIMEOUT caps how
+    //      long transmitted-but-unACKed data (and keepalive probes) may persist
+    //      before the kernel errors the socket, so the actively-sending case drops
+    //      on the same schedule as the idle case. It only ever fires on a genuinely
+    //      unreachable peer — a slow-but-alive server still ACKs at the TCP layer —
+    //      so it can't false-positive a live connection, which is why it's applied
+    //      even when keepalive is off.
+    //
+    // Best-effort: any option a platform rejects throws and is swallowed —
+    // dead-connection detection is a defense, not a correctness requirement.
+    private void ApplyDeadConnectionTimeouts()
+    {
         Socket sock = _tcp.Client;
-        try { sock.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); } catch { }
-        try { sock.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, idle); } catch { }
-        try { sock.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 10); } catch { }
-        try { sock.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 3); } catch { }
+        int idle = NoResponseTimeoutSeconds;
+
+        if (idle > 0)
+        {
+            try { sock.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); } catch { }
+            try { sock.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, idle); } catch { }
+            try { sock.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 10); } catch { }
+            try { sock.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 3); } catch { }
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            // Raw IPPROTO_TCP / TCP_USER_TIMEOUT; value is a uint of milliseconds.
+            const int IPPROTO_TCP = 6;
+            const int TCP_USER_TIMEOUT = 18;
+            uint ms = DeadConnectionCapMs(idle);
+            try { sock.SetRawSocketOption(IPPROTO_TCP, TCP_USER_TIMEOUT, BitConverter.GetBytes(ms)); } catch { }
+        }
+    }
+
+    // TCP_USER_TIMEOUT value in milliseconds for a given keepalive idle setting:
+    // match the keepalive schedule (idle + ~30s tail) when one is configured, else
+    // the standalone cap. Clamped to uint range so an absurd idle can't overflow
+    // the raw socket-option value.
+    internal static uint DeadConnectionCapMs(int idleSeconds)
+    {
+        // +30 in long so a near-int.MaxValue idle can't overflow before the clamp.
+        long capSeconds = idleSeconds > 0 ? (long)idleSeconds + 30 : DefaultDeadConnectionCapSeconds;
+        return (uint)Math.Min(capSeconds * 1000L, uint.MaxValue);
     }
 
     // Send raw bytes to the server. If the payload contains any IAC (255)
