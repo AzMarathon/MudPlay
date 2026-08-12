@@ -95,6 +95,34 @@ public sealed class TranscriptSnapshotTests
     }
 
     [Fact]
+    public void ScrolledOffRow_KeepsWriteTime_NotScrollOffTime_SoBoundaryStaysMonotonic()
+    {
+        // The reported bug: a row written early lingers on screen, then scrolls off
+        // LATER than rows still visible below it were written. Stamping it at
+        // scroll-off time made its timestamp jump ahead of the on-screen rows — the
+        // transcript ran backward at the scrollback/live boundary. It now keeps its
+        // write time, so scrolled-off < on-screen stays true.
+        TerminalScreen screen = new(10, 2);   // two visible rows
+
+        DateTimeOffset tA = new(2026, 8, 11, 18, 41, 33, TimeSpan.Zero);
+        WriteRow(screen, 0, "AAA", tA);       // A on the top row, written early
+        DateTimeOffset tB = new(2026, 8, 11, 18, 41, 34, TimeSpan.Zero);
+        WriteRow(screen, 1, "BBB", tB);       // B on the bottom row
+
+        // Much later, a new line arrives: A scrolls off, B rides up, C is written.
+        DateTimeOffset tC = new(2026, 8, 11, 18, 41, 56, TimeSpan.Zero);
+        screen.FeedTimestamp = tC;
+        screen.ScrollUp(0, 1, 1, default);    // A → ring; B → row 0; row 1 blanked
+        WriteRow(screen, 1, "CCC", tC);
+
+        // A kept its early write time even though it scrolled off at the much-later
+        // tC; the live rows keep theirs. tA < tB < tC — no backward jump.
+        Assert.Equal(tA, screen.Scrollback[0].Timestamp);
+        Assert.Equal(tB, screen.RowTimestamp(0));
+        Assert.Equal(tC, screen.RowTimestamp(1));
+    }
+
+    [Fact]
     public void ScrollUp_ShiftsRowStampsWithRows_AndResetsRevealedRow()
     {
         // The riskiest part of the feature: the per-row stamp array must move in

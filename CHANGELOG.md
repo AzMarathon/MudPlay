@@ -4,8 +4,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.6.2
 
-- Bug reports and death logs now timestamp the still-on-screen lines too, not just the scrolled-off ones — every content row is prefixed with its real write time, so a captured combat/movement sequence lines up against the program log by the clock instead of leaving the current-screen rows blank
-- Backscroll window gutter now shows each on-screen line's real write time instead of stamping the whole visible tail with one window-open instant
+- Captured transcripts — bug reports, death logs, and the Backscroll window — now stamp every line with the instant it was actually written, both the still-on-screen rows and the scrolled-off history, so the whole transcript stays in chronological order and lines up against the program log by the clock
+- Previously the on-screen lines came through blank (reports) or all shared one window-open time (Backscroll), and scrolled-off lines were stamped when they left the screen rather than when they arrived — which ran the timestamps out of order at the boundary
 
 ## 3.6.1
 

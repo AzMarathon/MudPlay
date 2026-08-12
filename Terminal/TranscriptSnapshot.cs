@@ -8,10 +8,11 @@ namespace MudPlay.Terminal;
 // consistent view of "the last N lines the user saw".
 public static class TranscriptSnapshot
 {
-    // One captured transcript line. Timestamp is the wall-clock instant the row
-    // was written: its scrollback capture time for a scrolled-off row, or its
-    // live per-row write stamp for a row still on screen. Null only for a blank
-    // row (no content was ever written, so there is no meaningful time).
+    // One captured transcript line. Timestamp is the wall-clock instant the row's
+    // content was written — the same per-row write stamp whether the row has since
+    // scrolled off into the ring or is still on screen, so the timestamps stay in
+    // order across the boundary. Null only for a blank row (no content was ever
+    // written, so there is no meaningful time).
     public readonly record struct Line(DateTimeOffset? Timestamp, string Text);
 
     // The last maxLines transcript lines, oldest → newest: every scrolled-off

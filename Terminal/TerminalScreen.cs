@@ -85,7 +85,7 @@ public sealed class TerminalScreen
         // Push the rows we're about to lose into scrollback so the user
         // can still scrub them in the Backscroll window.
         for (int y = 0; y < dropFromTop; y++)
-            Scrollback.Append(_cells.AsSpan(y * Cols, Cols));
+            Scrollback.Append(_cells.AsSpan(y * Cols, Cols), _rowStamps[y]);
 
         for (int y = 0; y < copyRows; y++)
         {
@@ -175,7 +175,7 @@ public sealed class TerminalScreen
 
         for (int y = fromRow; y <= lastNonBlank; y++)
         {
-            Scrollback.Append(_cells.AsSpan(y * Cols, Cols));
+            Scrollback.Append(_cells.AsSpan(y * Cols, Cols), _rowStamps[y]);
         }
     }
 
@@ -208,7 +208,7 @@ public sealed class TerminalScreen
         {
             for (int y = 0; y < n; y++)
             {
-                Scrollback.Append(_cells.AsSpan(y * Cols, Cols));
+                Scrollback.Append(_cells.AsSpan(y * Cols, Cols), _rowStamps[y]);
             }
         }
         // Move surviving rows up.

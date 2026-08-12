@@ -847,12 +847,12 @@ public static class BugReportBuilder
 
     private static string BuildScrollback(TerminalEmulator emulator)
     {
-        // Every content row carries its write time — a scrolled-off row's capture
-        // instant, or a live on-screen row's per-row write stamp. Keep the
-        // timestamp with each row so the log's timestamps can be aligned against
-        // the wire I/O (e.g. matching a nag-cancel log line to the telepath that
-        // triggered it, or a combat resume to the buff that interrupted it). Only
-        // blank spacing rows have no time.
+        // Every content row carries the instant its content was written — the same
+        // per-row write stamp whether it has scrolled off into the ring or is still
+        // on screen, so the timestamps stay in order and line up against the program
+        // log (e.g. matching a nag-cancel log line to the telepath that triggered
+        // it, or a combat resume to the buff that interrupted it). Only blank
+        // spacing rows have no time.
         IReadOnlyList<TranscriptSnapshot.Line> lines =
             TranscriptSnapshot.Tail(emulator, ScrollbackLines);
         if (lines.Count == 0) return "_(nothing on screen yet)_";
