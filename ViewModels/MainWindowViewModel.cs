@@ -2582,6 +2582,14 @@ public partial class MainWindowViewModel : ObservableObject
                 else if (wasConnected)
                 {
                     _lastDisconnectCause = ClassifyServerSideDrop();
+                    // An involuntary host-side drop must auto-enter on its
+                    // reconnect. Clear any stale suppress-entry intent left by
+                    // an earlier deliberate hangup so it can't carry across the
+                    // server drop and block re-entry (the deliberate-hangup and
+                    // user-initiated paths were caught above, so they keep their
+                    // "don't auto-enter" behavior).
+                    if (_lastDisconnectCause is DisconnectCause.CarrierLost or DisconnectCause.NoResponse)
+                        AppServices.Current.HangupSignal.AllowNextEntry();
                 }
 
                 // A remote @relog forces the dial-back unconditionally —

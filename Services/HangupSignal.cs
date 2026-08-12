@@ -58,6 +58,15 @@ public sealed class HangupSignal
         return was;
     }
 
+    // Clear the suppress-entry flag outright (no consume-as-return semantics).
+    // Called when an INVOLUNTARY host-side drop is classified (carrier lost /
+    // keepalive timeout): a server disconnect the user didn't ask for must
+    // auto-enter on its reconnect, so any stale suppress-entry intent left over
+    // from an earlier deliberate hangup can't carry across the drop and block
+    // re-entry. The deliberate paths (remote/user/low-HP hangup) never route
+    // through the server-drop branch, so this leaves their suppression intact.
+    public void AllowNextEntry() => _suppressNextEntry = false;
+
     // Test seam — non-mutating read of both flags. Lets unit tests assert "flag
     // is currently set" without consuming it. Production callers always go
     // through the Consume methods.
