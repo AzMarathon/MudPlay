@@ -476,7 +476,7 @@ Press **Alt+L** to open **Backscroll** — the full terminal history, including 
 - **Search** — type a term and press **Enter** (or **Find next**) to step through matches, newest to oldest, wrapping back to the top. The footer shows the line count and how many matches were found.
 - **Jump to end** — return to the newest line.
 - **Export…** — save the whole transcript to a text file, each line prefixed with its timestamp.
-- Drag to select a region and press **Ctrl+C** to copy it.
+- Drag to select a region, then **Ctrl+C** or **right-click → Copy** to put it on the clipboard as plain text. Right-click → **Select all** grabs the whole transcript to copy at once.
 
 Backscroll is a **snapshot taken when you open it**, not a live tail — to pick up newer output, close and reopen it (nothing is lost in the meantime).
 

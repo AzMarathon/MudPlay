@@ -1,9 +1,11 @@
 using System.Globalization;
 using System.Text;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Media;
 using MudPlay.Terminal;
 
@@ -377,6 +379,54 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         _dragging = false;
         e.Pointer.Capture(null);
         InvalidateVisual();
+    }
+
+    // Select the whole transcript (row 0 col 0 → last row's trimmed end). Feeds
+    // the context-menu "Select all" so a copy can grab everything at once.
+    public void SelectAll()
+    {
+        if (_rows.Count == 0) return;
+        int lastRow = _rows.Count - 1;
+        _anchor = new TextPos(0, 0);
+        _caret = new TextPos(lastRow, TrimmedLength(_rows[lastRow].Cells));
+        InvalidateVisual();
+    }
+
+    // True when a non-empty range is selected — gates the context-menu Copy item.
+    public bool HasSelection => NormalizedSelection() is not null;
+
+    // Copy the current selection to the system clipboard as plain text. Returns
+    // false when nothing is selected or no clipboard is reachable. Lives on the
+    // control because it's the focused element after a drag-select — so its own
+    // OnKeyDown catches Ctrl+C reliably, without depending on the key event
+    // bubbling to a window-level handler past a focus/"is a TextBox" guard. The
+    // window's right-click Copy calls this same method.
+    public bool CopySelectionToClipboard()
+    {
+        string sel = SelectedText;
+        if (string.IsNullOrEmpty(sel)) return false;
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } cb) return false;
+        _ = CopyTextAsync(cb, sel);
+        return true;
+    }
+
+    // Best-effort clipboard write on the UI thread (Avalonia's clipboard is
+    // UI-thread-affine, so no ConfigureAwait(false)). A missing/broken platform
+    // clipboard service is swallowed rather than faulting an unobserved Task.
+    private static async Task CopyTextAsync(IClipboard cb, string text)
+    {
+        try { await cb.SetTextAsync(text); }
+        catch { /* best-effort; non-fatal */ }
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled) return;
+        if (e.Key == Key.C && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            if (CopySelectionToClipboard()) e.Handled = true;
+        }
     }
 
     private (TextPos Start, TextPos End)? NormalizedSelection()

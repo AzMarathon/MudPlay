@@ -1,9 +1,6 @@
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Input.Platform;
-using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using MudPlay.Controls;
@@ -14,9 +11,10 @@ namespace MudPlay.Views;
 // Modeless terminal-history window. Bound to BackscrollViewModel, which holds a
 // frozen snapshot captured when the window opened (the window never tracks the
 // live terminal). The transcript is a BackscrollView — a virtualized canvas that
-// renders only the visible rows and owns its own (row, col) selection — so
-// drag-select and copy stay flat even on a deep history. The code-behind feeds it
-// the VM's rows once and drives Find-next / Jump-to-end by scrolling the viewer.
+// renders only the visible rows and owns its own (row, col) selection AND its own
+// Ctrl+C copy — so drag-select and copy stay flat even on a deep history. The
+// code-behind feeds it the VM's rows once and drives Find-next / Jump-to-end by
+// scrolling the viewer, and hosts the right-click Copy / Select-all menu.
 public partial class BackscrollWindow : Window
 {
     // Named controls resolved from the XAML name scope after load. This project
@@ -36,12 +34,29 @@ public partial class BackscrollWindow : Window
         MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "backscroll");
         Opened += OnOpened;
         Closed += OnClosed;
-        // Ctrl+C copies the view's (row, col) selection. The view doesn't own a
-        // native text selection, so the window handles the copy itself.
-        AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
+        BuildContextMenu();
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    // Right-click menu on the transcript. Copy is greyed out with nothing
+    // selected; "Select all" grabs the whole history so a single copy takes it
+    // all. Both delegate to the view, which owns the selection and the copy.
+    private void BuildContextMenu()
+    {
+        MenuItem copy = new() { Header = "Copy" };
+        copy.Click += (_, _) => _view.CopySelectionToClipboard();
+
+        MenuItem selectAll = new() { Header = "Select all" };
+        selectAll.Click += (_, _) => _view.SelectAll();
+
+        ContextMenu menu = new();
+        menu.Items.Add(copy);
+        menu.Items.Add(selectAll);
+        // Reflect the live selection state each time the menu opens.
+        menu.Opening += (_, _) => copy.IsEnabled = _view.HasSelection;
+        _view.ContextMenu = menu;
+    }
 
     private void OnOpened(object? sender, EventArgs e)
     {
@@ -52,9 +67,14 @@ public partial class BackscrollWindow : Window
 
         _view.SetRows(vm.Rows.Select(r => r.Source).ToArray());
 
-        // Park at the newest captured row once the first layout pass has sized
-        // the viewport, so the window opens on the tail of the history.
-        Dispatcher.UIThread.Post(OnJumpToEnd, DispatcherPriority.Background);
+        // Once the first layout pass has sized the viewport: park at the newest
+        // captured row (open on the tail) and focus the transcript so Ctrl+C
+        // reaches the view's key handler without the user clicking first.
+        Dispatcher.UIThread.Post(() =>
+        {
+            OnJumpToEnd();
+            _view.Focus();
+        }, DispatcherPriority.Background);
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -81,38 +101,5 @@ public partial class BackscrollWindow : Window
     {
         double maxY = Math.Max(0, _scroll.Extent.Height - _scroll.Viewport.Height);
         _scroll.Offset = _scroll.Offset.WithY(maxY);
-    }
-
-    private void OnKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Handled) return;
-        if (e.Key != Key.C || (e.KeyModifiers & KeyModifiers.Control) == 0) return;
-        // The search box owns its own Ctrl+C.
-        if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox) return;
-
-        string sel = _view.SelectedText;
-        if (string.IsNullOrEmpty(sel)) return;
-
-        if (TopLevel.GetTopLevel(this)?.Clipboard is { } cb)
-        {
-            _ = CopyAsync(cb, sel);
-            e.Handled = true;
-        }
-    }
-
-    // Clipboard writes route through DBus on Linux; on a host with no
-    // activatable clipboard service the Task faults. Observing it inside a
-    // try/catch keeps a best-effort copy from surfacing as an unobserved
-    // TaskScheduler exception that would fault the finalizer thread.
-    private static async Task CopyAsync(IClipboard cb, string text)
-    {
-        try
-        {
-            await cb.SetTextAsync(text).ConfigureAwait(false);
-        }
-        catch
-        {
-            // Best-effort copy; a missing/broken platform clipboard is non-fatal.
-        }
     }
 }
