@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.14**
-> - Backscroll window: added a right-click Copy / Select all menu, and fixed both Ctrl+C and copy so a selection reliably lands on the clipboard as plain text instead of silently failing (leaving a stale image) or not coming across
+> **Version 3.8.15**
+> - Map legend is now draggable — position it anywhere on the map; the spot is remembered install-wide, its backdrop is more opaque for readability, and toggling it off and back on re-clamps it into the currently-visible map if the window has since shrunk
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

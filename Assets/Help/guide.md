@@ -151,7 +151,7 @@ The **EXP/HR ESTIMATOR** panel in the right rail projects how much experience a 
 
 ## The map and obstacles
 
-**Right-click any room** for its menu: **Walk here**, **Add to favorites**, **I am here** (re-anchor if the map loses track of you), **Use Teleport**, **Center on…**, and toggles to mark a room **Avoid** or **Stash**. The **Overlays ▾** button layers lairs, shops, and spell rooms onto the map and toggles the **Legend**. Route lines are colour-coded — walk-to **blue**, a running loop **green**, a loop you're previewing **red**, an Auto-Lair approach **orange**.
+**Right-click any room** for its menu: **Walk here**, **Add to favorites**, **I am here** (re-anchor if the map loses track of you), **Use Teleport**, **Center on…**, and toggles to mark a room **Avoid** or **Stash**. The **Overlays ▾** button layers lairs, shops, and spell rooms onto the map and toggles the **Legend** — which you can **drag anywhere on the map** (it remembers where you put it; toggle it off and back on and it snaps back into view if the window has since shrunk). Route lines are colour-coded — walk-to **blue**, a running loop **green**, a loop you're previewing **red**, an Auto-Lair approach **orange**.
 
 En route, MudPlay handles closed and locked doors (key, pick, or bash), traps (search and disarm, or delegate to a capable party member), and hidden exits. A genuinely impassable obstacle halts the walk with a clear reason rather than looping on a door it can't open.
 

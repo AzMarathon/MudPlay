@@ -17,6 +17,11 @@ namespace MudPlay.Views.Navigation;
 // builder.
 public partial class NavigationWindow : Window
 {
+    // Legend-drag state. _legendGrab is the cursor's offset within the legend at
+    // press time, so the drag moves the legend under the same point it was grabbed.
+    private bool _legendDragging;
+    private Point _legendGrab;
+
     public NavigationWindow()
     {
         InitializeComponent();
@@ -43,6 +48,9 @@ public partial class NavigationWindow : Window
         // the map first before navigation works.
         Opened    += (_, _) => FocusMap();
         Activated += (_, _) => FocusMap();
+        // Position the legend once the first layout pass has sized the map (its
+        // Bounds are 0 until then). No-op when the legend starts hidden.
+        Opened    += (_, _) => Dispatcher.UIThread.Post(ApplyLegendPosition, DispatcherPriority.Background);
 
         // Building-loop ListBox — click row to remove, drag to reorder.
         if (this.FindControl<ListBox>("BuilderClicksList") is { } builderList)
@@ -91,6 +99,16 @@ public partial class NavigationWindow : Window
     // new container.
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // Toggling the legend back on re-clamps it into the currently-visible map
+        // — a position left off-view by a since-shrunk / covered window snaps back.
+        // (A live shrink while it's already shown is left alone, per design.)
+        if (e.PropertyName == nameof(NavigationViewModel.LegendVisible))
+        {
+            if (DataContext is NavigationViewModel { LegendVisible: true })
+                Dispatcher.UIThread.Post(ApplyLegendPosition, DispatcherPriority.Background);
+            return;
+        }
+
         if (e.PropertyName != nameof(NavigationViewModel.CurrentNavSelectedRow)) return;
         if (DataContext is not NavigationViewModel vm) return;
         if (vm.CurrentNavSelectedRow is not { } row) return;
@@ -184,6 +202,89 @@ public partial class NavigationWindow : Window
     private void OnMapRoomLeftClicked(Game.Map.RoomKey key, Point _)
     {
         if (DataContext is NavigationViewModel vm) vm.OnRoomLeftClicked(key);
+    }
+
+    // ----- Draggable map legend -------------------------------------------
+
+    private void OnLegendPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Border legend) return;
+        if (!e.GetCurrentPoint(legend).Properties.IsLeftButtonPressed) return;
+        _legendGrab = e.GetPosition(legend);      // cursor offset within the legend
+        _legendDragging = true;
+        e.Pointer.Capture(legend);
+        e.Handled = true;
+    }
+
+    private void OnLegendPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_legendDragging || sender is not Border legend) return;
+        if (this.FindControl<MapControl>("MapHost") is not { } map) return;
+        Point cursor = e.GetPosition(map);
+        legend.Margin = ClampLegend(cursor.X - _legendGrab.X, cursor.Y - _legendGrab.Y,
+                                    legend.Bounds.Size, map.Bounds.Size);
+    }
+
+    private void OnLegendPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_legendDragging) return;
+        _legendDragging = false;
+        e.Pointer.Capture(null);
+        e.Handled = true;
+        if (sender is not Border legend) return;
+        // Persist the dropped position (install-wide, Global tier). Save fires
+        // GlobalSettingsChanged — harmless here (the map only re-reads nav-line
+        // styles from it, which are unchanged).
+        var store = MudPlay.Services.AppServices.Current.Settings;
+        store.Current.MapLegendX = legend.Margin.Left;
+        store.Current.MapLegendY = legend.Margin.Top;
+        store.Save();
+    }
+
+    // Place the legend at its stored (or default bottom-left) position, clamped so
+    // it stays fully inside the current map viewport. No-op until both the legend
+    // and the map are laid out. Called on window open and on legend toggle-on.
+    private void ApplyLegendPosition()
+    {
+        if (this.FindControl<Border>("MapLegend") is not { IsVisible: true } legend) return;
+        if (this.FindControl<MapControl>("MapHost") is not { } map) return;
+
+        // Clear the margin BEFORE measuring: a stale position past the (now
+        // smaller) map edge starves the legend's arrange, collapsing its size to 0
+        // — which would defeat the clamp below and leave it stuck off-view. With
+        // the margin cleared it arranges at full size, so we get a real size to
+        // clamp against. Mirrors the hover tooltip's measure dance.
+        legend.Margin = new Thickness(0);
+        legend.InvalidateMeasure();
+        legend.UpdateLayout();
+        Size legendSize = legend.Bounds.Size;
+        Size mapSize = map.Bounds.Size;
+        if (legendSize.Width <= 0 || mapSize.Width <= 0) return;   // not laid out yet
+
+        var g = MudPlay.Services.AppServices.Current.Settings.Current;
+        double x, y;
+        if (g.MapLegendX is { } sx && g.MapLegendY is { } sy)
+        {
+            x = sx;
+            y = sy;
+        }
+        else
+        {
+            // Default: bottom-left, 12px inset (the pre-drag placement).
+            x = 12;
+            y = mapSize.Height - legendSize.Height - 12;
+        }
+        legend.Margin = ClampLegend(x, y, legendSize, mapSize);
+    }
+
+    // Clamp a (Left, Top) legend position so the whole legend stays inside the map
+    // viewport. When the legend is larger than the viewport the ceiling collapses
+    // to 0 (pinned top-left) rather than going negative.
+    private static Thickness ClampLegend(double x, double y, Size legendSize, Size mapSize)
+    {
+        double maxX = Math.Max(0, mapSize.Width - legendSize.Width);
+        double maxY = Math.Max(0, mapSize.Height - legendSize.Height);
+        return new Thickness(Math.Clamp(x, 0, maxX), Math.Clamp(y, 0, maxY), 0, 0);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

@@ -741,12 +741,20 @@
                 </ListBox>
             </Border>
 
-            <!-- Legend overlay — bottom-left of the map per user direction. -->
+            <!-- Legend overlay — draggable. Anchored top-left; its Margin is a
+                 (Left, Top) position in the map's coordinate space (the MapControl
+                 shares this Grid column), driven by the drag handlers in the
+                 code-behind. Defaults bottom-left; the code re-clamps it into the
+                 visible map whenever it's toggled on. -->
             <Border Grid.Column="0"
+                    Name="MapLegend"
                     IsVisible="{Binding LegendVisible}"
-                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                    Margin="12,0,0,12"
-                    Background="#1A1A1AEE"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Cursor="SizeAll"
+                    PointerPressed="OnLegendPointerPressed"
+                    PointerMoved="OnLegendPointerMoved"
+                    PointerReleased="OnLegendPointerReleased"
+                    Background="#F21A1A1A"
                     BorderBrush="{StaticResource ChromeBorderSoftBrush}" BorderThickness="1"
                     CornerRadius="4" Padding="10">
                 <StackPanel Spacing="4" MinWidth="180">

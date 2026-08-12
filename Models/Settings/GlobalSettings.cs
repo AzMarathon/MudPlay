@@ -58,6 +58,14 @@ public sealed class GlobalSettings
     // which pushes it to MapControl.
     public NavLineStyles? NavLines { get; set; }
 
+    // Map legend overlay's user-dragged position, in pixels from the top-left of
+    // the map viewport. Null (the default) parks it bottom-left. Install-wide
+    // (Global tier), persisted on drop and re-clamped into the visible map when
+    // the legend is toggled back on (so a position left off-view by a since-shrunk
+    // window snaps back). Both non-null or both null — a half-set pair is ignored.
+    public double? MapLegendX { get; set; }
+    public double? MapLegendY { get; set; }
+
     // Master enable for the Great Pyramid climb solver — when true (default) a
     // walk-to a pyramid room hands off to PyramidSolver; when false the walk
     // fails normally like any unroutable destination. Install-wide (Global tier);
