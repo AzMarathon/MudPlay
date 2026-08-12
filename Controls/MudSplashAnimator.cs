@@ -116,15 +116,30 @@ public sealed class MudSplashAnimator : IDisposable
             _frame = 0;
             _scene = NextScene();
         }
-        RenderFrame(_frame);
+        RenderSceneFrame(_frame);
         FrameAdvanced?.Invoke();
     }
 
+    // Full render — clear the whole grid, draw the static header once, then the
+    // scene. Used on init / resize where nothing prior is on screen, so there's no
+    // previous frame to un-draw (the footprint is reset).
     private void RenderFrame(int f)
     {
         Screen.ClearAll(SplashCanvas.BgAttr);
         DrawHeader(Screen);
+        _canvas.ResetFootprint();
         if (Animate) _scene.Render(_canvas, f);
+        Screen.Bump();
+    }
+
+    // Per-tick render — the header and background persist; clear only the previous
+    // frame's scene footprint and re-draw the scene. Avoids the whole-grid ClearAll
+    // and header redraw every 80ms, and leaves the changed cells in
+    // SplashCanvas.DirtyCells for a later partial-repaint path.
+    private void RenderSceneFrame(int f)
+    {
+        _canvas.BeginFrame();
+        _scene.Render(_canvas, f);
         Screen.Bump();
     }
 

@@ -23,6 +23,44 @@ public sealed class SplashCanvas
 
     public SplashCanvas(TerminalScreen screen) => Screen = screen;
 
+    // ----- dirty-cell frame tracking ----------------------------------------
+    // Every Put records the cell it touched into _footprint; BeginFrame rolls that
+    // into _prevFootprint and clears those cells back to background before the next
+    // frame draws — so a frame only ever repaints its own moving footprint instead
+    // of the whole lens re-cleared every tick. _dirty is the union of the cells this
+    // frame cleared and freshly drew — the exact set a partial repaint must touch.
+    private HashSet<int> _footprint = new();
+    private HashSet<int> _prevFootprint = new();
+    private readonly HashSet<int> _dirty = new();
+    private static readonly Cell BlankCell = new(' ', BgAttr);
+
+    // Cell indices (y * Cols + x) that changed this frame.
+    public IReadOnlyCollection<int> DirtyCells => _dirty;
+
+    // Start a fresh animation frame: clear the previous frame's scene footprint back
+    // to background (the header and untouched background persist), then let the scene
+    // draw. Call once before scene.Render each tick.
+    public void BeginFrame()
+    {
+        _dirty.Clear();
+        (_prevFootprint, _footprint) = (_footprint, _prevFootprint);
+        _footprint.Clear();
+        foreach (int idx in _prevFootprint)
+        {
+            Screen.Put(idx % Cols, idx / Cols, BlankCell);
+            _dirty.Add(idx);
+        }
+    }
+
+    // Drop all footprint state — used after a full redraw (init / resize) where the
+    // whole grid was just cleared, so there's no prior frame to un-draw next tick.
+    public void ResetFootprint()
+    {
+        _footprint.Clear();
+        _prevFootprint.Clear();
+        _dirty.Clear();
+    }
+
     // ----- palette (shared mud tones) ---------------------------------------
     public static readonly CellAttributes BgAttr    = CellAttributes.Default;
     public static readonly CellAttributes BrownDark = Rgb(64, 44, 26);
@@ -43,6 +81,9 @@ public sealed class SplashCanvas
         if (ch == ' ') return;
         if (x < 0 || x >= Cols || y < TitleRows || y >= Rows) return;
         Screen.Put(x, y, new Cell(ch, attr));
+        int idx = y * Cols + x;
+        _footprint.Add(idx);
+        _dirty.Add(idx);
     }
 
     // Draw a string left-to-right from (x, y). Spaces leave the underlying cell
