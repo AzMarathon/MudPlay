@@ -8,9 +8,12 @@ namespace MudPlay.Services;
 //
 // This is the in-memory source of truth. AppServices mirrors it to the
 // Char-tier LogDiagnosticsSettings section: it applies the persisted values
-// on ProfileLoaded, resets to off on ProfileClosed, and writes back on
-// Changed. All flags default off — verbose tracing burns IO and isn't an
-// everyday affordance — and a fresh character (no saved section) reads off.
+// on ProfileLoaded, resets to the LogDiagnosticsSettings defaults on
+// ProfileClosed, and writes back on Changed. The field initializers below are
+// all false, but the effective per-character defaults come from
+// LogDiagnosticsSettings, which ships Debug + Combat ON (so a fresh character's
+// Program Log already carries the decision-trail a bug report needs) and
+// AutoCollect + HopTiming off (the heavier on-disk / trace affordances).
 //
 // DebugDiagnostics gates the cross-engine Debug traces; every
 // _log?.Debug(...) site emits only while it's on. CombatDiagnostics gates
@@ -29,9 +32,10 @@ public sealed class LogDiagnosticState
     private bool _autoCollectLogs;
     private bool _hopTiming;
 
-    // Master toggle for the generation-gated Debug channel. Off by default;
-    // flip on to make every _log?.Debug(...) site across the engines start
-    // emitting, flip off again for normal play.
+    // Master toggle for the generation-gated Debug channel. Effectively on by
+    // default (applied from LogDiagnosticsSettings on profile load); while on,
+    // every _log?.Debug(...) site across the engines emits — flip it off to
+    // quiet them.
     public bool DebugDiagnostics
     {
         get => _debugDiagnostics;
@@ -43,9 +47,9 @@ public sealed class LogDiagnosticState
         }
     }
 
-    // Master toggle for the in-memory combat-decision channel. Off by default;
-    // flip on while troubleshooting a combat or healing engine, flip off again
-    // for normal play.
+    // Master toggle for the in-memory combat-decision channel. Effectively on
+    // by default (applied from LogDiagnosticsSettings on profile load); leave it
+    // on for the combat-decision trace, flip off to quiet it.
     public bool CombatDiagnostics
     {
         get => _combatDiagnostics;
