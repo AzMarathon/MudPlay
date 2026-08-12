@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.6.2**
-> - Captured transcripts — bug reports, death logs, and the Backscroll window — now stamp every line with the instant it was actually written, both the still-on-screen rows and the scrolled-off history, so the whole transcript stays in chronological order and lines up against the program log by the clock
-> - Previously the on-screen lines came through blank (reports) or all shared one window-open time (Backscroll), and scrolled-off lines were stamped when they left the screen rather than when they arrived — which ran the timestamps out of order at the boundary
+> **Version 3.7.0**
+> - Auto-engine toolbar toggles now snap back to your per-character base modes at the first start of a loop or auto-lair, and on profile load — so you can flip engines off to travel to a circuit (e.g. combat off to sprint 500 rooms to a loop) and settle into it with your defaults restored, badges and all
+> - Settings → General's engine checkboxes (renamed "Auto-Engines base modes") now define those base defaults, decoupled from the live toolbar: flipping a toolbar toggle no longer changes them, and they set the engine positions on profile load
+> - The snap-to-base fires once per run, not on later laps of the same loop; Auto-Train is excluded (it's not a toolbar engine)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

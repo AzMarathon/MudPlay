@@ -357,7 +357,7 @@ public partial class MainWindowViewModel : ObservableObject
             RefreshEngineActionChip();
         });
 
-    private void OnLoopRunnerEngineEvent(Game.Map.LoopEvent _)
+    private void OnLoopRunnerEngineEvent(Game.Map.LoopEvent e)
         => Dispatcher.UIThread.Post(() =>
         {
             _loopRunning = AppServices.Current.LoopRunner.State != Game.Map.LoopState.Idle;
@@ -366,13 +366,34 @@ public partial class MainWindowViewModel : ObservableObject
             // event so the lap counter ticks over on RepeatStarted and the slot
             // clears on Stopped.
             RefreshLocationSlot();
+            // Circuit reached its first waypoint (walk-to done, looping begins) —
+            // settle the live auto-engines into the character's base modes. Fires
+            // once per run (the event itself is one-shot), never on lap wraps.
+            if (e.Kind == Game.Map.LoopEventKind.ReachedFirstWaypoint)
+                ReconcileAutoModeToBase("loop start");
         });
 
     private void OnAutoLairActiveChanged(bool active)
         => Dispatcher.UIThread.Post(() =>
         {
             _autoLairOn = active;
+            // A fresh auto-lair run re-arms the once-per-run base-modes reconcile.
+            if (active) _autoLairBaseReconciled = false;
             RefreshEngineActionChip();
+        });
+
+    // Latches the auto-lair base-modes reconcile to the FIRST lair entry of a run
+    // (not every subsequent lair the circuit clears). Re-armed on ActiveChanged.
+    // The loop path needs no latch — its ReachedFirstWaypoint is already one-shot.
+    private bool _autoLairBaseReconciled;
+
+    private void OnAutoLairPhaseChangedForBase(Game.Map.AutoLairPhase phase)
+        => Dispatcher.UIThread.Post(() =>
+        {
+            if (phase != Game.Map.AutoLairPhase.Engaging) return;
+            if (_autoLairBaseReconciled) return;
+            _autoLairBaseReconciled = true;
+            ReconcileAutoModeToBase("auto-lair start");
         });
 
     private void OnMovementControlStateChanged()
@@ -553,6 +574,9 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Walker.Event           += OnWalkerEngineEvent;
         AppServices.Current.LoopRunner.Event       += OnLoopRunnerEngineEvent;
         AppServices.Current.AutoLair.ActiveChanged += OnAutoLairActiveChanged;
+        // Auto-lair reaching the lair (Entering→Engaging) is its circuit-start —
+        // the base-modes reconcile hooks it, latched once per run (see the handler).
+        AppServices.Current.AutoLair.PhaseChanged  += OnAutoLairPhaseChangedForBase;
         // Coalesced engine state drives the Start / Pause / Stop toolbar
         // buttons' visibility + Pause↔Resume label; re-apply row state on
         // every transition so the toolbar mirrors the running engine.
@@ -601,6 +625,10 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildRecentProfiles();
         SyncProfileMenuState();
         AppServices.Current.Profile.ProfileLoaded += OnProfileLoadedForConnect;
+        // On profile load the base-modes checkboxes set the live engine positions
+        // (no-op for a character that predates the base/live split). Runs before
+        // the badge reseed below; the reconcile also reseeds when it changes state.
+        AppServices.Current.Profile.ProfileLoaded += _ => ReconcileAutoModeToBase("profile load");
         AppServices.Current.Profile.ProfileLoaded += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileMutated += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileSaving  += _ => SyncAutoEngineTogglesFromProfile();
@@ -4515,6 +4543,33 @@ public partial class MainWindowViewModel : ObservableObject
 
     partial void OnIsDisableHangupsActiveChanged(bool value)
         => PersistGeneralFlag("DisableHangups", value, g => g.DisableHangups = value);
+
+    // Reset the LIVE auto-engine state (AutoMode) to the character's BASE modes —
+    // the Settings → General base-modes checkboxes (GeneralSettings.AutoModeBase).
+    // Called at profile load and at the first start of a loop / auto-lair circuit,
+    // so a user who flipped live toolbar toggles to travel to the circuit (combat
+    // off to sprint 500 rooms to a loop, say) settles into it with their normal
+    // defaults restored, toolbar badges and all. A no-op when the live state
+    // already matches the base, or when a pre-split character has no base yet
+    // (AutoModeBase null → treated as the current AutoMode). Engines read their
+    // flag per-tick, so persisting the flip + reseeding the badges is enough —
+    // no explicit per-engine re-eval needed here.
+    private void ReconcileAutoModeToBase(string reason)
+    {
+        if (AppServices.Current.Profile.Current is not { } profile) return;
+        Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
+        Models.Profile.AutoActionDefaults baseModes = dto.AutoModeBase ?? dto.AutoMode;
+        if (dto.AutoMode.SameAs(baseModes)) return;
+
+        dto.AutoMode = baseModes.Clone();
+        profile.Settings ??= new();
+        profile.Settings["General"] =
+            System.Text.Json.JsonSerializer.SerializeToElement(dto);
+        AppServices.Current.Profile.Save();
+        SyncAutoEngineTogglesFromProfile();
+        AppServices.Current.Log.Info("AutoMode",
+            $"Auto-engines reset to base modes ({reason}).");
+    }
 
     private void PersistAutoModeFlag(string flag, bool value,
                                      Action<Models.Profile.AutoActionDefaults> mutator)

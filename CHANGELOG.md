@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.7.0
+
+- Auto-engine toolbar toggles now snap back to your per-character base modes at the first start of a loop or auto-lair, and on profile load — so you can flip engines off to travel to a circuit (e.g. combat off to sprint 500 rooms to a loop) and settle into it with your defaults restored, badges and all
+- Settings → General's engine checkboxes (renamed "Auto-Engines base modes") now define those base defaults, decoupled from the live toolbar: flipping a toolbar toggle no longer changes them, and they set the engine positions on profile load
+- The snap-to-base fires once per run, not on later laps of the same loop; Auto-Train is excluded (it's not a toolbar engine)
+
 ## 3.6.2
 
 - Captured transcripts — bug reports, death logs, and the Backscroll window — now stamp every line with the instant it was actually written, both the still-on-screen rows and the scrolled-off history, so the whole transcript stays in chronological order and lines up against the program log by the clock

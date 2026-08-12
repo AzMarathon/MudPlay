@@ -711,7 +711,7 @@ public static class BugReportBuilder
         StringBuilder sb = new();
         Kv(sb, "Kill-switch engaged", svc.AutoModeController.KillSwitchEngaged.ToString());
         Kv(sb, "All wired engines off", svc.AutoModeController.AllWiredOff.ToString());
-        sb.Append("\nPer-engine toggles live in the `General` settings block below (`AutoMode`).\n");
+        sb.Append("\nPer-engine toggles live in the `General` settings block below: `AutoMode` is the live toolbar state, `AutoModeBase` the base defaults reconciled onto it at profile load / loop / auto-lair start (null = pre-split character, treated as equal to `AutoMode`).\n");
         return sb.ToString();
     }
 

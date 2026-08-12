@@ -70,14 +70,26 @@ public sealed class GeneralSettings
     // tooltip has always rendered at). Char-tier.
     public double? NavTooltipFontSize { get; set; }
 
-    // Master on/off state for every auto-engine. Each flag gates whether the
-    // matching engine actually fires: AutoActionDefaults.AutoCombat gates
-    // Game.Combat.CombatManager + the Game.Combat.CombatStateTracker's
-    // Combat-gate assertion; AutoActionDefaults.AutoHealRest gates
-    // Game.Health.HealthManager; the others gate their own engines. Loading the
-    // profile, manual edit in Settings → General, and the toolbar Toggle*
-    // commands all write the same field.
+    // LIVE on/off state for every auto-engine — the state the toolbar toggles
+    // drive and each engine reads per-tick. Each flag gates whether the matching
+    // engine fires: AutoActionDefaults.AutoCombat gates Game.Combat.CombatManager
+    // + the Game.Combat.CombatStateTracker's Combat-gate assertion;
+    // AutoActionDefaults.AutoHealRest gates Game.Health.HealthManager; the others
+    // gate their own engines. The toolbar Toggle* commands write this directly.
+    // It is transient across a session — reconciled back to AutoModeBase (below)
+    // at profile load and at each loop / auto-lair circuit start.
     public AutoActionDefaults AutoMode { get; set; } = new();
+
+    // BASE (default) engine modes for this character — the Settings → General
+    // "base modes" checkboxes edit THIS, not the live AutoMode. It is the state
+    // the engines settle into at profile load and when a loop / auto-lair circuit
+    // begins, so the user can flip live toolbar toggles mid-route (e.g. combat
+    // off to sprint 500 rooms to a loop) without touching their normal defaults —
+    // the circuit start flips the toolbar back to match these boxes, once per run.
+    // Deliberately decoupled from AutoMode: a toolbar flip changes AutoMode, never
+    // this. Null on a character that predates the split — treated as equal to
+    // AutoMode (see resolve sites) so nothing changes until the boxes are saved.
+    public AutoActionDefaults? AutoModeBase { get; set; }
 
     // ----- Emergency hangup carve-out --------------------------------
 

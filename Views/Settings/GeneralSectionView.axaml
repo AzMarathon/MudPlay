@@ -294,7 +294,8 @@
                      landed yet; the IsXxxWired flag on the VM flips
                      true as each engine ships. -->
                 <StackPanel Margin="0,16,0,0" Spacing="2">
-                    <TextBlock Classes="ColumnHeader" Text="Auto-Engines enabled on start"/>
+                    <TextBlock Classes="ColumnHeader" Text="Auto-Engines base modes"
+                               ToolTip.Tip="Your character's default engine states. Applied to the live toolbar toggles on profile load and once at the first start of a loop / auto-lair circuit — so you can flip toggles live to travel to a circuit (e.g. combat off to sprint there) and settle into it with these defaults restored, toolbar badges and all. Independent of the toolbar: flipping a toolbar toggle never changes these boxes."/>
                     <CheckBox IsChecked="{Binding AmAutoCombat,   Mode=TwoWay}"
                               IsEnabled="{Binding IsAutoCombatWired}"
                               Content="Auto-Combat"
