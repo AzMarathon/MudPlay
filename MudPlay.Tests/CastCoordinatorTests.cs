@@ -227,4 +227,44 @@ public sealed class CastCoordinatorTests
         Assert.False(h.Cast.TryCast("freedom"));      // sub-cooldown
         Assert.Single(h.Sent);
     }
+
+    [Fact]
+    public void RoundCooldownBypassAlone_StillBlockedByRecastInterval()
+    {
+        // Regression pin: a mid-fight self-buff cast, then an immediate combat
+        // re-attack fired within 500ms. bypassRoundCooldown clears the 5.5s
+        // round gate but NOT the burst guard, so the re-attack was rejected as
+        // "recast-interval" and slid to the next tick — a wasted round the mob
+        // swung through. This documents the exact defect the flag below fixes.
+        using Harness h = new();
+        Assert.True(h.Cast.TryCast("armr"));                                    // self-buff
+        Assert.False(h.Cast.TryCast("mmis", "outcast", bypassRoundCooldown: true));
+        Assert.Single(h.Sent);
+        Assert.Contains(h.Failures, f => f.Detail == "recast-interval");
+    }
+
+    [Fact]
+    public void RecastIntervalBypass_LetsResumeReattackLandImmediately()
+    {
+        // The combat dispatch passes bypassRecastInterval so the re-attack after
+        // a within-500ms self-buff goes out the same frame instead of deferring.
+        using Harness h = new();
+        Assert.True(h.Cast.TryCast("armr"));                                    // self-buff
+        Assert.True(h.Cast.TryCast("mmis", "outcast",
+            bypassRoundCooldown: true, bypassRecastInterval: true));
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("mmis outcast", h.LastSent);
+    }
+
+    [Fact]
+    public void RecastIntervalBypass_StillHonoursFailureLatch()
+    {
+        // The burst-guard bypass must not punch through the server failure latch:
+        // a fizzled last cast means an instant retry would just re-fail.
+        using Harness h = new();
+        h.Feed("You attempt to cast heal, but fail.");
+        Assert.False(h.Cast.TryCast("mmis", "outcast",
+            bypassRoundCooldown: true, bypassRecastInterval: true));
+        Assert.Empty(h.Sent);
+    }
 }

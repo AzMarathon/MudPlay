@@ -115,12 +115,20 @@ public sealed class CastCoordinator : IDisposable
     // "heal", "freedom"); whitespace-only is a no-op false return. target is an
     // optional explicit target — "self", a party member's name, or a monster name;
     // omit for self-cast spells where the server defaults the target to the caster.
-    // bypassRoundCooldown skips the once-per-round CastCommandCooldown so the initial
-    // combat engage casts at a fresh monster instantly — mirroring a weapon attack,
-    // which has no cooldown gate at all. It's used ONLY for that first engage; the
-    // failure latch and the MinRecastInterval burst guard still apply, so it can't
-    // double-fire or retry a fizzle. Per-round re-casts leave it false.
-    public bool TryCast(string spellName, string? target = null, bool bypassRoundCooldown = false)
+    // bypassRoundCooldown skips the once-per-round CastCommandCooldown so a combat
+    // engage / resume casts at the monster instantly — mirroring a weapon attack,
+    // which has no cooldown gate at all. The failure latch still applies, so it can't
+    // retry a fizzle. Per-round heartbeat re-casts leave it false.
+    // bypassRecastInterval additionally skips the 500ms MinRecastInterval burst guard.
+    // That guard exists to absorb CastingDirector's OWN back-to-back survival re-casts;
+    // a combat-attack resume fired the instant a survival buff/heal's *Combat Off*
+    // lands is a legitimate back-to-back (buff, then immediately attack) that the 500ms
+    // window would otherwise defer to the next tick — a wasted round the mob swings
+    // through (the "broke combat to cast armr, didn't re-attack until after they swung"
+    // report). The combat dispatch is already paced once-per-round by ResumePacing /
+    // the round cooldown, so it can't burst; CastingDirector's casts leave this false.
+    public bool TryCast(string spellName, string? target = null,
+                        bool bypassRoundCooldown = false, bool bypassRecastInterval = false)
     {
         if (string.IsNullOrWhiteSpace(spellName)) return false;
         if (_wireSender is null) return false;
@@ -152,7 +160,7 @@ public sealed class CastCoordinator : IDisposable
             CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked");
             return false;
         }
-        if (now - _lastCastSentAt < MinRecastInterval)
+        if (!bypassRecastInterval && now - _lastCastSentAt < MinRecastInterval)
         {
             CastFailed?.Invoke(CastFailureReason.Blocked, "recast-interval");
             return false;

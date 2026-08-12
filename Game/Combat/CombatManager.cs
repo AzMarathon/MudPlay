@@ -2235,7 +2235,14 @@ public sealed partial class CombatManager : IDisposable
                 // until manual input" stall.
                 _combatOff = false;
                 _announcedSpellCode = null;
-                DispatchRoundAction(_readSettings(), spellCand, CountEngageable(liveSpell), liveSpell);
+                // bypassRecastInterval: this re-attack lands within 500ms of the
+                // survival buff/heal that dropped *Combat Off*; without the bypass the
+                // burst guard defers it to the next tick and the mob swings free (the
+                // "broke combat to cast armr, didn't re-attack until after they swung"
+                // report). Safe here because this resume fires once per interrupt, not a
+                // frame-burst — the ordinary dispatch paths keep the guard.
+                DispatchRoundAction(_readSettings(), spellCand, CountEngageable(liveSpell), liveSpell,
+                    bypassRecastInterval: true);
             }
 
             // Guard-redirect recovery. When a guarded monster is our priority, each

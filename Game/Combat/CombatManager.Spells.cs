@@ -172,7 +172,7 @@ public sealed partial class CombatManager
     // weapon engine.
     private void DispatchRoundAction(
         CombatSettings settings, EngageableCandidate picked, int enemyCount,
-        RoomEntitiesObservation obs)
+        RoomEntitiesObservation obs, bool bypassRecastInterval = false)
     {
         // A change of combat target resets the per-target single-target cast caps —
         // MaxCasts is per-target for those slots (the AoE slots stay per-room) — and
@@ -256,10 +256,15 @@ public sealed partial class CombatManager
                 // A combat spell owns the round. Announce it ONCE and instantly: the
                 // engage bypasses the shared 5.5s round cooldown (mirroring a weapon's
                 // cooldown-free SendAttack), so a fresh mob is cast at immediately
-                // rather than after it swings. The server then auto-repeats the spell
-                // each round; the heartbeat re-announces only if the chooser's decision
-                // later changes. Set the bridge even when the cast is blocked so we
-                // stay in spell mode and retry next tick rather than swinging.
+                // rather than after it swings. bypassRecastInterval (set ONLY by the
+                // interrupt-resume caller) additionally skips the 500ms burst guard so a
+                // re-attack fired the instant a mid-fight self-buff's *Combat Off* lands
+                // isn't deferred a whole round — the mob's free swing. Ordinary dispatch
+                // (engage / arrival / tick) leaves it false so the guard still absorbs a
+                // burst of dispatches in the same frame. The server then auto-repeats the
+                // spell each round; the heartbeat re-announces only if the chooser's
+                // decision later changes. Set the bridge even when the cast is blocked so
+                // we stay in spell mode and retry next tick rather than swinging.
                 _castingSpellTarget = picked.RawName;
                 // Room-wide multi-attack spells (e.g. dancing blades) hit every enemy
                 // and MUST be cast bare — `blad`, never `blad <mob>` (the server treats
@@ -267,7 +272,7 @@ public sealed partial class CombatManager
                 // spells keep their mob; _castingSpellTarget still tracks the round's mob.
                 string? castTarget = decision.Action == CombatSpellAction.MultiAttack
                     ? null : picked.RawName;
-                if (_cast!.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
+                if (_cast!.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true, bypassRecastInterval: bypassRecastInterval))
                 {
                     _spellChooser.MarkCast(decision, picked.RawName);
                     _lastCastAction = decision.Action;

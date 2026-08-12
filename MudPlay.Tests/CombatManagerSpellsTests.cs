@@ -401,14 +401,13 @@ public sealed class CombatManagerSpellsTests
     // this used to guard against — it stops a SECOND heal/buff from contesting
     // the round, so by the time this resume runs nothing else wants the slot.
     //
-    // A synchronous test has zero elapsed time between the simulated heal/buff
-    // send and this resume attempt, which no real production call ever sees —
-    // there's always network latency between a cast going out and the server's
-    // *Combat Off* coming back. That trips MinRecastInterval (500ms, unconditional,
-    // a burst-absorb guard unrelated to this fix) regardless of the fix under test.
-    // So this asserts the FAILURE DETAIL when one occurs: "recast-interval" (that
-    // unrelated burst guard) is fine; "cast-blocked" (the round cooldown this fix
-    // bypasses) would mean the regression is back.
+    // The buff and its *Combat Off* resume land within the same ~500ms — a live
+    // capture (report paradigm-20260811-203111: "broke combat to cast armr, didn't
+    // re-attack until after they swung") proved the server's Off comes back faster
+    // than MinRecastInterval's 500ms burst guard, so that guard, not the round
+    // cooldown, was deferring the resume a whole round. The resume dispatch now
+    // passes bypassRecastInterval, so the re-attack goes out on THIS interrupt with
+    // no failure at all — no round of silence.
     [Fact]
     public void SpellMode_ResumeAfterInterrupt_RecastsImmediately_NoRoundOfSilence()
     {
@@ -419,6 +418,7 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: giant rat.");
         Assert.Equal("harm giant rat", h.LastSent);
+        int sentAtEngage = h.Sent.Count;
 
         List<(CastFailureReason Reason, string Detail)> failures = new();
         h.Cast.CastFailed += (reason, detail) => failures.Add((reason, detail));
@@ -427,11 +427,14 @@ public sealed class CombatManagerSpellsTests
         h.Cast.NotifyExternalCastSent();
 
         // Its *Combat Off* interrupt must resume the SAME target's attack spell
-        // right away — no waiting for the next tick.
+        // right away — no waiting for the next tick, no burst-guard deferral.
         h.Combat.NoteBetweenRoundCast();
         h.Feed("*Combat Off*");
 
+        Assert.Equal(sentAtEngage + 1, h.Sent.Count);          // resume landed this round
+        Assert.Equal("harm giant rat", h.LastSent);
         Assert.DoesNotContain(failures, f => f.Detail == "cast-blocked");
+        Assert.DoesNotContain(failures, f => f.Detail == "recast-interval");
     }
 
     // ----- Auto-Nuke auto-engine gate ----------------------------------

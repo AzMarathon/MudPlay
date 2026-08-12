@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.6.0**
-> - Navigation line colours and thickness are now customizable in Settings → General — the go-to, loop, preview, loop-builder, and Auto-Lair route lines each get a colour picker and a thickness stepper (per-line Reset, plus a "Restore Defaults" for all of them); the current look is the default, saves install-wide, and the map repaints live on Apply
+> **Version 3.6.1**
+> - Fixed a mid-fight self-buff (e.g. armr / mshi) wasting a whole combat round: after the buff dropped *Combat Off*, the spell re-attack was held back by the 500ms recast burst-guard and slid to the next tick, so the monster got a free swing before the character resumed attacking; the interrupt-resume now re-attacks immediately
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
