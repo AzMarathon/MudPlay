@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.Help"
+        xmlns:help="using:MudPlay.Views.Help"
+        x:Class="MudPlay.Views.Help.HelpWindow"
+        x:DataType="vm:HelpWindowViewModel"
+        Title="MudPlay Help"
+        Width="920" Height="660"
+        MinWidth="560" MinHeight="380"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+  <Grid ColumnDefinitions="300,4,*">
+
+    <!-- Left: search + table of contents -->
+    <DockPanel Grid.Column="0" Margin="8">
+      <TextBox DockPanel.Dock="Top" PlaceholderText="Search help…" Margin="0,0,0,8"
+               Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+      <TextBlock DockPanel.Dock="Bottom" Margin="2,6,0,0" Opacity="0.6"
+                 Text="{Binding StatusText}"/>
+      <TreeView ItemsSource="{Binding Topics}"
+                SelectedItem="{Binding SelectedTopic, Mode=TwoWay}"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <TreeView.Styles>
+          <Style Selector="TreeViewItem" x:DataType="vm:HelpNodeViewModel">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            <Setter Property="IsVisible" Value="{Binding IsVisible}"/>
+          </Style>
+        </TreeView.Styles>
+        <TreeView.DataTemplates>
+          <TreeDataTemplate DataType="vm:HelpNodeViewModel" ItemsSource="{Binding Children}">
+            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" Padding="0,2"/>
+          </TreeDataTemplate>
+        </TreeView.DataTemplates>
+      </TreeView>
+    </DockPanel>
+
+    <GridSplitter Grid.Column="1" Background="Transparent" ResizeDirection="Columns"/>
+
+    <!-- Right: rendered content for the selected topic -->
+    <ScrollViewer Grid.Column="2"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+      <!-- Right margin keeps a buffer between the wrap point and the scrollbar /
+           window edge so text never butts against the right side. -->
+      <StackPanel Spacing="12" Margin="20,16,14,16">
+        <TextBlock Text="{Binding SelectedTopic.Title}" FontSize="21" FontWeight="Bold"
+                   TextWrapping="Wrap"/>
+        <ContentControl help:HelpMarkdown.Source="{Binding SelectedTopic.Body}"/>
+      </StackPanel>
+    </ScrollViewer>
+
+  </Grid>
+</Window>

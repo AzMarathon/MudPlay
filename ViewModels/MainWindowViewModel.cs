@@ -4255,6 +4255,33 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
+    private MudPlay.Views.Help.HelpWindow? _helpWindow;
+
+    // Help → Help topics. A modeless, read-only compendium: a searchable table of
+    // contents (left) that drives a rendered content pane (right), covering how
+    // features work, how to use the client, and what each setting means. Same
+    // toggle convention — pressing the command while it's open closes it.
+    [RelayCommand]
+    private void OpenHelpWindow()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_helpWindow is { } existing)
+        {
+            existing.Close();
+            return;
+        }
+
+        MudPlay.Views.Help.HelpWindow window = new()
+        {
+            DataContext = new MudPlay.ViewModels.Help.HelpWindowViewModel(),
+        };
+        window.Closed += (_, _) => _helpWindow = null;
+        _helpWindow = window;
+        window.Show(main);
+    }
+
     // ----- Auto-engine toggle commands --------------------------------
     // ToolbarItemCatalogue routes its ToggleAutoCombat / ToggleAutoHealRest
     // entries here by command-name reflection. The Settings → General
