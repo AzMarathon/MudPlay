@@ -51,6 +51,13 @@ public sealed class GlobalSettings
     // out. 0 or negative disables auto-cleanup entirely.
     public int PlayerCleanupDays { get; set; } = 90;
 
+    // Per-line navigation-line appearance overrides (colour + thickness), edited in
+    // Settings → General. Delta only — null (or an all-default NavLineStyles) means
+    // the map draws its factory pens (NavLineDefaults). Install-wide (Global tier)
+    // so one look applies to every character. Read live by NavigationViewModel,
+    // which pushes it to MapControl.
+    public NavLineStyles? NavLines { get; set; }
+
     // Master enable for the Great Pyramid climb solver — when true (default) a
     // walk-to a pyramid room hands off to PyramidSolver; when false the walk
     // fails normally like any unroutable destination. Install-wide (Global tier);

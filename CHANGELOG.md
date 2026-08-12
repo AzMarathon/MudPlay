@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.6.0
+
+- Navigation line colours and thickness are now customizable in Settings → General — the go-to, loop, preview, loop-builder, and Auto-Lair route lines each get a colour picker and a thickness stepper (per-line Reset, plus a "Restore Defaults" for all of them); the current look is the default, saves install-wide, and the map repaints live on Apply
+
 ## 3.5.23
 
 - Fixed the alternating action orders (Alternate Spell/Physical, Alternate Physical/Spell, and Custom round cycle) flipping their attack/spell phase mid-round instead of once per real round — a monster's counter-swing line landing a beat after the player's own could each independently trip the engine's round-boundary signal, so a fight could switch from a physical swing straight to a spell cast (or back) within the same round instead of waiting for the next one
