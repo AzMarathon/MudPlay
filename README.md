@@ -1,9 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.4**
-> - Combat now fires a configured area/single-target debuff BEFORE the attack on engage (it used to land a round late): the debuff goes out first, then the attack re-announces on its *Combat Off* — while still deferring to a higher-priority survival cast per the Spells + Ailments spell-type priority
-> - Door-open no longer hangs the walker when a bash/pick/open draws no recognised response: a per-command watchdog treats the silence as a miss — retrying to the attempt cap, then failing over — so the walker replans instead of stalling
+> **Version 3.8.9**
+> - Route planning treats a key-only locked door as impassable without its key — no longer assuming a strength bash can open a key-only door, and surfacing the key requirement in the route picker
+> - Reconnecting after an involuntary server drop (carrier lost / no response) auto-enters the game again: a stale suppress-entry flag from an earlier deliberate hangup no longer strands you at the main menu
+> - Auto-bless no longer stops when Auto-Combat is toggled off — a stuck InCombat was silencing blessing; the idle-stall watchdog now clears it once the room goes quiet
+> - Startup splash redraws only the cells that change each frame, trimming per-frame render work
+> - Help compendium filled out: a comprehensive Remote @-command reference, plus the Party window, Action menu, Program Log, status-bar readouts, and loop exp/hr estimator now documented
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
