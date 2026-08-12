@@ -96,23 +96,51 @@ If your health drops past the thresholds on **Settings → Health**, the engine 
 
 # Navigation & Looping
 
-How MudPlay walks you around the world — one-off trips, repeating circuits, and lair camping — from the Navigation window (Alt+M), built on the imported room map.
+MudPlay walks you around the world — one-off trips, repeating circuits, and lair camping — all from the **Navigation window** (**Alt+M**, or View → Navigation), driven off the imported room map.
 
-## Walking and GOTO
+## The Navigation window
 
-Point MudPlay at any known room and it plots the shortest route and walks there, opening doors, disarming traps, and revealing hidden exits along the way. You can send it to a favorite, or a specific map/room.
+Three areas:
 
-## Loops
+- A **top status bar** — an engine badge reading **IDLE / WALKING / LOOPING / AUTO-LAIR**, a plain-English status line, the **Go to…** button, and a **search box**.
+- The **map** on the left.
+- A **right rail** of collapsible panels: **CURRENT NAV** (the live step list), **GOTO** (your favourites), **LOOPS + AUTO-LAIRS** (your saved circuits), and **EXP/HR ESTIMATOR** — with a **Navigation Management** button at the bottom for full editing.
 
-A loop is a saved circuit — a list of rooms MudPlay walks over and over, fighting and looting spawns as it goes. Queue a loop and, if you aren't already there, it first walks you to the loop's start, then begins the circuit. Combat, healing, and pickup all keep running while it moves.
+A row of action chips — **Save**, **Run**, **Loop mode**, **Lair mode** — sits just above the map.
+
+## Walking somewhere (GOTO)
+
+To send your character to a room:
+
+- **Search** — type a room name or a map/room key (e.g. `1/297`) in the top search box, pick the match, then click the green **Run** chip.
+- **Right-click a room** on the map → **Walk here**.
+- **Favourites** — save rooms you visit often (right-click a room → **Add to favorites**, or the Management dialog's **Go To** tab), then click one in the **GOTO** rail to walk there.
+
+MudPlay plots the shortest route and walks it, opening doors, disarming traps, and revealing hidden exits along the way. Click the red **Stop** chip to stop, or the **Pause / Resume** chip to hold and continue.
+
+## Building and running a loop
+
+A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and looting as it goes. To build one the quick way:
+
+1. Click the **Loop mode** chip (it changes to **Building**).
+2. **Left-click the rooms on the map, in order** — each becomes a waypoint. Reorder or remove them in the **CURRENT NAV** rail.
+3. Click **Run** to save and start it (you'll name it), or **Save** to keep it without running.
+
+Or build it off the map: **Navigation Management → New Loop** opens an editor where you add rooms by name or key, name and annotate the loop, and set per-waypoint options.
+
+**Run a saved loop** from the **LOOPS + AUTO-LAIRS** rail (or the Management dialog) — each has **Load** (stage it) and **Run** (start now). Queue one and, if you aren't already there, MudPlay walks you to the loop's start, then begins the circuit; combat, healing, and pickup keep running throughout. While it runs the badge reads **LOOPING** with "step X of Y on lap Z" — **Pause** to edit mid-run, **Stop** to end.
+
+Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
 
 ## Auto-Lair
 
-Auto-Lair camps a monster's lair: it travels there, waits out the respawn timer, enters to kill the spawn, then repeats. Tuned on Settings → Auto-Lair.
+**Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
 
-## Obstacles
+## The map and obstacles
 
-En route MudPlay handles closed and locked doors (key, pick, or bash), traps (search and disarm, or delegate to a capable party member), and hidden exits (search to reveal). Rooms with a cast-on-enter hazard are routed around unless you carry a counter for it. A genuinely impassable obstacle halts the walk with a clear reason instead of looping on a door it can't open.
+**Right-click any room** for its menu: **Walk here**, **Add to favorites**, **I am here** (re-anchor if the map loses track of you), **Use Teleport**, **Center on…**, and toggles to mark a room **Avoid** or **Stash**. The **Overlays ▾** button layers lairs, shops, and spell rooms onto the map and toggles the **Legend**. Route lines are colour-coded — walk-to **blue**, a running loop **green**, a loop you're previewing **red**, an Auto-Lair approach **orange**.
+
+En route, MudPlay handles closed and locked doors (key, pick, or bash), traps (search and disarm, or delegate to a capable party member), and hidden exits. A genuinely impassable obstacle halts the walk with a clear reason rather than looping on a door it can't open.
 
 ---
 
