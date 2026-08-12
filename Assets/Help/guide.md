@@ -201,7 +201,7 @@ Party members can drive each other with `@`-commands sent over chat. Commands ar
 | `@exp` | — | session exp earned, exp/hour, and time-to-level |
 | `@level` | — | level, current exp, and exp to next |
 | `@where` | — | room name, map/room, and exits |
-| `@path` | — | the movement engine's activity and step progress |
+| `@path` | — | the movement engine's activity and step progress; when stopped/idle, names the last loop that was run (so you can help a dead player resume their circuit) |
 | `@who` | — | other players / monsters in your room |
 | `@timer` | — or `<name>` | boss respawn timers (all, or matching a name) |
 | `@what` | — | items on the room floor |

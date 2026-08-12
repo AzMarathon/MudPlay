@@ -426,7 +426,15 @@ public sealed class PartyEssentialHandlers : IDisposable
     private void OnPath(RemoteCommandContext ctx)
     {
         MovementStatus mv = _readMovement?.Invoke() ?? default;
-        if (mv.Kind == MovementKind.None) { ctx.Reply("not moving"); return; }
+        if (mv.Kind == MovementKind.None)
+        {
+            // Idle now — name the loop last run so a party member can help a
+            // dead / stopped player pick their circuit back up.
+            ctx.Reply(mv.LastLoop is { Length: > 0 } last
+                ? $"not moving; last ran loop '{last}'"
+                : "not moving");
+            return;
+        }
 
         string engine = MovementEnginePhrase(mv);
 

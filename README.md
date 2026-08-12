@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.15**
-> - Map legend is now draggable — position it anywhere on the map; the spot is remembered install-wide, its backdrop is more opaque for readability, and toggling it off and back on re-clamps it into the currently-visible map if the window has since shrunk
+> **Version 3.8.16**
+> - `@path` remote command now names the last loop the player ran when they're stopped/idle — so if a party member dies and halts, you can see which circuit they were on and help them resume without guessing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

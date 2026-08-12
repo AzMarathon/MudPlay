@@ -275,6 +275,36 @@ public sealed class PartyEssentialHandlersTests
     }
 
     [Fact]
+    public void Path_WhenIdle_WithLastLoop_NamesTheLoopForRecovery()
+    {
+        // A dead / stopped player isn't moving, but @path still points a party
+        // member at the loop they were running so they can help resume it.
+        MovementStatus mv = new(MovementKind.None, null, 0, 0, LastLoop: "Orc Cave 1");
+        var (engine, _, player, _, players, _) = Setup(movement: mv);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
+        player.HasPromptData = true;
+
+        engine.DispatchForTests(Telepath("Friend", "@path"));
+        string reply = LastReply(engine);
+        Assert.Contains("not moving", reply);
+        Assert.Contains("last ran loop 'Orc Cave 1'", reply);
+    }
+
+    [Fact]
+    public void Path_WhenIdle_NoLoopRunThisSession_JustNotMoving()
+    {
+        MovementStatus mv = new(MovementKind.None, null, 0, 0);   // LastLoop null
+        var (engine, _, player, _, players, _) = Setup(movement: mv);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
+        player.HasPromptData = true;
+
+        engine.DispatchForTests(Telepath("Friend", "@path"));
+        string reply = LastReply(engine);
+        Assert.Contains("not moving", reply);
+        Assert.DoesNotContain("last ran loop", reply);
+    }
+
+    [Fact]
     public void Status_WhenFighting_ReportsFightingSubState()
     {
         var (engine, _, player, _, players, _) = Setup();

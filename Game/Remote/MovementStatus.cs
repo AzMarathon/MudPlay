@@ -41,7 +41,11 @@ public readonly record struct MovementStatus(
     int TotalSteps,
     bool Sailing = false,
     DateTimeOffset SailingEta = default,
-    string? SailingPlace = null)
+    string? SailingPlace = null,
+    // Name of the most recently run loop, carried even when Kind == None so a
+    // dead / stopped player's @path can still name the loop they were on. Null
+    // when no loop has run this session.
+    string? LastLoop = null)
 {
     // Snapshot the running movement engine. Priority Lair → Loop → Walker mirrors
     // PartyComebackManager.SnapshotRunningEngine: the upper engines drive the
@@ -76,6 +80,9 @@ public readonly record struct MovementStatus(
             return new MovementStatus(MovementKind.Walking, $"{dest.Map}/{dest.Room}",
                 walker.CurrentStepIndex, walker.StepCount, sailing, sailEta, sailPlace);
 
-        return new MovementStatus(MovementKind.None, null, 0, 0);
+        // Nothing moving us now — but carry the last-run loop so @path can point a
+        // party member at the loop a dead / stopped player was on.
+        return new MovementStatus(MovementKind.None, null, 0, 0,
+            LastLoop: loopRunner.LastRunLoopName);
     }
 }

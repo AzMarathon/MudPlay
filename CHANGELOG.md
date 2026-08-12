@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.16
+
+- `@path` remote command now names the last loop the player ran when they're stopped/idle (instead of just "not moving") — so if a party member dies and halts, you can see which circuit they were on and help them resume without guessing
+
 ## 3.8.15
 
 - Map legend is now draggable — position it anywhere on the map; the spot is remembered install-wide, and its backdrop is more opaque so it stays readable over map features. Toggling it off and back on re-clamps it into the currently-visible map, so a position left off-screen by a shrunk window snaps back
