@@ -670,16 +670,16 @@ Settings → "BBS + Display" — despite the plain "BBS" name in some places, th
 
 ### No-response (s)
 
-**Default:** `0` (disabled)
-**What it does:** How many seconds of total silence on the wire before MudPlay's underlying network connection starts actively probing to check if the connection is still alive. `0` disables this probing outright.
-**When you might change it:** Set a value (e.g. 60–120s) if you want dead/hung connections detected reasonably quickly rather than sitting silently broken for a long time.
+**Default:** `20`
+**What it does:** How many seconds of total silence on the wire before MudPlay's underlying network connection starts actively probing to check if it's still alive. `0` disables the idle keepalive probing — but MudPlay still caps dead-connection detection at about 60 seconds either way.
+**When you might change it:** Lower it for faster detection of a dead link; raise it on a connection that goes quiet for long stretches while still alive, to avoid probing too eagerly.
 **Important notes:** Detecting a dead connection this way doesn't reconnect you by itself — you also need "Reconnect when: Server stops responding" (below) turned on. Only applied at the moment you connect, so a change here takes effect on your next connection, not the current one.
 
-### Reconnect when: Connect attempt fails / Carrier is lost / Server stops responding / After Cleanup
+### Reconnect when: Connect attempt fails / Carrier is lost mid-session / Server stops responding / After Cleanup
 
 **Default:** all Off
 **What it does:** Four independent triggers for automatic redialing: a failed initial connect attempt, the connection dropping mid-session, the server going silent long enough for the No-response check above to flag it dead, or the BBS's scheduled nightly cleanup finishing. "After Cleanup" is a two-part behavior: it also makes MudPlay proactively exit to the main menu and hang up *before* the BBS forcibly disconnects it, once a "shutting down soon" warning is seen.
-**Important notes:** "Server stops responding" has no effect unless "No-response (s)" above is set above 0. "After Cleanup" depends on the "Cleanup wait (m)" field below to know how long to wait before redialing.
+**Important notes:** "Server stops responding" fires once MudPlay detects the connection is dead — the "No-response (s)" value above sets how quickly that happens (even at `0`, a hung server is caught within about 60 seconds). "After Cleanup" depends on the "Cleanup wait (m)" field below to know how long to wait before redialing.
 
 ### Cleanup wait (m)
 
@@ -1079,8 +1079,8 @@ Settings → Party.
 
 **Default:** `Mid`
 **Available options:** `Front`, `Mid`, `Back`
-**What it does:** Tells the game (and MudPlay) your preferred combat position in a party. Choosing Front or Back sends the corresponding in-game command the moment you join or lead a party.
-**When you might change it:** Set to Back if you're a healer/caster who shouldn't be tanking hits.
+**What it does:** Records your preferred combat position in a party. It's a saved preference only — it doesn't send any in-game command, and the automation doesn't act on it yet (it's reserved for future target-ordering).
+**When you might change it:** Set it to reflect your role, but don't expect it to change behavior on its own today.
 
 ### Minor / Major Party Heal — Single-target and Party (AOE) spells
 
@@ -1107,7 +1107,7 @@ Settings → Party.
 
 **Default:** all empty
 **What it does:** Up to 10 beneficial spells you want auto-cast on party members, each restricted to specific classes (e.g. cast a warrior buff only on Warriors and Barbarians). Row order is cast priority.
-**How the options work:** The first time you type a spell into an empty slot, every currently-known class gets auto-checked as a convenience — untick the ones you don't want it cast on.
+**How the options work:** The first time you type a spell into an empty slot, every currently-known class gets auto-checked as a convenience — untick the ones you don't want it cast on. Each row also has its own **recast within (s)** — how early before the buff's tracked expiry to recast it; it defaults to **15**, and `0` waits for the buff to actually wear off.
 
 ### Bless party while resting / Bless party during combat
 
@@ -1183,9 +1183,9 @@ Settings → Party.
 
 ---
 
-## Cash
+## Cash + Items
 
-Settings → Cash.
+Settings → Cash + Items.
 
 ### Per-currency policy (Copper / Silver / Gold / Platinum / Runic)
 
@@ -1216,15 +1216,15 @@ Settings → Cash.
 **What it does:** Skips picking up a coin if doing so would push your encumbrance into the named bracket. The three are nested by strictness — checking "Light" implies "Medium" and "Heavy" are also refused, since those are looser thresholds.
 **When you might change it:** Turn on "Don't make you Medium" if you want to stay light on your feet while exploring or fighting.
 
-### Collect after combat finished
+### Collect after combat finished (Cash and Items)
 
 **Default:** Off
-**What it does:** Waits until a room's fight is fully over before picking up ground coin/items, instead of grabbing them mid-fight where it could eat into your next attack.
+**What it does:** Waits until a room's fight is fully over before picking up ground coin and items (this one switch governs both engines), instead of grabbing them mid-fight.
 
-### Drop smaller currency to make room for larger
+### Drop smaller currency to make room for larger Collect-flagged coin
 
 **Default:** Off
-**What it does:** When picking up a higher-value coin would push you over an encumbrance limit, this drops a lower-value coin you're already carrying to make room, instead of just skipping the pickup.
+**What it does:** When picking up a higher-value coin would push you over an encumbrance limit, this drops just enough lower-value **Collect-flagged** coin you're already carrying to make room, instead of skipping the pickup. It never sacrifices Ignore-flagged coin.
 
 ### Don't get item if it makes you Light / Medium / Heavy
 
@@ -1242,21 +1242,21 @@ Settings → Talk.
 **Default:** Off
 **What it does:** A total kill-switch — with this on, MudPlay silently ignores every `@`-command from anyone on any channel, including from your own party.
 
-### Disallow @party commands
+### Disallow @party commands (from any party member)
 
 **Default:** Off
 **What it does:** Blocks the normal rule that any active party member can send you steering directives (`@party attack`, `@party rest`, etc.) that get relayed to your character.
 **When you might change it:** If you're technically partied but want this character to act independently without being steered.
 
-### Disallow @commands from telepaths / gangpaths / say (local)
+### Disallow @commands from telepaths / pages, gangpaths, or say (local)
 
 **Default:** all Off
-**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (direct telepath, guild/gang chat, local room speech). These are the only three channels MudPlay listens for `@`-commands on at all.
+**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (telepaths and pages, guild/gang chat, local room speech). These are the only three channels MudPlay listens for `@`-commands on at all.
 
 ### Warn sender on invalid / denied remote command
 
 **Default:** On
-**What it does:** The master switch for whether a reply is ever sent back when someone's `@`-command gets denied or isn't recognized. On means a reply goes out (either a specific reason or the generic message below); off means denials are silent — the command still gets refused, just without a reply.
+**What it does:** The master gate for replies to denied or unrecognized `@`-commands. When on, most refusals send a reply back (a specific reason when there is one, otherwise the generic message below); when off, refusals are silent. A few hard-blocked commands (such as `reroll` and `@party` suicide) stay silent either way, so a reply can't leak information to a malicious caller.
 
 ### Failure message
 
