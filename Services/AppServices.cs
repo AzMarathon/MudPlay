@@ -3161,6 +3161,12 @@ public sealed class AppServices
         // Combat.OnCombatTick, so the debuff is offered before the combat
         // heartbeat re-issues the round's combat action.
         CastDirector.SetCombatDebuffSource(Combat.PickInBetweenDebuff, Combat.CommitInBetweenDebuff);
+        // On a fresh engage the combat engine runs this in-between evaluator first,
+        // so a due survival cast — or, if none, the configured debuff — fires
+        // BEFORE the attack rather than a round later (the "fire the debuff before
+        // the attack spell" ordering). Only exercised when a debuff is actually
+        // due, so a normal engage is untouched.
+        Combat.SetInBetweenEvaluator(CastDirector.Evaluate);
         // A between-round survival cast stops our auto-attack; let the combat
         // engine resume the weapon attack on the resulting *Combat Off*
         // instead of idling until the next round.

@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.3
+
+- Combat now fires a configured area/single-target debuff BEFORE the attack on engage (it used to land a round late): the debuff goes out first, then the attack re-announces on its *Combat Off* — while still deferring to a higher-priority survival cast per the Spells + Ailments spell-type priority
+- bug reports addressed: paradigm-20260812-052003
+
 ## 3.8.2
 
 - Fixed the combat engine spamming its attack spell (e.g. `hamm`) many times a second until MaxCastsPerRoom capped it: its own announce was mistaken for a hand-typed cast, arming an immediate re-attack on the *Combat Off* the announce itself always causes — a self-sustaining recast loop. Engine-issued casts now ride a raw send that skips that observer.
