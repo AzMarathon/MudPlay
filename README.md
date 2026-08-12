@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.7.0**
-> - Auto-engine toolbar toggles now snap back to your per-character base modes at the first start of a loop or auto-lair, and on profile load — so you can flip engines off to travel to a circuit (e.g. combat off to sprint 500 rooms to a loop) and settle into it with your defaults restored, badges and all
-> - Settings → General's engine checkboxes (renamed "Auto-Engines base modes") now define those base defaults, decoupled from the live toolbar: flipping a toolbar toggle no longer changes them, and they set the engine positions on profile load
-> - The snap-to-base fires once per run, not on later laps of the same loop; Auto-Train is excluded (it's not a toolbar engine)
+> **Version 3.7.2**
+> - Fixed a lost carrier taking up to ~13 minutes to be noticed when it dropped mid-combat: the TCP keepalive meant to catch it resets on every send, so a client actively firing commands into a vanished server fell back to the kernel's retransmit timeout — a TCP_USER_TIMEOUT now caps dead-connection detection (to the no-response window, or ~60s when unset) so the auto-reconnect fires promptly
+> - The per-BBS "No-response (s)" default is now 20s (was disabled), so a fresh setup catches a dropped carrier in ~50s out of the box instead of relying on the OS default
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

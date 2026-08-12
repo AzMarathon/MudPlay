@@ -145,7 +145,8 @@ public static class BugReportBuilder
               + (bbs.ReconnectOnFailedConnect ? " failed-connect" : "")
               + (bbs.ReconnectOnCarrierLost ? " carrier-lost" : "")
               + (bbs.ReconnectOnNoResponse ? " no-response" : "")
-              + (bbs.ReconnectOnFailedConnect || bbs.ReconnectOnCarrierLost || bbs.ReconnectOnNoResponse ? "" : " none"));
+              + (bbs.ReconnectOnFailedConnect || bbs.ReconnectOnCarrierLost || bbs.ReconnectOnNoResponse ? "" : " none")
+              + $"; no-response idle {(bbs.NoResponseTimeoutSeconds > 0 ? bbs.NoResponseTimeoutSeconds + "s" : "off")}");
         // Startup profile-load setting — diagnoses "it didn't reopen my profile".
         Kv(sb, "Auto-load last profile", svc.Settings.Current.AutoLoadLastProfile ? "on" : "off");
         Kv(sb, "Last-used profile", svc.Settings.Current.LastUsedProfile is { } lp

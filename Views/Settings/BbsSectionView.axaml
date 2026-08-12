@@ -139,7 +139,7 @@
                                        Minimum="0" Maximum="3600" Increment="10"
                                        FormatString="0" Width="140"
                                        HorizontalAlignment="Left"
-                                       ToolTip.Tip="Seconds of wire silence before the OS starts TCP keepalive probes. The kernel declares the socket dead about 30s after probes start. 0 disables keepalive (the OS default of ~2h idle is too long for a BBS)."/>
+                                       ToolTip.Tip="How long a dead connection may go unnoticed before the socket is torn down and 'Server stops responding' / 'Carrier is lost' reconnect fires. Seconds of wire silence before TCP keepalive probes start (idle case; declared dead ~30s later), and it also caps the case where you're actively sending into a server that has vanished — so a lost carrier is caught within about this window (+30s) instead of the kernel's ~13-minute retransmit default. 0 skips the idle keepalive probing but still caps dead-connection detection at ~60s."/>
                     </Grid>
 
                     <TextBlock Classes="GroupHeader" Text="Reconnect when"/>

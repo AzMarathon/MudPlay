@@ -20,7 +20,7 @@ public sealed class BbsProfileFieldsTests
         Assert.Equal(5, dto.RedialPauseSeconds);
         Assert.False(dto.InfiniteRetries);
         Assert.Equal(0, dto.CleanupPeriodMinutes);
-        Assert.Equal(0, dto.NoResponseTimeoutSeconds);
+        Assert.Equal(20, dto.NoResponseTimeoutSeconds);   // ~50s dead-connection detection out of the box
         Assert.False(dto.ReconnectOnFailedConnect);
         Assert.False(dto.ReconnectOnCarrierLost);
         Assert.False(dto.ReconnectOnNoResponse);

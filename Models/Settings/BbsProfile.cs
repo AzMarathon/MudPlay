@@ -72,14 +72,17 @@ public sealed class BbsProfile
     public bool ReconnectOnNoResponse { get; set; }
 
     // Seconds of TCP-level idle before the OS starts probing the connection
-    // with TCP keepalive packets. 0 disables keepalive entirely (the OS
-    // default — typically ~2 hours idle — is way too long for a BBS).
+    // with TCP keepalive packets. Defaults to 20 — a lost carrier is caught
+    // within ~50s (idle + the ~30s probe tail; TelnetClient also caps the
+    // actively-sending case at idle + 30s via TCP_USER_TIMEOUT). 0 disables the
+    // idle keepalive probing (TelnetClient still caps dead-connection detection
+    // at ~60s); the OS default of ~2h idle would be way too long for a BBS.
     //
     // We pair this with hardcoded probe interval = 10s and retry count = 3,
     // so once the idle elapses the OS declares the socket dead within ~30s.
     // The ReconnectOnNoResponse toggle then decides whether to auto-dial
     // back.
-    public int NoResponseTimeoutSeconds { get; set; }
+    public int NoResponseTimeoutSeconds { get; set; } = 20;
 
     // Manage the whole nightly-cleanup cycle for this BBS. Two halves:
     // (1) proactive log-off — when a shutdown warning is observed, the
