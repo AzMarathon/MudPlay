@@ -45,12 +45,12 @@
                                   Content="Debug"
                                   Foreground="{StaticResource SeverityDebugBrush}"
                                   FontSize="11"
-                                  ToolTip.Tip="Generate the verbose Debug channel across all engines and show its rows. Persisted per-character; off by default."/>
+                                  ToolTip.Tip="Generate the verbose Debug channel across all engines and show its rows. Persisted per-character; on by default."/>
                         <CheckBox IsChecked="{Binding CombatDiagnostics}"
                                   Content="Combat"
                                   Foreground="{StaticResource SeverityCombatBrush}"
                                   FontSize="11"
-                                  ToolTip.Tip="Generate the combat-decision channel and show its rows. Persisted per-character; off by default."/>
+                                  ToolTip.Tip="Generate the combat-decision channel and show its rows. Persisted per-character; on by default."/>
                     </StackPanel>
                 </Border>
 

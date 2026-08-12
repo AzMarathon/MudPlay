@@ -39,15 +39,23 @@ The automation engines — Auto-Combat, Auto-Heal, Auto-Nuke, navigation looping
 
 # The Interface
 
-The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, or its **hotkey**, and press that same control again to close it. The terminal always stays live while you configure or check anything.
+The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, its **hotkey**, or the **terminal's right-click menu**, and press that same control again to close it. The terminal always stays live while you configure or check anything.
 
 ## The terminal and status bar
 
-Type, and your keystrokes go straight to the game. The status bar along the bottom shows the connection light (**red** idle · **yellow** connecting · **green** connected), your current room, and other live readouts. The **numpad** is pre-wired to compass movement out of the box.
+Type, and your keystrokes go straight to the game. The **numpad** is pre-wired to compass movement out of the box. **Right-click the terminal** for a quick menu: your starred GOTO **Favorites** (click one to walk there), quick-opens for Backscroll / Player Workshop / Party / Spell Book / Conversation / Navigation / Session Stats, **Reset States** (the recovery escape hatch — see Automation), and **Bug report…**.
+
+The status bar along the bottom packs several live readouts:
+
+- The **connection light** — **red** idle · **yellow** connecting · **green** connected (a reconnect countdown shows beside it while reconnecting).
+- An **engine-state badge** mirroring the Navigation one — **IDLE / WALKING / LOOPING / AUTO-LAIR** — whose border turns **yellow** then **red** as the engine-recovery gate escalates.
+- Your **location** (the map/room key) and the session's **exp/hr** rate.
+- A **look-target HP** readout that appears after you `look <monster>` — a coarse wound band × the monster's max HP, so you get an absolute HP range (invaluable on fast-regen bosses).
+- **Tick countdowns** — the combat round tick, the natural HP-regen tick, and the mana / meditate tick.
 
 ## The toolbar and menus
 
-A customizable **toolbar** of icon buttons sits under the menu bar (File · View · Tools · Help). You choose which buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**.
+A customizable **toolbar** of icon buttons sits under the menu bar. The full bar is **File · View · Action · Game Data · Tools · Help · Bug Report** — **Action** is your in-play on/off surface for the auto-engines and the manual one-shots (see **Automation**), **Game Data** switches imported data sets, and **Bug Report** captures client state to a file on your Desktop. You choose which toolbar buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**.
 
 ## The windows
 
@@ -56,7 +64,8 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 - **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
 - **Backscroll** (Alt+L) — scroll back through terminal history, with search and export. See **Tools & Diagnostics** for how to use it.
 - **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging. See the **Conversation** section for how to use it.
-- **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave.
+- **Party** (no default hotkey — View → Party, a toolbar button, or right-click → Open Party) — your live view of the party: each member's rank, health, status, and an uninvite button. See the **Party Play** section for how to use it.
+- **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave. See **Tools & Diagnostics** for its filters and toggles.
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
 - **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
@@ -132,6 +141,10 @@ Or build it off the map: **Navigation Management → New Loop** opens an editor 
 
 Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
 
+## Estimating a loop's exp/hour
+
+The **EXP/HR ESTIMATOR** panel in the right rail projects how much experience a prospective circuit would earn per hour *before* you commit to it — factoring in boss respawn timers and room summon rates, not just a flat monster count. Click **Start estimating**, then **click the rooms** on the map to sketch the circuit; the panel shows a running **exp/hr** figure as you add rooms. From there, **Save as loop** turns the sketch into a real loop, **Load loop…** pulls an existing loop in to evaluate it, **Clear rooms** starts over, and **Stop Estimating** exits the mode. Use it to compare two hunting circuits without walking either one.
+
 ## Auto-Lair
 
 **Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
@@ -147,6 +160,18 @@ En route, MudPlay handles closed and locked doors (key, pick, or bash), traps (s
 # Party Play
 
 MudPlay coordinates multi-character parties — following a leader, healing each other, and taking remote `@`-commands from party members.
+
+## The Party window
+
+Open it from **View → Party**, a toolbar button, or **right-click the terminal → Open Party** (it has no default hotkey — you can assign one in Settings → Toolbar + Shortcuts). It's your live roster: one row per member, updated as their health and status broadcasts arrive. Each row shows —
+
+- a **★** on the party leader;
+- a colour-coded **rank chip** — **F** front, **M** mid, **B** back — the member's combat rank;
+- the member's **name and class**, and **HP / MA bars**;
+- **status chips** that light up as conditions apply — **REST** resting · **MED** meditating · **BLD** blinded · **PSN** poisoned · **DIS** diseased · **CNF** confused · **HELD** held · **WAIT** waiting · **INVITED** invite pending;
+- an **uninvite (⨯)** button — active only when *you* lead — that kicks a follower or withdraws a pending invitation.
+
+The healing, ranks, nags, and re-invite behaviour the window reflects are all configured on **Settings → Party**.
 
 ## Leaders and followers
 
@@ -275,9 +300,11 @@ MudPlay collects coin and loot, banks your wealth, and manages your gear.
 
 With the collection engines on, MudPlay picks up coin and flagged items off the ground after a fight, following your per-currency rules (Settings → Cash) and the per-item flags in Game Data. It can skip a pickup that would push you into a heavier encumbrance band, and drop smaller coin to make room for larger.
 
+You don't have to wait for the engines, either: the **Action menu** (and the matching toolbar buttons) has **Get All**, **Drop All**, and **Equip All** to grab everything on the floor, drop everything unworn, or re-wear your Default set on demand — the local twins of the `@get-all` / `@drop-all` remote commands.
+
 ## Banking
 
-When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand. Set the bank and thresholds on Settings → Cash.
+When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand. Set the bank and thresholds on Settings → Cash. To bank right now regardless of the threshold, use **Action → Deposit All** (or its toolbar button / the `@deposit-all` remote command), which banks down to your keep-on-hand floor.
 
 ## Equipment sets
 
@@ -329,7 +356,14 @@ MudPlay's automation is a set of independent engines you switch on and off — c
 
 ## The auto-engines
 
-Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is a **toolbar toggle**. An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates all the combat/spell/health tuning.
+Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is an independent on/off switch. Your primary surface for them during play is the **Action menu** in the menu bar (the toolbar can also carry each as a button — add them in Settings → Toolbar + Shortcuts). An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates all the combat/spell/health tuning — but it does **not** gate Auto-Bless (blessing runs on its own toggle, out of combat).
+
+## Manual one-shots and Reset States
+
+The **Action menu** also carries commands you fire once, on demand, rather than leaving running:
+
+- **Get All / Drop All / Equip All / Deposit All** — pick up everything on the floor, drop everything unworn, wear your Default gear set, or bank your wealth down to the keep-on-hand floor, right now. (These are the local twins of the `@get-all` / `@drop-all` / `@deposit-all` remote commands, and the toolbar Get / Drop / Equip / Deposit buttons drive the same actions.)
+- **Reset States** — the recovery escape hatch. Clears *your own* stuck ailments, waits, and movement holds and returns you to an idle state — reach for it when an engine looks wedged (e.g. the walker parked "held" or "waiting" with nothing actually happening). It's also on the terminal's right-click menu.
 
 ## Base modes
 
@@ -337,7 +371,7 @@ The Settings → General **"Auto-Engines base modes"** checkboxes are your chara
 
 ## The kill switch
 
-The **Auto-All** toggle (and the `@auto-all` remote command) flips every engine off in one press, remembering what was on so a second press restores it — a fast "stop everything" that doesn't lose your setup.
+The **All auto-responses** toggle at the top of the Action menu (and the `@auto-all` remote command) flips every engine off in one press, remembering what was on so a second press restores it — a fast "stop everything" that doesn't lose your setup. While it's off, auto-entry to the game is gated too.
 
 ## Macros, aliases, and triggers
 
@@ -423,6 +457,15 @@ The window keeps its history even after you close it, and replays your last sess
 # Tools & Diagnostics
 
 A few smaller windows for reviewing your session and troubleshooting. Each is modeless and toggles closed when you press its key again.
+
+## Program Log (F4)
+
+Press **F4** (or **Tools → Program Log…**) to open the **Program Log** — a running, timestamped record of what the engines are actually doing, and the first place to look when something automated didn't behave. Each row is tagged with a severity and the source engine.
+
+- **INF / WRN / ERR** — severity filters; tick the ones you want to see.
+- **Search** filters the rows by source or message text; **Clear** empties the view; **Auto-scroll** keeps it pinned to the newest row.
+- **Debug** and **Combat** are *generation* toggles (not just filters): they turn the verbose cross-engine trace and the combat-decision channel on or off across the whole app, and show those rows here. Both are **on by default** and persist per character — leave them on for the richest diagnostics; turn one off to quiet the noise. (These are the same two channels you'll see in a bug report.)
+- **Auto-collect logs** writes the program, memory, and combat-trace files to the Logs folder for the session (off by default, so a normal run leaves nothing behind). **Hop timing** logs one line per confirmed room hop with its measured wall-clock time — used to tune the Auto-Lair travel-cost table. **Simulate Death button** reveals a test button on the Player Workshop's Death Recovery tab (off by default, and reset off every launch).
 
 ## Backscroll (Alt+L)
 
