@@ -1151,6 +1151,16 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
 
+        // Pre-attack in-between pass: on a fresh engage let the in-between window
+        // (a due survival cast, else the configured debuff — ranked by the
+        // Spells+Ailments priority) fire BEFORE the attack, so a pre-attack debuff
+        // lands ahead of the combat action rather than a round later. No-ops and
+        // leaves state untouched unless a debuff is actually due, so the ordinary
+        // engage is unchanged; when it fires, the attack resumes on the cast's
+        // *Combat Off*.
+        if (TryPreAttackInBetween(settings, picked, obs))
+            return;
+
         // Decide + dispatch this round's action. The chooser owns the full
         // per-round category ordering (Backstab / Debuffing / Spells /
         // Physical) in the user-configured priority; DispatchRoundAction

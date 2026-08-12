@@ -424,6 +424,14 @@ it isn't here and you're unsure, ask.
   - **An AoE spell's live enemy count drops below `MinEnemies`** → switch to a single-target action.
   - **Room / multi-target** attack spells fire at an empty room and emit a "nothing to hit here" style
     message (exact wording unconfirmed — no test character yet).
+- **[CONFIRMED]** *(2026-08-12, user + fix v3.8.3)* **A configured debuff fires BEFORE the attack on
+  engage — not a round later.** On entering a room, if a debuff slot is due (area debuff at ≥ `MinEnemies`,
+  or a single-target / per-monster pre-attack debuff), the client casts the debuff first, then the attack
+  re-announces on the debuff's `*Combat Off*`. The debuff still obeys the **Spells + Ailments spell-type
+  priority**: a higher-priority in-between survival cast (heal / cure / buff) that's due wins and fires
+  first, and the debuff waits for the next in-between pass. Only when nothing higher-priority is queued
+  does the debuff pre-empt the attack. (Before v3.8.3 the attack dispatched immediately on engage while the
+  debuff rode the next in-between tick, so the attack always went out first — the reported ordering bug.)
 - **[CONFIRMED]** *(2026-08-05, user)* **`MaxCasts` counts combat ROUNDS, not individual casts.** It is
   the maximum number of rounds the client will spend casting this spell at a target — one round counts
   as one regardless of how many times the spell fires that round (e.g. a spell that casts twice per

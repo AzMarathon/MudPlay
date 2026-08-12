@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.2**
-> - Fixed the combat engine spamming its attack spell (e.g. `hamm`) many times a second until MaxCastsPerRoom capped it: its own announce was mistaken for a hand-typed cast, arming an immediate re-attack on the *Combat Off* the announce itself always causes — a self-sustaining recast loop. Engine-issued casts now ride a raw send that skips that observer.
+> **Version 3.8.4**
+> - Combat now fires a configured area/single-target debuff BEFORE the attack on engage (it used to land a round late): the debuff goes out first, then the attack re-announces on its *Combat Off* — while still deferring to a higher-priority survival cast per the Spells + Ailments spell-type priority
+> - Door-open no longer hangs the walker when a bash/pick/open draws no recognised response: a per-command watchdog treats the silence as a miss — retrying to the attempt cap, then failing over — so the walker replans instead of stalling
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

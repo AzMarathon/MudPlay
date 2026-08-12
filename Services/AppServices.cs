@@ -2067,7 +2067,17 @@ public sealed class AppServices
             maxBashableStrengthProvider:   () => MaxStrength.MaxAchievableStrength,
             // Read lazily at door-open time — Inventory is constructed after Door.
             holdsKeyItem:                  HoldsKeyItem,
-            log: Log);
+            log: Log,
+            // UI-thread one-shot so the door FSM's response watchdog fires on the
+            // same thread its router-driven handlers run on; keeps Game/Map UI-free
+            // (tests drive result lines synchronously and leave this null).
+            scheduleDelay: (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+                return new DispatcherTimerHandle(timer);
+            });
         // LeaderDoorAssistManager — observes the leader failing to bash a
         // door and pitches in. Reads the Party-tab toggle + the Other-tab
         // pick/bash preference live. Wire-sender bound by MainWindowVM
@@ -3161,6 +3171,12 @@ public sealed class AppServices
         // Combat.OnCombatTick, so the debuff is offered before the combat
         // heartbeat re-issues the round's combat action.
         CastDirector.SetCombatDebuffSource(Combat.PickInBetweenDebuff, Combat.CommitInBetweenDebuff);
+        // On a fresh engage the combat engine runs this in-between evaluator first,
+        // so a due survival cast — or, if none, the configured debuff — fires
+        // BEFORE the attack rather than a round later (the "fire the debuff before
+        // the attack spell" ordering). Only exercised when a debuff is actually
+        // due, so a normal engage is untouched.
+        Combat.SetInBetweenEvaluator(CastDirector.Evaluate);
         // A between-round survival cast stops our auto-attack; let the combat
         // engine resume the weapon attack on the resulting *Combat Off*
         // instead of idling until the next round.

@@ -534,19 +534,18 @@ public sealed class CombatManagerSpellsTests
     }
 
     [Fact]
-    public void PreAttackOverride_OfferedAsInBetweenDebuff()
+    public void PreAttackOverride_FiresBeforeAttack()
     {
         using Harness h = new();
         h.SpellShorts[7] = "curse";
         h.Overlays[1] = new MonsterOverlay { OverridePreAttackSpellId = 7, OverridePreAttackCount = 2 };
         h.AddMonster(1, "giant rat");
 
-        h.Feed("Also here: giant rat.");   // engages, sets the current target
+        // A per-monster pre-attack override (a single-target debuff) fires BEFORE
+        // the attack on engage, keeping its mob ("curse giant rat").
+        h.Feed("Also here: giant rat.");
 
-        (string Spell, string? Target)? debuff = h.Combat.PickInBetweenDebuff();
-        Assert.NotNull(debuff);
-        Assert.Equal("curse", debuff!.Value.Spell);
-        Assert.Equal("giant rat", debuff.Value.Target);
+        Assert.Equal("curse giant rat", h.LastSent);
     }
 
     // ----- physical-first: weapon exhausted before spells -------------
@@ -731,28 +730,45 @@ public sealed class CombatManagerSpellsTests
     // ----- in-between debuff bridge ------------------------------------
 
     [Fact]
-    public void AreaDebuff_OfferedAsInBetween_OncePerRoom_CombatActionAttacks()
+    public void AreaDebuff_FiresBeforeAttack_ThenAttackResumes_OncePerRoom()
     {
         using Harness h = new();
         h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
         h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
         h.AddMonster(1, "giant rat");
 
-        // The combat action is the attack spell; the debuff is an in-between
-        // action that CastingDirector pulls from the engine (not under test
-        // here — we drive the bridge directly).
+        // On engage the area debuff fires BEFORE the attack — cast bare, never
+        // "curse <mob>" — then the attack re-announces on the debuff's *Combat Off*.
+        // (No director wired here, so the pre-attack pass fires the debuff directly.)
         h.Feed("Also here: giant rat.");
+        Assert.Equal("curse", h.LastSent);
+
+        h.Feed("*Combat Off*");
         Assert.Equal("blast", h.LastSent);
 
-        (string Spell, string? Target)? debuff = h.Combat.PickInBetweenDebuff();
-        Assert.Equal("curse", debuff?.Spell);
-        Assert.Null(debuff?.Target);   // area debuff is cast bare — never "curse <mob>"
-        h.Combat.CommitInBetweenDebuff();
-
-        Assert.Null(h.Combat.PickInBetweenDebuff());   // once per room
-
-        h.Tick();                                       // combat action unchanged
+        // Once per room: later rounds keep attacking and never re-fire the debuff.
+        h.Tick();
         Assert.Equal("blast", h.LastSent);
+        Assert.Single(h.AllSent, s => s == "curse");
+    }
+
+    [Fact]
+    public void PreAttackDebuff_DefersToHigherPrioritySurvivalCast()
+    {
+        using Harness h = new();
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        // Simulate the in-between director holding a higher-priority survival cast
+        // ready: its Evaluate fires and reports "heal". The pre-attack pass must let
+        // that win by the Spells+Ailments priority and NOT pre-empt it with the
+        // debuff this engage — the attack resumes after the survival cast's Off.
+        h.Combat.SetInBetweenEvaluator(() => "heal");
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+
+        Assert.DoesNotContain("curse", h.AllSent);   // debuff deferred to priority
+        Assert.DoesNotContain("blast", h.AllSent);   // attack deferred to the resume
     }
 
     // ----- backstab gate -----------------------------------------------

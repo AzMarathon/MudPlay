@@ -53,6 +53,13 @@ public sealed partial class CombatManager
     private CombatSpellDecision? _pendingDebuff;
     private string? _pendingDebuffTarget;
 
+    // Optional bridge to the CastingDirector's in-between window (Evaluate). Used
+    // by TryPreAttackInBetween to let a due survival cast — or, failing that, the
+    // configured debuff — fire BEFORE the attack on engage, honouring the
+    // Spells+Ailments priority. Returns the spell cast this pass, or null. Until
+    // wired, the pre-attack pass no-ops and engage dispatches the attack as before.
+    private Func<string?>? _inBetweenEvaluator;
+
     // ----- Deterministic magic eligibility (game-data gated) ----------
     // Optional, like the spell caster. Until SetMagicEligibility runs, the
     // weapon/spell gating fails open: any weapon hits and no spell is
@@ -156,6 +163,15 @@ public sealed partial class CombatManager
     {
         ArgumentNullException.ThrowIfNull(resolver);
         _spellShortByNumber = resolver;
+    }
+
+    // Wire the in-between evaluator (CastingDirector.Evaluate) that
+    // TryPreAttackInBetween runs to fire a due survival/debuff cast before the
+    // attack on engage. Optional — the pre-attack pass no-ops until set.
+    public void SetInBetweenEvaluator(Func<string?> evaluate)
+    {
+        ArgumentNullException.ThrowIfNull(evaluate);
+        _inBetweenEvaluator = evaluate;
     }
 
     // True once SetCombatSpellCaster has wired both the coordinator and the mana
@@ -497,6 +513,75 @@ public sealed partial class CombatManager
             DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
         else
             _castingSpellTarget = null;   // can't rebuild the target — drop; next observe re-picks
+    }
+
+    // Give the in-between window its shot BEFORE the attack on engage, so a
+    // configured debuff lands ahead of the combat action rather than a round
+    // later (report paradigm-20260812-052003: "should fire the debuff before the
+    // attack spell"). Only runs when a debuff is actually configured and due for
+    // this room/target — otherwise it returns false leaving every bit of state
+    // untouched, so the common no-debuff engage (and every weapon engage) is
+    // exactly as before.
+    //
+    // When a debuff IS due it still honours the user's Spells+Ailments spell-type
+    // priority: the director's Evaluate runs first, so a higher-priority survival
+    // cast (heal / cure / buff) that's due fires ahead of the debuff and the
+    // debuff waits for the next in-between pass. Only when nothing higher-priority
+    // is queued does the debuff fire here, ahead of the attack. Either way the
+    // caller defers the attack — it re-announces on the fired cast's *Combat Off*
+    // through the combat-off resume path.
+    //
+    // The debuff is cast directly (explicit target, not via the director's
+    // PickInBetweenDebuff, which can't see the target until _currentTarget is set
+    // — the very chicken-and-egg that made the attack win the race). Returns true
+    // when it fired something.
+    private bool TryPreAttackInBetween(
+        CombatSettings settings, EngageableCandidate picked, RoomEntitiesObservation obs)
+    {
+        if (!CombatSpellsWired || _cast is null) return false;
+
+        CombatSpellContext ctx = BuildContext(
+            settings, obs, picked.RawName, CountEngageable(obs), picked.MonsterNumber);
+        if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return false;
+
+        // A debuff is due. Let the director's in-between window fire a
+        // higher-priority survival cast first (it can't fire the debuff itself
+        // yet — its PickInBetweenDebuff keys on _currentTarget, still unset here).
+        if (_inBetweenEvaluator?.Invoke() is { } survivalCast)
+        {
+            _log?.Combat(LogCategory,
+                $"pre-attack: in-between {survivalCast} preferred over debuff by priority — " +
+                "attack resumes after its *Combat Off*");
+            return true;
+        }
+
+        // Nothing higher-priority was queued — fire the debuff before the attack.
+        // Open the round's per-target caps exactly as DispatchRoundAction would on
+        // a new target (the AoE / debuff per-room counters are untouched).
+        if (!string.Equals(_currentTarget, picked.RawName, StringComparison.OrdinalIgnoreCase))
+        {
+            _spellChooser.ResetForNewTarget();
+            _alternationRound = 0;
+            _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
+        }
+
+        // Area debuffs blanket the room and MUST be cast bare — `stnk`, never
+        // `stnk <mob>`; a single-target debuff keeps its mob.
+        string? castTarget =
+            decision.Action == CombatSpellAction.AreaDebuff ? null : picked.RawName;
+        if (!_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
+            return false;
+
+        _spellChooser.MarkCast(decision, picked.RawName);
+        _currentTarget = picked.RawName;
+        // Arm the attack resume: the debuff's *Combat Off* re-announces the combat
+        // action through the combat-off resume path — mirroring the director's own
+        // debuff, whose CastFired arms this same signal.
+        NoteBetweenRoundCast();
+        _log?.Combat(LogCategory,
+            $"pre-attack debuff {decision.Spell} at {picked.RawName} — " +
+            "attack resumes after its *Combat Off*");
+        return true;
     }
 
     // Answer the CastingDirector's "is there a debuff to fire this in-between
