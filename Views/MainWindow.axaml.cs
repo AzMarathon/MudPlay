@@ -169,9 +169,9 @@ public partial class MainWindow : Window
 
         HelpMenu.Items.Add(new MenuItem
         {
-            Header    = "Help topics…",
-            IsEnabled = false,
-            [ToolTip.TipProperty] = "Old-school help browser lands in a later phase.",
+            Header  = "Help topics…",
+            Command = vm.OpenHelpWindowCommand,
+            [ToolTip.TipProperty] = "Searchable guide to features, how to use the client, and what each setting means.",
         });
         HelpMenu.Items.Add(new Separator());
 
