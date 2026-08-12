@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.1
+
+- Filled in the Help compendium: added Getting Started, The Interface, Combat, Navigation & Looping, Party Play, Healing & Spells, Cash & Items, Player Workshop, Automation, Game Data, Conversation, Tools & Diagnostics, and Troubleshooting sections alongside the Settings Menu reference — concise explanations of how the client and its features actually work
+- The interactive windows are written as step-by-step how-to's — the Navigation window, Player Workshop, the macro/alias/trigger editors, the Game Data Browser, the Conversation window, the Spell Book, and the Backscroll / Session Stats / Wire Inspector tools: how to open each, its menus and buttons, and the workflow to drive it
+
 ## 3.8.0
 
 - New Help window (Help → Help topics): a searchable, tree-organized help browser — table of contents on the left, rendered help on the right — that ships with a full "Settings Menu" reference explaining what every setting does, how it works, and when to change it (the first of a growing compendium)

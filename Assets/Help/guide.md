@@ -1,3 +1,393 @@
+# Getting Started
+
+New to MudPlay? Here's the short path from launch to playing — and where the rest of this help lives.
+
+## What MudPlay is
+
+A Telnet terminal client for **MajorMUD / MegaMUD**-style BBS door games. It renders a faithful CP437/ANSI terminal and layers a large, tunable automation suite on top — auto-combat, healing, spellcasting, navigation and looping, party coordination, and coin/item collection. Play it as a plain terminal, or turn on as much automation as you like.
+
+## Connecting to a BBS
+
+Two ways to connect:
+
+- **Quick Connect** (one-off) — **File → Quick Connect…**, type the board's host (name or IP) and port, and click **Connect**. Nothing is saved; it's the fastest way to try a board.
+- **A saved profile** (persistent) — set up a character profile so your login, macros, settings, and the board's details are remembered and reconnect on their own. This is how you'll normally play (see below).
+
+## Profiles
+
+A **profile** is one character's workspace — its BBS login, macros, triggers, equipment sets, favorites, quest state, and every per-character setting. One profile is loaded at a time.
+
+- **New profile** (Ctrl+N) starts a blank draft; set up its BBS + credentials (below), then **Save** (Ctrl+S) to name it.
+- **Open profile** (Ctrl+O) loads a saved one.
+- **Auto-load last profile** (Settings → General) reopens the profile you used last on every launch.
+
+Settings live in four tiers — **Defaults → Global → BBS → Character** — so a profile only records what differs from the tier beneath it. (The Settings Menu section notes each setting's tier.)
+
+## Setting up a BBS
+
+In **Settings → BBS + Display**, fill in the board's **name**, **host**, and **port**, your **username / password**, and — if the board needs it — the **automated logon** steps that walk you from the BBS menu into the game. Reconnect behavior and terminal size live here too. These are **BBS-tier**: shared by every character on that board.
+
+With that saved, **Connect** (Alt+H, or File → Connect) and MudPlay logs you in.
+
+## Playing, and turning on automation
+
+In the game, the terminal works like any MUD client — type a command and it's sent to the game. The **numpad is pre-wired to compass movement**, and you can add your own **macros** (key → command) and **aliases** (typed shortcuts). The startup splash plays until you connect or load a profile.
+
+The automation engines — Auto-Combat, Auto-Heal, Auto-Nuke, navigation looping, and more — are **toolbar toggles** whose behavior is tuned on the matching Settings tabs. Flip them on to let MudPlay fight, heal, and travel for you. The **Combat**, **Navigation & Looping**, **Party Play**, and **Healing & Spells** sections explain how each engine decides what to do.
+
+---
+
+# The Interface
+
+The **terminal** is the center of MudPlay — everything the game sends, rendered as a CP437/ANSI screen, and where everything you type is sent. Around it, every other panel is a **modeless window**: open it from the **View** menu, a **toolbar** icon, or its **hotkey**, and press that same control again to close it. The terminal always stays live while you configure or check anything.
+
+## The terminal and status bar
+
+Type, and your keystrokes go straight to the game. The status bar along the bottom shows the connection light (**red** idle · **yellow** connecting · **green** connected), your current room, and other live readouts. The **numpad** is pre-wired to compass movement out of the box.
+
+## The toolbar and menus
+
+A customizable **toolbar** of icon buttons sits under the menu bar (File · View · Tools · Help). You choose which buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**.
+
+## The windows
+
+Each is modeless and toggles closed on its own key. Default hotkeys are shown; all are rebindable.
+
+- **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
+- **Backscroll** (Alt+L) — scroll back through terminal history, with search and export. See **Tools & Diagnostics** for how to use it.
+- **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging. See the **Conversation** section for how to use it.
+- **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave.
+- **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
+- **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
+- **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
+
+The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
+
+---
+
+# Combat
+
+How MudPlay fights for you once **Auto-Combat** is on (its toolbar toggle, or Settings → General). The knobs live on **Settings → Combat** and **Settings → Spells**; this is what the engine does with them.
+
+## The round loop
+
+Each combat round the engine picks one main action — **cast an attack spell** or **swing your weapon** — following your **Action order**:
+
+- **Spells first** — try your attack spells; fall back to the weapon only when every spell fails to fire that round (out of mana, cast cap hit, target immune).
+- **Physical first** — swing first; turn to spells only when the weapon is proven useless against this target.
+- **Alternate** — flip the preferred action every round; a round whose preferred type can't fire falls back to the other, so no round is wasted.
+- **Custom round cycle** — spend a set number of rounds swinging, then a set number casting, on repeat.
+
+Two things always sit above that choice: a **backstab opener** fires first when eligible, and **debuff spells** are a separate extra action that can land the same round.
+
+## Targeting
+
+When several hostiles share a room, **Target order** and **Target priority** decide who gets hit first — the highest-priority monster by default, or a "follow the party's target" mode. Per-monster priority is ranked in Game Data.
+
+## Fighting a crowd
+
+Against several enemies MudPlay uses your **multi-attack** and **area-debuff** spell slots to hit the whole room, falling back to single-target attacks once the room thins below a slot's minimum-enemies setting. Those room spells are gated by **Auto-Nuke**; single-target attack spells aren't "nukes" and stay available regardless.
+
+## Backing off
+
+If your health drops past the thresholds on **Settings → Health**, the engine can **run** instead of fighting to the death — breaking combat first (if set), then moving a configured distance in a chosen direction. Healing and fleeing are covered under **Healing & Spells**.
+
+---
+
+# Navigation & Looping
+
+MudPlay walks you around the world — one-off trips, repeating circuits, and lair camping — all from the **Navigation window** (**Alt+M**, or View → Navigation), driven off the imported room map.
+
+## The Navigation window
+
+Three areas:
+
+- A **top status bar** — an engine badge reading **IDLE / WALKING / LOOPING / AUTO-LAIR**, a plain-English status line, the **Go to…** button, and a **search box**.
+- The **map** on the left.
+- A **right rail** of collapsible panels: **CURRENT NAV** (the live step list), **GOTO** (your favourites), **LOOPS + AUTO-LAIRS** (your saved circuits), and **EXP/HR ESTIMATOR** — with a **Navigation Management** button at the bottom for full editing.
+
+A row of action chips — **Save**, **Run**, **Loop mode**, **Lair mode** — sits just above the map.
+
+## Walking somewhere (GOTO)
+
+To send your character to a room:
+
+- **Search** — type a room name or a map/room key (e.g. `1/297`) in the top search box, pick the match, then click the green **Run** chip.
+- **Right-click a room** on the map → **Walk here**.
+- **Favourites** — save rooms you visit often (right-click a room → **Add to favorites**, or the Management dialog's **Go To** tab), then click one in the **GOTO** rail to walk there.
+
+MudPlay plots the shortest route and walks it, opening doors, disarming traps, and revealing hidden exits along the way. Click the red **Stop** chip to stop, or the **Pause / Resume** chip to hold and continue.
+
+## Building and running a loop
+
+A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and looting as it goes. To build one the quick way:
+
+1. Click the **Loop mode** chip (it changes to **Building**).
+2. **Left-click the rooms on the map, in order** — each becomes a waypoint. Reorder or remove them in the **CURRENT NAV** rail.
+3. Click **Run** to save and start it (you'll name it), or **Save** to keep it without running.
+
+Or build it off the map: **Navigation Management → New Loop** opens an editor where you add rooms by name or key, name and annotate the loop, and set per-waypoint options.
+
+**Run a saved loop** from the **LOOPS + AUTO-LAIRS** rail (or the Management dialog) — each has **Load** (stage it) and **Run** (start now). Queue one and, if you aren't already there, MudPlay walks you to the loop's start, then begins the circuit; combat, healing, and pickup keep running throughout. While it runs the badge reads **LOOPING** with "step X of Y on lap Z" — **Pause** to edit mid-run, **Stop** to end.
+
+Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
+
+## Auto-Lair
+
+**Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Run** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
+
+## The map and obstacles
+
+**Right-click any room** for its menu: **Walk here**, **Add to favorites**, **I am here** (re-anchor if the map loses track of you), **Use Teleport**, **Center on…**, and toggles to mark a room **Avoid** or **Stash**. The **Overlays ▾** button layers lairs, shops, and spell rooms onto the map and toggles the **Legend**. Route lines are colour-coded — walk-to **blue**, a running loop **green**, a loop you're previewing **red**, an Auto-Lair approach **orange**.
+
+En route, MudPlay handles closed and locked doors (key, pick, or bash), traps (search and disarm, or delegate to a capable party member), and hidden exits. A genuinely impassable obstacle halts the walk with a clear reason rather than looping on a door it can't open.
+
+---
+
+# Party Play
+
+MudPlay coordinates multi-character parties — following a leader, healing each other, and taking remote `@`-commands from party members.
+
+## Leaders and followers
+
+One character leads; the rest follow. A follower tracks the leader's movement and holds position; if the leader disconnects, the party disbands. A party is 2–6 characters.
+
+## Party healing
+
+With party heal spells configured (Settings → Party), members watch each other's health broadcasts and heal whoever drops below the minor/major thresholds — single-target, or an area heal once enough members qualify.
+
+## Remote @-commands
+
+Party members can drive each other with `@`-commands over telepath, gangpath, or say — `@goto`, `@loop`, `@stop`, `@health`, and more. What's allowed is gated per-character on Settings → Talk (disallow all remote control, just `@party` commands, or specific channels), and a denied command can optionally warn the sender.
+
+## Reconnecting
+
+If a member drops, the party can auto-re-invite and reform on reconnect, and a member left behind can `@comeback` to rejoin the leader.
+
+---
+
+# Healing & Spells
+
+The health and spellcasting engines keep you alive and buffed — resting, healing, curing, and blessing on their own.
+
+## Health: rest, heal, flee
+
+Auto-Heal / Rest (its toolbar toggle, or Settings → General) watches your HP and mana. Below your rest thresholds it sits and rests (or meditates) back up; below your run thresholds it flees; below your hang-up threshold it can drop the connection as a last resort. Every threshold is set on Settings → Health, as a percentage or an absolute value.
+
+## Casting priorities
+
+When more than one spell wants to fire, the caster follows the priority order on Settings → Spells — party heals, self heals, curing, buffing, then debuffing — and won't cast if it would drop you below your mana floors.
+
+## Curing and blessing
+
+Configure cure spells for holds, poison, disease, and blindness, plus several bless (buff) slots that recast as they expire — while resting, and optionally during combat. You can also tell it to ignore, or not announce, specific ailments.
+
+## Mana regen
+
+For mana-regen classes, the caster can rest to regen and — if configured — reroll a poor regen result up to a cap.
+
+## The Spell Book (F2)
+
+Press **F2** to open the **Spell Book** — a read-only reference to your class's spells. It's a lookup companion for the Spells settings, not a place you configure automation: use it to find a spell's cast-code and effect, then type that code into the pickers on **Settings → Spells**. F2 again closes it, and it updates itself as you play (type `spells` or `stat` in the game to refresh what it knows).
+
+The header names the class and level it's showing. The grid lists each spell with a **✓** if you've learned it, its **Code** (the cast-code you type), **Name**, **Lvl** (the level it unlocks), **Mana** cost, and **Effect** at your current level (hover the Effect cell for the raw scaling formula). Three controls up top narrow the list:
+
+- **Show all** — off by default (you see only spells you're high enough level to cast); tick it to preview the whole class list, reading the **Lvl** column for when each unlocks.
+- **Known only** — hides spells you haven't learned yet.
+- **Search** — filter by cast-code or name.
+
+If your class carries wands, scrolls, or potions that cast a spell, a **Cast-on-use items** section at the bottom lists what each one casts, its mana, and its charges.
+
+---
+
+# Cash & Items
+
+MudPlay collects coin and loot, banks your wealth, and manages your gear.
+
+## Collecting coin and loot
+
+With the collection engines on, MudPlay picks up coin and flagged items off the ground after a fight, following your per-currency rules (Settings → Cash) and the per-item flags in Game Data. It can skip a pickup that would push you into a heavier encumbrance band, and drop smaller coin to make room for larger.
+
+## Banking
+
+When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand. Set the bank and thresholds on Settings → Cash.
+
+## Equipment sets
+
+Gear is organized into named equipment sets in the **Player Workshop** — a Default set feeds your normal/alternate weapons and armor, a Backstab set feeds your stealth gear — and MudPlay swaps to the right set automatically (and re-equips after recovering a death pile). The **Item Finder** helps you build sets by browsing every equippable item with full stats.
+
+---
+
+# Player Workshop
+
+Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a tabbed window for managing your character: gear, leveling, quests, bosses, and deaths. There are no Save buttons anywhere in it; every edit auto-saves to your profile. Its tabs, most-used first:
+
+## Equipment Manager — gear sets
+
+Your gear lives in **four fixed sets**, each auto-equipped at a specific moment:
+
+- **Default** — your baseline loadout (and backstab fallback).
+- **Backstab** — worn for the opening backstab round.
+- **Pre-rest HP** / **Pre-rest Mana** — swapped in out of combat before resting.
+
+You don't create sets, you fill them. Pick a set on the left, then either click **Update from live** (fills it from what you're wearing) or type items into the **Item** boxes on the slot grid — each box only suggests gear your character can actually wear in that slot, and a blank slot means *{no change}* (left as-is). Click **Enable** so automation may use the set, and **Equip Now** to wear it at once. The **Equipment Bonuses** panel shows the set's projected AC and stat totals.
+
+## Item Finder
+
+The **Item Finder** button (in Equipment Manager) opens a searchable catalog of every equippable item, with columns for damage, AC, resists, stat bonuses, and more. Filter it by class, slot, level, or any stat, and sort by any column. It's a **reference tool**: double-click a row to see the item's full data record, and use the **Trial gearset** panel (with **Find Best**) to plan a loadout and read its projected stats. To actually equip something you found, note its name and type it into that slot's **Item** box back in Equipment Manager.
+
+## CP Allocation
+
+Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you. Two checkboxes mirror Settings → Auto-Trainer: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan).
+
+## Level Projection
+
+A read-only what-if table: pick a level **from–to** range (and optionally any **Race / Class**) to see the exp, training cost, HP, and mana at each level — reflecting your CP Allocation plan. **Reset to current** re-seeds it from your live character.
+
+## Quests, Bosses, and Deaths
+
+- **Quest Status** — a journal of the realm's quests. Expand a card for its requirements, reward, and step checklist; tick every step (or the **Complete** box) to fold its permanent bonus into your character. **Edit Quests…** lets you name, hide, or annotate them.
+- **Bosses** — a respawn-timer tracker. **Mark** or **Now** stamps a boss's kill time and the **100%** column counts down to its respawn; **Manage Bosses…** edits the list, and you can **Import / Export** a shared table. Tick **Stop before** to halt automation ahead of a boss.
+- **Death Recovery** — your death history. **How did I Die?** replays the backscroll from the moment of death, and **Recover Now** walks to the death room and grabs the pile (or toggle **Auto-Recover Deathpiles** to do it automatically).
+
+## Character Info and Calculators
+
+**Character Info** is your read-only character sheet — stats, skills, the attack table, and folded-in quest bonuses. **Calculators** holds what-if tools: Monster Matchup, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings.
+
+---
+
+# Automation
+
+MudPlay's automation is a set of independent engines you switch on and off — combat, healing, spells, pickup, movement, and more.
+
+## The auto-engines
+
+Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, Auto-Get Items, Auto-Get Cash, Auto-Sneak, Auto-Hide, Auto-Search — is a **toolbar toggle**. An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates all the combat/spell/health tuning.
+
+## Base modes
+
+The Settings → General **"Auto-Engines base modes"** checkboxes are your character's default engine states. They set the engines at login and — the key part — the live toolbar toggles **snap back to them at the start of a loop or Auto-Lair**. So you can flip combat off to travel somewhere and it returns to your defaults when the circuit begins.
+
+## The kill switch
+
+The **Auto-All** toggle (and the `@auto-all` remote command) flips every engine off in one press, remembering what was on so a second press restores it — a fast "stop everything" that doesn't lose your setup.
+
+## Macros, aliases, and triggers
+
+Beyond the engines, you can script your own automation. All three editors live in the **Game Data Browser** — press **F3** (or use View → **Macros** / **Triggers** / **Aliases** to jump straight to one) and pick **Macros**, **Triggers**, or **Aliases** from the *Tables + editors* list on the left. Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove** button, and a grid of what you've already made. **Double-click a row to edit it.** There's no separate save step — each editor's **Save** button writes to disk immediately, and the list's **Enabled** column shows a ✓ for the ones that are live.
+
+- **Macros** bind a **key chord to a command.** Click **Add**, press **Capture** and hit the key combo (release the main key to lock it in, or Esc to cancel), then type the **Command** to send. Split it into several lines with `^M` or `;` — each fragment fires as its own command. Macros work while you're typing in the terminal; new profiles start with the numpad pre-wired to compass movement.
+- **Aliases** expand a **typed word into a longer command.** Give the alias a **Name** (matched on the first word you type, case-insensitive) and an **Expansion**, where `{0}` is the whole rest of the line and `{1}`, `{2}`, … are the individual words — so an alias `cast` → `c '{1}' {2}` turns `cast heal bob` into `c 'heal' bob`. Aliases only expand when you press **Enter in the Conversation window's input box**; typing in the main terminal bypasses them.
+- **Triggers** are **auto-responses to game text** — when a line matches, MudPlay fires a reply. Give the trigger a **Name**, then set:
+  - **Location** — *Game data* (saves with the active game-data set, so it travels with the realm) or *Profile* (saves with this character).
+  - **Scope** — which incoming lines it watches: *Game messages* (the default), a single chat channel (*Say / Yell / Gossip / Telepath / Gangpath / Broadcast*), *Chat (any)*, or the *System log*.
+  - **Match type** — *Literal* (type the text as it appears; `*` wildcards a span and `{name}` captures a piece) or *Regex* (full .NET regex, with `(?<name>…)` for captures).
+  - **Pattern** — the text or expression to match against each line. Any pieces you capture appear in the **Captures** row.
+  - **Response** — what MudPlay sends back on a match. Drop a captured value in with `{name}`, split multiple lines with `^M` or `;`, or leave it blank to send a bare Enter.
+  - **Sound** (optional) — a file picker is here, but sound playback isn't wired up yet, so it does nothing today.
+
+---
+
+# Game Data
+
+MudPlay's automation reads from **game data** — the monster, item, spell, room, and shop tables imported from a MajorMUD `.MDB` database. The **Game Data Browser** (press **F3**, or the toolbar's *Game Data Browser* button) lets you inspect all of it and override individual records for your character.
+
+## Importing and switching sets
+
+The top **Game Data** menu (in the menu bar) manages your data sets:
+
+- **Import .mdb…** — pick a MajorMUD `.MDB` file; MudPlay imports it as a new named set and switches to it. This populates the tables the engines read from — the terminal itself works without it.
+- **The set list** — every imported set appears at the top of the menu with a checkmark on the active one; click another to switch. The Browser's status bar shows *Set: <name>*.
+- **Manage Game Data…** — copy or move a set's saved loops and lairs into another set, or delete a set.
+- **Modify Blacklist…** — hide specific rooms (by map/room number) from the map and room search, and mark ones the walker should treat as unreachable.
+
+## Getting around the Browser
+
+The window is a sidebar plus a content pane:
+
+- The sidebar's **Search…** box filters the **section list**, not the rows — type "weapon" and unrelated sections drop away.
+- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Messages**. (The macro/alias/trigger editors are covered in the **Automation** section.)
+- **Imported tables** (bottom group) holds the game data: **Monsters, Items, Spells, Rooms, Lairs, Shops, Races, Classes, TextBlocks, Info, Unobtainable, Quest Flags.**
+
+Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
+
+## Overriding a record
+
+**Double-click a row to open it** — what happens depends on the table:
+
+- **Items** and **Monsters** open a real **override editor**: an editable pane on the left, the read-only **Other Info (from MDB)** on the right. For an item you can flip its automation flags (**Auto-collect, Auto-discard, Auto-buy, Auto-sell, Auto-stash**, and more), set **Min. to keep / Max to get**, and toggle **Auto-obtain for path**. For a monster you can set its **Relationship** and **Priority**, its pre-attack and override-attack spells, and the combat-message wording. The **Use** dropdown chooses where the override saves — **Character** (this character only), **BBS** (everyone on this BBS), or **Global** (the whole install) — then **OK** writes it and the row's Use column updates to match.
+- **Spells** — double-click edits the spell's player-cast **message** wording; the spell's own stats are read-only.
+- **Rooms** — double-click opens a read-only detail popup (exits, lighting, shop, placed monsters, room commands).
+- **Shops** — double-click jumps to the shop's room in the **Rooms** table.
+- The rest (Lairs, Races, Classes, and so on) are read-only reference.
+
+---
+
+# Conversation
+
+Press **Alt+C** to open the **Conversation** window — a dedicated view of all the chat MudPlay pulls out of the terminal, with its own input box so you can talk without hunting for the game prompt. Alt+C again closes it.
+
+## The chat log
+
+Chat is collected into one merged, timestamped stream (not per-channel tabs). Each line shows the time, a colored **channel tag**, the speaker, and the message:
+
+- **GOS** gossip · **SAY** local say · **YELL** yell · **←TELE / TELE→** telepaths received and sent · **GANG** gang/guild · **BCAST** broadcasts · **SERVER** realm notices (players entering and leaving, PvP messages).
+
+Each channel has its own color, and web links inside a message are clickable. Party chat isn't shown here — it has its own **Party** window.
+
+## Filtering and searching
+
+The toolbar across the top controls what you see:
+
+- **Channel checkboxes** — **Gossip, Say, Telepath, Gang, Broadcast, Yell, Server** — tick or untick to show or hide each channel. Each box is painted in its channel's color, so the row doubles as a color key. Your choices are remembered per character. (Telepaths in and out share the one Telepath box; realm notices and PvP messages share the Server box.)
+- **Search** box — narrows the log to lines whose speaker or text matches what you type (this one isn't remembered between sessions).
+- **Auto-scroll** — when ticked, the log stays pinned to the newest line; untick it to read back without being yanked to the bottom.
+
+## Talking
+
+Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands. **↑ / ↓** recall what you sent before, and the chevron at the right edge of the box opens a list of recent commands to pick from.
+
+## Logging and history
+
+The window keeps its history even after you close it, and replays your last session's chat when you reconnect. To save chat to a file, turn on **Settings → Talk → Log conversations** — it writes to the `Logs` folder, which you can open from **Tools → Open logs folder**. There's no clear button in the window itself; use **Tools → Clear chatlog** on the main window to wipe it. The chat font and channel colors are set on the Talk tab and take effect the next time you open the window.
+
+---
+
+# Tools & Diagnostics
+
+A few smaller windows for reviewing your session and troubleshooting. Each is modeless and toggles closed when you press its key again.
+
+## Backscroll (Alt+L)
+
+Press **Alt+L** to open **Backscroll** — the full terminal history, including lines that have scrolled off the top, on a timestamped transcript that opens at the newest line.
+
+- **Search** — type a term and press **Enter** (or **Find next**) to step through matches, newest to oldest, wrapping back to the top. The footer shows the line count and how many matches were found.
+- **Jump to end** — return to the newest line.
+- **Export…** — save the whole transcript to a text file, each line prefixed with its timestamp.
+- Drag to select a region and press **Ctrl+C** to copy it.
+
+Backscroll is a **snapshot taken when you open it**, not a live tail — to pick up newer output, close and reopen it (nothing is lost in the meantime).
+
+## Session Stats
+
+Open **Session Stats** from the **View** menu or its toolbar button (it has no default hotkey — you can assign one on Settings → Shortcuts). It tracks this session's performance in a stack of panels: **Kills/hour** and **Exp/hour** graphs, an **HP/MA per loop step** chart, and **Player Statistics**, **Time Analysis**, and **Session Statistics** tables (kills, experience, currency, and time spent moving, resting, and fighting).
+
+- **Right-click** the panel area to show or hide individual panels, and **drag a panel by its title** to reorder them — your layout is saved per character.
+- **Reset session** zeroes every counter and restarts the clocks; individual panels have their own **Reset** too. (These don't ask for confirmation.)
+- **Transaction history** and **Players Seen** open the detailed ledgers — coin banked and stashed this session, and every player you've encountered.
+
+## Wire Inspector (F5)
+
+Press **F5** to open the **Wire Inspector** — a troubleshooting view of the data the server sends, in two panes: **Raw** (with control codes made visible, e.g. `^[` for escape) and **Stripped** (the same stream with the ANSI escape sequences removed). It shows inbound server output only, and keeps the most recent 64 KB.
+
+- **Pause / Resume** freezes the view so you can read it; **Clear** empties the buffer.
+- **Auto-scroll** keeps both panes pinned to the newest bytes, and **Sync scroll** ties the two panes' scrolling together.
+- **Find next** locates a term in the Stripped pane, and **Export raw… / Export stripped…** save either pane to a file.
+
+Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire.
+
+---
+
 # Settings Menu
 
 MudPlay is a Telnet terminal client for MajorMUD / MegaMUD-style BBS door games. On top of a faithful terminal, it layers a large automation suite — auto-combat, auto-healing, auto-spellcasting, navigation/looping, party coordination, cash and item collection, and more — and almost every piece of that automation is tunable. This guide documents every one of those tunable settings: what it does, what happens when you change it, and where to find it.
@@ -25,11 +415,11 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 
 ## General
 
-Settings → General. Everything here is character-tier (follows the loaded character) except the navigation-line color block, which is Global-tier (applies to every character on the install). No character loaded means this whole tab shows a "load or create a profile" banner instead of controls.
+Settings → General. Everything here is character-tier (follows the loaded character) except two install-wide (Global-tier) items — the navigation-line color block and the startup-animation toggle — which apply to every character on the install. No character loaded means this whole tab shows a "load or create a profile" banner instead of controls.
 
 ### Data files (directory display)
 
-**What it does:** Shows the resolved path to MudPlay's data folder, with an "Open" button (opens it in your file browser) and a "Change…" button (relocates every file under that folder to a new location and restarts the app).
+**What it does:** Shows the resolved path to MudPlay's data folder, with an "Open Data folder…" button (opens it in your file browser) and a "Change…" button (relocates every file under that folder to a new location and restarts the app).
 **Important notes:** This is informational, not a saved setting. "Change…" triggers a full app restart at the new location; MudPlay validates the destination is empty, writable, and not nested inside the current folder before allowing the move.
 
 ### Terminal font (family + size)
@@ -73,7 +463,7 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **Available options:** Any RGB color via the color-picker; thickness 1.0–8.0 px in 0.5 steps.
 **What it does:** Sets the color and line thickness for each of the five distinct route lines the Navigation map draws — the active walk-to path, an active loop's route, a queued go-to preview, the in-progress loop-builder preview line, and an Auto-Lair run's route.
 **When you might change it:** Make the lines thicker or higher-contrast if you find the default map lines hard to see; give each route type a color you can tell apart at a glance.
-**Important notes:** This is a **Global-tier** setting — changing it changes the map for every character on the install, not just the current one. "Restore Defaults" resets every line at once. Applies live — the Navigation map repaints immediately with no restart.
+**Important notes:** This is a **Global-tier** setting — changing it changes the map for every character on the install, not just the current one. "Restore Defaults" resets every line at once, and each row has its own **Reset** button. Applies live — the Navigation map repaints immediately with no restart.
 
 ### Default task
 
@@ -94,23 +484,23 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **Default:** Off
 **What it does:** Before saving any change to this character (including from this very tab), copies the existing profile file to a `.json.bak` file first — a simple one-step-back safety net if a settings change goes wrong.
 
-### Auto-Engines enabled (10 checkboxes)
+### Auto-Engines base modes (11 checkboxes)
 
-**Default:** On — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Get-Items, Auto-Get-Cash, Auto-Sneak. Off — Auto-Light, Auto-Hide, Auto-Search, Auto-Train.
-**What it does:** Each checkbox is the master on/off switch for one entire automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal/Rest (healing and resting), Auto-Bless (buffing), Auto-Light (keeping a light lit), Auto-Get-Items (picking up ground loot), Auto-Get-Cash (picking up coin), Auto-Sneak/Auto-Hide (stealth), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
-**When you might change it:** Turn engines off if you want a character to log in with a specific automation posture already set — e.g. a scouting character that should never auto-fight.
-**Important notes:** Despite the "enabled on start" phrasing, these are **not** boot-only defaults — they're read live every time an engine checks whether it should act, and the same values are what the toolbar's individual engine-toggle buttons flip. In other words, this tab and the toolbar toggles are two views of the exact same live switches, not a "default" versus "current" pair.
+**Default:** On — Auto-Combat, Auto-Nuke, Auto-Heal / Rest, Auto-Bless, Auto-Get Items, Auto-Get Cash, Auto-Sneak. Off — Auto-Light, Auto-Hide, Auto-Search, Auto-Train.
+**What it does:** Each checkbox is the base on/off state for one automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal / Rest (healing and resting), Auto-Bless (buffing), Auto-Light (keeping a light lit), Auto-Get Items (picking up ground loot), Auto-Get Cash (picking up coin), Auto-Sneak and Auto-Hide (the two stealth engines), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
+**When you might change it:** Set the automation posture a character should return to — e.g. a scout that should never auto-fight, or a healer that should always rest.
+**Important notes:** These are your character's **base** engine states, not the live toolbar toggles. They're applied when the character loads, and the live toggles snap back to them at the start of a loop or Auto-Lair run — so you can flip an engine off to travel somewhere and have it return to your baseline when the circuit begins. See **Automation → Base modes** for the full picture.
 
 ### Allow hangup in all-off mode
 
 **Default:** Off
 **What it does:** Normally, if every Auto-* engine above is off, MudPlay does nothing at all — including the emergency low-HP hangup. Turning this on carves out one exception: even with everything off, MudPlay still disconnects you if your HP drops below the Health tab's "Hang up if below" threshold.
-**Important notes:** Depends on the Health tab's threshold to know when to fire. It's silenced entirely if the Other/toolbar "Disable hangups" toggle is on — that flag always wins.
+**Important notes:** Depends on the Health tab's threshold to know when to fire. It's silenced entirely if the toolbar's "Disable hangups" toggle is on — that flag always wins.
 
 ### Re-enable on reconnect (11 checkboxes)
 
 **Default:** Off (all)
-**What it does:** One checkbox per automation engine (the same list as above, plus Auto-Train). When you reconnect after having been disconnected mid-session (not the very first connect of an app session), each checked engine gets automatically turned back on — useful if you manually paused something, got dropped, and want your automation state to reset to "on" on redial rather than staying off.
+**What it does:** One checkbox per automation engine (the same 11 engines as above). When you reconnect after having been disconnected mid-session (not the very first connect of an app session), each checked engine gets automatically turned back on — useful if you manually paused something, got dropped, and want your automation state to reset to "on" on redial rather than staying off.
 **When you might change it:** Check the engines you always want running even through a flaky connection (e.g. Auto-Heal/Rest); leave off the ones you deliberately paused for a reason (e.g. Auto-Nuke while grinding a safe area).
 
 ---
@@ -134,8 +524,8 @@ In-app tab title: "Toolbar + Shortcuts". The toolbar layout/visibility/keybinds 
 
 ### Toolbar layout (button/separator list)
 
-**Default:** The 13 standard buttons in their original order.
-**What it does:** An ordered list of buttons (and separators) that make up the toolbar. "Add to toolbar" promotes an action from the Shortcuts pool onto the toolbar; "Remove" demotes it back off (it can still carry a keybind); "Add separator" inserts a visual divider; "Move up"/"Move down" reorder the selected row; "Reset Toolbar to Default" restores the factory 13-button layout without touching your keybinds.
+**Default:** The standard button layout (17 buttons plus 3 separators) in its original order.
+**What it does:** An ordered list of buttons (and separators) that make up the toolbar. "Add to toolbar" promotes an action from the Shortcuts pool onto the toolbar; "Remove" demotes it back off (it can still carry a keybind); "Add separator" appends a visual divider to the end of the list; "Move up"/"Move down" reorder the selected row; "Reset Toolbar to Default" restores the factory layout without touching your keybinds.
 **When you might change it:** Trim the toolbar down to just the buttons you actually click, or reorder it to match your workflow.
 **Important notes:** Per-character — each character can have a different toolbar. Applies live.
 
@@ -174,25 +564,25 @@ Not its own Settings tab — the rebind editor is a small popup dialog opened fr
 
 ### What's rebindable
 
-Every built-in action that has (or can have) a keyboard shortcut: connection toggle, opening the Navigation/Backscroll/Conversation windows, movement start/pause/stop, capture toggle, the function-key row (Workshop, Spell Book, Game Data Browser, Log Pane, Wire Inspector), and the Ctrl-cluster File-menu actions (New/Open/Save/Save As profile, Quit). A few actions (Open Party, Open Session Stats, Open Settings) ship with **no** default shortcut — you can only reach them via their toolbar button or menu until you assign one yourself.
+Every built-in action that has (or can have) a keyboard shortcut: connection toggle, opening the Navigation/Backscroll/Conversation windows, movement start/pause/stop, capture toggle, the function-key row (Player Workshop, Spell Book, Game Data Browser, Program Log, Wire Inspector), and the Ctrl-cluster File-menu actions (New/Open/Save/Save As profile, Quit). A few actions (Open Party, Open Session Stats, Open Settings) ship with **no** default shortcut — you can only reach them via their toolbar button or menu until you assign one yourself.
 
 ### Default shortcuts out of the box
 
-| Action | Default key |
+| Action (as labeled in the list) | Default key |
 |---|---|
-| Toggle connection | Alt+H |
-| Open Navigation | Alt+M |
-| Movement start | Alt+V |
-| Movement pause | Alt+B |
-| Movement stop | Alt+N |
-| Open Backscroll | Alt+L |
-| Toggle capture | Alt+S |
-| Open Conversation | Alt+C |
-| Open Workshop | F1 |
-| Open Spell Book | F2 |
-| Open Game Data Browser | F3 |
-| Open Log Pane | F4 |
-| Open Wire Inspector | F5 |
+| Connect / Disconnect | Alt+H |
+| Navigation | Alt+M |
+| Start movement | Alt+V |
+| Pause movement | Alt+B |
+| Stop movement | Alt+N |
+| Backscroll | Alt+L |
+| Capture | Alt+S |
+| Conversation | Alt+C |
+| Player Workshop | F1 |
+| Spell Book | F2 |
+| Game Data Browser | F3 |
+| Program Log | F4 |
+| Wire Inspector | F5 |
 | New profile | Ctrl+N |
 | Open profile | Ctrl+O |
 | Save profile | Ctrl+S |
@@ -203,7 +593,7 @@ Every built-in action that has (or can have) a keyboard shortcut: connection tog
 
 **What it does:** Click **Capture**, then press the key combination you want — the dialog waits for you to release a non-modifier key (so you can hold Ctrl/Shift/Alt first, then land on the target key) to lock it in. Press **Esc** to cancel without changing anything. **Clear** removes the shortcut entirely, leaving that action with no keybind until you assign a new one.
 **Important notes:** A captured combo is checked live against several exclusion lists and shows a red error (blocking Save) if it collides with anything:
-1. Reserved keys — Enter, Escape, Tab, Backspace, Delete, and specifically the period key (`.`), which MudPlay always reserves for MajorMUD's `say slow` prefix.
+1. Reserved keys — Enter, Escape, Tab, Backspace, Delete, the lock and system keys (Caps Lock, Num Lock, etc.), and specifically the main-row period key (`.`), which MudPlay reserves because a leading period is MajorMUD's say-precursor. (The numpad period stays bindable.)
 2. System combos — Alt+F4, Ctrl+C, Ctrl+V can never be rebound.
 3. Another built-in shortcut already using that combo.
 4. A user-defined macro (see below) already using that combo — macros and keybinds share one conflict list; a combo can never be assigned to both.
@@ -218,13 +608,13 @@ Per-character, not global — each character can have entirely different shortcu
 
 ## Macros & Aliases
 
-Two per-character typing shortcuts, each edited in its own dialog (not the main Settings window) and saved the moment you change them — there's no separate Apply step, unlike most Settings tabs. **Macros** bind a key combination to a command; **aliases** expand a typed word into a longer command. Macros share the built-in keybindings' "can't double-book a key" check; aliases are instead checked against MajorMUD chat commands so they can't hijack your chat.
+Two per-character typing shortcuts, both managed in the **Game Data Browser** (F3), not the main Settings window, and saved the moment you change them — there's no separate Apply step, unlike most Settings tabs. **Macros** bind a key combination to a command; **aliases** expand a typed word into a longer command. Macros share the built-in keybindings' "can't double-book a key" check; aliases are instead checked against MajorMUD chat commands so they can't hijack your chat. (For the step-by-step of building either — plus triggers — see the **Automation** section.)
 
 ### What a macro is
 
 **Default:** none beyond the seeded numpad defaults (see below)
 **What it does:** Binds a key combination (with optional Ctrl/Shift/Alt) to a text command that's sent to the game instead of the literal keystroke, whenever you're focused on the terminal or the Conversation window's input box.
-**How it works:** A macro's command can contain several steps separated by `^M` or `;` — each piece is sent as its own line, with no delay in between. If you need actual pauses between steps, MudPlay's triggers system is the tool for that instead, not macros. Each macro also has its own Enabled flag; a disabled macro is skipped entirely.
+**How it works:** A macro's command can contain several steps separated by `^M` or `;` — each piece is sent as its own line, with no delay in between. There's no built-in timed pause between steps; if you need to wait for the game to respond before the next command, a trigger that fires on that response is the tool instead. Each macro also has its own Enabled flag; a disabled macro is skipped entirely.
 
 ### Default numpad macros
 
@@ -249,7 +639,7 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 ### What an alias is
 
 **Default:** none.
-**What it does:** A typed-command shortcut — you type a short name and MudPlay expands it into a longer command before sending, matched on the first word of the line (case-insensitive). Aliases expand from both the terminal and the Conversation input box.
+**What it does:** A typed-command shortcut — you type a short name and MudPlay expands it into a longer command before sending, matched on the first word of the line (case-insensitive). Aliases expand only when you press Enter in the **Conversation** window's input box — typing in the main terminal sends each keystroke straight to the game and bypasses alias expansion.
 **How it works:** The rest of the line after the alias name fills positional placeholders in the expansion: `{0}` is the entire rest of the line, and `{1}`, `{2}`, … are the individual whitespace-separated words. So an alias `cast` → `c '{1}' {2}` turns `cast heal bob` into `c 'heal' bob`.
 **Important notes:** An alias name that would collide with a MajorMUD chat-channel command is rejected in the editor, so an alias can't hijack your chat. Aliases are separate from macros (key → command) and from triggers (auto-responses to game text).
 
@@ -280,16 +670,16 @@ Settings → "BBS + Display" — despite the plain "BBS" name in some places, th
 
 ### No-response (s)
 
-**Default:** `0` (disabled)
-**What it does:** How many seconds of total silence on the wire before MudPlay's underlying network connection starts actively probing to check if the connection is still alive. `0` disables this probing outright.
-**When you might change it:** Set a value (e.g. 60–120s) if you want dead/hung connections detected reasonably quickly rather than sitting silently broken for a long time.
+**Default:** `20`
+**What it does:** How many seconds of total silence on the wire before MudPlay's underlying network connection starts actively probing to check if it's still alive. `0` disables the idle keepalive probing — but MudPlay still caps dead-connection detection at about 60 seconds either way.
+**When you might change it:** Lower it for faster detection of a dead link; raise it on a connection that goes quiet for long stretches while still alive, to avoid probing too eagerly.
 **Important notes:** Detecting a dead connection this way doesn't reconnect you by itself — you also need "Reconnect when: Server stops responding" (below) turned on. Only applied at the moment you connect, so a change here takes effect on your next connection, not the current one.
 
-### Reconnect when: Connect attempt fails / Carrier is lost / Server stops responding / After Cleanup
+### Reconnect when: Connect attempt fails / Carrier is lost mid-session / Server stops responding / After Cleanup
 
 **Default:** all Off
 **What it does:** Four independent triggers for automatic redialing: a failed initial connect attempt, the connection dropping mid-session, the server going silent long enough for the No-response check above to flag it dead, or the BBS's scheduled nightly cleanup finishing. "After Cleanup" is a two-part behavior: it also makes MudPlay proactively exit to the main menu and hang up *before* the BBS forcibly disconnects it, once a "shutting down soon" warning is seen.
-**Important notes:** "Server stops responding" has no effect unless "No-response (s)" above is set above 0. "After Cleanup" depends on the "Cleanup wait (m)" field below to know how long to wait before redialing.
+**Important notes:** "Server stops responding" fires once MudPlay detects the connection is dead — the "No-response (s)" value above sets how quickly that happens (even at `0`, a hung server is caught within about 60 seconds). "After Cleanup" depends on the "Cleanup wait (m)" field below to know how long to wait before redialing.
 
 ### Cleanup wait (m)
 
@@ -323,6 +713,12 @@ Settings → "BBS + Display" — despite the plain "BBS" name in some places, th
 **What it does:** Your login for this specific BBS, saved per-character (so two different characters logging into the same board keep separate credentials).
 **Important notes:** Encrypted at rest — plaintext passwords never touch disk. The password field starts blank when you open Settings and only reveals the saved value if you click **Show**; leaving it blank and saving preserves whatever was already stored (it won't blank out your saved password).
 
+### Suicide password (read-only)
+
+**Default:** none stored
+**What it does:** Shows the MajorMUD suicide password MudPlay has on file for this character — and only appears when one is stored. This row is **read-only**: the client captures the password passively when you run `set suicide` in the game, then keeps an encrypted copy so the `@suicide` remote command can supply it automatically. Click **Show** to reveal it.
+**Important notes:** Saved per-character (encrypted at rest), even though it sits on the BBS tab. You can't type into it — to change the password, run `set suicide` in-game again; to clear it, run `pro` in-game and observe "You do not have a suicide password set." and MudPlay drops its stored copy.
+
 ### I have sysop / goto powers on this BBS
 
 **Default:** Off
@@ -351,6 +747,13 @@ Settings → "BBS + Display" — despite the plain "BBS" name in some places, th
 **Default:** `21:00`, your computer's local time zone.
 **What it does:** The BBS's daily maintenance time. Some boss monsters only respawn at this specific wall-clock time rather than on a countdown timer — MudPlay's boss tracker uses this to know when a "cleanup-only" boss should flip back to alive.
 
+### Board disconnect line
+
+**Default:** blank (built-in lines only)
+**What it does:** An optional extra logoff line for MudPlay to watch, on top of the built-in "just disconnected" / "just hung up" forms. Some boards emit a custom logoff line keyed on a player's **account** name rather than their character name, which the standard detection misses — so a party member's drop slips past and the party runs off without them. Teaching MudPlay that line means the drop is caught and the party waits for them.
+**How the options work:** Uses the same literal syntax as triggers — `{name}` captures the disconnecting player (matched against a member's account-name override in Game Data → Players, else their character name), and `*` matches a varying run (e.g. a trailing "Lines in Use: N" count). Example: `►►► [{name}] logs OFF*`.
+**Important notes:** BBS-tier — the line is shared by every character who plays this board. Leave it blank on boards that use the standard disconnect wording.
+
 ### Name of runic currency
 
 **Default:** `runic`
@@ -360,7 +763,7 @@ Settings → "BBS + Display" — despite the plain "BBS" name in some places, th
 
 ## Confirmation Prompts
 
-Found at the bottom of the "BBS + Display" tab, under a "Confirmations" heading. All four are **Global-tier** — one shared preference across every BBS and every character on this install — and all default to **off**, so a fresh install has no nagging popups.
+Found near the bottom of the "BBS + Display" tab, under a "Show confirmations" heading. All four are **Global-tier** — one shared preference across every BBS and every character on this install — and all default to **off**, so a fresh install has no nagging popups.
 
 ### Confirm exit
 
@@ -375,12 +778,12 @@ Found at the bottom of the "BBS + Display" tab, under a "Confirmations" heading.
 ### Confirm save settings
 
 **Default:** Off
-**What it does:** Prompts "Save your changes?" before the Settings window's OK/Apply actually writes anything (and before some other saves, like Game Data browser edits). Answering "No" returns you to the editor with nothing saved and the window still open.
+**What it does:** Prompts "Save your changes?" before the Settings window's OK/Apply actually writes anything. Answering "No" returns you to the editor with nothing saved and the window still open. (Game Data browser edits save immediately and aren't gated by this prompt.)
 
 ### Confirm deletes
 
 **Default:** Off
-**What it does:** Prompts before destructive list-row deletions — removing a toolbar button, deleting a saved BBS profile, and similar.
+**What it does:** Prompts before destructive deletions — deleting a saved BBS profile, removing a navigation favorite or Game Data record, and similar. (Removing a toolbar button is not gated by this prompt.)
 
 **Important notes (all four):** Applies live the moment you click OK/Apply on Settings — no restart needed.
 
@@ -445,14 +848,14 @@ Settings → Combat. Two switches live *outside* this tab and gate everything he
 ### Attack Order
 
 **Default:** `Default`
-**Available options:** `Default`, `Attack Last Party`, `Attack Last Room`, `Attack After`
+**Available options:** `Default`, `AttackLastParty`, `AttackLastRoom`, `AttackAfter` (shown verbatim in the dropdown).
 **What it does:** Pure timing — controls *when* you re-announce your own current target relative to other people's attacks, for coordinating who "goes" in what order. It never changes *what* you're targeting — that's Target Priority's job.
 **When you might change it:** A tank who wants to always commit their attack last, after everyone else in the party has already gone.
 
 ### Attack-after player name
 
 **Default:** empty
-**What it does:** The player Attack Order re-fires after, when Attack Order is set to `Attack After`.
+**What it does:** The player Attack Order re-fires after, when Attack Order is set to `AttackAfter`.
 
 ### Polite mode ⚠️ Not currently functional
 
@@ -538,7 +941,7 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 ### Spell type priority
 
 **Default order (highest priority first):** Minor party heal → Major party heal → Minor self heal → Major self heal → Curing → Buffing → Debuffing.
-**What it does:** Every tick, MudPlay checks all seven categories and casts the highest-priority one that has something ready to fire. Drag rows to reorder — the row position becomes the rank.
+**What it does:** Every tick, MudPlay checks all seven categories and casts the highest-priority one that has something ready to fire. Use the **▲ / ▼** arrows on each row to reorder them — higher in the list casts earlier.
 **When you might change it:** Move Curing above self-heals if you'd rather cure a debilitating ailment before topping off HP; move Debuffing higher if landing your debuff matters more to you than proactive buffing.
 **Important notes:** A downed ally rescue always jumps the queue no matter how you rank things — it's not part of this list and can't be demoted.
 
@@ -580,11 +983,11 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 **Default:** unset
 **What it does:** A spell automatically cast when you enter a dark room (works together with the light-item automation on the Auto-Light tab).
 
-### Bless slots
+### Bless spells
 
 **Default:** all empty (10 rows on a Stock realm, 15 on ParaMud)
-**What it does:** A ranked list of self-buffs MudPlay recasts whenever they aren't currently active. Row order is cast priority. Each row can hold a spell code or a `#item name` for a reusable buff item.
-**How the options work:** Each row has its own "recast within (seconds)" — how early before the buff's tracked expiry MudPlay proactively recasts it; `0` waits for it to actually wear off.
+**What it does:** A ranked list of self-buffs MudPlay recasts whenever they aren't currently active (the on-screen section is headed **Bless spells**, its rows labeled Bless 1, Bless 2, …). Row order is cast priority. Each row can hold a spell code or a `#item name` for a reusable buff item.
+**How the options work:** Each row has its own "recast within (seconds)" — how early before the buff's tracked expiry MudPlay proactively recasts it. It defaults to **15**; set it to `0` to wait for the buff to actually wear off before recasting.
 **Important notes:** The visible row count matches your active realm's buff-slot cap; extra picks beyond that cap aren't lost, they just wait until you load a realm that supports more.
 
 ### Bless self while resting / Bless self during combat
@@ -608,12 +1011,12 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 
 ## Health
 
-Settings → Health. Two parallel columns — HP on the left, Mana/Kai on the right — each independently switchable between percentage and raw-number thresholds.
+Settings → Health. Two stacked sections — **Health (HP)** on top, **Mana / Kai** below — each independently switchable between percentage and raw-number thresholds.
 
 ### Percentage / Value (mode picker)
 
 **Default:** `Percentage` (both HP and Mana)
-**What it does:** Switches whether every threshold in that column means "a percentage of your max pool" or "an absolute number." Switching modes automatically converts your existing numbers into the new scale.
+**What it does:** Switches whether every threshold in that section means "a percentage of your max pool" or "an absolute number." Switching modes doesn't rescale the numbers you've entered — each value is simply re-read against the new scale (and switching to Percentage clamps anything above 100 down to 100). A small live readout beside each field shows the equivalent in the other scale.
 
 ### Rest max (HP / MA)
 
@@ -646,7 +1049,7 @@ Settings → Health. Two parallel columns — HP on the left, Mana/Kai on the ri
 
 **Default:** 5%
 **What it does:** The absolute last resort: disconnects the game outright once HP falls to or below this value. Since 0 HP only "drops" you in MajorMUD rather than killing you outright, this threshold can go negative, all the way down to (but never past) the point your BBS's realm actually treats as death.
-**Important notes:** There's no "0 disables it" here — to fully disable the emergency hangup, use "Disable hangups" on the toolbar/Other tab instead.
+**Important notes:** There's no "0 disables it" here — to fully disable the emergency hangup, use the toolbar's "Disable hangups" toggle instead.
 
 ### Heal if above (rest/idle) / Heal if above (combat)
 
@@ -689,8 +1092,8 @@ Settings → Party.
 
 **Default:** `Mid`
 **Available options:** `Front`, `Mid`, `Back`
-**What it does:** Tells the game (and MudPlay) your preferred combat position in a party. Choosing Front or Back sends the corresponding in-game command the moment you join or lead a party.
-**When you might change it:** Set to Back if you're a healer/caster who shouldn't be tanking hits.
+**What it does:** Records your preferred combat position in a party. It's a saved preference only — it doesn't send any in-game command, and the automation doesn't act on it yet (it's reserved for future target-ordering).
+**When you might change it:** Set it to reflect your role, but don't expect it to change behavior on its own today.
 
 ### Minor / Major Party Heal — Single-target and Party (AOE) spells
 
@@ -717,7 +1120,7 @@ Settings → Party.
 
 **Default:** all empty
 **What it does:** Up to 10 beneficial spells you want auto-cast on party members, each restricted to specific classes (e.g. cast a warrior buff only on Warriors and Barbarians). Row order is cast priority.
-**How the options work:** The first time you type a spell into an empty slot, every currently-known class gets auto-checked as a convenience — untick the ones you don't want it cast on.
+**How the options work:** The first time you type a spell into an empty slot, every currently-known class gets auto-checked as a convenience — untick the ones you don't want it cast on. Each row also has its own **recast within (s)** — how early before the buff's tracked expiry to recast it; it defaults to **15**, and `0` waits for the buff to actually wear off.
 
 ### Bless party while resting / Bless party during combat
 
@@ -793,9 +1196,9 @@ Settings → Party.
 
 ---
 
-## Cash
+## Cash + Items
 
-Settings → Cash.
+Settings → Cash + Items.
 
 ### Per-currency policy (Copper / Silver / Gold / Platinum / Runic)
 
@@ -826,15 +1229,15 @@ Settings → Cash.
 **What it does:** Skips picking up a coin if doing so would push your encumbrance into the named bracket. The three are nested by strictness — checking "Light" implies "Medium" and "Heavy" are also refused, since those are looser thresholds.
 **When you might change it:** Turn on "Don't make you Medium" if you want to stay light on your feet while exploring or fighting.
 
-### Collect after combat finished
+### Collect after combat finished (Cash and Items)
 
 **Default:** Off
-**What it does:** Waits until a room's fight is fully over before picking up ground coin/items, instead of grabbing them mid-fight where it could eat into your next attack.
+**What it does:** Waits until a room's fight is fully over before picking up ground coin and items (this one switch governs both engines), instead of grabbing them mid-fight.
 
-### Drop smaller currency to make room for larger
+### Drop smaller currency to make room for larger Collect-flagged coin
 
 **Default:** Off
-**What it does:** When picking up a higher-value coin would push you over an encumbrance limit, this drops a lower-value coin you're already carrying to make room, instead of just skipping the pickup.
+**What it does:** When picking up a higher-value coin would push you over an encumbrance limit, this drops just enough lower-value **Collect-flagged** coin you're already carrying to make room, instead of skipping the pickup. It never sacrifices Ignore-flagged coin.
 
 ### Don't get item if it makes you Light / Medium / Heavy
 
@@ -852,21 +1255,21 @@ Settings → Talk.
 **Default:** Off
 **What it does:** A total kill-switch — with this on, MudPlay silently ignores every `@`-command from anyone on any channel, including from your own party.
 
-### Disallow @party commands
+### Disallow @party commands (from any party member)
 
 **Default:** Off
 **What it does:** Blocks the normal rule that any active party member can send you steering directives (`@party attack`, `@party rest`, etc.) that get relayed to your character.
 **When you might change it:** If you're technically partied but want this character to act independently without being steered.
 
-### Disallow @commands from telepaths / gangpaths / say (local)
+### Disallow @commands from telepaths / pages, gangpaths, or say (local)
 
 **Default:** all Off
-**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (direct telepath, guild/gang chat, local room speech). These are the only three channels MudPlay listens for `@`-commands on at all.
+**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (telepaths and pages, guild/gang chat, local room speech). These are the only three channels MudPlay listens for `@`-commands on at all.
 
 ### Warn sender on invalid / denied remote command
 
 **Default:** On
-**What it does:** The master switch for whether a reply is ever sent back when someone's `@`-command gets denied or isn't recognized. On means a reply goes out (either a specific reason or the generic message below); off means denials are silent — the command still gets refused, just without a reply.
+**What it does:** The master gate for replies to denied or unrecognized `@`-commands. When on, most refusals send a reply back (a specific reason when there is one, otherwise the generic message below); when off, refusals are silent. A few hard-blocked commands (such as `reroll` and `@party` suicide) stay silent either way, so a reply can't leak information to a malicious caller.
 
 ### Failure message
 
@@ -937,6 +1340,7 @@ Settings → Auto-Light. Everything here only matters once the master **Auto-Lig
 **Available options:** 0–600
 **What it does:** When your lit light's remaining burn time drops below this, MudPlay detours to a shop, restocks back to your Carry-hours target, and returns to what it was doing.
 **When you might change it:** Lower it to squeeze more use out of what you're carrying before triggering a resupply detour.
+**Important notes:** A live readout at the bottom of the tab summarizes the current plan (e.g. how many of your chosen light it will stock for your Carry-hours target), or says provisioning is off.
 
 ---
 
@@ -960,6 +1364,7 @@ Settings → Auto-Lair. This tab tunes the scheduler that loops between "lairs" 
 ### Engage timeout
 
 **Default:** `30` seconds
+**Available options:** 1–3600
 **What it does:** After walking into a lair, how long the scheduler assumes you're busy fighting/looting before it re-evaluates where to go next.
 **When you might change it:** Raise it for lairs where fights reliably take longer than 30 seconds so you're not yanked away mid-fight.
 
@@ -984,7 +1389,7 @@ Settings → Auto-Trainer. Automates leveling up and (separately) spending banke
 ### Auto-train
 
 **Default:** Off
-**What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, walks to the nearest allowed trainer, trains every level you can, then resumes what it was doing.
+**What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, detours to an allowed trainer, trains every level you can, then resumes what it was doing.
 
 ### Auto-train stats
 
@@ -1008,27 +1413,27 @@ Settings → Auto-Trainer. Automates leveling up and (separately) spending banke
 
 **Default:** Off; channel defaults to `Gangpath`
 **Available channel options:** `Gangpath`, `Gossip`, `Yell`, `Say`
-**What it does:** When on, the moment you become able to train a new level, MudPlay sends a short "ready to train" message on the chosen chat channel — handy for letting a static party know it's time to regroup at a trainer.
+**What it does:** When on, the moment you become able to train a new level, MudPlay sends a short message on the chosen chat channel (`I can now train to level: N`) — handy for letting a static party know it's time to regroup at a trainer.
 **Important notes:** Deliberately doesn't spam on login — only a genuine in-session level-up crossing announces, never a backlog of levels you were already eligible for when you connected.
 
 ### Discovered trainers table
 
 **Default:** every discovered trainer allowed
-**What it does:** A list of every trainer found in your loaded game data, each with a checkbox controlling whether MudPlay is allowed to route to it. Uncheck a specific trainer to exclude it — useful if a trainer sits somewhere dangerous or inconvenient.
+**What it does:** A list of the trainers in your loaded game data that apply to you — the universal Training Room plus your own class's trainer — each with a checkbox controlling whether MudPlay is allowed to route to it. Uncheck a specific trainer to exclude it — useful if a trainer sits somewhere dangerous or inconvenient. A **Usable at my level** filter above the table narrows it to trainers whose level range covers your current level.
 
 ---
 
 ## Statline
 
-Settings → Statline. A single field, modeled on MegaMUD's Statline dialog. Statline is **server-owned** — this tab builds a text string that gets sent to the game with a `set statline` command on logon, and MudPlay's own screen parser is generated from that exact same string, so the two can never drift apart from each other.
+Settings → Statline, modeled on MegaMUD's Statline dialog. Statline is **server-owned** — this tab builds a text string that gets sent to the game with a `set statline` command, and MudPlay's own screen parser is generated from that same string, so the two stay in sync. The tab has three parts: a read-only **Current Statline** preview (how the prompt will look, using your live numbers when connected or sample numbers otherwise), the editable **Statline Command** field, and a **Customize** row for building the string from wildcards.
 
 ### Statline Command
 
-**Default:** blank, treated as `full` (a sensible class-appropriate default format)
+**Default:** `full` (a sensible class-appropriate default format)
 **Available options:** `full` (class default), a hand-built wildcard string, or `full custom <wildcards>`.
 **What it does:** Controls the exact text/format your character's status-line prompt uses in the game, which MudPlay then reads back to track your live HP/mana/etc.
-**How the options work:** Pick tokens from the "Customize" dropdown (current/max HP, current/max mana, resting flag, wealth, experience, color codes, and more) and click "Add" to build a custom string. "Default" resets back to `full`.
-**Important notes:** If you're connected when you change this and click Apply, MudPlay sends the updated `set statline` command to the game immediately. It also automatically re-sends this command on every connect and self-corrects (up to 3 retries) if it notices your live prompt doesn't match what your saved command should produce — so a fresh character or a server reset that lost your custom statline fixes itself without you having to do anything.
+**How the options work:** Pick tokens from the **Customize** dropdown (current/max HP, current/max mana, resting flag, wealth, experience, color codes, and more) and click **Add** to build a custom string. **Default** resets back to `full`.
+**Important notes:** When you change this and click OK/Apply while connected, MudPlay sends the updated `set statline` command to the game immediately. On each connect it also checks that the game's live prompt matches your saved statline and re-sends the command if it doesn't (self-correcting, up to 3 retries) — so a server reset that lost your custom statline fixes itself without you having to do anything.
 
 ---
 
@@ -1040,7 +1445,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 **Default:** `5`
 **Available options:** 0–9
-**What it does:** Refuses to let a remote `@suicide` command through if your remaining lives are at or below this number — protects a near-dead character from a careless or malicious remote kill command. `0` disables the protection entirely.
+**What it does:** Refuses to let a remote `@suicide` command through if your remaining lives are at or below this number — protects a near-dead character from a careless or malicious remote kill command. `0` disables the protection entirely. (If MudPlay can't read your current life count, it blocks the command regardless of this threshold.)
 
 ### Utilize self or party members to disarm traps
 
@@ -1082,7 +1487,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **Default:** On
 **What it does:** If you're a follower who gets stranded behind a moving leader, MudPlay automatically sends the `@comeback` request on your behalf.
 
-### Enable the Great Pyramid climb solver / Enable the asylum (maze) solver
+### Enable the Great Pyramid climb solver / Enable the asylum (random-teleport maze) solver
 
 **Default:** both On
 **What it does:** Two Global-tier toggles for automated navigation through two of MajorMUD's notoriously tricky areas — the Great Pyramid's climbing puzzle and the Warped Asylum's random-teleport maze. On means walking to a destination inside either area drives the puzzle-solving automatically; off means a walk there just fails like any other unreachable spot, and you navigate manually.
@@ -1110,10 +1515,10 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 **What it does:** A single master pause switch for every scheduled event on this character, without deleting or individually disabling each one.
 **Important notes:** Saves immediately on toggle — no separate Apply step.
 
-### Event list (New / Modify / Remove)
+### Event list (New… / Modify… / Remove)
 
-**What it does:** Shows every scheduled event you've defined, with its name, trigger, and action. Changes save to the profile immediately.
-**Important notes:** A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to manually re-enable it once you've fixed the reference.
+**What it does:** Shows every scheduled event you've defined, with its name, trigger, and action. **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
+**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference.
 
 ### Event editor — trigger types
 
@@ -1144,7 +1549,7 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 
 ## Diagnostics / Log Pane
 
-Not a Settings tab — these four toggles live in the **Log Pane** window (default shortcut F4), and are documented here for completeness since they're genuine per-character saved preferences. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
+Not a Settings tab — these four toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine per-character saved preferences. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
 
 ### Debug channel
 
@@ -1170,9 +1575,9 @@ Not a Settings tab — these four toggles live in the **Log Pane** window (defau
 
 ---
 
-## Equipment Sets (Character Workshop)
+## Equipment Sets (Player Workshop)
 
-Not a Settings-window tab. Your character's gear loadouts — a "Default" set (worn during normal combat), an "Alternate" set, a "Backstab" set, and others tied to specific triggers — are configured in the **Character Workshop**'s Equipment Manager, not in Settings. They're mentioned here because the Combat tab's weapon fields (Normal/Alternate/Backstab weapon) are actually populated from these sets rather than being typed in directly — see the note under [Combat → Weapon slots](#combat) above. Full documentation of the Equipment Manager's gear-set editor is outside the scope of this settings guide, since it's an inventory/loadout management tool rather than a simple settings screen.
+Not a Settings-window tab. Your character's gear loadouts — the four fixed sets **Default**, **Backstab**, **Pre-rest HP**, and **Pre-rest Mana** — are configured in the **Player Workshop**'s Equipment Manager, not in Settings. They're mentioned here because the Combat tab's weapon fields (Normal/Alternate/Backstab weapon) are actually populated from the Default and Backstab sets rather than being typed in directly — see the note under the Combat tab's weapon slots above. See the **Player Workshop** section for how to build and enable a set.
 
 ---
 
@@ -1210,7 +1615,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Auto-connect on profile load | `false` | bool | `AutoConnect` | Models/Profile/GeneralSettings.cs |
 | Backup profile on save | `false` | bool | `BackupOnSave` | Models/Profile/GeneralSettings.cs |
 | Auto-Combat / Auto-Nuke / Auto-Heal-Rest / Auto-Bless / Auto-Light / Auto-Get-Items / Auto-Get-Cash / Auto-Sneak / Auto-Hide / Auto-Search enabled | true/true/true/true/false/true/true/true/false/false | bool each | `AutoMode.AutoCombat` etc. | Models/Profile/AutoActionDefaults.cs |
-| Auto-Train enabled | `false` | bool | `AutoTrainerSettings.AutoTrain` (mirrored) | Models/Profile/GeneralSettings.cs |
+| Auto-Train enabled | `false` | bool | `AutoTrainerSettings.AutoTrain` (mirrored on the General tab) | Models/Profile/AutoTrainerSettings.cs |
 | Allow hangup in all-off mode | `false` | bool | `AllowHangupInAllOffMode` | Models/Profile/GeneralSettings.cs |
 | Re-enable on reconnect (11 flags) | `false` (all) | bool | `ReEnableAutoCombatOnReconnect` etc. | Models/Profile/GeneralSettings.cs |
 | Disable hangups (toolbar toggle) | `false` | bool | `DisableHangups` | Models/Profile/GeneralSettings.cs |
@@ -1241,7 +1646,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Redial pause (s) | `5` | 1–300 | `RedialPauseSeconds` | Models/Settings/BbsProfile.cs |
 | Infinite retries | `false` | bool | `InfiniteRetries` | Models/Settings/BbsProfile.cs |
 | Cleanup wait (m) | `0` | 0–600 | `CleanupPeriodMinutes` | Models/Settings/BbsProfile.cs |
-| No-response (s) | `0` | 0–3600 | `NoResponseTimeoutSeconds` | Models/Settings/BbsProfile.cs |
+| No-response (s) | `20` | 0–3600 | `NoResponseTimeoutSeconds` | Models/Settings/BbsProfile.cs |
 | Reconnect on failed connect / carrier lost / no response / after cleanup | `false` (all) | bool | `ReconnectOnFailedConnect` etc. | Models/Settings/BbsProfile.cs |
 | Game entry / exit command | `"E"` / `"=x"` | string | `GameEntryCommand` / `GameExitCommand` | Models/Settings/BbsProfile.cs |
 | Player dies at (HP) | `-25` | -999–0 | `PlayerDiesAtHp` | Models/Settings/BbsProfile.cs |
@@ -1269,8 +1674,8 @@ This section is a compact, technical lookup table for every setting documented a
 | Run if BS fails | `false` | bool | `RunIfBackstabFails` | Models/Profile/CombatSettings.cs |
 | Clear hostiles when seen hidden | `false` | bool | `ClearHostilesWhenSeenHidden` | Models/Profile/CombatSettings.cs |
 | Target order | `Normal` | Normal / Reverse | `TargetOrder` | Models/Profile/CombatSettings.cs |
-| Target Priority (+ member name) | `Default` / `""` | Default / FollowLeader / FollowMember | `TargetPriority` / `TargetPriorityMemberName` | Models/Profile/CombatSettings.cs |
-| Attack Order (+ after-player name) | `Default` / `""` | Default / AttackLastParty / AttackLastRoom / AttackAfter | `AttackTiming` / `AttackAfterPlayerName` | Models/Profile/CombatSettings.cs |
+| Target Priority (+ member name) | `Default` / `null` | Default / FollowLeader / FollowMember | `TargetPriority` / `TargetPriorityMemberName` | Models/Profile/CombatSettings.cs |
+| Attack Order (+ after-player name) | `Default` / `null` | Default / AttackLastParty / AttackLastRoom / AttackAfter | `AttackTiming` / `AttackAfterPlayerName` | Models/Profile/CombatSettings.cs |
 | Polite mode ⚠️ unwired | `Off` | Off / WaitForOthers / SkipRoom / AttackDifferent | `PoliteMode` | Models/Profile/CombatSettings.cs |
 | Min. / Max. monsters | 0 / 20 | 0–20 / 1–20 | `MinMonstersInRoom` / `MaxMonstersInRoom` | Models/Profile/CombatSettings.cs |
 | Run distance | `2` | 1–100 | `RunDistance` | Models/Profile/CombatSettings.cs |
@@ -1355,7 +1760,7 @@ This section is a compact, technical lookup table for every setting documented a
 | @comeback backtrack rooms / auto-request | 10 / true | 1–50 / bool | `MaxComebackBacktrackRooms` / `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |
 | Pyramid / Asylum solver enabled | true / true | bool (Global) | `GlobalSettings.PyramidSolverEnabled` / `AsylumSolverEnabled` | Models/Settings/GlobalSettings.cs |
 | Cleanup Player DB after N days | `90` | 0–3650 (Global) | `GlobalSettings.PlayerCleanupDays` | Models/Settings/GlobalSettings.cs |
-| Disable all events | `false` | bool | `CharacterProfile.EventsGloballyDisabled` | ViewModels/Settings/EventsSectionViewModel.cs |
+| Disable all events | `false` | bool | `CharacterProfile.EventsGloballyDisabled` | Models/Profile/CharacterProfile.cs |
 | Event (Name/Disabled/Trigger/Action fields) | see above | see above | `ScheduledEvent.*` | Models/GameData/ScheduledEvent.cs |
 
 ### Diagnostics / Log Pane / Equipment
@@ -1375,3 +1780,21 @@ The following were traced and confirmed to have **no** exposed setting — liste
 ---
 
 *This guide reflects the MudPlay source as of the `main` branch. Two settings in the Combat tab (Polite mode, Show combat round totals) and the entire Sounds tab are present in the UI but not currently wired to any runtime behavior — see their entries above for details. If a setting here stops matching what you see in the app, the code is the source of truth; please report the discrepancy.*
+
+---
+
+# Troubleshooting
+
+Common snags and how to deal with them.
+
+## Reconnecting
+
+MudPlay can auto-reconnect when a connect attempt fails, the carrier drops mid-session, or the server stops responding — each toggled per-BBS on Settings → BBS + Display, with a retry count (or infinite) and a redial pause. The **No-response** timeout controls how quickly a dead connection is noticed.
+
+## Something automated didn't behave
+
+Open the **Program Log** (F4) — it records what the engines decided and why. Turn on Debug / Combat diagnostics from the log pane for more detail when you're reproducing an issue.
+
+## Filing a bug report
+
+Use the menu-bar **Bug Report** button, or right-click the terminal → **Bug report…**. It writes a Markdown snapshot of your current state — movement, player, settings, program log, and scrollback — to your Desktop, ready to attach to a GitHub issue, so a problem can be diagnosed from the exact moment it happened.
