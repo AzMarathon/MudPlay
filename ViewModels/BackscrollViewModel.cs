@@ -76,11 +76,17 @@ public sealed partial class BackscrollViewModel : ObservableObject
         for (int y = 0; y < screen.Rows; y++)
             if (!IsRowBlank(screen.Row(y))) lastNonBlank = y;
 
+        // Each on-screen row carries its own per-row write stamp — the same one
+        // the bug-report snapshot reads — so the gutter shows when each line
+        // actually arrived. A blank interior spacing row has no write time, so
+        // fall back to the snapshot instant. Previously every live row shared one
+        // window-open timestamp, so the gutter mistimed the whole on-screen tail.
         DateTimeOffset now = DateTimeOffset.Now;
         for (int y = 0; y <= lastNonBlank; y++)
         {
+            DateTimeOffset stamp = screen.RowTimestamp(y) ?? now;
             Rows.Add(new BackscrollRowViewModel(
-                new ScrollbackBuffer.Row(now, screen.Row(y).ToArray())));
+                new ScrollbackBuffer.Row(stamp, screen.Row(y).ToArray())));
         }
     }
 

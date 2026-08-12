@@ -90,6 +90,30 @@ public class BackscrollViewModelTests
         Assert.Contains(reopened.Rows, r => r.PlainText.Contains("post030"));
     }
 
+    [Fact]
+    public void LiveScreenRows_ShowTheirOwnWriteTime_NotTheWindowOpenInstant()
+    {
+        // Regression: the on-screen tail used to be stamped with a single
+        // window-open DateTimeOffset.Now, so every live line shared one wrong
+        // time. Each row now carries its own per-row write stamp.
+        TerminalEmulator emu = new(80, 5);
+        TerminalScreen screen = emu.Screen;
+
+        // Write an on-screen row as a Feed batch would — stamp the batch, then
+        // place cells — but pin the stamp three minutes in the past so it can't
+        // be confused with the window-open instant.
+        DateTimeOffset writeTime = DateTimeOffset.Now.AddMinutes(-3);
+        screen.FeedTimestamp = writeTime;
+        const string text = "ONSCREEN LINE";
+        for (int x = 0; x < text.Length; x++)
+            screen.Put(x, 0, new Cell(text[x], default));
+
+        BackscrollViewModel vm = new(emu);
+
+        BackscrollRowViewModel row = vm.Rows.Single(r => r.PlainText.Contains("ONSCREEN LINE"));
+        Assert.Equal(writeTime.ToLocalTime().ToString("HH:mm:ss"), row.TimestampText);
+    }
+
     // Find Next walks the newest match first and works upward toward the oldest,
     // matching the window's newest-at-bottom orientation, then wraps back to the
     // newest after passing the top.
