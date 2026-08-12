@@ -55,7 +55,7 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 
 - **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
 - **Backscroll** (Alt+L) — scroll back through terminal history, with search and export.
-- **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging.
+- **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging. See the **Conversation** section for how to use it.
 - **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave.
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
@@ -308,6 +308,36 @@ Click a section to open it. Each table has its own **Filter…** box (this one f
 - **Rooms** — double-click opens a read-only detail popup (exits, lighting, shop, placed monsters, room commands).
 - **Shops** — double-click jumps to the shop's room in the **Rooms** table.
 - The rest (Lairs, Races, Classes, and so on) are read-only reference.
+
+---
+
+# Conversation
+
+Press **Alt+C** to open the **Conversation** window — a dedicated view of all the chat MudPlay pulls out of the terminal, with its own input box so you can talk without hunting for the game prompt. Alt+C again closes it.
+
+## The chat log
+
+Chat is collected into one merged, timestamped stream (not per-channel tabs). Each line shows the time, a colored **channel tag**, the speaker, and the message:
+
+- **GOS** gossip · **SAY** local say · **YELL** yell · **←TELE / TELE→** telepaths received and sent · **GANG** gang/guild · **BCAST** broadcasts · **SERVER** realm notices (players entering and leaving, PvP messages).
+
+Each channel has its own color, and web links inside a message are clickable. Party chat isn't shown here — it has its own **Party** window.
+
+## Filtering and searching
+
+The toolbar across the top controls what you see:
+
+- **Channel checkboxes** — **Gossip, Say, Telepath, Gang, Broadcast, Yell, Server** — tick or untick to show or hide each channel. Each box is painted in its channel's color, so the row doubles as a color key. Your choices are remembered per character. (Telepaths in and out share the one Telepath box; realm notices and PvP messages share the Server box.)
+- **Search** box — narrows the log to lines whose speaker or text matches what you type (this one isn't remembered between sessions).
+- **Auto-scroll** — when ticked, the log stays pinned to the newest line; untick it to read back without being yanked to the bottom.
+
+## Talking
+
+Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands. **↑ / ↓** recall what you sent before, and the chevron at the right edge of the box opens a list of recent commands to pick from.
+
+## Logging and history
+
+The window keeps its history even after you close it, and replays your last session's chat when you reconnect. To save chat to a file, turn on **Settings → Talk → Log conversations** — it writes to the `Logs` folder, which you can open from **Tools → Open logs folder**. There's no clear button in the window itself; use **Tools → Clear chatlog** on the main window to wipe it. The chat font and channel colors are set on the Talk tab and take effect the next time you open the window.
 
 ---
 
