@@ -2,8 +2,10 @@ namespace MudPlay.Terminal;
 
 // Capacity-tunable ring of rows that have scrolled off the top of the
 // TerminalScreen. Each row preserves both its cells (so ANSI colours survive)
-// and the timestamp it was captured at (so the Backscroll window can render
-// per-line timestamps without inventing them).
+// and its write time — the instant its content was written, carried from the
+// screen's per-row stamp, NOT the moment it scrolled off — so the Backscroll
+// window and bug report render per-line timestamps that stay in order with the
+// still-on-screen rows instead of jumping at the boundary.
 //
 // Single-threaded by design: the emulator drives every Append from the UI
 // dispatcher's Feed path. The ring is never read off the UI thread, so no lock
@@ -55,17 +57,27 @@ public sealed class ScrollbackBuffer
         _ring = new Row[capacity];
     }
 
-    // Capture row with the current wall-clock timestamp. The cells are copied;
-    // the caller may overwrite the source buffer immediately on return.
-    public void Append(ReadOnlySpan<Cell> row)
+    // Capture row stamped with the instant its content was written (carried from
+    // the screen's per-row write stamp), NOT the moment it scrolled off. A row's
+    // scroll-off time can lag its write time by seconds when it lingered on screen
+    // before newer output pushed it off; stamping the write time keeps the ring's
+    // timestamps monotonic with — and continuous into — the still-on-screen rows,
+    // which carry the same write time. A default timestamp (a blank row that was
+    // never written) falls back to the current instant. The cells are copied; the
+    // caller may overwrite the source buffer immediately on return.
+    public void Append(ReadOnlySpan<Cell> row, DateTimeOffset writeTime)
     {
         Cell[] copy = row.ToArray();
-        Row entry = new(DateTimeOffset.Now, copy);
+        Row entry = new(writeTime == default ? DateTimeOffset.Now : writeTime, copy);
         _ring[_head] = entry;
         _head = (_head + 1) % Capacity;
         if (_count < Capacity) _count++;
         RowAdded?.Invoke(entry);
     }
+
+    // Capture row with the current wall-clock instant — for callers that don't
+    // track a per-row write time.
+    public void Append(ReadOnlySpan<Cell> row) => Append(row, DateTimeOffset.Now);
 
     // Indexer with 0 = oldest row, Count - 1 = newest. Throws when out of
     // range so subtle off-by-one errors surface in tests.

@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.6.1**
-> - Fixed a mid-fight self-buff (e.g. armr / mshi) wasting a whole combat round: after the buff dropped *Combat Off*, the spell re-attack was held back by the 500ms recast burst-guard and slid to the next tick, so the monster got a free swing before the character resumed attacking; the interrupt-resume now re-attacks immediately
+> **Version 3.6.2**
+> - Captured transcripts — bug reports, death logs, and the Backscroll window — now stamp every line with the instant it was actually written, both the still-on-screen rows and the scrolled-off history, so the whole transcript stays in chronological order and lines up against the program log by the clock
+> - Previously the on-screen lines came through blank (reports) or all shared one window-open time (Backscroll), and scrolled-off lines were stamped when they left the screen rather than when they arrived — which ran the timestamps out of order at the boundary
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

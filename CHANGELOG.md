@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.6.2
+
+- Captured transcripts — bug reports, death logs, and the Backscroll window — now stamp every line with the instant it was actually written, both the still-on-screen rows and the scrolled-off history, so the whole transcript stays in chronological order and lines up against the program log by the clock
+- Previously the on-screen lines came through blank (reports) or all shared one window-open time (Backscroll), and scrolled-off lines were stamped when they left the screen rather than when they arrived — which ran the timestamps out of order at the boundary
+
 ## 3.6.1
 
 - Fixed a mid-fight self-buff (e.g. armr / mshi) wasting a whole combat round: after the buff dropped *Combat Off*, the spell re-attack was held back by the 500ms recast burst-guard and slid to the next tick, so the monster got a free swing before the character resumed attacking; the interrupt-resume now re-attacks immediately

@@ -601,7 +601,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             sb.Append("Death line: ").Append(record.MessageText).Append('\n');
         sb.Append('\n')
           .Append("Last ").Append(lines.Count)
-          .Append(" line(s) of backscroll before death (scrollback rows timestamped; the live-screen tail is the grid at death):\n");
+          .Append(" line(s) of backscroll before death (each content row prefixed with its write time):\n");
         sb.Append(new string('-', 60)).Append('\n');
         foreach (TranscriptSnapshot.Line line in lines)
         {
