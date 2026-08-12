@@ -59,4 +59,19 @@ public sealed partial class HelpNodeViewModel : ObservableObject
         IsExpanded = anyChild;
         return IsVisible;
     }
+
+    // Re-open the branch path down to `target`. Used after a filter clears (which
+    // collapses every branch) so a still-selected subsection isn't left hidden
+    // inside a collapsed parent — the content pane keeps showing it, and now the
+    // tree selection is visible too. Returns true when `target` is this node or
+    // lives in its subtree; this node expands only when the target is below it.
+    public bool ExpandToReveal(HelpNodeViewModel target)
+    {
+        if (ReferenceEquals(this, target)) return true;
+        bool below = false;
+        foreach (HelpNodeViewModel c in Children)
+            below |= c.ExpandToReveal(target);
+        if (below) IsExpanded = true;
+        return below;
+    }
 }

@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.13
+
+- Help window: clearing the search box after picking a filtered subsection now keeps that topic selected and visible in the tree (the branch re-opens to it) instead of collapsing and burying the selection
+
 ## 3.8.12
 
 - Toggling an avoid room that isn't on your running loop's path no longer disturbs the loop — it keeps circling instead of restarting into a stalled approach (avoiding an unrelated room used to Stop+Start the loop, reset session stats, and re-broadcast @reset every toggle); a loop whose path an avoid does block re-plans around it while keeping the same session

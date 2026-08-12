@@ -37,6 +37,14 @@ public sealed partial class HelpWindowViewModel : ObservableObject
     {
         foreach (HelpNodeViewModel t in Topics)
             t.ApplyFilter(value);
+
+        // Clearing the search resets every branch to collapsed; re-open the path
+        // to the selected topic so its tree selection stays visible instead of
+        // hiding inside a now-collapsed parent (the content pane already keeps
+        // showing it).
+        if (string.IsNullOrWhiteSpace(value) && SelectedTopic is { } selected)
+            foreach (HelpNodeViewModel t in Topics)
+                t.ExpandToReveal(selected);
     }
 
     private static int TopicCount(IReadOnlyList<HelpNodeViewModel> nodes) =>
