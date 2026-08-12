@@ -379,6 +379,20 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         InvalidateVisual();
     }
 
+    // Select the whole transcript (row 0 col 0 → last row's trimmed end). Feeds
+    // the context-menu "Select all" so a copy can grab everything at once.
+    public void SelectAll()
+    {
+        if (_rows.Count == 0) return;
+        int lastRow = _rows.Count - 1;
+        _anchor = new TextPos(0, 0);
+        _caret = new TextPos(lastRow, TrimmedLength(_rows[lastRow].Cells));
+        InvalidateVisual();
+    }
+
+    // True when a non-empty range is selected — gates the context-menu Copy item.
+    public bool HasSelection => NormalizedSelection() is not null;
+
     private (TextPos Start, TextPos End)? NormalizedSelection()
     {
         if (_anchor is not { } a || _caret is not { } c || a == c) return null;

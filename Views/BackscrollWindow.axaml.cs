@@ -39,9 +39,30 @@ public partial class BackscrollWindow : Window
         // Ctrl+C copies the view's (row, col) selection. The view doesn't own a
         // native text selection, so the window handles the copy itself.
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
+        BuildContextMenu();
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    // Right-click menu on the transcript — a mouse-driven copy that doesn't
+    // depend on keyboard focus reaching the window's Ctrl+C handler. Copy is
+    // greyed out with nothing selected; "Select all" grabs the whole history so
+    // a single copy can take it all.
+    private void BuildContextMenu()
+    {
+        MenuItem copy = new() { Header = "Copy" };
+        copy.Click += (_, _) => CopySelection();
+
+        MenuItem selectAll = new() { Header = "Select all" };
+        selectAll.Click += (_, _) => _view.SelectAll();
+
+        ContextMenu menu = new();
+        menu.Items.Add(copy);
+        menu.Items.Add(selectAll);
+        // Reflect the live selection state each time the menu opens.
+        menu.Opening += (_, _) => copy.IsEnabled = _view.HasSelection;
+        _view.ContextMenu = menu;
+    }
 
     private void OnOpened(object? sender, EventArgs e)
     {
@@ -90,25 +111,33 @@ public partial class BackscrollWindow : Window
         // The search box owns its own Ctrl+C.
         if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox) return;
 
-        string sel = _view.SelectedText;
-        if (string.IsNullOrEmpty(sel)) return;
-
-        if (TopLevel.GetTopLevel(this)?.Clipboard is { } cb)
-        {
-            _ = CopyAsync(cb, sel);
-            e.Handled = true;
-        }
+        if (CopySelection()) e.Handled = true;
     }
 
-    // Clipboard writes route through DBus on Linux; on a host with no
-    // activatable clipboard service the Task faults. Observing it inside a
+    // Copy the view's (row, col) selection to the system clipboard as plain
+    // text. Shared by Ctrl+C and the right-click Copy item. Returns false when
+    // nothing is selected or no clipboard is available (so the key handler
+    // leaves the event unhandled).
+    private bool CopySelection()
+    {
+        string sel = _view.SelectedText;
+        if (string.IsNullOrEmpty(sel)) return false;
+
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } cb) return false;
+        _ = CopyAsync(cb, sel);
+        return true;
+    }
+
+    // Clipboard writes route through DBus / the platform compositor; on a host
+    // with no activatable clipboard service the Task faults. Observing it in a
     // try/catch keeps a best-effort copy from surfacing as an unobserved
-    // TaskScheduler exception that would fault the finalizer thread.
+    // TaskScheduler exception. NOT ConfigureAwait(false): Avalonia's clipboard is
+    // UI-thread-affine, so the continuation must stay on the UI thread.
     private static async Task CopyAsync(IClipboard cb, string text)
     {
         try
         {
-            await cb.SetTextAsync(text).ConfigureAwait(false);
+            await cb.SetTextAsync(text);
         }
         catch
         {
