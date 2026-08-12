@@ -249,7 +249,14 @@ public partial class NavigationWindow : Window
         if (this.FindControl<Border>("MapLegend") is not { IsVisible: true } legend) return;
         if (this.FindControl<MapControl>("MapHost") is not { } map) return;
 
-        legend.UpdateLayout();                    // settle the legend's measured size
+        // Clear the margin BEFORE measuring: a stale position past the (now
+        // smaller) map edge starves the legend's arrange, collapsing its size to 0
+        // — which would defeat the clamp below and leave it stuck off-view. With
+        // the margin cleared it arranges at full size, so we get a real size to
+        // clamp against. Mirrors the hover tooltip's measure dance.
+        legend.Margin = new Thickness(0);
+        legend.InvalidateMeasure();
+        legend.UpdateLayout();
         Size legendSize = legend.Bounds.Size;
         Size mapSize = map.Bounds.Size;
         if (legendSize.Width <= 0 || mapSize.Width <= 0) return;   // not laid out yet

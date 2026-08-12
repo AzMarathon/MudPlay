@@ -4,7 +4,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.8.15
 
-- Map legend is now draggable — position it anywhere on the map; the spot is remembered install-wide. Toggling it off and back on re-clamps it into the currently-visible map, so a position left off-screen by a shrunk window snaps back
+- Map legend is now draggable — position it anywhere on the map; the spot is remembered install-wide, and its backdrop is more opaque so it stays readable over map features. Toggling it off and back on re-clamps it into the currently-visible map, so a position left off-screen by a shrunk window snaps back
 
 ## 3.8.14
 

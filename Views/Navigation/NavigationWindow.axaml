@@ -754,7 +754,7 @@
                     PointerPressed="OnLegendPointerPressed"
                     PointerMoved="OnLegendPointerMoved"
                     PointerReleased="OnLegendPointerReleased"
-                    Background="#1A1A1AEE"
+                    Background="#4D1A1A1A"
                     BorderBrush="{StaticResource ChromeBorderSoftBrush}" BorderThickness="1"
                     CornerRadius="4" Padding="10">
                 <StackPanel Spacing="4" MinWidth="180">
