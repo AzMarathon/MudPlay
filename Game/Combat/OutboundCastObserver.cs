@@ -18,12 +18,19 @@ namespace MudPlay.Game.Combat;
 //
 // Only cast-code recognition happens here. Every downstream guard
 // (weapon-mode-only, live-target-present, our-cast-recency, resume pacing)
-// stays in CombatManager.OnCombatStatus, so a false positive is inert — arming
-// the signal outside combat, or on the engine's own cast, changes nothing.
+// stays in CombatManager.OnCombatStatus, so a false positive from arming the
+// signal outside combat is inert.
 //
 // Hooked into the wire-send pipeline by MainWindowViewModel.SendUserInput,
 // alongside the trainer-menu / stat / movement observers. Short payloads only —
-// anything past ~64 bytes can't be a bare cast command.
+// anything past ~64 bytes can't be a bare cast command. Engine-issued casts
+// (CastCoordinator) do NOT reach this observer — they ride a raw send that
+// skips SendUserInput's observer fan-out (SendEngineWireRaw), because arming
+// the resume signal on the combat engine's OWN attack-spell announce is NOT
+// inert: that announce always drops *Combat Off* too, so the false arm
+// re-announces the same spell on its own resulting Off, which drops another
+// Off, forever — a self-sustaining recast loop capped only by MaxCastsPerRoom
+// (the reported "combat spamming hamm" bug).
 public sealed class OutboundCastObserver
 {
     private const int MaxBytes = 64;

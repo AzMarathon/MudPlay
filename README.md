@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.0**
-> - New Help window (Help → Help topics): a searchable, tree-organized help browser — table of contents on the left, rendered help on the right — that ships with a full "Settings Menu" reference explaining what every setting does, how it works, and when to change it (the first of a growing compendium)
-> - The search box filters the table of contents live by both topic title and body text; the content pane renders headings, bold/italic, inline code, bullet lists, and tables
+> **Version 3.8.2**
+> - Fixed the combat engine spamming its attack spell (e.g. `hamm`) many times a second until MaxCastsPerRoom capped it: its own announce was mistaken for a hand-typed cast, arming an immediate re-attack on the *Combat Off* the announce itself always causes — a self-sustaining recast loop. Engine-issued casts now ride a raw send that skips that observer.
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
