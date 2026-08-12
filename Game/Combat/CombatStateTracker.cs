@@ -355,34 +355,49 @@ public sealed class CombatStateTracker : IDisposable
     }
 
     // Idle-stall watchdog, driven by the 1s heartbeat (TickEngine's
-    // HeartbeatElapsed). When the Combat gate has been held for IdleStallThreshold
-    // with zero combat activity, the room is empty (a live fight emits a line
-    // every 5s round) yet the gate hung because the empty re-display carried no
-    // "Also here:" line for the classifier to observe. Single-phase recovery:
-    // send a benign resync CR (the safety probe) AND force the tracker idle in the
-    // same tick. If a monster actually lingered — a laggy >6s round — the CR's
-    // re-displayed "Also here:" re-asserts the gate a beat later, so the optimistic
-    // clear self-heals. Running on the 1s heartbeat lands this in ~6s total.
+    // HeartbeatElapsed). Rescues two stall shapes after IdleStallThreshold of
+    // zero combat activity — a live fight emits a line every 5s round, so total
+    // silence means the fight is over and the room is empty:
+    //   1. Gate asserted (auto-attack ON) — the classic walker hang: the empty
+    //      re-display carried no "Also here:" line for the classifier to observe,
+    //      so the gate stayed held over an empty room.
+    //   2. InCombat stuck true with the gate NOT asserted (auto-attack OFF) — an
+    //      incoming combat line latched InCombat, but with the gate never
+    //      asserted the ONLY path that clears InCombat (OnEntitiesObserved's
+    //      combat-off branch) runs solely on a room re-display that idle play
+    //      never produces. InCombat then hangs, silencing rest AND bless (bless
+    //      refuses to fire in combat), which reads to the user as "auto-bless
+    //      stopped when I turned auto-combat off."
+    // Single-phase recovery for both: send a benign resync CR (the safety probe)
+    // AND force the tracker idle in the same tick. If a monster actually lingered
+    // — a laggy >6s round — the CR's re-displayed "Also here:" re-observes a beat
+    // later, so the optimistic clear self-heals. Running on the 1s heartbeat
+    // lands this in ~6s total.
     public void OnCombatTick()
     {
         if (_disposed) return;
-        if (!_gateAsserted) return;
         if (_wireSender is null) return;
+        // Nothing to rescue unless the gate is held OR InCombat is stuck true.
+        // With auto-attack off InCombat can hang with the gate clear, so the
+        // gate alone is not a sufficient trigger — see shape 2 above.
+        if (!_gateAsserted && !_state.InCombat) return;
         if (_now() - _lastCombatActivityAt < IdleStallThreshold) return;
 
-        double heldSec = (_now() - _gateAssertedAt).TotalSeconds;
         double idleSec = (_now() - _lastCombatActivityAt).TotalSeconds;
         // Skip the resync CR while we can't see: a dark room re-emits no
         // "Also here:" to re-observe, and its "you can't see anything" reply is
         // dead-reckoned as a false confirm of the movement loop's in-flight step.
-        // The gate still clears optimistically either way.
+        // The combat state still clears optimistically either way.
         bool dark = _isInDarkRoom?.Invoke() == true;
+        string held = _gateAsserted
+            ? $"combat gate held {(_now() - _gateAssertedAt).TotalSeconds:F1}s"
+            : "InCombat stuck (auto-attack off)";
         _log?.Info(LogCategory,
-            $"combat gate held {heldSec:F1}s, idle {idleSec:F1}s since last activity "
+            $"{held}, idle {idleSec:F1}s since last activity "
             + $"({_lastCombatActivityDesc}) — no combat activity for the stall window, "
             + (dark
-                ? "room empty; dark room, skipping resync CR and clearing the stuck gate"
-                : "room empty; resyncing and clearing the stuck gate"));
+                ? "room empty; dark room, skipping resync CR and clearing stuck combat state"
+                : "room empty; resyncing and clearing stuck combat state"));
         if (!dark)
             _wireSender(Encoding.Latin1.GetBytes("\r"));
         ResetCombatState("idle-stall watchdog: no combat activity — room empty");
