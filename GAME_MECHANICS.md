@@ -1839,6 +1839,29 @@ elemental resist is safely pre-emptable. Among Normal spells, `magic missile` is
   **snakeskin boots** negate certain room-cast "swamp poison" effects — snakeskin also grants
   immunity to certain poisons, varying by game-data set.
 
+## The `spells` / `sp` command output *([CONFIRMED] 2026-08-13, user capture, Paradigm)*
+
+`sp` is the accepted abbreviation of `spells` and produces the identical listing of the character's
+obtained spells. The format (mana classes) is an intro line, a **padding-aligned** column header,
+then one row per spell, terminated by the prompt:
+
+```
+You have the following spells:
+Level Mana Short Spell Name
+   1    1  harm   harm
+   1    2  mihe   minor healing
+   2    4  bles   bless
+   ...
+```
+
+Key parsing points: the column header's inter-column **padding varies by class and realm** (Kai
+classes render "Level Kai  Short …" with an extra space; a realm's mana header can be padded
+differently again), so the header must be matched **whitespace-normalised**, not against a fixed
+single-space string. Each row is `Level Mana Short <Spell Name…>`; the obtained set keys on the full
+Name (not the Short cast-code). `You have no spells.` is the authoritative empty list. A parse that
+opens on the header but reads zero rows is a **format miss, not an empty book** — it must not clear
+the obtained set. (SpellListParser + report "sp didn't update spellbook".)
+
 ## Spell targeting: monster type tags
 
 A spell's eligibility against a monster is a match between a **spell-side targeting tag** and a

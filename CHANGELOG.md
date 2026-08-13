@@ -14,6 +14,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Navigation map room right-click menu adds Favorites and Recent-destinations walk-to sub-lists at the top, styled to match the terminal flyout (numbered, goto-blue)
 - Nav room right-click "Add to favorites" renamed "Save as Go To" (it saves the room to your Go To list)
 - Shift+right-click a map room whose only jump is unambiguous (up-only, down-only, or a single teleport) follows it immediately instead of opening the menu
+- Spell Book now updates from `sp` as well as the full `spells` — the padding-aligned spell-list column header is matched regardless of its column spacing (a realm whose header was padded differently previously aborted the parse and left the book stale)
+- A spell-list parse miss can no longer wipe the Spell Book, and the parse now logs its header + obtained count so a future "spellbook didn't update" report is diagnosable from the log
 - bug reports addressed: paradigm-20260813-122226, paradigm-20260813-121114, paradigm-20260813-131020, paradigm-20260813-141450
 
 ## 3.8.51

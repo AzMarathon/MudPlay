@@ -10,6 +10,7 @@
 > - Map exit stubs flag command-required exits (a `go path`-style named exit) in the magenta "Action required" colour
 > - Terminal right-click menu adds a "Recent destinations" flyout (last 10 GOTO targets); the nav room right-click menu adds matching Favorites + Recent-destinations walk-to lists, and its "Add to favorites" is renamed "Save as Go To"
 > - Shift+right-click a map room with a single up/down/teleport jump follows it immediately, skipping the menu
+> - Spell Book updates reliably from `sp` (not just `spells`) — the spell-list column header is matched regardless of column padding; a parse miss can no longer wipe the book, and the parse is now logged
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
