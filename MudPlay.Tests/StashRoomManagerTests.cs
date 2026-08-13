@@ -86,7 +86,7 @@ public sealed class StashRoomManagerTests
         h.Stash.ExecuteStash(new RoomKey(1, 42));
 
         Assert.Single(h.Sent);
-        Assert.Equal("hide 500 gold", h.SentLines().First());
+        Assert.Equal("hide 500 gold crown", h.SentLines().First());
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public sealed class StashRoomManagerTests
         h.Stash.ExecuteStash(new RoomKey(1, 42));
 
         Assert.Single(h.Sent);
-        Assert.Equal("hide 400 gold", h.SentLines().First());
+        Assert.Equal("hide 400 gold crown", h.SentLines().First());
     }
 
     [Fact]
@@ -144,9 +144,9 @@ public sealed class StashRoomManagerTests
 
         Assert.Equal(3, h.Sent.Count);
         List<string> lines = h.SentLines().ToList();
-        Assert.Equal("hide 50 silver", lines[0]);
-        Assert.Equal("hide 250 gold", lines[1]);
-        Assert.Equal("hide 2 platinum", lines[2]);
+        Assert.Equal("hide 50 silver noble", lines[0]);
+        Assert.Equal("hide 250 gold crown", lines[1]);
+        Assert.Equal("hide 2 platinum piece", lines[2]);
         Assert.Equal(3, h.Executed[0].Currencies.Count);
     }
 
@@ -163,11 +163,11 @@ public sealed class StashRoomManagerTests
 
         List<string> lines = h.SentLines().ToList();
         Assert.Equal(5, lines.Count);
-        Assert.Equal("hide 7 copper", lines[0]);
-        Assert.Equal("hide 6 silver", lines[1]);
-        Assert.Equal("hide 5 gold", lines[2]);
-        Assert.Equal("hide 4 platinum", lines[3]);
-        Assert.Equal("hide 3 runic", lines[4]);
+        Assert.Equal("hide 7 copper farthing", lines[0]);
+        Assert.Equal("hide 6 silver noble", lines[1]);
+        Assert.Equal("hide 5 gold crown", lines[2]);
+        Assert.Equal("hide 4 platinum piece", lines[3]);
+        Assert.Equal("hide 3 runic coin", lines[4]);
     }
 
     [Fact]
@@ -195,10 +195,10 @@ public sealed class StashRoomManagerTests
 
         List<string> lines = h.SentLines().ToList();
         Assert.Equal(4, lines.Count);
-        Assert.Equal("hide 8000 copper", lines[0]);
-        Assert.Equal("hide 900 silver", lines[1]);
-        Assert.Equal("hide 40 gold", lines[2]);
-        Assert.Equal("hide 2 platinum", lines[3]);
+        Assert.Equal("hide 8000 copper farthing", lines[0]);
+        Assert.Equal("hide 900 silver noble", lines[1]);
+        Assert.Equal("hide 40 gold crown", lines[2]);
+        Assert.Equal("hide 2 platinum piece", lines[3]);
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public sealed class StashRoomManagerTests
         h.Stash.ExecuteStash(new RoomKey(1, 42));
 
         List<string> lines = h.SentLines().ToList();
-        Assert.Contains("hide 400 gold", lines);
+        Assert.Contains("hide 400 gold crown", lines);
         Assert.Contains("hide a torch", lines);
         Assert.Contains("hide a rusty dagger", lines);
         Assert.Single(h.Executed[0].Currencies);

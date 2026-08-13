@@ -131,12 +131,14 @@ public sealed class StashRoomManager : IDisposable
         List<(string Currency, long Amount)> dispatched = new();
         foreach ((string denom, long count) in held.PlanOffloadAboveKeep(cash.KeepOnHandWealth))
         {
-            // Map the canonical "runic" back to the per-BBS runic word so the
-            // emitted `hide N <word>` matches what the server accepts; the
-            // StashExecuted consumer canonicalizes for value math.
-            string wire = denom == "runic" ? _naming.RunicName : denom;
-            Send($"hide {count} {wire}");
-            dispatched.Add((wire, count));
+            // Hide names the coins by their full two-word noun, same as the
+            // get / drop paths — a bare denomination adjective binds
+            // ambiguously (MajorMUD hides a "silver" ring instead of silver
+            // nobles), so WireNoun forces a currency match (and maps runic to
+            // the per-BBS word). The dispatched record keeps the canonical
+            // denom key; the StashExecuted consumer canonicalizes for value math.
+            Send($"hide {count} {_naming.WireNoun(denom)}");
+            dispatched.Add((denom, count));
         }
 
         // Stash rooms hold items too (banks are cash-only). Hide every
