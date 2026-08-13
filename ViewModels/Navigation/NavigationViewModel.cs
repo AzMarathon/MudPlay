@@ -1170,6 +1170,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         SearchQuery = string.Empty;
     }
 
+    // Arm a walk to a specific room from OUTSIDE the window — the item record's
+    // "Queue Walking here" shop links route here (via AppServices.QueueWalkTo).
+    // Same arming as a search-result pick: pan the map and light the Run button.
+    public void QueueDestination(RoomKey key)
+    {
+        Layout = _services.Bfs.BuildLayout(key);
+        SelectedRoomKey = key;
+        QueuedDestination = key;
+    }
+
     // ----- Loops + Auto-Lair setups (combined) ----------------------
 
     // Loops in the active BBS (flat backing list).

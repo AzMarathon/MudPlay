@@ -69,6 +69,14 @@ public sealed class AppServices
     public void SetNavigateToRoomOpener(Action<Game.Map.RoomKey> opener) => _navigateToRoomOpener = opener;
     public void NavigateToRoom(Game.Map.RoomKey key) => _navigateToRoomOpener?.Invoke(key);
 
+    // Opens (or re-focuses) the Navigation window and ARMS a walk to a room —
+    // sets QueuedDestination exactly as picking a search result does, so the user
+    // then clicks Run. Used by the item record's "Queue Walking here" shop links.
+    // No-op until the main VM binds it.
+    private Action<Game.Map.RoomKey>? _queueWalkOpener;
+    public void SetQueueWalkOpener(Action<Game.Map.RoomKey> opener) => _queueWalkOpener = opener;
+    public void QueueWalkTo(Game.Map.RoomKey key) => _queueWalkOpener?.Invoke(key);
+
     // Opens (or re-focuses) the single Navigation Management dialog. Both the map
     // window's "Navigation Management" button and the toolbar Start button route
     // here so there's only ever one instance — no two identical windows. The bool
@@ -2300,7 +2308,7 @@ public sealed class AppServices
         // surface (the Item Finder's double-click), reusing the browser's read-only
         // view assembly. Deps all constructed above; charm read live off PlayerStats.
         ItemRecord = new ItemRecordDialogService(
-            GameData, Resolver, Dialogs, ItemOverlaySeed, ItemSources, () => PlayerStats.Charm);
+            GameData, Resolver, Dialogs, ItemOverlaySeed, ItemSources);
 
         // Room graph — seeded from the active set's Rooms.json every time the
         // set switches. Built once per swap; consumers hold typed Room

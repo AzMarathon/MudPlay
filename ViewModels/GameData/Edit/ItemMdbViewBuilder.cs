@@ -53,6 +53,7 @@ public sealed class ItemMdbViewBuilder
     {
         List<KeyValuePair<string, string>> otherInfo = new();
         List<ShopSaleRow> shops = new();
+        List<DroppedByRow> droppedBy = new();
         bool isLight = false;
         bool isContainer = false;
 
@@ -267,25 +268,22 @@ public sealed class ItemMdbViewBuilder
                 }
             }
 
-            // Dropped By — extract Monster #N(X%) tokens, resolve each
-            // to its Monsters.Name, comma-join. Skip when the item has
-            // no Monster references in Obtained From.
-            string droppedBy = ResolveDroppedBy(obtainedFrom);
-            if (!string.IsNullOrEmpty(droppedBy))
-                otherInfo.Add(new KeyValuePair<string, string>("Dropped By", droppedBy));
+            // Dropped By — one clickable monster link per "Monster #N(X%)" token,
+            // resolved to its Monsters.Name (+ drop-rate suffix). Its own linked
+            // list rather than a joined string so each monster is clickable.
+            droppedBy.AddRange(ResolveDroppedByLinks(obtainedFrom));
 
             // Bought / sold — one clickable row per shop buy/sell location, each
-            // followed by an "@<charm>cha BUY: … SELL: …" line priced for the
-            // current character's charm (or the neutral retail charm of 50 when
-            // it's unknown) under the active realm's formula. The location links
-            // to the host room's Rooms-tab record.
+            // with a "BUY: … SELL: …" line priced for the given charm under the
+            // active realm's formula (the dialog re-runs this as its charm picker
+            // moves). The location links to the host room's Rooms-tab record.
             double baseCopper = ShopPriceCalculator.ToCopper(ReadInt(el, "Price"), ReadInt(el, "Currency"));
             int charm = _charm;
             shops = ResolveShopSales(obtainedFrom, baseCopper, charm, _cache.ActiveRealm);
 
             break;
         }
-        return new ItemMdbView(otherInfo, shops, isLight, isContainer);
+        return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy);
     }
 
     // ----- Ability-row formatting helpers -----
@@ -476,7 +474,9 @@ public sealed class ItemMdbViewBuilder
             if (baseCopper > 0)
             {
                 double buyCopper = ShopPriceCalculator.BuyCopper(baseCopper, markup, charm);
-                price = $"@{charm}cha BUY: {ShopPriceCalculator.FormatCopper(buyCopper)} " +
+                // Charm is shown in the dialog's picker now, so the line drops the
+                // "@Ncha" prefix and shows just the buy/sell figures for it.
+                price = $"BUY: {ShopPriceCalculator.FormatCopper(buyCopper)}   " +
                         $"SELL: {ShopPriceCalculator.FormatCopper(sellCopper)}";
             }
 
@@ -550,11 +550,13 @@ public sealed class ItemMdbViewBuilder
         return (null, mapNo, roomNo, markup);
     }
 
-    // Comma-joined list of monster names parsed from Obtained From's "Monster #N(X%)" tokens.
-    private string ResolveDroppedBy(string obtainedFrom)
+    // One clickable DroppedByRow per "Monster #N(X%)" token in Obtained From,
+    // resolved to its Monsters.Name (+ drop-rate suffix), de-duplicated by label.
+    private List<DroppedByRow> ResolveDroppedByLinks(string obtainedFrom)
     {
-        if (string.IsNullOrWhiteSpace(obtainedFrom)) return string.Empty;
-        List<string> entries = new();
+        List<DroppedByRow> rows = new();
+        if (string.IsNullOrWhiteSpace(obtainedFrom)) return rows;
+        HashSet<string> seen = new();
         foreach (string token in obtainedFrom.Split(','))
         {
             string trimmed = token.Trim();
@@ -568,10 +570,10 @@ public sealed class ItemMdbViewBuilder
             if (!int.TryParse(numText.Trim(), out int monsterId)) continue;
             string? name = LookupMonsterName(monsterId);
             if (string.IsNullOrEmpty(name)) continue;
-            string entry = name + percent;
-            if (!entries.Contains(entry)) entries.Add(entry);
+            string label = name + percent;
+            if (seen.Add(label)) rows.Add(new DroppedByRow(label, monsterId));
         }
-        return string.Join(", ", entries);
+        return rows;
     }
 
     private string? LookupMonsterName(int monsterId)
@@ -599,4 +601,5 @@ public sealed record ItemMdbView(
     IReadOnlyList<KeyValuePair<string, string>> OtherInfo,
     IReadOnlyList<ShopSaleRow> Shops,
     bool IsLight = false,
-    bool IsContainer = false);
+    bool IsContainer = false,
+    IReadOnlyList<DroppedByRow>? DroppedBy = null);

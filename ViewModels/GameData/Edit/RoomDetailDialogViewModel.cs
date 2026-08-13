@@ -85,9 +85,27 @@ public sealed partial class RoomDetailDialogViewModel
     [ObservableProperty]
     private bool _trainerCostsTruncated;
 
-    // Prices are shown at the neutral retail Charm (no discount / surcharge) so
-    // the popup reads the same for every character.
-    private const int RetailCharm = 50;
+    // Charm the shop stock prices are shown at — a picker (default 50, the
+    // neutral retail point) the user can drag to see buy/sell at a different
+    // charm. Rebuilds the stock table + subtitle on change (see OnCharmChanged).
+    [ObservableProperty] private int _charm = 50;
+
+    // The shop being displayed (if any), retained so the charm picker can re-price
+    // its stock without re-reading the room. Null for a non-shop room.
+    private ShopDefinition? _shopDef;
+    private bool _shopIsTrainer;
+    private bool _shopHasStock;
+
+    partial void OnCharmChanged(int value)
+    {
+        if (_shopDef is not { } def) return;
+        ShopSubtitle = BuildShopSubtitle(def, _shopIsTrainer, _shopHasStock);
+        if (_shopHasStock)
+        {
+            ShopStock.Clear();
+            PopulateStock(def);
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasExtras))]
@@ -123,6 +141,7 @@ public sealed partial class RoomDetailDialogViewModel
         ShopName = string.Empty;
         ShopSubtitle = string.Empty;
         TrainerBand = string.Empty;
+        _shopDef = null;   // re-rooted; a non-shop room mustn't re-price a stale def
 
         Room? room = _services.RoomGraph.GetRoom(key);
         if (room is null)
@@ -208,6 +227,9 @@ public sealed partial class RoomDetailDialogViewModel
         bool hasStock = def.Stock.Count > 0;
         if (!isTrainer && !hasStock) return false;   // bank / empty → plain line
 
+        _shopDef = def;
+        _shopIsTrainer = isTrainer;
+        _shopHasStock = hasStock;
         ShopName = string.IsNullOrEmpty(def.Name) ? $"Shop #{def.Number}" : def.Name;
         ShopSubtitle = BuildShopSubtitle(def, isTrainer, hasStock);
 
@@ -265,7 +287,7 @@ public sealed partial class RoomDetailDialogViewModel
         if (hasStock)
         {
             if (def.MarkupPercent > 0) parts.Add($"buy markup {def.MarkupPercent}%");
-            parts.Add($"prices at {RetailCharm} charm");
+            parts.Add($"prices at {Charm} charm");
         }
         return string.Join(" · ", parts);
     }
@@ -281,9 +303,9 @@ public sealed partial class RoomDetailDialogViewModel
             if (e.BaseCopper > 0)
             {
                 buy = ShopPriceCalculator.FormatCopper(
-                    ShopPriceCalculator.BuyCopper(e.BaseCopper, def.MarkupPercent, RetailCharm));
+                    ShopPriceCalculator.BuyCopper(e.BaseCopper, def.MarkupPercent, Charm));
                 sell = ShopPriceCalculator.FormatCopper(
-                    ShopPriceCalculator.SellCopper(e.BaseCopper, RetailCharm, realm));
+                    ShopPriceCalculator.SellCopper(e.BaseCopper, Charm, realm));
             }
             else
             {

@@ -169,8 +169,13 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             ?? seedDefaults;
 
         // MDB-derived display rows that don't roundtrip through the overlay —
-        // the dialog renders them as the read-only "Other Info" pane.
-        ItemMdbView mdb = new ItemMdbViewBuilder(_cache, _playerStats?.Charm ?? 0).Build(wcc);
+        // the dialog renders them as the read-only "Other Info" pane. Built at
+        // the neutral retail charm (50) so it matches the dialog's charm picker
+        // default; the picker re-prices the shop rows via shopSalesForCharm.
+        ItemMdbView mdb = new ItemMdbViewBuilder(_cache, 50).Build(wcc);
+        GameDataCache cache = _cache;
+        IReadOnlyList<ShopSaleRow> ShopsForCharm(int charm) =>
+            new ItemMdbViewBuilder(cache, charm).Build(wcc).Shops;
 
         // Container loot table (null for a non-chest) — the dialog shows it as a
         // read-only "Chest Contents" section below "Other Info".
@@ -197,7 +202,9 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             isContainer:      mdb.IsContainer,
             chest:            chest,
             containerSources: containerSources,
-            givers:           givers);
+            givers:           givers,
+            shopSalesForCharm: ShopsForCharm,
+            droppedBy:        mdb.DroppedBy);
 
         // Replace any open item menu with the new one: a double-click on another
         // row swaps the shown item instead of opening a second window. Closing
@@ -236,4 +243,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     // Test seam: the rendered clickable bought/sold shop rows for a given item.
     internal IReadOnlyList<ShopSaleRow> BuildShopSalesForTests(string itemNumber)
         => new ItemMdbViewBuilder(_cache, _playerStats?.Charm ?? 0).Build(itemNumber).Shops;
+
+    // Test seam: the clickable "Dropped by" monster links for a given item.
+    internal IReadOnlyList<Edit.DroppedByRow> BuildDroppedByForTests(string itemNumber)
+        => new ItemMdbViewBuilder(_cache, 50).Build(itemNumber).DroppedBy ?? System.Array.Empty<Edit.DroppedByRow>();
 }

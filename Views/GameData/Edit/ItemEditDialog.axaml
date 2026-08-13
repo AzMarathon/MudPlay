@@ -198,20 +198,58 @@
                                  Hidden for an item sold at no shop. -->
                             <StackPanel IsVisible="{Binding HasShopSales}" Margin="0,10,0,0">
                                 <TextBlock Classes="SectionHeader" Text="Bought / sold"/>
+                                <!-- Charm picker — re-prices the buy/sell figures below
+                                     live. Default 50 (neutral retail); adjust to compare,
+                                     e.g. a higher-charm party member selling. -->
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,6">
+                                    <TextBlock Classes="MdbKey" Text="Charm" VerticalAlignment="Center"/>
+                                    <NumericUpDown Value="{Binding Charm, Mode=TwoWay}"
+                                                   Minimum="1" Maximum="255" Increment="1"
+                                                   FormatString="0" ShowButtonSpinner="True"
+                                                   Width="120" MinWidth="120"
+                                                   ToolTip.Tip="Buy/sell below are shown at this charm — adjust to compare (e.g. a higher-charm party member selling)"/>
+                                </StackPanel>
                                 <ItemsControl ItemsSource="{Binding ShopSales}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="vm:ShopSaleRow">
                                             <StackPanel Margin="0,1,0,4">
-                                                <Button Classes="MdbLink"
-                                                        Content="{Binding Location}"
-                                                        Command="{Binding Open}"
-                                                        IsEnabled="{Binding CanOpen}"
-                                                        HorizontalAlignment="Left"
-                                                        ToolTip.Tip="Open this room in the Game Data browser"/>
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button Classes="MdbLink"
+                                                            Content="{Binding Location}"
+                                                            Command="{Binding Open}"
+                                                            IsEnabled="{Binding CanOpen}"
+                                                            HorizontalAlignment="Left"
+                                                            ToolTip.Tip="Open this room in the Game Data browser"/>
+                                                    <Button Classes="MdbLink"
+                                                            Content="Queue Walking here →"
+                                                            Command="{Binding QueueWalk}"
+                                                            IsEnabled="{Binding CanOpen}"
+                                                            HorizontalAlignment="Left"
+                                                            ToolTip.Tip="Arm a walk to this shop's room (opens the map; then click Run)"/>
+                                                </StackPanel>
                                                 <TextBlock Classes="MdbValue" Text="{Binding Price}"
                                                            IsVisible="{Binding HasPrice}"
                                                            Margin="8,0,0,0"/>
                                             </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <!-- Dropped by — monsters that drop this item (with drop-rate),
+                                 each a clickable link to its Game Data record. Hidden when
+                                 nothing drops it. -->
+                            <StackPanel IsVisible="{Binding HasDroppedBy}" Margin="0,10,0,0">
+                                <TextBlock Classes="SectionHeader" Text="Dropped by"/>
+                                <ItemsControl ItemsSource="{Binding DroppedBy}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vm:DroppedByRow">
+                                            <Button Classes="MdbLink"
+                                                    Content="{Binding Label}"
+                                                    Command="{Binding Open}"
+                                                    HorizontalAlignment="Left"
+                                                    Margin="0,1"
+                                                    ToolTip.Tip="Open this monster in the Game Data browser"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
