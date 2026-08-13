@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -85,9 +86,20 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 
     // Bought/sold shop rows — each a clickable link to the host room's
     // Rooms-tab record, with a charm-priced buy/sell line beneath. Empty for an
-    // item sold at no shop.
-    public IReadOnlyList<ShopSaleRow> ShopSales { get; }
+    // item sold at no shop. Rebuilt when Charm moves (prices are charm-scaled).
+    public ObservableCollection<ShopSaleRow> ShopSales { get; } = new();
     public bool HasShopSales => ShopSales.Count > 0;
+
+    // Charm the bought/sold prices are shown at — a picker (default 50, the
+    // neutral retail point) the user can drag to see how buy/sell shift, e.g. to
+    // weigh a higher-charm party member selling instead. Rebuilds ShopSales.
+    [ObservableProperty] private int _charm = 50;
+    private readonly Func<int, IReadOnlyList<ShopSaleRow>>? _shopSalesForCharm;
+
+    // Monsters that drop this item, each a clickable link to its record. Empty
+    // when nothing drops it.
+    public IReadOnlyList<DroppedByRow> DroppedBy { get; }
+    public bool HasDroppedBy => DroppedBy.Count > 0;
 
     // Chest-contents readout (containers only) — the decoded loot table's
     // per-item drop chances plus a one-line yield summary. Empty for any item
@@ -113,6 +125,16 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 
     public string Title => $"Item — {(Name.Length > 0 ? Name : $"#{WccNoStr}")}";
 
+    // Re-price the bought/sold rows at the picker's charm — the shop membership
+    // is unchanged, only the buy/sell figures. The callback re-runs the shop
+    // resolution for the new charm (the caller wires it to ItemMdbViewBuilder).
+    partial void OnCharmChanged(int value)
+    {
+        if (_shopSalesForCharm is null) return;
+        ShopSales.Clear();
+        foreach (ShopSaleRow row in _shopSalesForCharm(value)) ShopSales.Add(row);
+    }
+
     public ItemEditDialogViewModel(
         string wccNoStr,
         string mdbName,
@@ -124,13 +146,17 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         bool isContainer = false,
         ChestContents? chest = null,
         IReadOnlyList<ItemSource>? containerSources = null,
-        IReadOnlyList<ItemGiver>? givers = null)
+        IReadOnlyList<ItemGiver>? givers = null,
+        Func<int, IReadOnlyList<ShopSaleRow>>? shopSalesForCharm = null,
+        IReadOnlyList<DroppedByRow>? droppedBy = null)
     {
         WccNoStr     = wccNoStr;
         Name         = existing?.Name ?? mdbName;
         UseTier      = currentTier;
         MdbInfo      = mdbInfo;
-        ShopSales    = shops;
+        _shopSalesForCharm = shopSalesForCharm;
+        foreach (ShopSaleRow row in shops) ShopSales.Add(row);
+        DroppedBy    = droppedBy ?? Array.Empty<DroppedByRow>();
         CanBuySell   = !isLight;
         CanAutoOpen  = isContainer;
 

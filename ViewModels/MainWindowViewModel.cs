@@ -564,6 +564,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetMonsterGameDataOpener(OpenMonsterGameData);
         AppServices.Current.SetRoomGameDataOpener(OpenRoomGameData);
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
+        AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
         AppServices.Current.SetNavManagerOpener(OpenNavManager);
 
@@ -3999,6 +4000,12 @@ public partial class MainWindowViewModel : ObservableObject
     // the chosen room.
     private void FocusNavigationOnRoom(Game.Map.RoomKey key)
         => EnsureNavigationWindow()?.OnFloorChangeRequested(key);
+
+    // Registered on AppServices — the item record's "Queue Walking here" shop
+    // links route here to open/focus the map and ARM the walk (QueuedDestination),
+    // exactly as picking a nav search result does; the user then clicks Run.
+    private void QueueWalkToRoom(Game.Map.RoomKey key)
+        => EnsureNavigationWindow()?.QueueDestination(key);
 
     // Room-detail exit clicks re-root the popup on the neighbour and let an
     // already-open map follow — but must not summon the map if it's closed,

@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.9.5
+
+- Item record (Game Data → Items): a **Charm** picker (default 50) re-prices the bought/sold buy/sell figures live, so you can compare charm levels (e.g. a higher-charm party member selling) — the "@Ncha" prefix is gone since charm now lives in the picker
+- Item record: each bought/sold shop gains a **Queue Walking here →** link that arms a walk to that shop (like typing it in the nav search box); **Dropped by** monsters are now clickable links to their records
+- Room-detail popup for a shop gains the same live Charm picker (replaces the static "prices at 50 charm")
+
 ## 3.9.2
 
 - Game Data → Monsters → Override Attack: reopening the dialog now shows the cast-code you typed (e.g. "agon") instead of the internal Spell.Number it resolved to

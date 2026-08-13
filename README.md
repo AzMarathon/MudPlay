@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.9.2**
-> - Game Data → Monsters → Override Attack: reopening the dialog now shows the cast-code you typed (e.g. "agon"), not the internal Spell.Number
-> - Override Attack activates from the spell alone — Max is an optional per-room cap (blank = unlimited), no longer required to arm the override
+> **Version 3.9.5**
+> - Item record (Game Data → Items): a Charm picker (default 50) re-prices the bought/sold buy/sell figures live, to compare charm levels
+> - Item record: each bought/sold shop gains a "Queue Walking here →" link; "Dropped by" monsters are now clickable links to their records
+> - Shop room-detail popup gains the same live Charm picker (replaces the static "prices at 50 charm")
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

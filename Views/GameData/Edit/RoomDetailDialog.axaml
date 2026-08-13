@@ -152,6 +152,19 @@
                             <TextBlock Classes="Sub" Text="{Binding ShopSubtitle}"/>
                         </StackPanel>
 
+                        <!-- Charm picker — re-prices the stock table + subtitle live
+                             (stock shops only; trainer costs aren't charm-based).
+                             Default 50 (neutral retail). -->
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="8,2,0,0"
+                                    IsVisible="{Binding HasShop}">
+                            <TextBlock Classes="Sub" Text="Charm" VerticalAlignment="Center"/>
+                            <NumericUpDown Value="{Binding Charm, Mode=TwoWay}"
+                                           Minimum="1" Maximum="255" Increment="1"
+                                           FormatString="0" ShowButtonSpinner="True"
+                                           Width="110" MinWidth="110"
+                                           ToolTip.Tip="Prices below are shown at this charm — adjust to compare"/>
+                        </StackPanel>
+
                         <!-- Trainer level band (training rooms only). -->
                         <TextBlock Classes="Body" Margin="8,0,0,0"
                                    IsVisible="{Binding HasTrainer}"

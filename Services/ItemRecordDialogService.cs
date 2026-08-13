@@ -23,26 +23,23 @@ public sealed class ItemRecordDialogService
     private readonly DialogService _dialogs;
     private readonly ItemOverlaySeedStore _overlaySeed;
     private readonly ItemSourceIndex _itemSources;
-    private readonly Func<int> _playerCharm;
 
     private ItemEditDialogViewModel? _openItemVm;
 
     public ItemRecordDialogService(
         GameDataCache cache, SettingsResolver resolver, DialogService dialogs,
-        ItemOverlaySeedStore overlaySeed, ItemSourceIndex itemSources, Func<int> playerCharm)
+        ItemOverlaySeedStore overlaySeed, ItemSourceIndex itemSources)
     {
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(dialogs);
         ArgumentNullException.ThrowIfNull(overlaySeed);
         ArgumentNullException.ThrowIfNull(itemSources);
-        ArgumentNullException.ThrowIfNull(playerCharm);
         _cache = cache;
         _resolver = resolver;
         _dialogs = dialogs;
         _overlaySeed = overlaySeed;
         _itemSources = itemSources;
-        _playerCharm = playerCharm;
     }
 
     public async Task OpenAsync(int itemNumber)
@@ -60,7 +57,12 @@ public sealed class ItemRecordDialogService
         ItemOverlay existing = _resolver.ResolveGameData<ItemOverlay>("Items", wcc, seedDefaults) ?? seedDefaults;
         SettingsTier currentTier = _resolver.GetGameDataSourceTier("Items", wcc);
 
-        ItemMdbView mdb = new ItemMdbViewBuilder(_cache, _playerCharm()).Build(wcc);
+        // Built at the neutral retail charm (50) to match the dialog's charm
+        // picker default; the picker re-prices the shop rows via shopSalesForCharm.
+        ItemMdbView mdb = new ItemMdbViewBuilder(_cache, 50).Build(wcc);
+        GameDataCache cache = _cache;
+        IReadOnlyList<ShopSaleRow> ShopsForCharm(int charm) =>
+            new ItemMdbViewBuilder(cache, charm).Build(wcc).Shops;
         ChestContents? chest = ChestContentsReader.Read(_cache, itemNumber);
         IReadOnlyList<ItemSource>? containerSources = _itemSources.ContainersOf(itemNumber);
         IReadOnlyList<ItemGiver>? givers = _itemSources.GiversOf(itemNumber);
@@ -76,7 +78,9 @@ public sealed class ItemRecordDialogService
             isContainer:      mdb.IsContainer,
             chest:            chest,
             containerSources: containerSources,
-            givers:           givers);
+            givers:           givers,
+            shopSalesForCharm: ShopsForCharm,
+            droppedBy:        mdb.DroppedBy);
 
         ItemEditDialogViewModel? previous = _openItemVm;
         _openItemVm = vm;

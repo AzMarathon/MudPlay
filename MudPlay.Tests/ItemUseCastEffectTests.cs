@@ -52,6 +52,12 @@ public sealed class ItemUseCastEffectTests : IDisposable
         return vm.BuildShopSalesForTests(itemNumber);
     }
 
+    private IReadOnlyList<DroppedByRow> DroppedByFor(string itemNumber)
+    {
+        ItemsSectionViewModel vm = new(_cache);
+        return vm.BuildDroppedByForTests(itemNumber);
+    }
+
     [Fact]
     public void NonWeaponUseCast_ShowsEffectDamage()
     {
@@ -177,6 +183,25 @@ public sealed class ItemUseCastEffectTests : IDisposable
     }
 
     [Fact]
+    public void BoughtSold_PriceReflectsCharm()
+    {
+        // The buy price is charm-scaled, so the same shop item shows a different
+        // BUY line at charm 30 vs 70 — the dialog's charm picker re-prices live
+        // off this. The "@Ncha" prefix is gone (charm now lives in the picker).
+        Seed("Shops", "[{\"Number\":5,\"Assigned To\":\"Room 1/10\",\"Markup%\":0}]");
+        Seed("Rooms", "[{\"Map Number\":1,\"Room Number\":10,\"Name\":\"General Store\"}]");
+        Seed("Items", "[{\"Number\":200,\"Name\":\"Torch\",\"ItemType\":0,\"Price\":1000,\"Currency\":0,\"Obtained From\":\"Shop #5\"}]");
+        _cache.SwitchSet("v1.11p");
+
+        string lowCharm  = new ItemMdbViewBuilder(_cache, 30).Build("200").Shops[0].Price;
+        string highCharm = new ItemMdbViewBuilder(_cache, 70).Build("200").Shops[0].Price;
+
+        Assert.NotEqual(lowCharm, highCharm);          // buy price shifts with charm
+        Assert.Contains("BUY:", lowCharm);
+        Assert.DoesNotContain("@", lowCharm);          // "@Ncha" prefix dropped
+    }
+
+    [Fact]
     public void BoughtSold_Absent_WhenItemHasNoShop()
     {
         // No shop reference in Obtained From → no bought/sold rows at all.
@@ -195,8 +220,10 @@ public sealed class ItemUseCastEffectTests : IDisposable
         Seed("Items", "[{\"Number\":300,\"Name\":\"Dragon Scale\",\"ItemType\":0,\"Obtained From\":\"Monster #42(10%)\"}]");
         _cache.SwitchSet("v1.11p");
 
-        IReadOnlyList<KeyValuePair<string, string>> info = OtherInfoFor("300");
+        // Dropped By is now a list of clickable monster links (not an Other-Info
+        // string); the label carries the drop rate, e.g. "Prismatic Dragon(10%)".
+        IReadOnlyList<DroppedByRow> dropped = DroppedByFor("300");
 
-        Assert.Contains(info, kv => kv.Key == "Dropped By" && kv.Value == "Prismatic Dragon(10%)");
+        Assert.Contains(dropped, r => r.Label == "Prismatic Dragon(10%)");
     }
 }

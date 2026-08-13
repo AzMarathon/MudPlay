@@ -1,5 +1,6 @@
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 
 namespace MudPlay.ViewModels.GameData.Edit;
@@ -21,6 +22,11 @@ public sealed class ShopSaleRow
     public bool CanOpen { get; }
     public ICommand Open { get; }
 
+    // "Queue Walking here →" — arms a walk to the shop's host room (same as
+    // picking it in the nav search box: sets QueuedDestination, opening the map
+    // if needed). Gated on a resolved room, like Open.
+    public ICommand QueueWalk { get; }
+
     public ShopSaleRow(string location, string price, int map, int room)
     {
         Location = location;
@@ -28,6 +34,9 @@ public sealed class ShopSaleRow
         CanOpen = map > 0 && room > 0;
         Open = new RelayCommand(
             () => AppServices.Current.OpenRoomGameData(map, room),
+            () => CanOpen);
+        QueueWalk = new RelayCommand(
+            () => AppServices.Current.QueueWalkTo(new RoomKey(map, room)),
             () => CanOpen);
     }
 }
