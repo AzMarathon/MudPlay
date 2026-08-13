@@ -837,7 +837,7 @@ public sealed class MapControl : Control
     // Raised on right-click. The key is the hit room, or null when the click
     // landed on empty map space — so the context-menu target is cleared
     // instead of left pointing at a stale (off-screen) room.
-    public event Action<RoomKey?, Point>? RoomRightClicked;
+    public event Action<RoomKey?, Point, KeyModifiers>? RoomRightClicked;
     public event Action<RoomKey, Point>? RoomLeftClicked;
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -892,14 +892,14 @@ public sealed class MapControl : Control
                 // so the user can see which square the context menu is
                 // attached to (the menu can move off-screen on small maps).
                 SelectedRoomKey = hit;
-                RoomRightClicked?.Invoke(hit, point.Position);
+                RoomRightClicked?.Invoke(hit, point.Position, e.KeyModifiers);
             }
             else
             {
                 // Empty-space right-click: clear the context target so the
                 // menu doesn't keep showing the previous room's entries
                 // (teleports, etc.) after the map has shifted under it.
-                RoomRightClicked?.Invoke(null, point.Position);
+                RoomRightClicked?.Invoke(null, point.Position, e.KeyModifiers);
             }
             e.Handled = true;
         }

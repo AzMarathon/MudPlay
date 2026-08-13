@@ -38,6 +38,10 @@ public partial class NavigationWindow : Window
             map.RoomLeftClicked        += OnMapRoomLeftClicked;
             map.RoomHovered            += OnMapRoomHovered;
             map.FloorChangeRequested   += OnMapFloorChangeRequested;
+            // Shift+right-click fires a single unambiguous floor/teleport jump
+            // straight from the press (see OnMapRoomRightClicked) and cancels the
+            // menu that would otherwise open on release.
+            if (map.ContextMenu is ContextMenu roomMenu) roomMenu.Opening += OnRoomMenuOpening;
         }
 
         // Keyboard focus → the map by default so numpad / arrow keys
@@ -194,9 +198,26 @@ public partial class NavigationWindow : Window
         popup.Opacity = 1;
     }
 
-    private void OnMapRoomRightClicked(Game.Map.RoomKey? key, Point _)
+    // Set when a Shift+right-click fired a floor/teleport shortcut, so the menu
+    // that Avalonia would open on the following release is cancelled instead.
+    private bool _suppressRoomMenu;
+
+    private void OnMapRoomRightClicked(Game.Map.RoomKey? key, Point _, KeyModifiers modifiers)
     {
-        if (DataContext is NavigationViewModel vm) vm.ContextRoomKey = key;
+        _suppressRoomMenu = false;
+        if (DataContext is not NavigationViewModel vm) return;
+        vm.ContextRoomKey = key;   // rebuilds the up/down/teleport context synchronously
+        // Shift held on a room whose sole jump is an up-only / down-only / lone
+        // teleport → do it now and skip the menu.
+        if (key is not null && (modifiers & KeyModifiers.Shift) != 0)
+            _suppressRoomMenu = vm.TryQuickFloorTeleportShortcut();
+    }
+
+    private void OnRoomMenuOpening(object? sender, CancelEventArgs e)
+    {
+        if (!_suppressRoomMenu) return;
+        e.Cancel = true;
+        _suppressRoomMenu = false;
     }
 
     private void OnMapRoomLeftClicked(Game.Map.RoomKey key, Point _)

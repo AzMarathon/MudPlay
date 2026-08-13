@@ -2120,6 +2120,29 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_contextDownTarget is { } t) OnFloorChangeRequested(t);
     }
 
+    // Shift+right-click quick action: when the right-clicked room's ONLY
+    // floor/teleport jump is a single unambiguous one — an up-only, a down-only,
+    // or a lone teleport destination — invoke it directly and skip the context
+    // menu. Returns true when it fired (caller suppresses the menu); false when
+    // the room has zero or more than one such option (show the normal menu, where
+    // the user picks). Assumes ContextRoomKey is already set to the clicked room
+    // (its setter rebuilt the up/down/teleport context synchronously).
+    public bool TryQuickFloorTeleportShortcut()
+    {
+        // Multiple teleport destinations are a menu of choices, never an auto-pick.
+        if (_contextTeleportDests.Count > 1) return false;
+
+        bool up = ContextHasUp;
+        bool down = ContextHasDown;
+        bool teleport = ContextTeleportSingle;
+        if ((up ? 1 : 0) + (down ? 1 : 0) + (teleport ? 1 : 0) != 1) return false;
+
+        if (up) GoUpFloor();
+        else if (down) GoDownFloor();
+        else UseTeleport();
+        return true;
+    }
+
     [RelayCommand]
     private async Task WalkToContextRoom()
     {

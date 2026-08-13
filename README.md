@@ -9,6 +9,7 @@
 > - Navigation room tooltip now shows each monster's game-data record number (e.g. `Dark Goblin Archer(#48)`)
 > - Map exit stubs flag command-required exits (a `go path`-style named exit) in the magenta "Action required" colour
 > - Terminal right-click menu adds a "Recent destinations" flyout (last 10 GOTO targets); the nav room right-click menu adds matching Favorites + Recent-destinations walk-to lists, and its "Add to favorites" is renamed "Save as Go To"
+> - Shift+right-click a map room with a single up/down/teleport jump follows it immediately, skipping the menu
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
