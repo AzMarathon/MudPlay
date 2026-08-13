@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.9.2
+
+- Game Data → Monsters → Override Attack: reopening the dialog now shows the cast-code you typed (e.g. "agon") instead of the internal Spell.Number it resolved to
+- Override Attack now activates from the spell (number or cast-code) alone — Max is an optional per-room cast cap (blank = unlimited), no longer required to arm the override, which previously left it silently falling back to the global attack spell
+- bug reports addressed: paradigm-20260813-131658, paradigm-20260813-132647
+
 ## 3.9.0
 
 - Navigation now routes out of sealed rooms via an NPC ask-transport exit — a room whose only egress is asking a resident NPC to port you elsewhere (the Floating Citadel's Grey Lord → Town Square) is no longer a dead-end; the walker sends the `ask <npc> <keyword>` itself. Only ungated transports are used
