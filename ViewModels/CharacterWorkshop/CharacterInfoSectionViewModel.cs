@@ -160,13 +160,14 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     // Worn items split into name + parenthesized slot so the view can align every
     // slot flag in a shared column (like the in-game `look self`), rather than
     // letting each "(Slot)" trail its own name at a ragged offset.
-    public ObservableCollection<EquippedItemRow> EquippedItems { get; } = new();
-    // Carried-but-unworn item names harvested from the last inventory dump.
-    public ObservableCollection<string> CarriedItems { get; } = new();
+    public ObservableCollection<WorkshopItemRow> EquippedItems { get; } = new();
+    // Carried-but-unworn items harvested from the last inventory dump.
+    public ObservableCollection<WorkshopItemRow> CarriedItems { get; } = new();
     // Key-ring contents from the dump's "You have the following keys: …" trailer.
     // The game tracks keys apart from the pack, so they get their own list in the
-    // Inventory box rather than mixing into CarriedItems.
-    public ObservableCollection<string> Keys { get; } = new();
+    // Inventory box rather than mixing into CarriedItems. Keys are items too, so
+    // they link to their Game Data record the same way.
+    public ObservableCollection<WorkshopItemRow> Keys { get; } = new();
     // True once at least one worn item is known — gates the equipped list.
     [ObservableProperty] private bool _hasEquipped;
     // True once at least one carried item is known — gates the carried list.
@@ -574,20 +575,21 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
         EquippedItems.Clear();
         foreach (EquippedItem item in snap.EquippedItems)
-            EquippedItems.Add(new EquippedItemRow(
+            EquippedItems.Add(new WorkshopItemRow(
                 item.Name,
                 string.IsNullOrEmpty(item.Slot)
                     ? string.Empty
-                    : string.Create(CultureInfo.InvariantCulture, $"({item.Slot})")));
+                    : string.Create(CultureInfo.InvariantCulture, $"({item.Slot})"),
+                ResolveItemNumber(item.Name)));
 
         CarriedItems.Clear();
         foreach (string name in snap.CarriedItems)
-            CarriedItems.Add(name);
+            CarriedItems.Add(new WorkshopItemRow(name, string.Empty, ResolveItemNumber(name)));
 
         Keys.Clear();
         if (snap.Keys is { } keys)
             foreach (string name in keys)
-                Keys.Add(name);
+                Keys.Add(new WorkshopItemRow(name, string.Empty, ResolveItemNumber(name)));
 
         HasEquipped = EquippedItems.Count > 0;
         HasCarried = CarriedItems.Count > 0;
@@ -630,9 +632,40 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         _alignmentTracker.StaleChanged -= OnAlignmentStaleChanged;
         _questBonuses.Changed -= OnQuestBonusesChanged;
     }
-}
 
-// One worn item for the equipped list: the name and its parenthesized slot flag
-// ("(Hands)"), kept apart so the view can align every slot in a shared column.
-// Slot is empty for a worn item the game reported without a slot label.
-public readonly record struct EquippedItemRow(string Name, string Slot);
+    // Resolve an inventory-dump item name to its Items-table Number for a clickable
+    // record link, or 0 when it doesn't resolve (dump names can be truncated /
+    // pluralised, so a few worn/carried items won't link).
+    private int ResolveItemNumber(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return 0;
+        int num = LookupItemNumber(name);
+        if (num == 0)
+        {
+            // A stacked carried item carries a count prefix ("3 piece of amber")
+            // the Items-table name ("piece of amber") lacks — strip it and retry.
+            string stripped = StripCountPrefix(name);
+            if (!ReferenceEquals(stripped, name)) num = LookupItemNumber(stripped);
+        }
+        return num;
+    }
+
+    private int LookupItemNumber(string name)
+    {
+        if (_gameData.FindRowByName("Items", name) is not { } row) return 0;
+        return row.TryGetProperty("Number", out JsonElement n) && n.ValueKind == JsonValueKind.Number
+            ? n.GetInt32()
+            : 0;
+    }
+
+    // "3 piece of amber" → "piece of amber". Returns the input unchanged when it
+    // has no leading "<digits> " count prefix. Only the record LOOKUP strips the
+    // count; the displayed name keeps it (the quantity is useful).
+    private static string StripCountPrefix(string name)
+    {
+        int i = 0;
+        while (i < name.Length && char.IsDigit(name[i])) i++;
+        if (i == 0 || i >= name.Length || name[i] != ' ') return name;
+        return name[(i + 1)..].TrimStart();
+    }
+}

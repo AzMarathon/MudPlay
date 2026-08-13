@@ -363,8 +363,10 @@ public sealed partial class RoomDetailDialogViewModel
         _services.CenterNavigationIfOpen(target);
     }
 
+    // The label carries the monster's record number — "chest(#69)" — so the popup
+    // doubles as a quick lookup key (matches the map hover tooltip).
     private RoomDetailLink MakeMonsterLink(int id, string name, string? note)
-        => new(name, note, new RelayCommand(() => _services.OpenMonsterGameData(id)));
+        => new($"{name}(#{id})", note, new RelayCommand(() => _services.OpenMonsterGameData(id)));
 
     // Title / key click — open (or focus) the Navigation map and centre it on
     // whichever room the popup is currently showing.

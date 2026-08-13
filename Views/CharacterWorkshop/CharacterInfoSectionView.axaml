@@ -31,6 +31,32 @@
             <Setter Property="CornerRadius" Value="4"/>
             <Setter Property="Padding" Value="12"/>
         </Style>
+
+        <!-- Clickable item-name link — matches the Game Data edit dialogs. Renders
+             as plain mono text; underlines on hover; greys when there's no record
+             to open (name didn't resolve to an Items Number). -->
+        <Style Selector="Button.ItemLink">
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.ItemLink:disabled">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+            <Setter Property="Cursor" Value="Arrow"/>
+        </Style>
+        <Style Selector="Button.ItemLink:disabled /template/ ContentPresenter">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+        </Style>
+        <Style Selector="Button.ItemLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
     </UserControl.Styles>
 
     <!-- Every readout mirrors live state (stat snapshot / `i` dump / `who`), so
@@ -273,13 +299,18 @@
                                 <ItemsControl ItemsSource="{Binding EquippedItems}"
                                               Grid.IsSharedSizeScope="True">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:EquippedItemRow">
+                                        <DataTemplate x:DataType="vm:WorkshopItemRow">
                                             <Grid Margin="0,0,0,1">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" SharedSizeGroup="EquipName"/>
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Classes="FieldValue" Text="{Binding Name}"/>
+                                                <Button Grid.Column="0" Classes="ItemLink"
+                                                        Content="{Binding Name}"
+                                                        Command="{Binding Open}"
+                                                        IsEnabled="{Binding CanOpen}"
+                                                        HorizontalAlignment="Left"
+                                                        ToolTip.Tip="Open this item's Game Data record"/>
                                                 <TextBlock Grid.Column="1" Classes="FieldValue"
                                                            Foreground="{StaticResource ChromeFgSecBrush}"
                                                            Margin="10,0,0,0" Text="{Binding Slot}"/>
@@ -296,8 +327,12 @@
                                            FontWeight="SemiBold"/>
                                 <ItemsControl ItemsSource="{Binding CarriedItems}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="sys:String">
-                                            <TextBlock Classes="FieldValue" Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,1"/>
+                                        <DataTemplate x:DataType="vm:WorkshopItemRow">
+                                            <Button Classes="ItemLink" Content="{Binding Name}"
+                                                    Command="{Binding Open}"
+                                                    IsEnabled="{Binding CanOpen}"
+                                                    HorizontalAlignment="Left" Margin="0,0,0,1"
+                                                    ToolTip.Tip="Open this item's Game Data record"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -311,8 +346,12 @@
                                            FontWeight="SemiBold"/>
                                 <ItemsControl ItemsSource="{Binding Keys}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="sys:String">
-                                            <TextBlock Classes="FieldValue" Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,1"/>
+                                        <DataTemplate x:DataType="vm:WorkshopItemRow">
+                                            <Button Classes="ItemLink" Content="{Binding Name}"
+                                                    Command="{Binding Open}"
+                                                    IsEnabled="{Binding CanOpen}"
+                                                    HorizontalAlignment="Left" Margin="0,0,0,1"
+                                                    ToolTip.Tip="Open this item's Game Data record"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
