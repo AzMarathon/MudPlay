@@ -1,10 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.43**
-> - Game Data → Monsters → Override Attack: typing a spell's cast-code (e.g. "turn") now auto-resolves to its Number and lands on the mana-gated, cascading spell rung — same as typing the number directly, instead of silently becoming an ungated raw command
-> - Combat no longer stalls at 0 mana: a mana-costing action (a spell cascade, or a forced attack-command that's really a spell cast-code) stands down for the physical weapon at 0 mana; a free command verb (bash/kick) still fires, backstab is preserved, and it resumes once mana recovers
-> - Fixed a self-sustaining cast-spam loop where a between-round-cast resume kept re-triggering off its own resulting *Combat Off*, firing dozens of casts from one interrupt — now fires at most once per interrupt
+> **Version 3.8.51**
+> - Auto-train now returns to the loop after training instead of stalling with the route drawn and nothing on the wire
+> - Loops/Auto-Lairs tree: expanding a folder now scrolls it into view instead of opening off-screen below the fold
+> - Selecting a room via the nav search box or loading a Go-to destination no longer slows a running loop
+> - Terminal now accepts paste (Ctrl+V / Shift+Insert); multi-line pastes send as sequential commands
+> - Monster Matchup: changing the selected attack no longer resizes the Character Workshop window
+> - Status-bar TNL now uses the same banked-aware estimate as Session Stats' "time to next level"
+> - Combat diagnostics now log the cast-interrupt resume path to expose mid-fight re-engage stalls
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

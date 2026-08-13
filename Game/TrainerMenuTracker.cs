@@ -257,25 +257,43 @@ public sealed class TrainerMenuTracker : IDisposable
         // flow below: the first in-game prompt after arming is the command's own
         // `[HP=...]:train stats` echo (skipped); the next one is the bare prompt
         // that returns when the user leaves the stat box, so line-mode resumes.
+        //
+        // BOTH keyboard-owning flags are cleared BEFORE firing any exit event.
+        // InputMenuExited drives the auto-train loop-resume walk synchronously, and
+        // TrainerScreenGate holds the engine send-gate while MenuOwnsKeyboard
+        // (_inputMenuActive || _inMenu) is true. If _inMenu were still set when
+        // InputMenuExited fired, the gate would stay held and silently drop the
+        // resume's first move byte with no retry — the walker draws the route back
+        // but never steps (report paradigm-20260813-063517).
+        bool fireInputExited = false;
         if (_inputMenuActive)
         {
             if (_skipNextInputPrompt)
-            {
                 _skipNextInputPrompt = false;
-            }
             else
             {
                 _inputMenuActive = false;
-                _log?.Log(LogSeverity.Info, "TrainerMenu",
-                    "In-game prompt returned — firing InputMenuExited.");
-                InputMenuExited?.Invoke();
+                fireInputExited = true;
             }
         }
 
-        if (!_inMenu) return;
-        _inMenu = false;
-        _expectingMenuSince = null;
-        _log?.Log(LogSeverity.Info, "TrainerMenu", "Exited trainer menu — firing MenuExited.");
-        MenuExited?.Invoke();
+        bool fireMenuExited = _inMenu;
+        if (_inMenu)
+        {
+            _inMenu = false;
+            _expectingMenuSince = null;
+        }
+
+        if (fireInputExited)
+        {
+            _log?.Log(LogSeverity.Info, "TrainerMenu",
+                "In-game prompt returned — keyboard released, firing InputMenuExited.");
+            InputMenuExited?.Invoke();
+        }
+        if (fireMenuExited)
+        {
+            _log?.Log(LogSeverity.Info, "TrainerMenu", "Exited trainer menu — firing MenuExited.");
+            MenuExited?.Invoke();
+        }
     }
 }

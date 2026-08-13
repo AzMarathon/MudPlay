@@ -860,6 +860,12 @@ public partial class MainWindowViewModel : ObservableObject
         // flush.
         Action<byte[]> engineSend = AppServices.Current.EngineGate.WrapEngineSender(SendUserInput);
 
+        // A move step put on the wire while the gate was locked is silently dropped;
+        // when the last hold clears, re-drive any step the walker is still stalled
+        // on so it doesn't sit forever with a route drawn and nothing sent (the
+        // auto-train loop-resume stall, report paradigm-20260813-063517).
+        AppServices.Current.EngineGate.Released += AppServices.Current.Walker.NudgeStalledStep;
+
         // Combat-gated-entry handler sends `break` on refusal — needs the same
         // gate-wrapped wire path.
         _combatEntryRefusalHandler.SetWireSender(engineSend);
@@ -1590,16 +1596,16 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // "<rate>/hr" with " - TNL: <time>" appended when the time-to-next-level can be
-    // computed (a live rate AND a parsed level span). TNL = ExpToNext ÷ rate; the
-    // LevelExpSpan guard mirrors ExperienceQueryHandler so a not-yet-parsed level
-    // doesn't advertise a bogus "0" ETA.
+    // computed. Uses the SAME estimate as the Session Stats "time to next level"
+    // readout (banked-aware target level + game-data exp chart) so the two never
+    // drift — an earlier stat-line "exp to next" ÷ rate ignored banked levels and
+    // desynced from Session Stats.
     private static string RateWithTnl(double xpHr)
     {
         string rate = $"{Game.Combat.RateText.Compact(xpHr)}/hr";
-        Game.PlayerStats stats = AppServices.Current.PlayerStats;
-        if (xpHr <= 0 || stats.LevelExpSpan <= 0) return rate;
-        if (Game.Calculators.ExperienceTableCalculator
-                .CalcTimeToLevel(stats.ExpToNext, 0, (long)xpHr) is not { } tnl)
+        if (xpHr <= 0) return rate;
+        if (Game.Calculators.TimeToLevelEstimator.Estimate(
+                AppServices.Current.PlayerStats, AppServices.Current.GameData, xpHr).Eta is not { } tnl)
             return rate;
         return $"{rate} - TNL: {(tnl <= TimeSpan.Zero ? "ready"
             : Game.Calculators.ExperienceTableCalculator.FormatTimeToLevel(tnl))}";

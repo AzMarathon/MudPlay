@@ -43,7 +43,7 @@ The **terminal** is the center of MudPlay — everything the game sends, rendere
 
 ## The terminal and status bar
 
-Type, and your keystrokes go straight to the game. The **numpad** is pre-wired to compass movement out of the box. **Right-click the terminal** for a quick menu: your starred GOTO **Favorites** (click one to walk there), quick-opens for Backscroll / Player Workshop / Party / Spell Book / Conversation / Navigation / Session Stats, **Reset States** (the recovery escape hatch — see Automation), and **Bug report…**.
+Type, and your keystrokes go straight to the game. The **numpad** is pre-wired to compass movement out of the box. **Paste** with **Ctrl+V** or **Shift+Insert** — a single line drops onto your input, and a multi-line paste is sent as one command per line. **Right-click the terminal** for a quick menu: your starred GOTO **Favorites** (click one to walk there), quick-opens for Backscroll / Player Workshop / Party / Spell Book / Conversation / Navigation / Session Stats, **Reset States** (the recovery escape hatch — see Automation), and **Bug report…**.
 
 The status bar along the bottom packs several live readouts:
 

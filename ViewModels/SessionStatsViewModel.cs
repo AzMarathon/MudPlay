@@ -40,10 +40,6 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // of wasting the bottom half on values you never reach.
     private const double AxisFloorHeadroom = 15;
 
-    // Upper bound on the banked-level scan — same cap the auto-trainer and
-    // level-up announcer use, so the time-to-level count stays in lock-step.
-    private const int MaxLevelScan = 60;
-
     private readonly CombatSessionTracker _combatTracker;
     private readonly TimeAnalysisTracker _timeTracker;
     private readonly SessionActivityTracker _activityTracker;
@@ -436,30 +432,19 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     {
         get
         {
-            int level = _stats.Level;
-            if (level <= 0) return "level unknown — type stat";
+            if (_stats.Level <= 0) return "level unknown — type stat";
 
-            // Chart resolves from the class + race exp tables. Mirrors the
-            // caller-resolves-chart convention the trainer / level-projection
-            // paths use — the pure exp calculator never reads game data.
-            int chart = ExperienceTableCalculator.CalcExpChart(
-                GetInt(_gameData.FindRowByName("Classes", _stats.Class), "ExpTable"),
-                GetInt(_gameData.FindRowByName("Races", _stats.Race), "ExpTable"));
-            if (chart <= 0) return "exp chart unavailable — import game data";
+            // Shared with the status-bar "TNL" (TimeToLevelEstimator) so the two
+            // readouts can't drift — banked-aware target level + game-data exp chart.
+            TimeToLevelEstimator.Result r =
+                TimeToLevelEstimator.Estimate(_stats, _gameData, Activity.ExperiencePerHour);
+            if (r.TargetLevel <= 0) return "exp chart unavailable — import game data";
 
-            RealmType realm = _gameData.ActiveRealm;
-            long exp = _stats.Exp;
-
-            int banked = TrainBudgetCalculator.BankableLevels(exp, level, chart, realm, MaxLevelScan);
-            int target = level + banked + 1;
-            string bankedPart = $"{banked} level{(banked == 1 ? "" : "s")} gained";
-
-            double rate = Activity.ExperiencePerHour;
-            TimeSpan? eta = ExperienceTableCalculator.CalcTimeToLevel(
-                ExperienceTableCalculator.CalcExpNeeded(target, chart, realm), exp, (long)rate);
-            string etaPart = eta is null
+            string bankedPart = $"{r.BankableLevels} level{(r.BankableLevels == 1 ? "" : "s")} gained";
+            string etaPart = r.Eta is null
                 ? "rate unknown"
-                : eta.Value <= TimeSpan.Zero ? "ready to level" : $"{Fmt(eta.Value)} until level {target}";
+                : r.Eta.Value <= TimeSpan.Zero ? "ready to level"
+                    : $"{Fmt(r.Eta.Value)} until level {r.TargetLevel}";
 
             return $"{bankedPart} · {etaPart}";
         }
@@ -567,14 +552,6 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     private static string Range(int min, int max) =>
         max <= 0 ? "—" : $"{min}–{max}";
-
-    // Read an int field off an optional game-data row (missing row / field → 0).
-    private static int GetInt(JsonElement? rowOpt, string property)
-    {
-        if (rowOpt is not JsonElement row || row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(property, out JsonElement v)) return 0;
-        return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
-    }
 
     public void Dispose()
     {

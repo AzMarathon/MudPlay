@@ -1369,6 +1369,23 @@ public sealed class AutoWalkManager : IRecoverableEngine
         }
     }
 
+    // Re-drive the current step after the engine send-gate that swallowed it
+    // releases. A step put on the wire while the gate was locked is silently
+    // dropped (EngineSendGate.WrapEngineSender no-ops when locked) yet still sets
+    // _stepInFlight, so the walker sits Walking with the route drawn and nothing on
+    // the wire, waiting on a confirmation that never comes (report
+    // paradigm-20260813-063517: the auto-train loop-resume walk dropped its first
+    // move behind the trainer-menu hold). The step index only advances on
+    // confirmation, so clearing the in-flight flag and re-sending replays the SAME
+    // step. No-op unless we're mid-walk with a step actually in flight.
+    public void NudgeStalledStep()
+    {
+        if (State != WalkState.Walking || !_stepInFlight) return;
+        _log?.Info("Walker", "engine send-gate released — re-driving the stalled step");
+        _stepInFlight = false;
+        SendNextStep();
+    }
+
     private void SendMoveStep(MoveStep step)
     {
         // Predict the expected landing so we can validate via tracker.

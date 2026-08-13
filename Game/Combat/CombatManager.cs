@@ -2152,6 +2152,12 @@ public sealed partial class CombatManager : IDisposable
         _betweenRoundCastAt = DateTimeOffset.Now;
         if (_castingSpellTarget is not null)
             _spellAttackOwed = true;
+        // Start of the resume-timing chain: a between-round cast (a survival heal /
+        // buff) will drop *Combat Off* and stop our sustained attack, so the next
+        // Off within the window should re-engage. Logged so the cast→Off→resume
+        // sequence is traceable end to end (report paradigm-20260813-065138).
+        _log?.Combat(LogCategory,
+            $"between-round cast noted — resume armed (spellTarget={_castingSpellTarget ?? "(none)"})");
     }
 
     // "You gain N experience." — the prompt kill signal (see _lastExpGainAt). Only
@@ -2250,6 +2256,21 @@ public sealed partial class CombatManager : IDisposable
             // guard there fires a redundant second `aa <target>` on top of it — the
             // reported "doubled down on the physical attack". Fall through to the
             // guarded resume so ResumeAfterAttackGuard suppresses the double.
+            // Diagnostic for the "won't re-engage after a mid-fight buff/heal" class
+            // of stall (report paradigm-20260813-065138): while a between-round cast
+            // is still within the resume window, log the exact state that decides the
+            // weapon- and spell-mode resumes below, so a capture shows why a resume
+            // did or didn't fire instead of leaving it invisible. Combat-level, so
+            // it only surfaces with combat diagnostics on.
+            if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow)
+                _log?.Combat(LogCategory,
+                    $"*Combat Off* in resume window ({(DateTimeOffset.Now - _betweenRoundCastAt).TotalMilliseconds:F0}ms "
+                    + $"after cast): spellTarget={_castingSpellTarget ?? "(none)"}, "
+                    + $"engageable={_classifier.Current is { } cc && HasEngageable(cc)}, "
+                    + $"sinceDeath={(DateTimeOffset.Now - _lastDeathAt).TotalMilliseconds:F0}ms, "
+                    + $"castAtOrAfterLastSwing={_lastAttackSentAt <= _betweenRoundCastAt}, "
+                    + $"spellResumeAlreadyFired={_betweenRoundCastAt == _lastSpellResumeForBetweenRoundCastAt}");
+
             if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _castingSpellTarget is null
                 && _classifier.Current is { } live
@@ -2261,7 +2282,10 @@ public sealed partial class CombatManager : IDisposable
                         "between-round-cast resume suppressed — kill this burst; " +
                         "deferring re-engage to the death→re-observe path");
                 else
+                {
+                    _log?.Combat(LogCategory, "between-round-cast resume → re-engaging weapon attack");
                     TryResumeEngage(live, bypassAttackGuard: _lastAttackSentAt <= _betweenRoundCastAt);
+                }
             }
 
             // Spell analogue of the weapon resume above. A spell attack auto-repeats
@@ -2298,6 +2322,8 @@ public sealed partial class CombatManager : IDisposable
                 // condition above and re-fire again (see
                 // _lastSpellResumeForBetweenRoundCastAt).
                 _lastSpellResumeForBetweenRoundCastAt = _betweenRoundCastAt;
+                _log?.Combat(LogCategory,
+                    $"between-round-cast resume → re-announcing attack spell on {spellTarget}");
                 // bypassRecastInterval: this re-attack lands within 500ms of the
                 // survival buff/heal that dropped *Combat Off*; without the bypass the
                 // burst guard defers it to the next tick and the mob swings free (the
