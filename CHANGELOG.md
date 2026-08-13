@@ -2,13 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.8.35
+## 3.8.36
 
 - Item Finder: new Negates column listing the spells an item cancels while worn, plus a Negates dropdown in the stat filters (populated with every spell any item negates; `(none)` = off) to narrow to items that negate a chosen spell
 - Item record: flag-style properties (LoyalItem, Del@Maint, QuestItem, NotSellable, …) now read "Yes" instead of a misleading "0", and the never-drop (Not Droppable) / delete-on-death columns are now surfaced
 - Status bar: connection indicator is now just the coloured dot (green/yellow/red), with the state text moved to its hover tooltip — freeing room on the bar
 - Status bar: the exp/hr slot now appends "- TNL: <time>" (estimated time to next level at the current rate)
 - Monster look: the HP estimate slot is relabelled "TGT HP:" and also prints a yellow "[<name> remaining Hitpoints: <est>]" line to the terminal; a new Settings → Other "Show monster HP lookup" checkbox (default on) gates both
+- Auto-get MaxToGet cap no longer overshoots: a stacked pack count ("50 orc-head") is now read at its true quantity after an inventory refresh, so collection stops at the limit instead of topping up past it
+- bug reports addressed: paradigm-20260812-235342
 
 ## 3.8.30
 

@@ -5439,8 +5439,17 @@ public sealed class AppServices
     {
         int count = 0;
         Game.Inventory.InventorySnapshot snap = Inventory.Snapshot;
-        foreach (string name in snap.CarriedItems)
-            if (ItemNames.FindByName(name) == itemId) count++;
+        // A stacked pack entry is stored two ways: the full-inventory parse keeps it
+        // as one count-prefixed token ("50 orc-head"), while the live `You took N`
+        // path appends N singular entries. Split the leading count so both forms
+        // count their true quantity — otherwise a parse collapses a stack to 1,
+        // under-reading the held total and letting the auto-get MaxToGet cap collect
+        // past its limit after any inventory refresh.
+        foreach (string entry in snap.CarriedItems)
+        {
+            (int qty, string name) = Game.Inventory.CountedCommand.SplitLeadingCount(entry);
+            if (ItemNames.FindByName(name) == itemId) count += qty;
+        }
         foreach (Game.Inventory.EquippedItem worn in snap.EquippedItems)
             if (ItemNames.FindByName(worn.Name) == itemId) count++;
         return count;
