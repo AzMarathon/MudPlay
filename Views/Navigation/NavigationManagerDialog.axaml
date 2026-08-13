@@ -191,7 +191,7 @@
                                             ToolTip.Tip="Persist the currently-running loop to disk under the typed name."/>
                                 </Grid>
                             </Border>
-                            <TextBox Text="{Binding WalkFilter, Mode=TwoWay}"
+                            <TextBox Classes="clearable" Text="{Binding WalkFilter, Mode=TwoWay}"
                                      PlaceholderText="Filter loops / lairs…"
                                      FontSize="11" Margin="0,0,0,3"
                                      IsVisible="{Binding HasWalkItems}"/>
@@ -450,7 +450,7 @@
                                           HorizontalScrollBarVisibility="Disabled"
                                           VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="0,0,14,0">
-                                    <TextBox Text="{Binding GotoFilter, Mode=TwoWay}"
+                                    <TextBox Classes="clearable" Text="{Binding GotoFilter, Mode=TwoWay}"
                                              PlaceholderText="Filter favourites…"
                                              FontSize="11" Margin="0,0,0,3"
                                              IsVisible="{Binding HasFavorites}"/>
@@ -603,7 +603,7 @@
                  box (its own Grid.Row="1" overlay anchored bottom) so it
                  doesn't shove the footer around. -->
             <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                <TextBox Grid.Column="0"
+                <TextBox Grid.Column="0" Classes="clearable"
                          Name="WalkToBox"
                          Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          IsVisible="{Binding HasWalkToSearch}"

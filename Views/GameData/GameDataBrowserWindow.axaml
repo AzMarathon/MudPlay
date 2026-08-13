@@ -45,6 +45,7 @@
                     <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
                         <TextBlock Grid.Row="0" Classes="SidebarHeader" Text="Tables + editors"/>
                         <TextBox  Grid.Row="1"
+                                  Classes="clearable"
                                   Margin="8,0,8,6"
                                   PlaceholderText="Search…"
                                   Text="{Binding SearchText, Mode=TwoWay}"/>

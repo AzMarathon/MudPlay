@@ -147,7 +147,7 @@
                                VerticalAlignment="Center"
                                FontSize="11"
                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                    <TextBox Grid.Column="1"
+                    <TextBox Grid.Column="1" Classes="clearable"
                              Name="AddRoomTextBox"
                              Text="{Binding NewWaypointQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              PlaceholderText="Room key (1/297) or name"

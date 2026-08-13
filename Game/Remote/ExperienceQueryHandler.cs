@@ -91,19 +91,12 @@ public sealed class ExperienceQueryHandler : IDisposable
                 TimeSpan? eta = ExperienceTableCalculator.CalcTimeToLevel(_stats.ExpToNext, 0, (long)rate);
                 etaPart = eta is null
                     ? null
-                    : eta.Value <= TimeSpan.Zero ? "ready to level" : $"~{FormatEta(eta.Value)} to level";
+                    : eta.Value <= TimeSpan.Zero ? "ready to level"
+                        : $"~{ExperienceTableCalculator.FormatTimeToLevel(eta.Value)} to level";
             }
         }
 
         string body = $"{snap.ExperienceEarned:N0} exp this session, {ratePart}";
         ctx.Reply(etaPart is null ? body : $"{body}, {etaPart}");
-    }
-
-    // Compact h/m/s rendering for the time-to-level estimate.
-    private static string FormatEta(TimeSpan ts)
-    {
-        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
-        if (ts.TotalMinutes >= 1) return $"{ts.Minutes}m";
-        return $"{ts.Seconds}s";
     }
 }

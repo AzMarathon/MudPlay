@@ -185,6 +185,15 @@
                       Margin="0,8,0,0"
                       ToolTip.Tip="When checked: if a movement-blocking condition (a prevents-movement gamedata flag or over-encumbrance) strands you as your party leader walks off, MudPlay telepaths @comeback &lt;your room&gt; to the leader so their recovery flow picks you back up. When unchecked, the strand is detected but no request is sent — you handle it manually. Applies only for this character."/>
 
+            <!-- Master gate for the monster-HP-lookup display. When checked
+                 (default), looking at a monster surfaces its estimated remaining
+                 hit points in the status-bar "TGT HP:" slot and as a yellow line
+                 in the terminal scrollback. Char-tier setting. -->
+            <CheckBox Content="Show monster HP lookup"
+                      IsChecked="{Binding ShowMonsterHpLookup, Mode=TwoWay}"
+                      Margin="0,8,0,0"
+                      ToolTip.Tip="When checked (default): looking at a monster shows its estimated remaining hit points — both in the status bar's &quot;TGT HP:&quot; slot and as a yellow line printed to the terminal (e.g. [orc remaining Hitpoints: 35-48]). When unchecked, neither is shown. Applies only for this character."/>
+
             <!-- Navigation puzzle-solver master toggles (Global tier — one switch
                  per install). Off → a walk-to that would hand off to the solver
                  just fails like any unroutable destination. Read live via

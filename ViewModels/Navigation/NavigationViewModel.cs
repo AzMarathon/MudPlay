@@ -1317,6 +1317,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Lairs.Delete(row.Source.Name);
     }
 
+    // Right-click → Add / Remove from favourites on a Setups row. Flips the
+    // setup's Favorite flag and re-saves; LairManager.Save fires SetupsChanged so
+    // the rail refreshes and the terminal Favourites flyout (amber) updates.
+    [RelayCommand]
+    private void ToggleSetupFavorite(LairSetupRowViewModel? row)
+    {
+        if (row is null) return;
+        row.Source.Favorite = !row.Source.Favorite;
+        _services.Lairs.Save(row.Source);
+    }
+
     // True when the top-bar Save chip should be active — covers the four
     // situations the user might want to persist what they've built or are
     // running: Loop build mode with savable clicks, Loop running, Auto-Lair
@@ -1667,6 +1678,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         bool ok = await _services.Confirm.ConfirmDeleteAsync($"loop \"{row.Source.Name}\"");
         if (!ok) return;
         _services.Loops.Delete(row.Source.Name);
+    }
+
+    // Right-click → Add / Remove from favourites on a Loops row. Flips the loop's
+    // Favorite flag and re-saves; LoopManager.Save fires LoopsChanged so the rail
+    // refreshes and the terminal Favourites flyout (green) updates.
+    [RelayCommand]
+    private void ToggleLoopFavorite(LoopRowViewModel? row)
+    {
+        if (row is null) return;
+        row.Source.Favorite = !row.Source.Favorite;
+        _services.Loops.Save(row.Source);
     }
 
     // Right-click → Preview on a Loops-pane row. Lays the loop's expanded

@@ -146,6 +146,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // ComebackRequester on Apply + profile load.
     [ObservableProperty] private bool _autoRequestComebackWhenLeftBehind = true;
 
+    // Master gate for the monster-HP-lookup display (status-bar "TGT HP:" slot
+    // + the yellow terminal line on a monster look). Default on.
+    [ObservableProperty] private bool _showMonsterHpLookup = true;
+
     // Per-category Verbose toggles + WriteCombatRoundTrace live in a
     // session-only umbrella switch in the Log pane menu — see
     // LogDiagnosticState + LogPaneViewModel.CombatFilter. Verbose tracing
@@ -252,6 +256,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             HideWhenDiscarding    = HideWhenDiscarding,
             MaxComebackBacktrackRooms = Math.Clamp(MaxComebackBacktrackRooms, 1, 50),
             AutoRequestComebackWhenLeftBehind = AutoRequestComebackWhenLeftBehind,
+            ShowMonsterHpLookup   = ShowMonsterHpLookup,
         };
 
         profile.Settings ??= new();
@@ -311,6 +316,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         HideWhenDiscarding    = dto.HideWhenDiscarding;
         MaxComebackBacktrackRooms = dto.MaxComebackBacktrackRooms;
         AutoRequestComebackWhenLeftBehind = dto.AutoRequestComebackWhenLeftBehind;
+        ShowMonsterHpLookup = dto.ShowMonsterHpLookup;
         PlayerCleanupDays = _globalSettings?.Current.PlayerCleanupDays ?? 90;
         PyramidSolverEnabled = _globalSettings?.Current.PyramidSolverEnabled ?? true;
         AsylumSolverEnabled = _globalSettings?.Current.AsylumSolverEnabled ?? true;
@@ -373,6 +379,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnHideWhenDiscardingChanged(bool value) => MarkDirty();
     partial void OnMaxComebackBacktrackRoomsChanged(int value) => MarkDirty();
     partial void OnAutoRequestComebackWhenLeftBehindChanged(bool value) => MarkDirty();
+    partial void OnShowMonsterHpLookupChanged(bool value) => MarkDirty();
     partial void OnPyramidSolverEnabledChanged(bool value) => MarkDirty();
     partial void OnAsylumSolverEnabledChanged(bool value) => MarkDirty();
 

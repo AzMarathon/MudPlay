@@ -12,7 +12,7 @@
         WindowStartupLocation="CenterOwner">
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="18">
-        <TextBox Grid.Row="0" Width="240" HorizontalAlignment="Left" Margin="0,0,0,10"
+        <TextBox Grid.Row="0" Classes="clearable" Width="240" HorizontalAlignment="Left" Margin="0,0,0,10"
                  PlaceholderText="Filter by boss or room…"
                  Text="{Binding FilterText, Mode=TwoWay}"/>
 

@@ -56,7 +56,13 @@ public sealed class ItemFinderCatalogTests : IDisposable
         " {\"Number\":7,\"Name\":\"glowing amulet\",\"ItemType\":0,\"Worn\":8,\"Encum\":12,\"Abil-0\":13,\"AbilVal-0\":75,\"In Game\":1}," +
         " {\"Number\":8,\"Name\":\"runed pendant\",\"ItemType\":0,\"Worn\":8,\"Abil-0\":46,\"AbilVal-0\":3,\"Abil-1\":1,\"AbilVal-1\":2,\"Abil-2\":4,\"AbilVal-2\":5,\"Abil-3\":9,\"AbilVal-3\":10,\"Abil-4\":27,\"AbilVal-4\":4,\"In Game\":1}," +
         " {\"Number\":9,\"Name\":\"runic blade\",\"ItemType\":1,\"WeaponType\":2,\"Speed\":30,\"StrReq\":0,\"Min\":5,\"Max\":10,\"Abil-0\":28,\"AbilVal-0\":5,\"In Game\":1}," +
-        " {\"Number\":10,\"Name\":\"warding ring\",\"ItemType\":0,\"Worn\":4,\"Abil-0\":28,\"AbilVal-0\":5,\"In Game\":1}]";
+        " {\"Number\":10,\"Name\":\"warding ring\",\"ItemType\":0,\"Worn\":4,\"Abil-0\":28,\"AbilVal-0\":5,\"In Game\":1}," +
+        // phoenix charm : neck armour negating two spells (526 magma heat, 218
+        //                 temple of fire fire) — exercises the Negates column/filter.
+        " {\"Number\":11,\"Name\":\"phoenix charm\",\"ItemType\":0,\"Worn\":8,\"NegateSpell-0\":526,\"NegateSpell-1\":218,\"In Game\":1}]";
+
+    private const string Spells =
+        "[{\"Number\":526,\"Name\":\"magma heat\"},{\"Number\":218,\"Name\":\"temple of fire fire\"}]";
 
     private static ItemFinderEntry.SwingContext UsableContext() => new(
         CombatLevel: 5, Level: 30, Agility: 60, Strength: 60,
@@ -67,9 +73,26 @@ public sealed class ItemFinderCatalogTests : IDisposable
         string dir = Path.Combine(_root, "realm");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "Items.json"), Items);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), Spells);
         GameDataCache cache = new(_root);
         cache.SwitchSet("realm");
         return cache;
+    }
+
+    [Fact]
+    public void BuildCatalog_ResolvesNegatedSpellsToNames()
+    {
+        IReadOnlyList<ItemFinderEntry> catalog = ItemFinderEntry.BuildCatalog(SeededCache());
+
+        ItemFinderEntry charm = catalog.Single(e => e.Name == "phoenix charm");
+        Assert.Equal(new[] { "magma heat", "temple of fire fire" }, charm.Negates.Select(n => n.Name));
+        Assert.Equal(new[] { 526, 218 }, charm.Negates.Select(n => n.Id));   // id backs the "#id" dropdown label
+        Assert.Equal("magma heat, temple of fire fire", charm.NegatesText);
+
+        // A non-negating item carries an empty list and a blank Negates cell.
+        ItemFinderEntry dagger = catalog.Single(e => e.Name == "keen dagger");
+        Assert.Empty(dagger.Negates);
+        Assert.Equal(string.Empty, dagger.NegatesText);
     }
 
     [Fact]

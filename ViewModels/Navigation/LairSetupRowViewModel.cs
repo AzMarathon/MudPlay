@@ -23,6 +23,12 @@ public sealed class LairSetupRowViewModel
             ? string.Empty
             : $"{Source.Markers[0].Map}/{Source.Markers[0].Room}";
 
+    // Context-menu label reflecting the current favourite state (the setup's
+    // Favorite flag feeds the terminal right-click Favourites flyout). The row is
+    // rebuilt on every SetupsChanged, so a plain computed getter stays in sync.
+    public string FavoriteMenuHeader
+        => Source.Favorite ? "Remove from favourites" : "Add to favourites";
+
     public LairSetupRowViewModel(LairSetup source)
     {
         ArgumentNullException.ThrowIfNull(source);

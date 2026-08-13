@@ -23,7 +23,7 @@
                        Foreground="{StaticResource ChromeFgMutedBrush}"
                        TextWrapping="Wrap"
                        Margin="0,4,0,8"/>
-            <TextBox DockPanel.Dock="Top"
+            <TextBox DockPanel.Dock="Top" Classes="clearable"
                      Name="QueryBox"
                      Text="{Binding Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      PlaceholderText="Room name or map/room…"

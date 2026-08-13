@@ -41,7 +41,7 @@
              with non-null AddCommand / RemoveCommand — wired in
              code-behind via FindControl). -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
-            <TextBox Text="{Binding SearchText, Mode=TwoWay}"
+            <TextBox Classes="clearable" Text="{Binding SearchText, Mode=TwoWay}"
                      PlaceholderText="Filter…"
                      ToolTip.Tip="{Binding FilterHint}"
                      Width="320"/>

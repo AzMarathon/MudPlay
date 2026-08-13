@@ -14,7 +14,7 @@
 
     <!-- Left: search + table of contents -->
     <DockPanel Grid.Column="0" Margin="8">
-      <TextBox DockPanel.Dock="Top" PlaceholderText="Search help…" Margin="0,0,0,8"
+      <TextBox DockPanel.Dock="Top" Classes="clearable" PlaceholderText="Search help…" Margin="0,0,0,8"
                Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
       <TextBlock DockPanel.Dock="Bottom" Margin="2,6,0,0" Opacity="0.6"
                  Text="{Binding StatusText}"/>

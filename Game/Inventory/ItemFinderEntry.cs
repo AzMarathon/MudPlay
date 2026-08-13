@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
@@ -161,6 +162,15 @@ public sealed record ItemFinderEntry
     public int WaterResist { get; init; }
     public int ShadowResist { get; init; }
 
+    // Spells the item negates while worn (NegateSpell-0..9, resolved against the
+    // Spells table — the same data the item record view surfaces). Empty for the
+    // common non-negating item. Carries the spell id so the finder's Negates
+    // dropdown can label each option "<name> #<id>"; the column shows just names.
+    public IReadOnlyList<NegatedSpell> Negates { get; init; } = Array.Empty<NegatedSpell>();
+
+    // One negated spell — its Spells.Number and resolved Name.
+    public readonly record struct NegatedSpell(int Id, string Name);
+
     // Mean swings per round over a 10-round simulation for the live character
     // wielding this weapon (energy carried forward each round). 0 for non-weapons
     // and when the finder is opened without a usable character context.
@@ -228,6 +238,9 @@ public sealed record ItemFinderEntry
     public string LightningResistText => Signed(LightningResist);
     public string WaterResistText => Signed(WaterResist);
     public string ShadowResistText => Signed(ShadowResist);
+    public string NegatesText => Negates.Count > 0
+        ? string.Join(", ", Negates.Select(static n => n.Name))
+        : string.Empty;
     // The modelled swing average paired with the weapon's raw speed, e.g.
     // "2.3 (30)". Blank when there's no swing to show (non-weapon, or the finder
     // opened without a usable character) — the speed rides with the swing count
@@ -358,6 +371,7 @@ public sealed record ItemFinderEntry
                 ShadowResist = t.PlusShadowResist,
                 AvgSwings = avgSwings,
                 WeaponSpeed = isWeapon ? GetInt(row, "Speed") : 0,
+                Negates = ScanNegates(row, cache),
                 Row = row,
             });
         }
@@ -375,6 +389,23 @@ public sealed record ItemFinderEntry
             return c != 0 ? c : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
         return list;
+    }
+
+    // Spell names the item negates — one per non-zero NegateSpell-0..9, resolved
+    // against the Spells table (mirrors the item record view). A spell id that
+    // doesn't resolve falls back to "#id" so the row still reads. Returns the
+    // shared empty list for the common no-negate item.
+    private static IReadOnlyList<NegatedSpell> ScanNegates(JsonElement row, GameDataCache cache)
+    {
+        List<NegatedSpell>? list = null;
+        for (int i = 0; i < 10; i++)
+        {
+            int spellId = GetInt(row, $"NegateSpell-{i}");
+            if (spellId == 0) continue;
+            string name = cache.FindNameByNumber("Spells", spellId) ?? $"#{spellId}";
+            (list ??= new List<NegatedSpell>()).Add(new NegatedSpell(spellId, name));
+        }
+        return list ?? (IReadOnlyList<NegatedSpell>)Array.Empty<NegatedSpell>();
     }
 
     // One Abil-0..19 pass for the two facts the worn-stat summary leaves out: the

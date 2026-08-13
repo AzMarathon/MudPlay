@@ -101,6 +101,15 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     [ObservableProperty] private string _smashDamage = "—";
     // Backstab damage range ("min-max") for the equipped weapon; empty when not stealth-capable.
     [ObservableProperty] private string _backstabDamage = string.Empty;
+    // Swings/round per attack, from the MajorMUD energy budget
+    // (CombatCalculator.CalcSwings): weapon speed + level + class CombatLVL +
+    // agility + strength-vs-StrReq + encumbrance. Bash doubles energy per swing
+    // (≈half the swings), Smash locks the round to a single swing, and a backstab
+    // is always one strike.
+    [ObservableProperty] private string _attackSwings = "—";
+    [ObservableProperty] private string _bashSwings = "—";
+    [ObservableProperty] private string _smashSwings = "—";
+    [ObservableProperty] private string _backstabSwings = string.Empty;
     // Smash row visible only for smash-capable classes.
     [ObservableProperty] private bool _showSmash;
     // Backstab row visible only when the character has innate (race or class) stealth.
@@ -113,6 +122,9 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     [ObservableProperty] private string _kickDamage = "—";
     [ObservableProperty] private string _jumpKickAccuracy = "—";
     [ObservableProperty] private string _jumpKickDamage = "—";
+    [ObservableProperty] private string _punchSwings = "—";
+    [ObservableProperty] private string _kickSwings = "—";
+    [ObservableProperty] private string _jumpKickSwings = "—";
     // Martial-arts strike rows are gated per-attack on the class innately granting
     // that strike (Mystic carries Punch / Kick / Jumpkick); a trained Martial Arts
     // skill alone doesn't grant the special strikes, so it no longer drives these.
@@ -331,6 +343,20 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             AttackDamage = BashDamage = SmashDamage = "—";
         }
 
+        // Swings/round for the melee rows. Needs a weapon (its speed drives the
+        // energy budget), a level and a class CombatLVL. Bash doubles energy per
+        // swing; Smash is locked to a single swing (mirrors the Calculators tab).
+        if (t.WeaponMax > 0 && level > 0 && nCombatLevel > 0)
+        {
+            AttackSwings = WeaponSwings(realm, level, nCombatLevel, agi, str, t, encumCur, encumMax, isBashing: false);
+            BashSwings = WeaponSwings(realm, level, nCombatLevel, agi, str, t, encumCur, encumMax, isBashing: true);
+            SmashSwings = canSmash ? "1.0" : "—";
+        }
+        else
+        {
+            AttackSwings = BashSwings = SmashSwings = "—";
+        }
+
         bool hasClassStealth = ClassCapabilities.ClassHasStealth(classRow);
         bool hasRaceStealth = ClassCapabilities.RaceHasStealth(raceRow);
         bool canBackstab = hasClassStealth || hasRaceStealth;
@@ -352,6 +378,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
                 t.PlusBSMin, t.PlusBSMax, t.PlusMaxDamage, hasClassStealth, realm);
             BackstabDamage = string.Create(CultureInfo.InvariantCulture,
                 $"{bsDmg.MinDamage}-{bsDmg.MaxDamage}");
+            BackstabSwings = "1.0";   // a backstab is always a single strike
         }
         else
         {
@@ -359,6 +386,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             // snapshot) → em-dash; genuinely non-stealth chars read N/A.
             BackstabAccuracy = stealth > 0 ? "—" : "N/A";
             BackstabDamage = string.Empty;
+            BackstabSwings = string.Empty;
         }
 
         // Martial-arts attacks — Mystic special strikes. Each strike row is gated
@@ -403,12 +431,42 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             PunchDamage = MARange(MudAttackType.Punch, realm, level, maPlusSkill, str, t.PlusMaxDamage, t.PlusPunchDmg);
             KickDamage = MARange(MudAttackType.Kick, realm, level, maPlusSkill, str, t.PlusMaxDamage, t.PlusKickDmg);
             JumpKickDamage = MARange(MudAttackType.Jumpkick, realm, level, maPlusSkill, str, t.PlusMaxDamage, t.PlusJumpKickDmg);
+
+            // Bare-handed strikes have a fixed attack speed (no weapon) and no
+            // strength requirement, so their swing rate comes from MartialArtsSpeed.
+            PunchSwings = MASwings(MudAttackType.Punch, realm, level, nCombatLevel, agi, str, encumCur, encumMax);
+            KickSwings = MASwings(MudAttackType.Kick, realm, level, nCombatLevel, agi, str, encumCur, encumMax);
+            JumpKickSwings = MASwings(MudAttackType.Jumpkick, realm, level, nCombatLevel, agi, str, encumCur, encumMax);
         }
         else
         {
             PunchAccuracy = KickAccuracy = JumpKickAccuracy = "—";
             PunchDamage = KickDamage = JumpKickDamage = "—";
+            PunchSwings = KickSwings = JumpKickSwings = "—";
         }
+    }
+
+    // Swings/round for a weapon row: the energy-budget swing count, formatted like
+    // the Calculators tab's "Swings/Rnd". Bash passes isBashing so the doubled
+    // energy halves the rate.
+    private static string WeaponSwings(RealmType realm, int level, int nCombatLevel, int agi, int str,
+                                       EquipmentStatSummary t, int encumCur, int encumMax, bool isBashing)
+    {
+        SwingCalcResult s = CombatCalculator.CalcSwings(
+            nCombatLevel, level, t.WeaponSpeed, agi, str, t.WeaponStrReq,
+            encumCur, encumMax, isBashing: isBashing, realmType: realm);
+        return s.RawSwings.ToString("0.0", CultureInfo.InvariantCulture);
+    }
+
+    // Swings/round for a martial-arts strike: the strike's fixed speed stands in
+    // for a weapon's, and it carries no strength requirement.
+    private static string MASwings(MudAttackType type, RealmType realm, int level, int nCombatLevel,
+                                   int agi, int str, int encumCur, int encumMax)
+    {
+        SwingCalcResult s = CombatCalculator.CalcSwings(
+            nCombatLevel, level, CombatCalculator.MartialArtsSpeed(type, realm), agi, str,
+            weaponStrReq: 0, encumCur, encumMax, realmType: realm);
+        return s.RawSwings.ToString("0.0", CultureInfo.InvariantCulture);
     }
 
     private static string MARange(MudAttackType type, RealmType realm, int level, int maPlusSkill, int str,

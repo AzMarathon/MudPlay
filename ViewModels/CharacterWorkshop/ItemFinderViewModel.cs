@@ -40,6 +40,8 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     private const string AnyAlign = "(Any)";
     private const string AnySlot = "(Any slot)";
     private const string AnyType = "(Any)";
+    // Negate dropdown's "no filter" sentinel — the default; shows every item.
+    private const string NoNegate = "(none)";
 
     // The catch-all slot option — every non-weapon item at once, so weapons drop
     // out. The mirror image of the "(All weapons)" weapon-type option below.
@@ -105,6 +107,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ("LightningResistText", static e => e.LightningResistText),
         ("WaterResistText",     static e => e.WaterResistText),
         ("ShadowResistText",    static e => e.ShadowResistText),
+        ("NegatesText",         static e => e.NegatesText),
     };
 
     public event Action<bool>? CloseRequested;
@@ -138,6 +141,9 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     private readonly ItemFinderEntry.SwingContext? _swing;
     private readonly Dictionary<string, EquipmentSlot> _slotByLabel = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _weaponCodeByLabel = new(StringComparer.Ordinal);
+    // Negate dropdown label ("<spell> #<id>") → spell id, so the filter matches by
+    // id (unambiguous across same-named spells).
+    private readonly Dictionary<string, int> _negateIdByLabel = new(StringComparer.Ordinal);
 
     // Snapshot of the derived filter inputs, refreshed by ApplyFilter so the per-item
     // predicate stays a cheap field compare rather than re-resolving each call.
@@ -188,6 +194,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     // Armour-type labels present in the catalog, "(Any)" first.
     public ObservableCollection<string> ArmourTypeOptions { get; } = new();
 
+    // Distinct spell names any item in the catalog negates, "(none)" first — the
+    // Negates dropdown. Selecting a spell keeps only items that negate it.
+    public ObservableCollection<string> NegateOptions { get; } = new();
+
     // Attack types the Swings column can model — "Attack" (base) plus Bash / Smash
     // and the martial-arts strikes. Fixed content, so a plain array.
     public IReadOnlyList<string> AttackTypeOptions { get; } = AttackTypes;
@@ -231,6 +241,8 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     [ObservableProperty] private int _minDr;
     [ObservableProperty] private int _maxStrReq;     // required-strength gate (≤)
     [ObservableProperty] private int _maxLevelReq;   // required-level gate (≤)
+    // Negate dropdown: NoNegate = off; a spell name keeps only items negating it.
+    [ObservableProperty] private string? _selectedNegate = NoNegate;
 
     // ----- Trial gearset (right flyout, default hidden) -----
     // The what-if loadout: one row per equippable slot, each holding a trialled item
@@ -379,6 +391,20 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
                      .OrderBy(static g => g.Min(e => e.ArmourType))
                      .Select(static g => g.Key))
             ArmourTypeOptions.Add(label);
+
+        // Every distinct spell an item in the catalog negates, labelled
+        // "<spell> #<id>", alphabetised, with the "(none)" no-filter default first.
+        NegateOptions.Add(NoNegate);
+        foreach (ItemFinderEntry.NegatedSpell neg in _all
+                     .SelectMany(static e => e.Negates)
+                     .Distinct()
+                     .OrderBy(static n => n.Name, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(static n => n.Id))
+        {
+            string label = $"{neg.Name} #{neg.Id}";
+            _negateIdByLabel[label] = neg.Id;
+            NegateOptions.Add(label);
+        }
     }
 
     private void OnFilterPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -555,6 +581,12 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         if (MaxStrReq > 0 && e.StrReq > MaxStrReq) return false;
         if (MaxLevelReq > 0 && e.LevelReq > MaxLevelReq) return false;
 
+        // Negate dropdown: keep only items that negate the selected spell (by id).
+        if (SelectedNegate is { } sel && sel != NoNegate
+            && _negateIdByLabel.TryGetValue(sel, out int negId)
+            && !e.Negates.Any(n => n.Id == negId))
+            return false;
+
         return true;
     }
 
@@ -577,6 +609,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         MinHitMagic = MaxHitMagic = 0;
         MinBsAccuracy = MinBsMin = MinBsMax = MinAc = MinDr = 0;
         MaxStrReq = MaxLevelReq = 0;
+        SelectedNegate = NoNegate;
         _filterSuspended = false;
         // Attack type is reset too, so rebuild the catalog (Swings back to base)
         // rather than only re-running the filter over the current projection.

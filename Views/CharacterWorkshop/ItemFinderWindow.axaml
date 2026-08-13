@@ -197,6 +197,16 @@
                                                    ToolTip.Tip="Show items whose required strength is this or lower (0 = off)."/>
                                     <TextBlock Classes="FieldLabel" Text="Strength req"/>
                                 </DockPanel>
+                                <!-- Negates: the distinct spells any catalog item negates,
+                                     "(none)" = off. Picking one keeps only items with that
+                                     negate. -->
+                                <StackPanel Spacing="2">
+                                    <TextBlock Classes="FieldLabel" Text="Negates"/>
+                                    <ComboBox ItemsSource="{Binding NegateOptions}"
+                                              SelectedItem="{Binding SelectedNegate, Mode=TwoWay}"
+                                              HorizontalAlignment="Stretch"
+                                              ToolTip.Tip="Show only items that negate this spell ((none) = off)."/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -216,7 +226,7 @@
                                Foreground="{StaticResource ChromeFgSecBrush}"
                                FontSize="{StaticResource FontSizeSm}"
                                VerticalAlignment="Center"/>
-                    <TextBox Grid.Column="1" Text="{Binding NameFilter, Mode=TwoWay}"
+                    <TextBox Grid.Column="1" Classes="clearable" Text="{Binding NameFilter, Mode=TwoWay}"
                              PlaceholderText="Filter by name…" Width="240" HorizontalAlignment="Left"
                              VerticalAlignment="Center"
                              ToolTip.Tip="Show only items whose name contains this text."/>
@@ -296,6 +306,7 @@
                         <DataGridTextColumn Header="Lightning"  Binding="{ReflectionBinding LightningResistText}" SortMemberPath="LightningResist" Width="86"  Tag="LightningResistText"/>
                         <DataGridTextColumn Header="Water"      Binding="{ReflectionBinding WaterResistText}" SortMemberPath="WaterResist" Width="62"  Tag="WaterResistText"/>
                         <DataGridTextColumn Header="Shadow"     Binding="{ReflectionBinding ShadowResistText}" SortMemberPath="ShadowResist" Width="68"  Tag="ShadowResistText"/>
+                        <DataGridTextColumn Header="Negates"    Binding="{ReflectionBinding NegatesText}"    SortMemberPath="NegatesText" Width="Auto" MinWidth="200" Tag="NegatesText"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>

@@ -47,10 +47,10 @@ Type, and your keystrokes go straight to the game. The **numpad** is pre-wired t
 
 The status bar along the bottom packs several live readouts:
 
-- The **connection light** — **red** idle · **yellow** connecting · **green** connected (a reconnect countdown shows beside it while reconnecting).
+- The **connection light** — **red** idle · **yellow** connecting · **green** connected (a reconnect countdown shows beside it while reconnecting). It's just the dot; hover it for the state text.
 - An **engine-state badge** mirroring the Navigation one — **IDLE / WALKING / LOOPING / AUTO-LAIR** — whose border turns **yellow** then **red** as the engine-recovery gate escalates.
-- Your **location** (the map/room key) and the session's **exp/hr** rate.
-- A **look-target HP** readout that appears after you `look <monster>` — a coarse wound band × the monster's max HP, so you get an absolute HP range (invaluable on fast-regen bosses).
+- Your **location** (the map/room key), the session's **exp/hr** rate, and **- TNL:** — the estimated time to next level at that rate.
+- A **TGT HP:** readout that appears after you `look <monster>` — a coarse wound band × the monster's max HP, so you get an absolute HP range (invaluable on fast-regen bosses). The same estimate is also printed as a yellow line in the terminal. A **Settings → Other → "Show monster HP lookup"** checkbox (default on) toggles both.
 - **Tick countdowns** — the combat round tick, the natural HP-regen tick, and the mana / meditate tick.
 
 ## The toolbar and menus
@@ -138,6 +138,8 @@ A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and
 Or build it off the map: **Navigation Management → New Loop** opens an editor where you add rooms by name or key, name and annotate the loop, and set per-waypoint options.
 
 **Run a saved loop** from the **LOOPS + AUTO-LAIRS** rail (or the Management dialog) — each has **Load** (stage it) and **Run** (start now). Queue one and, if you aren't already there, MudPlay walks you to the loop's start, then begins the circuit; combat, healing, and pickup keep running throughout. While it runs the badge reads **LOOPING** with "step X of Y on lap Z" — **Pause** to edit mid-run, **Stop** to end.
+
+**Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Run**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to the terminal's right-click Favorites flyout (green for loops, amber for lairs) alongside your starred GOTO rooms, so you can start it from anywhere.
 
 Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
 
@@ -331,7 +333,7 @@ You don't create sets, you fill them. Pick a set on the left, then either click 
 
 ## Item Finder
 
-The **Item Finder** button (in Equipment Manager) opens a searchable catalog of every equippable item, with columns for damage, AC, resists, stat bonuses, and more. Filter it by class, slot, level, or any stat, and sort by any column. It's a **reference tool**: double-click a row to see the item's full data record, and use the **Trial gearset** panel (with **Find Best**) to plan a loadout and read its projected stats. To actually equip something you found, note its name and type it into that slot's **Item** box back in Equipment Manager.
+The **Item Finder** button (in Equipment Manager) opens a searchable catalog of every equippable item, with columns for damage, AC, resists, stat bonuses, and more. Filter it by class, slot, level, or any stat, and sort by any column. A **Negates** column lists the spells an item cancels while worn, and the **Negates** dropdown in the stats filters lets you narrow to items that negate a particular spell (it's populated with every spell any item in the set negates; the default `(none)` doesn't filter). It's a **reference tool**: double-click a row to see the item's full data record, and use the **Trial gearset** panel (with **Find Best**) to plan a loadout and read its projected stats. To actually equip something you found, note its name and type it into that slot's **Item** box back in Equipment Manager.
 
 ## CP Allocation
 
@@ -349,7 +351,7 @@ A read-only what-if table: pick a level **from–to** range (and optionally any 
 
 ## Character Info and Calculators
 
-**Character Info** is your read-only character sheet — stats, skills, the attack table, and folded-in quest bonuses. **Calculators** holds what-if tools: Monster Matchup, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings.
+**Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. **Calculators** holds what-if tools: Monster Matchup, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings.
 
 ---
 
@@ -1599,6 +1601,11 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 **Default:** On
 **What it does:** If you're a follower who gets stranded behind a moving leader, MudPlay automatically sends the `@comeback` request on your behalf.
+
+### Show monster HP lookup
+
+**Default:** On
+**What it does:** When you `look <monster>`, MudPlay shows its estimated remaining hit points — both in the status bar's **TGT HP:** slot and as a yellow line printed to the terminal (e.g. `[orc remaining Hitpoints: 35-48]`). Turning this off suppresses both.
 
 ### Enable the Great Pyramid climb solver / Enable the asylum (random-teleport maze) solver
 

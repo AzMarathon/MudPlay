@@ -34,6 +34,17 @@ public static class ExperienceTableCalculator
         return System.TimeSpan.FromHours((double)remaining / expPerHour);
     }
 
+    // Compact h/m/s rendering for a time-to-level estimate — "2h 15m" / "15m" /
+    // "9s". Shared by every surface that shows a TNL (the @exp reply, the status
+    // bar). Rolls up to hours, so a multi-hour ETA never reads as a huge minute
+    // count.
+    public static string FormatTimeToLevel(System.TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        if (ts.TotalMinutes >= 1) return $"{ts.Minutes}m";
+        return $"{ts.Seconds}s";
+    }
+
     // ----- Private progressions --------------------------------------------
 
     private static long CalcExpNeeded_ParaMud(int level, int chart)
