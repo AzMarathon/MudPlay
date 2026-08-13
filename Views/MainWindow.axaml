@@ -512,39 +512,45 @@
                                  VerticalAlignment="Center">
                 <ctl:TerminalControl.ContextMenu>
                     <ContextMenu>
-                        <!-- Quick-access GOTO favourites — the ones starred in the
-                             Go To list. Each item walks there on click. The whole
-                             submenu (and its trailing separator) hides when nothing
-                             is starred. Items are self-contained (each carries its
-                             own Walk command), so ItemsSource binding works without
-                             reaching the parent VM; ReflectionBinding sidesteps the
-                             compiled-binding DataType on the generated child items. -->
+                        <ContextMenu.Resources>
+                            <!-- Shared item theme for the walk-to flyouts (Favorites +
+                                 Recent destinations). Header = the item itself, rendered
+                                 by the template so only the name gets the per-kind accent
+                                 (room=blue, loop=green, lair=amber); the "N)" prefix stays
+                                 default. Items are self-contained (each carries its own
+                                 Walk command), so ItemsSource binding works without
+                                 reaching the parent VM; ReflectionBinding sidesteps the
+                                 compiled-binding DataType on the generated child items. -->
+                            <ControlTheme x:Key="WalkFlyoutItemTheme" TargetType="MenuItem"
+                                          BasedOn="{StaticResource {x:Type MenuItem}}">
+                                <Setter Property="Header"    Value="{ReflectionBinding}"/>
+                                <Setter Property="Command"   Value="{ReflectionBinding Command}"/>
+                                <Setter Property="IsEnabled" Value="{ReflectionBinding IsEnabled}"/>
+                                <Setter Property="HeaderTemplate">
+                                    <Setter.Value>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <TextBlock Text="{ReflectionBinding Prefix}"/>
+                                                <TextBlock Text="{ReflectionBinding Name}"
+                                                           Foreground="{ReflectionBinding NameBrush}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </ControlTheme>
+                        </ContextMenu.Resources>
+                        <!-- Quick-access GOTO favourites — the ones starred in the Go To
+                             list. Each item walks there on click; the submenu hides when
+                             nothing is starred. -->
                         <MenuItem Header="Favorites" IsVisible="{Binding HasFavorites}"
-                                  ItemsSource="{Binding Favorites}">
-                            <MenuItem.ItemContainerTheme>
-                                <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
-                                    <!-- Header = the item itself, rendered by the
-                                         template below so only the name gets the
-                                         per-kind accent (room=blue, loop=green,
-                                         lair=amber); the "N)" prefix stays default. -->
-                                    <Setter Property="Header"    Value="{ReflectionBinding}"/>
-                                    <Setter Property="Command"   Value="{ReflectionBinding Command}"/>
-                                    <Setter Property="IsEnabled" Value="{ReflectionBinding IsEnabled}"/>
-                                    <Setter Property="HeaderTemplate">
-                                        <Setter.Value>
-                                            <DataTemplate>
-                                                <StackPanel Orientation="Horizontal" Spacing="5">
-                                                    <TextBlock Text="{ReflectionBinding Prefix}"/>
-                                                    <TextBlock Text="{ReflectionBinding Name}"
-                                                               Foreground="{ReflectionBinding NameBrush}"/>
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </ControlTheme>
-                            </MenuItem.ItemContainerTheme>
-                        </MenuItem>
-                        <Separator IsVisible="{Binding HasFavorites}"/>
+                                  ItemsSource="{Binding Favorites}"
+                                  ItemContainerTheme="{StaticResource WalkFlyoutItemTheme}"/>
+                        <!-- The last GOTO destinations (newest first, up to 10) — each
+                             walks there on click, same as a favourite. -->
+                        <MenuItem Header="Recent destinations" IsVisible="{Binding HasRecentDestinations}"
+                                  ItemsSource="{Binding RecentDestinations}"
+                                  ItemContainerTheme="{StaticResource WalkFlyoutItemTheme}"/>
+                        <Separator IsVisible="{Binding HasWalkFlyouts}"/>
                         <!-- Panel quick-opens — the windows most useful to reach
                              from a right-click on the canvas. -->
                         <MenuItem Header="Open Backscroll"      InputGesture="{Binding BackscrollGesture}"   Command="{Binding OpenBackscrollCommand}"/>

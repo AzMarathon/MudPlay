@@ -609,6 +609,18 @@
                                  CompassChords="{Binding CompassChords}">
                 <controls:MapControl.ContextMenu>
                     <ContextMenu Name="RoomContextMenu">
+                        <ContextMenu.Resources>
+                            <!-- Item theme for the Favorites / Recent-destinations
+                                 walk-to sub-lists: each generated item shows its label
+                                 and carries its own Walk command. ReflectionBinding
+                                 sidesteps the compiled-binding DataType on the generated
+                                 child items. -->
+                            <ControlTheme x:Key="RoomWalkItemTheme" TargetType="MenuItem"
+                                          BasedOn="{StaticResource {x:Type MenuItem}}">
+                                <Setter Property="Header"  Value="{ReflectionBinding Name}"/>
+                                <Setter Property="Command" Value="{ReflectionBinding Command}"/>
+                            </ControlTheme>
+                        </ContextMenu.Resources>
                         <MenuItem Header="{Binding ContextRoomName, StringFormat='At: {0}'}"
                                   IsEnabled="False" FontWeight="SemiBold"/>
                         <Separator/>
@@ -622,6 +634,14 @@
                         <MenuItem Header="Remove from favorites"
                                   Command="{Binding ToggleContextRoomFavoriteCommand}"
                                   IsVisible="{Binding ContextIsFavorite}"/>
+                        <!-- Starred favourites + recent GOTO destinations, each walks
+                             there on click (same route picker as "Walk here"). -->
+                        <MenuItem Header="Favorites" IsVisible="{Binding HasContextFavorites}"
+                                  ItemsSource="{Binding ContextFavorites}"
+                                  ItemContainerTheme="{StaticResource RoomWalkItemTheme}"/>
+                        <MenuItem Header="Recent destinations" IsVisible="{Binding HasContextRecentDestinations}"
+                                  ItemsSource="{Binding ContextRecentDestinations}"
+                                  ItemContainerTheme="{StaticResource RoomWalkItemTheme}"/>
                         <MenuItem Header="Use Teleport"
                                   Command="{Binding UseTeleportCommand}"
                                   IsVisible="{Binding ContextTeleportSingle}"/>

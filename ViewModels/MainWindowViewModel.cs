@@ -697,6 +697,11 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Loops.LoopsChanged += RebuildFavoritesMenu;
         AppServices.Current.Lairs.SetupsChanged += RebuildFavoritesMenu;
 
+        // Recent GOTO destinations flyout, refreshed on every recorded walk (and
+        // on profile swap, which GotoHistoryStore fires Changed for).
+        RebuildRecentDestinationsMenu();
+        AppServices.Current.GotoHistory.Changed += RebuildRecentDestinationsMenu;
+
         // Apply the loaded profile's persisted scrollback size now — the
         // buffer was constructed with the default; AppServices already
         // populated DisplayConfig from the profile by the time we got here.
@@ -3738,6 +3743,38 @@ public partial class MainWindowViewModel : ObservableObject
 
         _hasFavorites = Favorites.Count > 0;
         OnPropertyChanged(nameof(HasFavorites));
+        OnPropertyChanged(nameof(HasWalkFlyouts));
+    }
+
+    // The last GOTO destinations (newest first, up to 10 — GotoHistoryStore caps
+    // it), each walking there on click through the same route picker the Favorites
+    // flyout uses. Kept in most-recent order (NOT sorted) so the top row is where
+    // you just were.
+    public ObservableCollection<FavoriteMenuItem> RecentDestinations { get; } = new();
+
+    private bool _hasRecentDestinations;
+    public bool HasRecentDestinations => _hasRecentDestinations;
+
+    // Drives the shared separator below both walk-to flyouts — shown when either
+    // Favorites or Recent destinations has rows.
+    public bool HasWalkFlyouts => _hasFavorites || _hasRecentDestinations;
+
+    private void RebuildRecentDestinationsMenu()
+    {
+        var s = AppServices.Current;
+        RecentDestinations.Clear();
+        int number = 0;
+        foreach (Game.Map.RoomKey key in s.GotoHistory.All)
+        {
+            Game.Map.RoomKey target = key;
+            string name = s.RoomGraph.GetRoom(key) is { } r ? r.Name : key.ToString();
+            RecentDestinations.Add(new FavoriteMenuItem($"{++number})",
+                $"{name} ({key.Map}/{key.Room})", GotoFavBrush,
+                new AsyncRelayCommand(() => WalkToFavoriteRoomAsync(target))));
+        }
+        _hasRecentDestinations = RecentDestinations.Count > 0;
+        OnPropertyChanged(nameof(HasRecentDestinations));
+        OnPropertyChanged(nameof(HasWalkFlyouts));
     }
 
     // Start a favourited loop from the flyout — stop any conflicting engine

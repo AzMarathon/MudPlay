@@ -10,6 +10,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Manually casting a spell mid-combat can no longer make the attack spell burst — the resume is rate-limited to once per round for hand-typed casts (engine survival casts are unaffected)
 - Navigation room tooltip now lists each monster with its game-data record number (e.g. `Dark Goblin Archer(#48)`)
 - Map exit stubs now flag a command-required exit — a `go path`-style named exit — in the magenta "Action required" colour, alongside levers and ask-doors
+- Terminal right-click menu adds a "Recent destinations" flyout (the last 10 GOTO targets, click to walk there)
+- Navigation map room right-click menu adds Favorites and Recent-destinations walk-to sub-lists
 - bug reports addressed: paradigm-20260813-122226, paradigm-20260813-121114, paradigm-20260813-131020, paradigm-20260813-141450
 
 ## 3.8.51

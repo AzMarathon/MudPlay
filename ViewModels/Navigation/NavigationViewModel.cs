@@ -999,6 +999,53 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             GotoHistoryRows.Add(new GotoHistoryRowViewModel(key, $"{name} {key.Map}/{key.Room}"));
         }
         OnPropertyChanged(nameof(HasGotoHistory));
+        RebuildContextRecentDestinations();
+    }
+
+    // Walk-to sub-lists for the map's room right-click menu: the starred GOTO
+    // favourites and the recent destinations, each walking there on click via the
+    // same WalkToRoom the "Walk here" item uses. Populated from RefreshFavorites /
+    // RefreshGotoHistory so they track the stores. Items reuse the terminal
+    // flyout's FavoriteMenuItem carrier (label + self-contained command).
+    public ObservableCollection<MudPlay.ViewModels.FavoriteMenuItem> ContextFavorites { get; } = new();
+    public ObservableCollection<MudPlay.ViewModels.FavoriteMenuItem> ContextRecentDestinations { get; } = new();
+    public bool HasContextFavorites => ContextFavorites.Count > 0;
+    public bool HasContextRecentDestinations => ContextRecentDestinations.Count > 0;
+
+    private void RebuildContextFavorites()
+    {
+        ContextFavorites.Clear();
+        var rows = new List<(string label, RoomKey key)>();
+        foreach (FavoriteRoom f in _services.Favorites.StarredFavorites())
+        {
+            RoomKey key = new(f.Map, f.Room);
+            string label = !string.IsNullOrWhiteSpace(f.Label)
+                ? f.Label!
+                : Graph?.GetRoom(key) is { } r ? r.Name : key.ToString();
+            rows.Add((label, key));
+        }
+        rows.Sort((a, b) => string.Compare(a.label, b.label, StringComparison.OrdinalIgnoreCase));
+        foreach ((string label, RoomKey key) in rows)
+        {
+            RoomKey target = key;
+            ContextFavorites.Add(new MudPlay.ViewModels.FavoriteMenuItem(
+                string.Empty, label, null, new AsyncRelayCommand(() => WalkToRoom(target))));
+        }
+        OnPropertyChanged(nameof(HasContextFavorites));
+    }
+
+    private void RebuildContextRecentDestinations()
+    {
+        ContextRecentDestinations.Clear();
+        foreach (RoomKey key in _services.GotoHistory.All)
+        {
+            RoomKey target = key;
+            string name = Graph?.GetRoom(key)?.DisplayName ?? "???";
+            ContextRecentDestinations.Add(new MudPlay.ViewModels.FavoriteMenuItem(
+                string.Empty, $"{name} {key.Map}/{key.Room}", null,
+                new AsyncRelayCommand(() => WalkToRoom(target))));
+        }
+        OnPropertyChanged(nameof(HasContextRecentDestinations));
     }
 
     // Bound TwoWay to the history flyout's ListBox SelectedItem. Picking a row arms
@@ -1522,6 +1569,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasFavorites));
         OnPropertyChanged(nameof(HasGotoFolders));
         RebuildFavoriteTree();
+        RebuildContextFavorites();
     }
 
     // Rebuild the GOTO folder tree from the flat Favorites, honouring GotoFilter.
@@ -2062,7 +2110,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task WalkToContextRoom()
     {
-        if (ContextRoomKey is not { } k) return;
+        if (ContextRoomKey is { } k) await WalkToRoom(k);
+    }
+
+    // Shared walk-to used by the room right-click "Walk here" AND the menu's
+    // Favorites / Recent-destinations sub-lists — stop conflicting engines, drop
+    // out of loop-build, record the destination, then hand to the route picker.
+    private async Task WalkToRoom(Game.Map.RoomKey k)
+    {
         // If a loop or Auto-Lair is currently driving movement, stop
         // it before handing control to the walker — the user's explicit
         // walk-to takes precedence over the automation in the
