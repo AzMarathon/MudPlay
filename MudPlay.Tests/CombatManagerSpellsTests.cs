@@ -76,7 +76,13 @@ public sealed class CombatManagerSpellsTests
             Combat.SetBackstabHooks(() => Sneaking, n => SeeHidden.Contains(n));
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
             Combat.SetSpellShortResolver(
-                n => SpellShorts.TryGetValue(n, out string? s) ? s : null);
+                n => SpellShorts.TryGetValue(n, out string? s) ? s : null,
+                code =>
+                {
+                    foreach ((int number, string s) in SpellShorts)
+                        if (string.Equals(s, code, StringComparison.OrdinalIgnoreCase)) return number;
+                    return null;
+                });
             // Store the settle callback instead of running a real timer so a test
             // controls when the window elapses (FireSettle). Only arms on arrival
             // observations, so the existing Also-Here tests are unaffected.
@@ -435,6 +441,42 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("harm giant rat", h.LastSent);
         Assert.DoesNotContain(failures, f => f.Detail == "cast-blocked");
         Assert.DoesNotContain(failures, f => f.Detail == "recast-interval");
+    }
+
+    // Report paradigm-20260813-081016 ("why did it spam turn like that"): the
+    // resume above correctly re-announces on the interrupt's *Combat Off* — but
+    // casting the resumed spell ITSELF drops *Combat Off* again a moment later
+    // (CONFIRMED mechanic, unlike a weapon swing). Without a per-interrupt
+    // guard, that self-caused Off satisfies the exact same "within
+    // CastInterruptResumeWindow of _betweenRoundCastAt" condition that fired
+    // the first resume, so it fires AGAIN — and each of those casts drops its
+    // OWN Off too, compounding into dozens of casts inside the 3s window from
+    // one legitimate interrupt. A single NoteBetweenRoundCast must resume
+    // exactly once, no matter how many further Off lines land before the
+    // window expires.
+    [Fact]
+    public void SpellMode_ResumeAfterInterrupt_FiresOnlyOnce_NotEveryOffInWindow()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "small zombie");
+
+        h.Feed("Also here: small zombie.");
+        Assert.Equal("turn small zombie", h.LastSent);
+
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        int sentAfterFirstResume = h.Sent.Count;
+        Assert.Equal("turn small zombie", h.LastSent);   // the one legitimate resume
+
+        // The resumed cast's own *Combat Off* lands — same interrupt window,
+        // no new NoteBetweenRoundCast (nothing else cast a survival spell).
+        // Fed repeatedly to mirror the live burst, which was dozens of lines.
+        for (int i = 0; i < 10; i++) h.Feed("*Combat Off*");
+
+        Assert.Equal(sentAfterFirstResume, h.Sent.Count);   // no further re-announces
     }
 
     // ----- Auto-Nuke auto-engine gate ----------------------------------
@@ -1147,5 +1189,97 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(afterSwitch, h.Sent.Count);
         h.Tick();
         Assert.Equal(afterSwitch, h.Sent.Count);
+    }
+
+    // ----- 0-mana: stand down only from MANA-COSTING actions ------------
+    // Report paradigm-20260813-064159: a forced attack COMMAND that is really a
+    // spell cast-code (a legacy override saved before cast-codes auto-routed to the
+    // spell rung) costs mana; the server silently no-ops it at 0 mana, so the engine
+    // kept re-sending it while the player stood there getting hit. At 0 mana the
+    // engine now falls back to the physical weapon for mana-costing actions — but
+    // NOT for a free verb, which costs no mana and must still fire.
+
+    [Fact]
+    public void OutOfMana_ForcedCommandIsSpellCastCode_FallsBackToWeapon()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "attack";
+        h.SpellShorts[18] = "turn";   // "turn" is a real spell cast-code → costs mana
+        h.AddMonster(1, "large zombie");
+        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "turn" };
+        h.Ma = 0;
+
+        h.Feed("Also here: large zombie.");
+
+        Assert.Equal("attack large zombie", h.LastSent);
+    }
+
+    [Fact]
+    public void OutOfMana_ForcedCommandIsFreeVerb_StillFires()
+    {
+        // "bash" isn't a spell cast-code, so it costs no mana — the 0-mana fallback
+        // must NOT swallow it (the whole point of scoping the guard to mana-costing
+        // actions rather than every command).
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "attack";
+        h.AddMonster(1, "large zombie");
+        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "bash" };
+        h.Ma = 0;
+
+        h.Feed("Also here: large zombie.");
+
+        Assert.Equal("bash large zombie", h.LastSent);
+    }
+
+    [Fact]
+    public void OutOfMana_SpellCascade_NotAttempted_SwingsWeapon()
+    {
+        // A configured attack spell must not be attempted at 0 mana even if its
+        // MinManaPerCast is unset (0 = no floor, not "free").
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "attack";
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm" };
+        h.AddMonster(1, "giant rat");
+        h.Ma = 0;
+
+        h.Feed("Also here: giant rat.");
+
+        Assert.Equal("attack giant rat", h.LastSent);
+    }
+
+    [Fact]
+    public void HasMana_ForcedCommandIsSpellCastCode_UsesOverride()
+    {
+        // Sanity: the guard is mana-gated, not a blanket bypass of the override.
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "attack";
+        h.SpellShorts[18] = "turn";
+        h.AddMonster(1, "large zombie");
+        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "turn" };
+        h.Ma = 40;
+
+        h.Feed("Also here: large zombie.");
+
+        Assert.Equal("turn large zombie", h.LastSent);
+    }
+
+    [Fact]
+    public void OutOfMana_ForcedCommandIsSpellCastCode_ResumesOnceManaRecovers()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.AlternateSpellPhysical;
+        h.Settings.NormalAttackCommand = "attack";
+        h.SpellShorts[18] = "turn";
+        h.AddMonster(1, "large zombie");
+        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "turn" };
+        h.Ma = 0;
+
+        h.Feed("Also here: large zombie.");
+        Assert.Equal("attack large zombie", h.LastSent);
+
+        h.Ma = 40;
+        h.Tick();
+
+        Assert.Equal("turn large zombie", h.LastSent);
     }
 }

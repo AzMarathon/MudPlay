@@ -500,12 +500,14 @@ behaviour — how the client's auto-combat interprets the per-monster overrides)
   global Combat-tab choice **for that species only**. The **Override Attack** field takes EITHER:
   - a **`Spells.Number`** (resolved to the `Spells.Short` cast-code) — routed through the *Normal
     Attack Spell* rung with its mana floor + per-room cast cap; OR
-  - a **raw command / cast-code** ("attack", "bash", "harm") sent **verbatim** as the attack verb,
-    forced over the whole spell/weapon flow, with **no** rung gating (the server auto-repeats it
-    like any attack command). The editor keeps the two mutually exclusive — a positive integer is
-    the spell id, any other non-empty text is the command (this is what lets a plain command like
-    `attack` persist; an earlier int-only parse silently dropped it). The pre-attack override
-    stays spell-only and occupies the *Single-Target Debuff* rung.
+  - a **raw command verb** ("attack", "bash") sent **verbatim** as the attack verb, forced over the
+    whole spell/weapon flow, with **no** rung gating (the server auto-repeats it like any attack
+    command). The editor disambiguates on save: a positive integer is the spell id; other text is
+    checked against the active set's known spell **cast-codes** — a match (e.g. "turn") resolves to
+    that spell's Number and takes the **gated spell rung** (a user who types the code they'd cast
+    in-game gets mana/cap gating, not a raw command); only text matching no spell stays a raw command
+    (this is what lets `attack` persist; an earlier int-only parse silently dropped it). The
+    pre-attack override stays spell-only and occupies the *Single-Target Debuff* rung.
   - **Gate bypass:** when an override is set the client **bypasses the effectiveness gates**
     (observed "no effect" immunity, SpellImmu level-block, and ≥100% elemental resist) — the
     rationale is that a user who hand-picks the attack for a specific monster has done the due
@@ -518,6 +520,13 @@ behaviour — how the client's auto-combat interprets the per-monster overrides)
     to a known cast-code). The command form carries no count — it's active whenever the text is
     non-blank. This "null/zero count ⇒ fall back to global" reading is the client's interpretation
     of the ambiguous count field — **flag for user confirmation** if override behaviour is ever questioned.
+  - **0-mana stand-down.** At literal 0 mana nothing that costs MA can land — the server silently
+    **no-ops** a cast or a mana-costing command with **no error line** to react to (an earlier build
+    kept re-sending a forced `turn` every round while the player stood there getting hit until a
+    regen tick). So at 0 mana the client marks spells unavailable (the chooser collapses to
+    Backstab/Physical) and, for a forced command that resolves to a spell cast-code, falls back to
+    the physical weapon; a genuinely free verb (bash/kick) still fires since it costs no MA.
+    Re-evaluated each round, so it resumes the instant mana ticks back up.
 - **Attack-command "no effect" fallback.** A spell driven through the **attack-command** slot
   (`NormalAttackCommand = "harm"`, not the attack-*spell* rung) draws the same
   `Your spell has no effect on <monster>.` immunity line, but reaches the wire as a plain command,

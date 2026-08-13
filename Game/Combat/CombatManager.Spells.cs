@@ -40,6 +40,10 @@ public sealed partial class CombatManager
     // slots store a Number, but casts go out as the Short). Optional: until wired
     // no per-monster spell override is ever substituted.
     private Func<int, string?>? _spellShortByNumber;
+    // Reverse of the above: a cast-code → its Spells.Number, or null when the text
+    // isn't a known spell. Lets the forced-command path tell a mana-costing spell
+    // cast-code (a legacy override saved as a command) from a free verb ("bash").
+    private Func<string, int?>? _spellNumberByShort;
 
     // ----- In-between debuff bridge (CastingDirector-driven) -----------
     // A debuff is an in-between action, not a combat action, so it casts
@@ -159,10 +163,13 @@ public sealed partial class CombatManager
     // per-monster spell override (Monster overlay stores the override as a
     // Number; the chooser needs the Short to cast it). Until called, no override
     // is ever substituted and the global Combat-tab spell slots are used as-is.
-    public void SetSpellShortResolver(Func<int, string?> resolver)
+    // The optional reverse (cast-code → Number) lets the forced-command path
+    // recognise a mana-costing spell code so it can stand down at 0 mana.
+    public void SetSpellShortResolver(Func<int, string?> resolver, Func<string, int?>? reverse = null)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         _spellShortByNumber = resolver;
+        _spellNumberByShort = reverse;
     }
 
     // Wire the in-between evaluator (CastingDirector.Evaluate) that
@@ -210,6 +217,24 @@ public sealed partial class CombatManager
         // user hand-picked it), mirroring the spell-id override's bypass contract.
         if (AttackCommandOverrideFor(picked.MonsterNumber) is { } forcedCommand)
         {
+            // A forced command that is actually a spell cast-code (a legacy override
+            // saved as a raw command before cast-codes auto-routed to the spell
+            // rung — see MonsterEditDialogViewModel.ParseAttackOverride) costs mana.
+            // At 0 mana the server silently no-ops it with no error line, so re-
+            // sending it every round just leaves the player standing there getting
+            // hit until a regen tick (report paradigm-20260813-064159). Fall back to
+            // the physical weapon; the next round re-evaluates so it resumes when
+            // mana ticks back. A free verb ("bash", "kick") isn't a spell code, so it
+            // still fires at 0 mana — it costs no MA.
+            if (_readMana is not null && _readMana().Ma <= 0
+                && _spellNumberByShort?.Invoke(forcedCommand) is not null)
+            {
+                bool useAlt = ShouldUseAlternateWeapon(settings, picked.ResolvedName, picked.MonsterNumber);
+                SendWeaponAttack(settings, picked.RawName, useAlt, picked.Priority);
+                _currentTarget = picked.RawName;
+                _backstabOpenerConsumed = true;
+                return;
+            }
             bool newTarget = !string.Equals(_currentTarget, picked.RawName, StringComparison.OrdinalIgnoreCase);
             if (newTarget)
                 _log?.Combat(LogCategory,
@@ -697,7 +722,12 @@ public sealed partial class CombatManager
             MaxMana:             maxMa,
             BackstabPending:     BackstabPending(settings, obs),
             ImmuneAttackSpells:  ImmuneActionsFor(target),
-            SpellsAvailable:     true,
+            // At literal 0 mana nothing that costs MA can land, no matter what a
+            // slot's MinManaPerCast says (0 there means "no floor set", not "free").
+            // Marking spells unavailable collapses the chooser to Backstab vs
+            // Physical, so combat keeps swinging (and can still backstab) instead of
+            // re-casting a spell the server no-ops (report paradigm-20260813-064159).
+            SpellsAvailable:     ma > 0,
             LevelBlockedActions: LevelBlockedFor(settings, monsterNumber),
             AllowNukes:          _autoNukeGate?.Invoke() ?? true,
             ResistBlockedActions: ResistBlockedFor(settings, monsterNumber),

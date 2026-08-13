@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.40**
-> - Monster HP lookup now reads the record placed/summoned in your current room, so a display name shared across zones (an orc lieutenant in the barracks vs the slums) shows the right monster's HP instead of the first same-named game-data match
-> - Per-monster spell overrides now match that same room-aware record, so an override set on one zone's monster (a graveyard zombie) no longer bleeds onto a same-named monster elsewhere (a tunnels zombie)
+> **Version 3.8.43**
+> - Game Data → Monsters → Override Attack: typing a spell's cast-code (e.g. "turn") now auto-resolves to its Number and lands on the mana-gated, cascading spell rung — same as typing the number directly, instead of silently becoming an ungated raw command
+> - Combat no longer stalls at 0 mana: a mana-costing action (a spell cascade, or a forced attack-command that's really a spell cast-code) stands down for the physical weapon at 0 mana; a free command verb (bash/kick) still fires, backstab is preserved, and it resumes once mana recovers
+> - Fixed a self-sustaining cast-spam loop where a between-round-cast resume kept re-triggering off its own resulting *Combat Off*, firing dozens of casts from one interrupt — now fires at most once per interrupt
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
