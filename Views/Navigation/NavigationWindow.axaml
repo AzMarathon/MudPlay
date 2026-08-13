@@ -1084,13 +1084,14 @@
                                          from the Navigation Management window's GOTO
                                          tab, or right-click nodes in this tree. -->
                                     <!-- Filter box first, then folders, then favourites. -->
-                                    <!-- Right margin keeps the clearable ✕ clear of the
-                                         rail's overlay vertical scrollbar (see the LOOPS
-                                         filter box below for the full rationale). -->
+                                    <!-- Fixed width so the box can't grow with typed text
+                                         and push the clearable ✕ under the scrollbar (see
+                                         the LOOPS filter box below for the full rationale). -->
                                     <TextBox Classes="clearable" Text="{Binding GotoFilter, Mode=TwoWay}"
                                              PlaceholderText="Filter favourites…"
                                              FontSize="11"
-                                             Margin="0,0,10,2"
+                                             Width="250" HorizontalAlignment="Left"
+                                             Margin="0,0,0,2"
                                              IsVisible="{Binding HasFavorites}"/>
                                     <!-- Empty-state hint — cap MaxWidth +
                                          keep wrapping so a long string
@@ -1280,14 +1281,19 @@
                                 </Expander.Header>
                                 <StackPanel Spacing="2" HorizontalAlignment="Stretch">
                                     <!-- Filter box first, then folders, then loops. -->
-                                    <!-- Right margin keeps the clearable ✕ clear of the
-                                         rail's overlay vertical scrollbar (it expands over
-                                         the right edge on hover); without it the ✕ hides
-                                         behind the scrollbar once the box holds text. -->
+                                    <!-- Fixed width caps the box at the rail's content
+                                         width so it can't grow with typed text — the
+                                         expander measures its content unbounded, which
+                                         otherwise let the box widen past the rail edge and
+                                         pushed the clearable ✕ under the auto-hiding
+                                         scrollbar. Long text scrolls inside the box instead.
+                                         Left-aligned so the spare width sits on the
+                                         scrollbar side. -->
                                     <TextBox Classes="clearable" Text="{Binding LoopFilter, Mode=TwoWay}"
                                              PlaceholderText="Filter loops / lairs…"
                                              FontSize="11"
-                                             Margin="0,0,10,2"
+                                             Width="250" HorizontalAlignment="Left"
+                                             Margin="0,0,0,2"
                                              IsVisible="{Binding HasAnyLoopsOrSetups}"/>
                                     <TextBlock Text="No loops or Auto-Lair setups saved on this BBS."
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
