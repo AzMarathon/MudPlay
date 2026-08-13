@@ -1,16 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.9.0**
-> - Navigation now routes out of sealed rooms via NPC ask-transport — a room whose only exit is asking a resident NPC to port you elsewhere (the Grey Lord → Town Square) is no longer a dead-end
-> - Turning auto-combat off mid-fight now resumes movement immediately instead of stalling until a manual room redisplay
-> - "Do not rest in this room" no longer suppresses resting for the rest of the loop — the rest gate re-arms on leaving the flagged room
-> - Manually casting a spell mid-combat can no longer make the attack spell burst (rate-limited to once per round for hand-typed casts)
-> - Navigation room tooltip now shows each monster's game-data record number (e.g. `Dark Goblin Archer(#48)`)
-> - Map exit stubs flag command-required exits (a `go path`-style named exit) in the magenta "Action required" colour
-> - Terminal right-click menu adds a "Recent destinations" flyout (last 10 GOTO targets); the nav room right-click menu adds matching Favorites + Recent-destinations walk-to lists, and its "Add to favorites" is renamed "Save as Go To"
-> - Shift+right-click a map room with a single up/down/teleport jump follows it immediately, skipping the menu
-> - Spell Book updates reliably from `sp` (not just `spells`) — the spell-list column header is matched regardless of column padding; a parse miss can no longer wipe the book, and the parse is now logged
+> **Version 3.9.2**
+> - Game Data → Monsters → Override Attack: reopening the dialog now shows the cast-code you typed (e.g. "agon"), not the internal Spell.Number
+> - Override Attack activates from the spell alone — Max is an optional per-room cap (blank = unlimited), no longer required to arm the override
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
