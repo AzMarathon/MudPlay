@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.9.8
+
+- Monster record (Game Data → Monsters): each "Spawns In" room now shows that room's lair size — e.g. `1/2122 (lair: 2)`
+
 ## 3.9.7
 
 - Player Workshop → Character Info: equipped, carried, and key-ring items are now clickable links to their Game Data item record — a stacked item's count prefix ("3 piece of amber") is stripped for the lookup; a name the dump truncated stays plain text
