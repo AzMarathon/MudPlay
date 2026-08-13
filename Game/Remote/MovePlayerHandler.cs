@@ -309,7 +309,7 @@ public sealed class MovePlayerHandler : IDisposable
             StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Lair);
             _autoLair.Clear();
             foreach (RoomKey k in coords) _autoLair.Mark(k);
-            ctx.Reply(_autoLair.Start()
+            ctx.Reply(_autoLair.Start($"{coords.Count} lairs")
                 ? $"auto-lair: {coords.Count} lairs"
                 : "auto-lair failed to start");
             return;
@@ -322,7 +322,7 @@ public sealed class MovePlayerHandler : IDisposable
         _autoLair.Clear();
         foreach (Models.Profile.LairMarker m in setup.Markers)
             _autoLair.Mark(new RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
-        ctx.Reply(_autoLair.Start()
+        ctx.Reply(_autoLair.Start(setup.Name)
             ? $"auto-lair '{setup.Name}': {setup.MarkerCount} lairs"
             : "auto-lair failed to start");
     }

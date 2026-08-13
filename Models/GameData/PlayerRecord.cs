@@ -263,11 +263,14 @@ public enum PlayerRemoteControls
     // Boss respawn timers being tracked — @timer.
     QueryBossTimers     = 1 << 12,
 
+    // Unrecovered deaths in the recovery log — @death.
+    QueryDeaths         = 1 << 13,
+
     // Convenience — every category above flipped on.
     All = QueryVersion | QueryExperience | QueryHealthStatus | QueryLocation
         | QueryInventory | RequestInvite | MovePlayer | ExecuteCommands
         | HangupDisconnect | AlterSettings | DivertConversations | SysopCommands
-        | QueryBossTimers,
+        | QueryBossTimers | QueryDeaths,
 }
 
 // One equipment slot's contents from a look <player> response. SlotLabel

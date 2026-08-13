@@ -308,6 +308,18 @@ public sealed class PartyEssentialHandlers : IDisposable
         };
     }
 
+    // The idle @path fallback: name the last loop / auto-lair the player ran (so a
+    // party member can help them resume), or a plain "not moving" when nothing has
+    // run this session. An unnamed ad-hoc auto-lair reports the bare engine.
+    private static string DescribeLastPath(MovementStatus mv) => mv.LastPathKind switch
+    {
+        MovementKind.Loop => $"not moving; last ran loop '{mv.LastPathName}'",
+        MovementKind.Lair => mv.LastPathName is { Length: > 0 } name
+            ? $"not moving; last ran auto-lair '{name}'"
+            : "not moving; last ran auto-lair",
+        _                 => "not moving",
+    };
+
     // The "<name> (map M, room R)" room descriptor used by @status, @path, and (with
     // an exits tail) @where. One formatter so the three replies never drift.
     private static string FormatRoom(Room room) =>
@@ -426,7 +438,13 @@ public sealed class PartyEssentialHandlers : IDisposable
     private void OnPath(RemoteCommandContext ctx)
     {
         MovementStatus mv = _readMovement?.Invoke() ?? default;
-        if (mv.Kind == MovementKind.None) { ctx.Reply("not moving"); return; }
+        if (mv.Kind == MovementKind.None)
+        {
+            // Idle now — name the last loop / auto-lair run so a party member can
+            // help a dead / stopped player pick their circuit back up.
+            ctx.Reply(DescribeLastPath(mv));
+            return;
+        }
 
         string engine = MovementEnginePhrase(mv);
 

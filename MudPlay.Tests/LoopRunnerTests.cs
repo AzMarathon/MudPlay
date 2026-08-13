@@ -792,6 +792,22 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void LastRunLoopName_SetOnStart_SurvivesStop()
+    {
+        // @path recovery: the last-run loop's name must outlive the run so a dead
+        // / stopped player can be pointed back at their circuit.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.Null(h.Runner.LastRunLoopName);          // nothing run yet
+
+        h.Runner.Start(AbCycle());
+        Assert.Equal("ab", h.Runner.LastRunLoopName);
+
+        h.Runner.Stop();
+        Assert.Equal("ab", h.Runner.LastRunLoopName);   // retained past the stop
+    }
+
+    [Fact]
     public void Reset_ClearsLapHistory()
     {
         Harness h = NewHarness();

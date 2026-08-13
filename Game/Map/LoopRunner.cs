@@ -179,6 +179,15 @@ public sealed class LoopRunner : IRecoverableEngine
     public Loop? CurrentLoop => _loop;
     public int CurrentIndex => _index;
 
+    // Name of the most recently RUN loop, retained after the run stops (unlike
+    // CurrentLoop, which nulls on Stop/Reset). Set when a loop starts and only
+    // overwritten by the next loop — so after a death or manual stop, @path can
+    // still tell a party member which loop the player was on, to help them
+    // resume. Null until the first loop of the session runs. LastRunLoopAt lets
+    // MovementStatus pick the more recent of loop vs auto-lair for @path.
+    public string? LastRunLoopName { get; private set; }
+    public DateTimeOffset LastRunLoopAt { get; private set; } = DateTimeOffset.MinValue;
+
     // Loop the user has "loaded" (staged) but not yet started — the Manage dialog's
     // Load action records it here. Distinct from CurrentLoop (which is only set
     // while a run is live): a staged loop sits idle until something begins it. The
@@ -540,6 +549,8 @@ public sealed class LoopRunner : IRecoverableEngine
         }
 
         _loop = loop;
+        LastRunLoopName = loop.Name;   // retained past Stop/Reset for @path recovery
+        LastRunLoopAt = DateTimeOffset.UtcNow;
         _index = 0;
         _stepInFlight = false;
         _awaitingPromptForCommand = false;

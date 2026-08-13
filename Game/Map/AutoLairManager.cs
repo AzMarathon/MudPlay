@@ -103,6 +103,15 @@ public sealed class AutoLairManager : IDisposable
 
     public bool IsActive => Phase != AutoLairPhase.Idle;
 
+    // Most recently run auto-lair, retained past Stop (like
+    // LoopRunner.LastRunLoopName) so @path can name it for a dead player's
+    // recovery. Name is the setup name (or an ad-hoc descriptor) passed to Start;
+    // a label-less resume keeps the prior name but re-stamps the time. LastRunAt
+    // lets MovementStatus pick the more recent of loop vs auto-lair. Default
+    // (name null, time MinValue) until the first labelled run.
+    public string? LastRunLairName { get; private set; }
+    public DateTimeOffset LastRunLairAt { get; private set; } = DateTimeOffset.MinValue;
+
     // True when Pause has been called and Resume hasn't yet — the
     // scheduler suspends new dispatches, all timers are halted, and the
     // walker is gated via MovementCoordinator.UserGate. Cleared implicitly
@@ -232,7 +241,11 @@ public sealed class AutoLairManager : IDisposable
     // Begin scheduling. No-op when already active, when fewer than
     // 2 markers are set, or when the tracker has no current room for
     // the walker to start from.
-    public bool Start()
+    // label names the run for @path recovery (the setup name, or an ad-hoc
+    // descriptor for a coord-list run). A label-less call — a resume of the same
+    // run from Trainer / comeback paths — keeps the prior name but re-stamps the
+    // time so the last-run ordering stays fresh.
+    public bool Start(string? label = null)
     {
         if (IsActive) return true;
         if (_markers.Count < 2)
@@ -245,6 +258,9 @@ public sealed class AutoLairManager : IDisposable
             _log?.Warn("AutoLair", "no current room — locate before starting Auto-Lair.");
             return false;
         }
+
+        LastRunLairAt = DateTimeOffset.UtcNow;
+        if (label is { Length: > 0 }) LastRunLairName = label;
 
         // Treat every marked room as "ready now" at Start, ignoring
         // any stale LastEntered the store picked up from passive walk-

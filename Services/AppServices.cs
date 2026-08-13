@@ -695,6 +695,10 @@ public sealed class AppServices
     // @timer read-only query handler. App-lifetime, like the other query handlers.
     public Game.Remote.BossTimerQueryHandler BossTimerQuery { get; private set; } = null!;
 
+    // @death read-only query handler — reports unrecovered deaths from the
+    // recovery log. App-lifetime, like the other query handlers.
+    public Game.Remote.DeathQueryHandler DeathQuery { get; private set; } = null!;
+
     // Runtime keystroke → macro → wire-send bridge. Constructed up-
     // front; MacroDispatcher.SetSender gets bound from
     // MainWindowViewModel after the telnet client is
@@ -3514,6 +3518,7 @@ public sealed class AppServices
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData);
+        DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
 
         // Write-side inventory / cash actions — @get-all / @drop-all /
         // @deposit-all / @share emit get / drop / dep / with / give on the wire.

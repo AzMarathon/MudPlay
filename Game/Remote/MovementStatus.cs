@@ -41,7 +41,14 @@ public readonly record struct MovementStatus(
     int TotalSteps,
     bool Sailing = false,
     DateTimeOffset SailingEta = default,
-    string? SailingPlace = null)
+    string? SailingPlace = null,
+    // The most recently run PATH — the loop or auto-lair, whichever ran last —
+    // carried even when Kind == None so a dead / stopped player's @path can name
+    // what they were on. LastPathKind is Loop, Lair, or None (nothing run this
+    // session); LastPathName is the loop / auto-lair name (may be null for an
+    // ad-hoc / unnamed auto-lair run).
+    MovementKind LastPathKind = MovementKind.None,
+    string? LastPathName = null)
 {
     // Snapshot the running movement engine. Priority Lair → Loop → Walker mirrors
     // PartyComebackManager.SnapshotRunningEngine: the upper engines drive the
@@ -76,6 +83,17 @@ public readonly record struct MovementStatus(
             return new MovementStatus(MovementKind.Walking, $"{dest.Map}/{dest.Room}",
                 walker.CurrentStepIndex, walker.StepCount, sailing, sailEta, sailPlace);
 
-        return new MovementStatus(MovementKind.None, null, 0, 0);
+        // Nothing moving us now — carry the last-run PATH (loop or auto-lair,
+        // whichever ran most recently) so @path can point a party member at what
+        // a dead / stopped player was on.
+        DateTimeOffset loopAt = loopRunner.LastRunLoopAt;
+        DateTimeOffset lairAt = autoLair.LastRunLairAt;
+        if (loopAt == DateTimeOffset.MinValue && lairAt == DateTimeOffset.MinValue)
+            return new MovementStatus(MovementKind.None, null, 0, 0);
+        return lairAt >= loopAt
+            ? new MovementStatus(MovementKind.None, null, 0, 0,
+                LastPathKind: MovementKind.Lair, LastPathName: autoLair.LastRunLairName)
+            : new MovementStatus(MovementKind.None, null, 0, 0,
+                LastPathKind: MovementKind.Loop, LastPathName: loopRunner.LastRunLoopName);
     }
 }

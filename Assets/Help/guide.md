@@ -201,9 +201,10 @@ Party members can drive each other with `@`-commands sent over chat. Commands ar
 | `@exp` | — | session exp earned, exp/hour, and time-to-level |
 | `@level` | — | level, current exp, and exp to next |
 | `@where` | — | room name, map/room, and exits |
-| `@path` | — | the movement engine's activity and step progress |
+| `@path` | — | the movement engine's activity and step progress; when stopped/idle, names the last loop or auto-lair that was run (so you can help a dead player resume their circuit) |
 | `@who` | — | other players / monsters in your room |
 | `@timer` | — or `<name>` | boss respawn timers (all, or matching a name) |
+| `@death` | — or `all` | unrecovered deaths from the recovery log — the most recent one, or `all` of them (each with when, status, room, and lives left) so you can help a dead player recover; own permission ("Query deaths") |
 | `@what` | — | items on the room floor |
 | `@wealth` | — | your coins and total value |
 | `@enc` | — | encumbrance |

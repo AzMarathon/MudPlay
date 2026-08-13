@@ -300,7 +300,7 @@ public sealed class DefaultTaskRunner : IDisposable
         foreach (LairMarker m in setup.Markers)
             _autoLair.Mark(new RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
 
-        if (_autoLair.Start())
+        if (_autoLair.Start(setup.Name))
             _log?.Info("DefaultTask", $"started Auto-Lair '{setup.Name}' ({setup.Markers.Count} markers).");
         else
             _log?.Warn("DefaultTask", $"Auto-Lair '{setup.Name}' failed to start (needs ≥2 markers and a known room).");

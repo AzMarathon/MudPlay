@@ -83,6 +83,7 @@ public static class RemoteCommandCatalog
             ["@path"]         = PlayerRemoteControls.QueryLocation,
             ["@who"]          = PlayerRemoteControls.QueryLocation,
             ["@timer"]        = PlayerRemoteControls.QueryBossTimers,   // own permission — grant boss-timer queries separately
+            ["@death"]        = PlayerRemoteControls.QueryDeaths,       // own permission — grant unrecovered-death queries separately
             ["@help"]         = PlayerRemoteControls.QueryVersion,
             ["@what"]         = PlayerRemoteControls.QueryInventory,
             ["@wealth"]       = PlayerRemoteControls.QueryInventory,
