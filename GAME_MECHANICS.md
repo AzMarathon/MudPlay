@@ -455,6 +455,30 @@ it isn't here and you're unsure, ask.
   primary probe itself is still the unavoidable reactive detection (living-only immunity isn't
   pre-emptable from data — see the immunity section below), and the swap is one cascade step per round
   because the alternate's own no-effect can't arrive until it has cast next round.
+- **[CONFIRMED]** *(2026-08-12, user — report `paradigm-20260812-200128`, ~6th on this issue)* **The
+  single-target attack-spell cascade — the authoritative rules.** With ActionOrder = *Spells first* and
+  a Normal + Alternate single-target attack spell configured (e.g. Normal `lbol` MaxCasts=1 / min-mana 75,
+  Alt `mmis` unlimited / min-mana 0):
+  - **One combat spell per combat round at one target.** A spell may fire multiple times in a round but
+    that's still "one spell." You can NEVER announce two *different* attack spells the same round.
+  - **A kill always wins over any cascade switch.** When the chosen attack spell kills the target, drop
+    that target and re-pick — do NOT fire the OTHER attack spell (normal↔alternate) at the just-dead
+    target. A cast at a corpse ("You don't see X here!") is a wasted round. This holds symmetrically:
+    normal-kills-then-alt-at-corpse AND alt-kills-then-normal-at-corpse are both the bug.
+  - **When the Alternate is considered (single-target only):** only against a still-ALIVE target the
+    Normal can't handle — (a) we don't meet the Normal's cast conditions (mana below its floor, or its
+    MaxCasts rounds elapsed while the target lives), or (b) the Normal came back "no effect" / immune
+    (e.g. priest `harm` vs an acid slime).
+  - **Every fresh target re-evaluates the Normal first.** The cascade state (which spell is current, the
+    per-target cast count, the mana-drop latch) resets per target — a new mob always reconsiders the
+    Normal, re-checking mana (regen ticks in / casts drain it round to round). It must NOT carry the
+    previous target's cascade position, or a fresh mob opens on the alternate.
+  - **MaxCasts=1 = one FULL round** (the spell actually fired), then switch ONLY if the target is still
+    alive — never "announce once then immediately switch the same round before it fires."
+  - **Mana fallback under Spells-first:** below the Normal's min-mana → consider the Alt; if mana is at
+    or above the Alt's min-mana use the Alt, else fall back to physical. Once dropped off the Normal for
+    mana, stay dropped for that target (a regen tick lifting mana back over the floor must not flip back
+    mid-fight — the per-target latch).
 - **[CONFIRMED]** **Martial-arts strikes (Punch / Kick / Jumpkick) are class-innate abilities, not a
   function of the trained Martial Arts skill.** A class grants a strike by listing its ability id in
   an `Abil-0..9` slot: **Punch = 29, Kick = 30, Jumpkick = 35** (Mystic carries all three at value 1

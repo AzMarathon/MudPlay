@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.17**
-> - `@path` remote command now names the last loop or auto-lair the player ran when they're stopped/idle — so if a party member dies and halts, you can see which circuit they were on and help them resume without guessing
-> - New `@death` remote command reports unrecovered deaths from the recovery log (most recent, or `@death all`), gated by a new "Query deaths" per-player permission — so you can help a dead party member recover
+> **Version 3.8.19**
+> - Combat attack spells no longer double-fire the normal + alternate: `MaxCasts` is counted per *fired* round instead of at announce, so a `MaxCasts=1` normal spell takes its round before the cascade hands to the alternate — fixing "normal then immediately alternate," the alternate cast at a target the normal just killed, and a fresh mob opening on the alternate. A kill fully drops the target and resets the cascade
+> - Stashing currency now names coins by their full two-word noun (`hide 50 gold crown`) like get/drop already do, instead of the bare denomination that MajorMUD binds to a same-named item
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
