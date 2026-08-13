@@ -221,6 +221,33 @@ public sealed class RoomEntityClassifierTests
         Assert.Equal(EntityKind.Unknown, h.Observations[0].Entities[0].Kind);
     }
 
+    // ----- ReemitCurrent (auto-combat-off gate re-evaluation, report 121114) -----
+
+    [Fact]
+    public void ReemitCurrent_ReplaysTheCurrentObservation()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Single(h.Observations);
+
+        h.Classifier.ReemitCurrent();
+
+        // A second, identical observation fires so every EntitiesObserved
+        // subscriber (combat gate, deferred-cash / get-items / search acquisition
+        // holds) re-evaluates without waiting for a fresh room render.
+        Assert.Equal(2, h.Observations.Count);
+        Assert.Equal("giant rat", h.Observations[1].Entities[0].ResolvedName);
+    }
+
+    [Fact]
+    public void ReemitCurrent_BeforeAnyObservation_IsNoOp()
+    {
+        using Harness h = new();
+        h.Classifier.ReemitCurrent();
+        Assert.Empty(h.Observations);
+    }
+
     // ----- player lookup ---------------------------------------------
 
     [Fact]

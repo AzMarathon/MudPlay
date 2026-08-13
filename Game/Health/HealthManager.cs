@@ -104,6 +104,7 @@ public sealed class HealthManager : IDisposable
     private Action? _onShadowRestRecovered;     // recovery hit rest-max — resume combat
     private bool _shadowRestWasHolding;         // falling-edge latch for the resume callback
     private Func<bool>? _shouldSkipRestHere;    // running loop's current room is a "do not rest" waypoint
+    private bool _skipRestDeferredRecovery;     // a do-not-rest room made us skip a needed rest; re-arm on the next room change
     private bool _partyWaitSignaled;            // @wait sent, awaiting @ok
     private bool _hpGateAsserted;
     private bool _maGateAsserted;
@@ -592,6 +593,17 @@ public sealed class HealthManager : IDisposable
                     ? "do-not-rest room — advancing instead of resting"
                     : $"MA {_state.Ma}/{_state.MaxMa} >= rest-target={maRestTarget}");
         }
+
+        // A do-not-rest room can't raise (and clears) the recovery gate even when
+        // the pool is below a rest trigger. A plain Standing hop OUT of that room
+        // raises no prompt change, so Evaluate wouldn't re-run to re-arm the gate
+        // in the next restable room — the deficit would ride untended until some
+        // later prompt happens to change (typically back at the loop's circle
+        // start, where do-not-rest eats it again: the reported "whole loop won't
+        // rest"). Latch the deferred deficit here so NoteRoomChanged re-arms on the
+        // next room change.
+        if (skipRest && (_state.Hp < hpRestTrigger || _state.Ma < maRestTrigger))
+            _skipRestDeferredRecovery = true;
 
         // ----- party-follower @wait / @ok --------------------------
         // @wait fires when a recovery gate first asserts (we dropped below a
@@ -1139,10 +1151,23 @@ public sealed class HealthManager : IDisposable
                 $"remaining={_fleeQueue.Count}");
         }
 
-        if (!_restInFlight) return;
-        _restInFlight = false;
-        _restConfirmedByPrompt = false;
-        _log?.Combat(LogCategory, "rest-in-flight cleared on room change");
+        if (_restInFlight)
+        {
+            _restInFlight = false;
+            _restConfirmedByPrompt = false;
+            _log?.Combat(LogCategory, "rest-in-flight cleared on room change");
+        }
+
+        // Re-arm a rest that a do-not-rest room forced us to skip: the hop out of
+        // that room carries no prompt change to re-run Evaluate on its own, so do
+        // it once here. Skipped mid-flee — the flee queue above drives its own
+        // arrivals and a rest re-arm would fight it. Evaluate re-sets the latch if
+        // the new room is ALSO a do-not-rest room with a deficit.
+        if (_skipRestDeferredRecovery && _fleeEngine is null)
+        {
+            _skipRestDeferredRecovery = false;
+            Evaluate();
+        }
     }
 
     // Send pre-/post-rest chain — split on ; or ^M / newline (the documented

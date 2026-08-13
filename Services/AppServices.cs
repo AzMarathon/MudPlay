@@ -3222,7 +3222,7 @@ public sealed class AppServices
         // class's available list.
         OutboundCast = new Game.Combat.OutboundCastObserver(
             isCastCode: c => Spellbook.FindByCastCode(c) is not null,
-            onManualCast: Combat.NoteBetweenRoundCast);
+            onManualCast: Combat.NoteManualBetweenRoundCast);
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a

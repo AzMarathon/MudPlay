@@ -84,6 +84,54 @@ public sealed class SpellListParserTests : IDisposable
     }
 
     [Fact]
+    public void PaddedColumnHeader_StillParses()
+    {
+        // Report: `sp` didn't update the book while `spells` did — the column
+        // header is padding-aligned and a realm's padding didn't match the fixed
+        // single-space form, so the header was unrecognised and the block aborted.
+        // The parser now space-normalises the header before matching.
+        SpellbookState book = NewBook();
+        using SpellListParser parser = new(book);
+
+        parser.FeedTestLines(new[]
+        {
+            "Level   Mana   Short   Spell Name",   // extra column padding — rejected before the fix
+            "  2    5  star starlight",
+            "  5   10  high high arc",
+        });
+        parser.FeedTestLine("Mage> ", isPromptLine: true);
+
+        Assert.True(book.IsObtained(100));
+        Assert.True(book.IsObtained(101));
+        Assert.Equal(2, book.ObtainedCount);
+    }
+
+    [Fact]
+    public void HeaderThenNoRows_DoesNotWipeExistingBook()
+    {
+        // A block that opens on a header but parses no rows is a format miss, not
+        // an authoritative "no spells" — it must NOT overwrite a good spellbook.
+        SpellbookState book = NewBook();
+        using SpellListParser parser = new(book);
+
+        parser.FeedTestLines(new[]
+        {
+            "You have the following spells:",
+            "Level Mana Short Spell Name",
+            "  2    5  star starlight",
+        });
+        parser.FeedTestLine("Mage> ", isPromptLine: true);
+        Assert.Equal(1, book.ObtainedCount);
+
+        // Header opens a block, then the prompt ends it with zero rows parsed.
+        parser.FeedTestLine("You have the following spells:");
+        parser.FeedTestLine("Mage> ", isPromptLine: true);
+
+        Assert.Equal(1, book.ObtainedCount);   // unchanged, not wiped empty
+        Assert.True(book.IsObtained(100));
+    }
+
+    [Fact]
     public void ColumnHeaderAlone_OpensBlock()
     {
         SpellbookState book = NewBook();

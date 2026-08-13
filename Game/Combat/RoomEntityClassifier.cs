@@ -723,6 +723,19 @@ public sealed class RoomEntityClassifier : IDisposable
         EntitiesObserved?.Invoke(wiped);
     }
 
+    // Re-fire EntitiesObserved with the current observation unchanged, so every
+    // subscriber re-evaluates on demand. Used when a state flip that is NOT itself
+    // a room observation — the auto-combat master toggle — must reach all
+    // room-observation consumers at once (combat gate, deferred-cash / get-items /
+    // search acquisition holds), not just the one that flipped it. Without this, a
+    // toggle that only re-runs the combat tracker leaves a sibling gate (e.g. the
+    // deferred-cash Acquisition hold) asserted, stalling the walker until a manual
+    // room re-display. No-op before the first observation.
+    public void ReemitCurrent()
+    {
+        if (Current is { } obs) EntitiesObserved?.Invoke(obs);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

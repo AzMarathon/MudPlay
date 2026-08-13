@@ -86,6 +86,12 @@ public sealed class SpellListParser : IDisposable
 
         string trimmed = text.Trim();
         string lower = trimmed.ToLowerInvariant();
+        // Collapse runs of whitespace before matching the header. The column
+        // header is padding-aligned, and the padding varies by class and realm —
+        // "Level Mana Short Spell Name" vs the Kai classes' "Level Kai  Short …" —
+        // so a fixed single-space match misses a realm whose mana header is padded
+        // differently, and the unrecognised line then aborts the block (see below).
+        string headerProbe = NormalizeSpaces(lower);
 
         if (IsEmptyListLine(lower))
         {
@@ -97,9 +103,12 @@ public sealed class SpellListParser : IDisposable
             return;
         }
 
-        if (IsHeaderLine(lower))
+        if (IsHeaderLine(headerProbe))
         {
-            // Header (intro or column header) opens / restarts the block.
+            // Header (intro or column header) opens / restarts the block. Log the
+            // raw header so a future "spellbook didn't update" report shows exactly
+            // what the realm sent (and whether the space-normalisation was needed).
+            _log?.Info("SpellListParser", $"spell list block opened — header \"{trimmed}\"");
             _state = State.Reading;
             _namesThisBlock.Clear();
             return;
@@ -130,8 +139,23 @@ public sealed class SpellListParser : IDisposable
 
     private void Commit()
     {
+        // A block that opened on a header but yielded no parsed rows is a format
+        // miss, NOT an authoritative "no spells" (that path is IsEmptyListLine) —
+        // do NOT overwrite the book with an empty set (that would wipe a good
+        // spellbook on a header/row-format mismatch). Log it at Warning so a
+        // recurring miss is visible in a report.
+        if (_namesThisBlock.Count == 0)
+        {
+            _log?.Log(LogSeverity.Warn, "SpellListParser",
+                "spell list block ended with 0 rows parsed — book left unchanged "
+                + "(header matched but no rows parsed; likely a row-format mismatch)");
+            _state = State.Idle;
+            return;
+        }
+
         _book.SetObtainedByNames(_namesThisBlock);
         _log?.Info("SpellListParser", $"spell list complete — {_namesThisBlock.Count} spell(s) obtained");
+        _log?.Log(LogSeverity.Debug, "SpellListParser", $"obtained spells: {string.Join(", ", _namesThisBlock)}");
         _namesThisBlock.Clear();
         _state = State.Idle;
     }
@@ -141,11 +165,18 @@ public sealed class SpellListParser : IDisposable
 
     // ----- line classification -----------------------------------------
 
-    private static bool IsHeaderLine(string lower)
-        => lower.StartsWith("you have the following spells:", StringComparison.Ordinal)
-        || lower.StartsWith("you have the following powers:", StringComparison.Ordinal)
-        || lower.StartsWith("level mana short spell name", StringComparison.Ordinal)
-        || lower.StartsWith("level kai  short spell name", StringComparison.Ordinal);
+    private static bool IsHeaderLine(string probe)
+        => probe.StartsWith("you have the following spells:", StringComparison.Ordinal)
+        || probe.StartsWith("you have the following powers:", StringComparison.Ordinal)
+        || probe.StartsWith("level mana short spell name", StringComparison.Ordinal)
+        || probe.StartsWith("level kai short spell name", StringComparison.Ordinal);   // probe is space-normalised
+
+    // Collapse every run of whitespace to a single space (and trim). The spell-list
+    // column header is padding-aligned and the padding varies by class and realm
+    // (the two hard-coded variants above are evidence of that), so normalising lets
+    // one canonical form match them all rather than hard-coding each alignment.
+    private static string NormalizeSpaces(string s)
+        => string.Join(' ', s.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     private static bool IsEmptyListLine(string lower)
         => lower.StartsWith("you have no spell", StringComparison.Ordinal)

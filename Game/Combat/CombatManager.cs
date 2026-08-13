@@ -282,6 +282,16 @@ public sealed partial class CombatManager : IDisposable
     // swallow the instant Off/Engaged cycle a per-strike attack produces.
     private static readonly TimeSpan ResumePacing = TimeSpan.FromMilliseconds(2500);
 
+    // Rate limit for the spell-mode attack-resume that a MANUAL cast arms. A user
+    // mashing hand-typed casts (e.g. a room/utility spell) re-stamps the arming
+    // each keypress, so each would otherwise fire its own re-attack — the reported
+    // manual-cast → attack-spell spam. Engine survival casts are never paced (they
+    // resume once per round); this bounds only the hand-typed burst. Timestamp is
+    // separate from _lastInterruptResumeAt so it can't perturb the weapon resume.
+    private static readonly TimeSpan ManualResumePacing = TimeSpan.FromMilliseconds(2500);
+    private DateTimeOffset _lastManualCastResumeAt = DateTimeOffset.MinValue;
+    private bool _lastBetweenRoundCastManual;   // was the last between-round cast hand-typed?
+
     // Timestamp of the last attack we actually sent to the wire (set by
     // NoteAttackSent on every SendAttack). Distinct from _lastInterruptResumeAt,
     // which only tracks resumes: an attack fired by the death→re-observe path
@@ -2147,9 +2157,20 @@ public sealed partial class CombatManager : IDisposable
     // _spellAttackOwed while an attack spell was actively cycling — this cast just
     // spent the round that owed us an attack, so CastingDirector must sit out the
     // next one (see _spellAttackOwed).
-    public void NoteBetweenRoundCast()
+    // Engine-armed between-round cast (CastingDirector survival heals/buffs, and
+    // our own internal casts). Never rate-limited — the engine casts at most once
+    // per round, so each is a legitimate resume.
+    public void NoteBetweenRoundCast() => NoteBetweenRoundCast(manual: false);
+
+    // Manual (hand-typed) between-round cast, routed here by OutboundCastObserver.
+    // Flagged so the spell-mode resume can rate-limit a mashed burst (see
+    // ManualResumePacing) without ever throttling the engine's per-round resumes.
+    public void NoteManualBetweenRoundCast() => NoteBetweenRoundCast(manual: true);
+
+    private void NoteBetweenRoundCast(bool manual)
     {
         _betweenRoundCastAt = DateTimeOffset.Now;
+        _lastBetweenRoundCastManual = manual;
         if (_castingSpellTarget is not null)
             _spellAttackOwed = true;
         // Start of the resume-timing chain: a between-round cast (a survival heal /
@@ -2157,7 +2178,8 @@ public sealed partial class CombatManager : IDisposable
         // Off within the window should re-engage. Logged so the cast→Off→resume
         // sequence is traceable end to end (report paradigm-20260813-065138).
         _log?.Combat(LogCategory,
-            $"between-round cast noted — resume armed (spellTarget={_castingSpellTarget ?? "(none)"})");
+            $"between-round cast noted ({(manual ? "manual" : "engine")}) — resume armed "
+            + $"(spellTarget={_castingSpellTarget ?? "(none)"})");
     }
 
     // "You gain N experience." — the prompt kill signal (see _lastExpGainAt). Only
@@ -2295,14 +2317,26 @@ public sealed partial class CombatManager : IDisposable
             // a kill's Off); it re-decides through the chooser (DispatchRoundAction),
             // so a lapsed spell condition switches cleanly, and it forces a fresh
             // announce because the server dropped the repeat.
+            // The per-interrupt guard (_betweenRoundCastAt != _last…) caps ONE
+            // re-announce per between-round-cast stamp — enough for the engine's own
+            // survival casts (each is a distinct round). But a user MASHING manual
+            // casts (e.g. a room/utility spell) re-stamps _betweenRoundCastAt each
+            // time, so each fresh stamp fires its own re-attack: a burst as fast as
+            // they type (the reported manual-cast → mmis spam). Rate-limit ONLY the
+            // manual-armed resume (ManualResumePacing) — the engine's per-round
+            // survival casts must keep resuming every round, so they're never paced.
+            bool manualPaced = _lastBetweenRoundCastManual
+                && DateTimeOffset.Now - _lastManualCastResumeAt < ManualResumePacing;
             if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _betweenRoundCastAt != _lastSpellResumeForBetweenRoundCastAt
+                && !manualPaced
                 && _castingSpellTarget is { } spellTarget
                 && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
                 && _classifier.Current is { } liveSpell
                 && TargetPresent(liveSpell, spellTarget)
                 && TryBuildCandidate(liveSpell, spellTarget) is { } spellCand)
             {
+                if (_lastBetweenRoundCastManual) _lastManualCastResumeAt = DateTimeOffset.Now;
                 // Clear the interrupt flag before attempting the re-announce, mirroring
                 // ResumeEngage's weapon-mode path — NOT only inside DispatchRoundAction's
                 // TryCast-succeeded branch. This attempt can lose the round's single cast
