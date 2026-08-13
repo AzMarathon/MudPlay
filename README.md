@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.9.7**
-> - Player Workshop → Character Info: equipped, carried, and key-ring items are now clickable links to their Game Data item record (stacked-item count prefixes are handled)
-> - Room-detail popup: the "Also here" monsters now show their record number (e.g. `chest(#69)`)
-> - Item record (Game Data → Items): a Charm picker (default 50) re-prices the bought/sold figures live; each shop gains a "Queue Walking here →" link; "Dropped by" monsters are clickable links
-> - Shop room-detail popup gains the same live Charm picker
+> **Version 3.9.8**
+> - Monster record (Game Data → Monsters): each "Spawns In" room now shows that room's lair size — e.g. `1/2122 (lair: 2)`
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

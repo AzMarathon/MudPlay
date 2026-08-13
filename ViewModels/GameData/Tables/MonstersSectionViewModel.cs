@@ -509,7 +509,8 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             // as map/room pairs at the bottom per user spec (the pane
             // scrolls; a common mob like giant rat lairs in dozens of
             // rooms and we show them all).
-            AddRoomList(kv, "Spawns In", FindSpawnRooms(wccNo));
+            AddRoomList(kv, "Spawns In", FindSpawnRooms(wccNo),
+                k => $"{k.Map}/{k.Room} (lair: {SpawnLairMax(k)})");
 
             // ----- Placed In (fixed NPC room) -----
             // Placed monsters (bosses / uniques / shopkeepers) live in a
@@ -778,15 +779,26 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // the room-detail popup. Not truncated — the Other Info pane scrolls and a truncated
     // list has no expand affordance, so show them all. Falls back to a plain comma-joined
     // string when no DialogService is available (design-time). No-op when rooms is empty.
-    private void AddRoomList(List<MdbInfoRow> kv, string label, IReadOnlyList<RoomKey> rooms)
+    private void AddRoomList(List<MdbInfoRow> kv, string label, IReadOnlyList<RoomKey> rooms,
+        Func<RoomKey, string>? labelFor = null)
     {
         if (rooms.Count == 0) return;
-        string list = string.Join(", ", rooms.Select(k => $"{k.Map}/{k.Room}"));
+        labelFor ??= static k => $"{k.Map}/{k.Room}";
+        string list = string.Join(", ", rooms.Select(labelFor));
         IReadOnlyList<RoomLink>? links = _dialogs is { } dialogs
-            ? rooms.Select(k => new RoomLink($"{k.Map}/{k.Room}", k, dialogs)).ToList()
+            ? rooms.Select(k => new RoomLink(labelFor(k), k, dialogs)).ToList()
             : null;
         kv.Add(new MdbInfoRow($"{label} ({rooms.Count})", list, Rooms: links));
     }
+
+    // Per-room lair cap — the "(Max N)" from a room's lair tag, e.g. "(lair: 2)"
+    // appended to each Spawns-In room so the record shows how many of the monster
+    // spawn there. 0 when the room / tag can't be read (shouldn't happen for a
+    // room FindSpawnRooms already matched by its lair tag).
+    private int SpawnLairMax(RoomKey key)
+        => _roomGraph?.GetRoom(key) is { } room
+           && RoomTooltipBuilder.TryParseLairMax(room.RawLairTag, out int max)
+            ? max : 0;
 
     // Append an "Item Drops (N)" row listing every dropped item as a clickable
     // chip that jumps the browser's Items tab to that item. Mirrors AddRoomList;
