@@ -85,7 +85,8 @@ public sealed class ItemFinderCatalogTests : IDisposable
         IReadOnlyList<ItemFinderEntry> catalog = ItemFinderEntry.BuildCatalog(SeededCache());
 
         ItemFinderEntry charm = catalog.Single(e => e.Name == "phoenix charm");
-        Assert.Equal(new[] { "magma heat", "temple of fire fire" }, charm.Negates);
+        Assert.Equal(new[] { "magma heat", "temple of fire fire" }, charm.Negates.Select(n => n.Name));
+        Assert.Equal(new[] { 526, 218 }, charm.Negates.Select(n => n.Id));   // id backs the "#id" dropdown label
         Assert.Equal("magma heat, temple of fire fire", charm.NegatesText);
 
         // A non-negating item carries an empty list and a blank Negates cell.

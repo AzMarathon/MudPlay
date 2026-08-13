@@ -306,7 +306,7 @@
                         <DataGridTextColumn Header="Lightning"  Binding="{ReflectionBinding LightningResistText}" SortMemberPath="LightningResist" Width="86"  Tag="LightningResistText"/>
                         <DataGridTextColumn Header="Water"      Binding="{ReflectionBinding WaterResistText}" SortMemberPath="WaterResist" Width="62"  Tag="WaterResistText"/>
                         <DataGridTextColumn Header="Shadow"     Binding="{ReflectionBinding ShadowResistText}" SortMemberPath="ShadowResist" Width="68"  Tag="ShadowResistText"/>
-                        <DataGridTextColumn Header="Negates"    Binding="{ReflectionBinding NegatesText}"    SortMemberPath="NegatesText" Width="200" Tag="NegatesText"/>
+                        <DataGridTextColumn Header="Negates"    Binding="{ReflectionBinding NegatesText}"    SortMemberPath="NegatesText" Width="Auto" MinWidth="200" Tag="NegatesText"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>

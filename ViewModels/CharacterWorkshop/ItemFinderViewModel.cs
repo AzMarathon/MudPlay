@@ -141,6 +141,9 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     private readonly ItemFinderEntry.SwingContext? _swing;
     private readonly Dictionary<string, EquipmentSlot> _slotByLabel = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _weaponCodeByLabel = new(StringComparer.Ordinal);
+    // Negate dropdown label ("<spell> #<id>") → spell id, so the filter matches by
+    // id (unambiguous across same-named spells).
+    private readonly Dictionary<string, int> _negateIdByLabel = new(StringComparer.Ordinal);
 
     // Snapshot of the derived filter inputs, refreshed by ApplyFilter so the per-item
     // predicate stays a cheap field compare rather than re-resolving each call.
@@ -389,14 +392,19 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
                      .Select(static g => g.Key))
             ArmourTypeOptions.Add(label);
 
-        // Every distinct spell an item in the catalog negates, alphabetised, with
-        // the "(none)" no-filter default first.
+        // Every distinct spell an item in the catalog negates, labelled
+        // "<spell> #<id>", alphabetised, with the "(none)" no-filter default first.
         NegateOptions.Add(NoNegate);
-        foreach (string spell in _all
+        foreach (ItemFinderEntry.NegatedSpell neg in _all
                      .SelectMany(static e => e.Negates)
-                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                     .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase))
-            NegateOptions.Add(spell);
+                     .Distinct()
+                     .OrderBy(static n => n.Name, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(static n => n.Id))
+        {
+            string label = $"{neg.Name} #{neg.Id}";
+            _negateIdByLabel[label] = neg.Id;
+            NegateOptions.Add(label);
+        }
     }
 
     private void OnFilterPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -573,9 +581,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         if (MaxStrReq > 0 && e.StrReq > MaxStrReq) return false;
         if (MaxLevelReq > 0 && e.LevelReq > MaxLevelReq) return false;
 
-        // Negate dropdown: keep only items that negate the selected spell.
-        if (SelectedNegate is { } neg && neg != NoNegate
-            && !e.Negates.Contains(neg, StringComparer.OrdinalIgnoreCase))
+        // Negate dropdown: keep only items that negate the selected spell (by id).
+        if (SelectedNegate is { } sel && sel != NoNegate
+            && _negateIdByLabel.TryGetValue(sel, out int negId)
+            && !e.Negates.Any(n => n.Id == negId))
             return false;
 
         return true;
