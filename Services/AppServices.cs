@@ -1247,6 +1247,10 @@ public sealed class AppServices
     // walker resumes only once both engines finish looting.
     public Game.Inventory.AcquisitionGate Acquisition { get; private set; } = null!;
 
+    // Coalesces the post-kill room re-render Cash and AutoGetItems each request,
+    // so the last kill renders the room once, not twice. Both are bound to it.
+    public Game.Inventory.RoomRedisplayCoordinator RoomRedisplay { get; } = new();
+
     // On-entry stash plan for user-
     // marked stash rooms. Dispatches hide N <coin>
     // commands per Models.Profile.StashCurrencyRule
@@ -3633,6 +3637,7 @@ public sealed class AppServices
         // counts aren't relevant to the new one.
         Profile.ProfileLoaded += _ => Cash.ResetTallies();
         Cash.SetAcquisitionGate(Acquisition);
+        Cash.SetRoomRedisplay(RoomRedisplay);
         // Combat-finished flush: every room-entity observation re-checks the
         // deferred collect queue. CombatStateTracker's handler subscribed in its
         // constructor (well before here), so it runs first and the hostile flag
@@ -3732,6 +3737,7 @@ public sealed class AppServices
             log: Log,
             isParadigm: onParadigm);
         AutoGetItems.SetAcquisitionGate(Acquisition);
+        AutoGetItems.SetRoomRedisplay(RoomRedisplay);
         // Combat-finished flush: every room-entity observation re-checks
         // the deferred queue (CombatStateTracker's handler ran first, so
         // the hostile flag is current).

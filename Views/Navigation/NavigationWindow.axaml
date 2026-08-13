@@ -386,6 +386,7 @@
                             <StackPanel Width="290" Spacing="3">
                                 <Button Content="Clear destination"
                                         Command="{Binding ClearQueuedDestinationCommand}"
+                                        Click="OnClearDestinationClick"
                                         IsVisible="{Binding HasQueuedDestination}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                         FontSize="11"/>

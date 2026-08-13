@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.27**
+> **Version 3.8.30**
 > - Transaction history: the stash tint now fills the whole entry edge-to-edge (consecutive stashes read as one gold band, no gaps), and the timestamp / type / room-location text is brighter for readability
+> - After the last monster in a room dies, the room re-displays once instead of twice — the item and cash collect engines now share one post-kill re-render
+> - Fixed a doubled attack command after the first kill in a room: a matched death line no longer lets the same kill's exp/*Combat Off* re-drop and re-attack the freshly-picked next target
+> - Navigation goto flyout: "Clear destination" now closes the flyout, like picking a recent destination already does
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

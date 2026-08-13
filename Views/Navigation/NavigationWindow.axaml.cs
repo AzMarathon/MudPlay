@@ -332,12 +332,20 @@ public partial class NavigationWindow : Window
     private void OnGotoHistorySelected(object? sender, SelectionChangedEventArgs e)
     {
         if (e.AddedItems.Count == 0) return;
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (this.FindControl<TextBox>("SearchBox") is { } searchBox)
-                FlyoutBase.GetAttachedFlyout(searchBox)?.Hide();
-        });
+        HideGotoFlyout();
     }
+
+    // Clearing the queued destination should also dismiss the flyout (the bound
+    // Command runs the clear; this just closes the popup). Same deferred Hide as
+    // a history pick — the button itself vanishes once HasQueuedDestination flips
+    // false, so the flyout has nothing left to show anyway.
+    private void OnClearDestinationClick(object? sender, RoutedEventArgs e) => HideGotoFlyout();
+
+    private void HideGotoFlyout() => Dispatcher.UIThread.Post(() =>
+    {
+        if (this.FindControl<TextBox>("SearchBox") is { } searchBox)
+            FlyoutBase.GetAttachedFlyout(searchBox)?.Hide();
+    });
 
     // ----- Building-loop click list ---------------------------------
 

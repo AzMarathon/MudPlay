@@ -2539,6 +2539,35 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
+    public void MatchedDeath_ThenSameKillsExpAndCombatOff_DoesNotDropTheRePickedSurvivor()
+    {
+        // Report 215511: the first kill's death LINE cleared the corpse and
+        // re-picked the next survivor, then the SAME kill's exp + *Combat Off*
+        // tripped the exp-inference — which dropped the freshly-picked survivor
+        // and re-attacked it, double-firing the attack command. A matched death
+        // line must gate that inference off (this Off is the matched kill's Off).
+        using Harness h = new();
+        h.AddMonster(1, "orc lieutenant", killable: true, allowNoPrefix: false,
+            "small", "short");
+
+        h.Feed("Also here: small orc lieutenant, short orc lieutenant.");
+        Assert.Equal("small orc lieutenant", h.Combat.CurrentTarget);
+
+        // First orc's death line matches → clear + re-display re-picks the survivor.
+        h.Combat.NoteMonsterDied("small orc lieutenant");
+        h.Feed("Also here: short orc lieutenant.");
+        Assert.Equal("short orc lieutenant", h.Combat.CurrentTarget);
+        int sentAfterRepick = h.Sent.Count;
+
+        // The SAME kill's exp + *Combat Off* arrive — must NOT infer a second kill.
+        h.Feed("You gain 100 experience.");
+        h.Feed("*Combat Off*");
+
+        Assert.Equal("short orc lieutenant", h.Combat.CurrentTarget);   // survivor still engaged
+        Assert.Equal(sentAfterRepick, h.Sent.Count);                    // no double-fire
+    }
+
+    [Fact]
     public void BetweenRoundCast_ThenCombatOff_ResumesImmediately()
     {
         // The reported case: a between-round CastingDirector self-heal fires
