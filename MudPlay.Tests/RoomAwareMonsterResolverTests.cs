@@ -46,7 +46,10 @@ public sealed class RoomAwareMonsterResolverTests : IDisposable
         ]
         """;
 
-    private (RoomAwareMonsterResolver Resolver, GameDataCache Cache) NewResolver()
+    // baseName stands in for the classifier's flavor-prefix stripping (tested
+    // separately); identity by default so a raw name is its own base.
+    private (RoomAwareMonsterResolver Resolver, GameDataCache Cache) NewResolver(
+        Func<string, string?>? baseName = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Monsters.json"), MonstersJson);
@@ -56,7 +59,8 @@ public sealed class RoomAwareMonsterResolverTests : IDisposable
         var spawns = new MonsterSpawnIndex(cache);
         var summons = new MonsterSummonTargetsIndex(cache);
         // currentRoom is unused by ResolveInRoom (tests pass the room explicitly).
-        var resolver = new RoomAwareMonsterResolver(cache, () => null, spawns, summons);
+        var resolver = new RoomAwareMonsterResolver(
+            cache, () => null, baseName ?? (s => s), spawns, summons);
         return (resolver, cache);
     }
 
@@ -115,5 +119,20 @@ public sealed class RoomAwareMonsterResolverTests : IDisposable
         (RoomAwareMonsterResolver r, _) = NewResolver();
         Room barracks = RoomWith(lair: "(Max 2): 101,[5]");
         Assert.Equal(101, r.ResolveInRoom(barracks, "  Orc Lieutenant  "));
+    }
+
+    [Fact]
+    public void FlavorPrefixedNameMatchesTheRoomsBaseRecord()
+    {
+        // The game shows "short orc lieutenant" / "fierce orc lieutenant" — flavor
+        // prefixes on the base record "orc lieutenant" (#101, in the lair). Once the
+        // classifier strips the prefix to "orc lieutenant", both resolve to this
+        // room's #101, not the slums #202.
+        (RoomAwareMonsterResolver r, _) = NewResolver(
+            baseName: n => n.EndsWith("orc lieutenant", StringComparison.OrdinalIgnoreCase)
+                ? "orc lieutenant" : n);
+        Room barracks = RoomWith(lair: "(Max 1): 101,[5]");
+        Assert.Equal(101, r.ResolveInRoom(barracks, "short orc lieutenant"));
+        Assert.Equal(101, r.ResolveInRoom(barracks, "fierce orc lieutenant"));
     }
 }

@@ -94,6 +94,26 @@ public sealed class RoomEntityClassifierTests
         Assert.Null(h.Classifier.Current);
     }
 
+    // ----- ResolveBaseName (flavor-prefix strip for room-aware resolution) -----
+
+    [Fact]
+    public void ResolveBaseName_StripsFlavorPrefixToBaseName()
+    {
+        using Harness h = new();
+        h.AddMonster(101, "orc lieutenant", allowNoPrefix: true, "short", "fierce");
+        Assert.Equal("orc lieutenant", h.Classifier.ResolveBaseName("short orc lieutenant"));
+        Assert.Equal("orc lieutenant", h.Classifier.ResolveBaseName("fierce orc lieutenant"));
+        Assert.Equal("orc lieutenant", h.Classifier.ResolveBaseName("orc lieutenant"));
+    }
+
+    [Fact]
+    public void ResolveBaseName_UnknownMonster_ReturnsNull()
+    {
+        using Harness h = new();
+        h.AddMonster(101, "orc lieutenant", allowNoPrefix: true, "short");
+        Assert.Null(h.Classifier.ResolveBaseName("giant spider"));
+    }
+
     [Fact]
     public void NonMatchingLine_NoEmit()
     {

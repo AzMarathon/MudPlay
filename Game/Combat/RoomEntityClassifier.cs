@@ -381,6 +381,22 @@ public sealed class RoomEntityClassifier : IDisposable
         return numEl.TryGetInt32(out number);
     }
 
+    // Strip a monster display name's flavor prefix down to its canonical base name
+    // ("short orc lieutenant" → "orc lieutenant") using the same message-catalog /
+    // Monsters-table matching Classify does — so a room-aware resolver can compare
+    // a looked-at name against room monsters' base names without re-implementing the
+    // prefix rules. Returns null when the name resolves to no known monster.
+    public string? ResolveBaseName(string display)
+    {
+        if (string.IsNullOrWhiteSpace(display)) return null;
+        string trimmed = display.Trim();
+        if (TryMatchMonster(trimmed, out MonsterMessageRecord? m) && m is not null)
+            return m.Name;
+        // Exact Monsters-table hit: the name is already its own base (no prefix).
+        if (TryMatchMonstersTable(trimmed, out _)) return trimmed;
+        return null;
+    }
+
     private bool TryMatchMonster(string entry, out MonsterMessageRecord? hit)
     {
         // Direct match: AllowNoPrefix records whose Name == entry.

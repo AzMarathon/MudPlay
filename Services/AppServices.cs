@@ -2746,6 +2746,9 @@ public sealed class AppServices
             () => RoomTracker.State.CurrentRoom is { } r
                 ? RoomGraph.GetRoom(r.Key) ?? r
                 : null,
+            // Strip the display name's flavor prefix to the base Monsters name so a
+            // "short orc lieutenant" matches this room's "orc lieutenant" record.
+            RoomClassifier.ResolveBaseName,
             MonsterSpawns, MonsterSummonTargets);
         SummonSettle = new Game.Combat.SummonOnDeathSettle(
             MonsterDeath, RoomClassifier, MovementCoordinator, MonsterDeathSummon,

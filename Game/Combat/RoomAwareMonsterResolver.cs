@@ -23,15 +23,18 @@ public sealed class RoomAwareMonsterResolver
 {
     private readonly GameDataCache _gameData;
     private readonly Func<Room?> _currentRoom;
+    private readonly Func<string, string?> _resolveBaseName;
     private readonly MonsterSpawnIndex _spawns;
     private readonly MonsterSummonTargetsIndex _summons;
 
     public RoomAwareMonsterResolver(
         GameDataCache gameData, Func<Room?> currentRoom,
+        Func<string, string?> resolveBaseName,
         MonsterSpawnIndex spawns, MonsterSummonTargetsIndex summons)
     {
         _gameData = gameData ?? throw new ArgumentNullException(nameof(gameData));
         _currentRoom = currentRoom ?? throw new ArgumentNullException(nameof(currentRoom));
+        _resolveBaseName = resolveBaseName ?? throw new ArgumentNullException(nameof(resolveBaseName));
         _spawns = spawns ?? throw new ArgumentNullException(nameof(spawns));
         _summons = summons ?? throw new ArgumentNullException(nameof(summons));
     }
@@ -45,17 +48,27 @@ public sealed class RoomAwareMonsterResolver
         return ResolveInRoom(room, name);
     }
 
-    // Core resolution against an explicit room — the candidate whose display name
+    // Core resolution against an explicit room — the candidate whose base name
     // matches, or null. Split out so it's testable without a live RoomTracker.
+    //
+    // The looked-at name carries the game's flavor prefix ("short orc lieutenant",
+    // "fierce orc lieutenant") while the Monsters record holds the base name ("orc
+    // lieutenant"). ResolveBaseName strips the prefix via the classifier's real
+    // per-monster prefix rules (a distinct "short orc lieutenant" record resolves
+    // to itself; a prefixed bare record resolves to "orc lieutenant"), then the
+    // candidate is matched on that base name. Unresolvable names fall through to a
+    // raw exact match, which typically finds nothing → caller's first-match fallback.
     internal int? ResolveInRoom(Room room, string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
         string trimmed = name.Trim();
+        string target = _resolveBaseName(trimmed) is { Length: > 0 } b ? b : trimmed;
+
         foreach (int id in RoomCandidates(room))
         {
             string? candidate = _gameData.FindNameByNumber("Monsters", id);
             if (!string.IsNullOrEmpty(candidate)
-                && string.Equals(candidate, trimmed, StringComparison.OrdinalIgnoreCase))
+                && string.Equals(candidate, target, StringComparison.OrdinalIgnoreCase))
                 return id;
         }
         return null;
