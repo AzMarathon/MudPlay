@@ -60,7 +60,7 @@
                           Foreground="{StaticResource ChromeFgSecBrush}"
                           FontSize="11" VerticalAlignment="Center"/>
 
-                <TextBox Grid.Column="4" MinWidth="220"
+                <TextBox Grid.Column="4" Classes="clearable" MinWidth="220"
                          PlaceholderText="Search source / message…"
                          Text="{Binding SearchText, Mode=TwoWay}"/>
 

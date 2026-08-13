@@ -43,7 +43,7 @@
                           IsChecked="{Binding SyncScroll}"
                           Content="Sync scroll"
                           Foreground="#CCCCCC"/>
-                <TextBox Grid.Column="7" MinWidth="220"
+                <TextBox Grid.Column="7" Classes="clearable" MinWidth="220"
                          PlaceholderText="Search…"
                          Text="{Binding SearchText, Mode=TwoWay}"/>
                 <Button Grid.Column="8" Margin="6,0,0,0"

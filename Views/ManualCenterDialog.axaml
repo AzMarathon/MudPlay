@@ -22,7 +22,7 @@
             <!-- Single search box — mirrors the Navigation rail's
                  search input. Enter commits the highlighted (or top)
                  row; up/down arrows move through the dropdown. -->
-            <TextBox Grid.Row="1"
+            <TextBox Grid.Row="1" Classes="clearable"
                      Name="QueryBox"
                      Text="{Binding Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      PlaceholderText="Search rooms…"

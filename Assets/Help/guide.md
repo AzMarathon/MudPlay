@@ -139,6 +139,8 @@ Or build it off the map: **Navigation Management → New Loop** opens an editor 
 
 **Run a saved loop** from the **LOOPS + AUTO-LAIRS** rail (or the Management dialog) — each has **Load** (stage it) and **Run** (start now). Queue one and, if you aren't already there, MudPlay walks you to the loop's start, then begins the circuit; combat, healing, and pickup keep running throughout. While it runs the badge reads **LOOPING** with "step X of Y on lap Z" — **Pause** to edit mid-run, **Stop** to end.
 
+**Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Run**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to the terminal's right-click Favorites flyout (green for loops, amber for lairs) alongside your starred GOTO rooms, so you can start it from anywhere.
+
 Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
 
 ## Estimating a loop's exp/hour

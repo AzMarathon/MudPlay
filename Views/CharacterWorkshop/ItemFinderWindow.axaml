@@ -226,7 +226,7 @@
                                Foreground="{StaticResource ChromeFgSecBrush}"
                                FontSize="{StaticResource FontSizeSm}"
                                VerticalAlignment="Center"/>
-                    <TextBox Grid.Column="1" Text="{Binding NameFilter, Mode=TwoWay}"
+                    <TextBox Grid.Column="1" Classes="clearable" Text="{Binding NameFilter, Mode=TwoWay}"
                              PlaceholderText="Filter by name…" Width="240" HorizontalAlignment="Left"
                              VerticalAlignment="Center"
                              ToolTip.Tip="Show only items whose name contains this text."/>

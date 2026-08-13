@@ -22,6 +22,12 @@ public sealed class LoopRowViewModel
     // "4 rooms" — count of waypoints in the loop.
     public string SubLabel => $"{Source.RoomCount} room{(Source.RoomCount == 1 ? "" : "s")}";
 
+    // Context-menu label reflecting the current favourite state (the loop's
+    // Favorite flag feeds the terminal right-click Favourites flyout). The row is
+    // rebuilt on every LoopsChanged, so a plain computed getter stays in sync.
+    public string FavoriteMenuHeader
+        => Source.Favorite ? "Remove from favourites" : "Add to favourites";
+
     public LoopRowViewModel(Loop source)
     {
         ArgumentNullException.ThrowIfNull(source);

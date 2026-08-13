@@ -365,7 +365,7 @@
                 <!-- Search box — top-right corner of the header. Hidden while the
                      map is collapsed (search has no target rail to show results
                      against in that mode). -->
-                <TextBox Grid.Column="4"
+                <TextBox Grid.Column="4" Classes="clearable"
                          Name="SearchBox"
                          IsVisible="{Binding MapExpanded}"
                          Text="{Binding SearchQuery, Mode=TwoWay}"
@@ -1084,7 +1084,7 @@
                                          from the Navigation Management window's GOTO
                                          tab, or right-click nodes in this tree. -->
                                     <!-- Filter box first, then folders, then favourites. -->
-                                    <TextBox Text="{Binding GotoFilter, Mode=TwoWay}"
+                                    <TextBox Classes="clearable" Text="{Binding GotoFilter, Mode=TwoWay}"
                                              PlaceholderText="Filter favourites…"
                                              FontSize="11"
                                              Margin="0,0,0,2"
@@ -1277,7 +1277,7 @@
                                 </Expander.Header>
                                 <StackPanel Spacing="2" HorizontalAlignment="Stretch">
                                     <!-- Filter box first, then folders, then loops. -->
-                                    <TextBox Text="{Binding LoopFilter, Mode=TwoWay}"
+                                    <TextBox Classes="clearable" Text="{Binding LoopFilter, Mode=TwoWay}"
                                              PlaceholderText="Filter loops / lairs…"
                                              FontSize="11"
                                              Margin="0,0,0,2"
@@ -1417,8 +1417,14 @@
                                                             <MenuItem Header="Run"
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).RunSetupCommand}"
                                                                       CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="Edit…"
+                                                                      Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).EditSetupCommand}"
+                                                                      CommandParameter="{Binding}"/>
                                                             <MenuItem Header="Move to folder…"
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).MoveSetupToFolderPromptCommand}"
+                                                                      CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="{Binding FavoriteMenuHeader}"
+                                                                      Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).ToggleSetupFavoriteCommand}"
                                                                       CommandParameter="{Binding}"/>
                                                         </ContextMenu>
                                                     </Grid.ContextMenu>
@@ -1463,8 +1469,14 @@
                                                             <MenuItem Header="Run"
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).RunLoopCommand}"
                                                                       CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="Edit…"
+                                                                      Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).EditLoopCommand}"
+                                                                      CommandParameter="{Binding}"/>
                                                             <MenuItem Header="Move to folder…"
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).MoveLoopToFolderPromptCommand}"
+                                                                      CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="{Binding FavoriteMenuHeader}"
+                                                                      Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).ToggleLoopFavoriteCommand}"
                                                                       CommandParameter="{Binding}"/>
                                                         </ContextMenu>
                                                     </Grid.ContextMenu>

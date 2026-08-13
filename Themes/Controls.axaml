@@ -11,7 +11,34 @@
   StaticResource, which Avalonia resolves at load time.
 -->
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctl="using:MudPlay.Controls">
+
+    <!-- ============ Clearable filter boxes ============
+         Opt-in via Classes="clearable" on any filter / search TextBox: an ✕
+         button in the box's right inner content that clears the text. The
+         button only shows while the box is non-empty, and each styled box gets
+         its own button instance (Setter Template). The shared ClearTextBoxCommand
+         clears the TextBox passed as its parameter — no per-view code. -->
+    <Style Selector="TextBox.clearable">
+        <Setter Property="InnerRightContent">
+            <Template>
+                <Button Classes="clearBtn"
+                        Command="{x:Static ctl:ClearTextBoxCommand.Instance}"
+                        CommandParameter="{Binding $parent[TextBox]}"
+                        IsVisible="{Binding $parent[TextBox].Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                        Background="Transparent" BorderThickness="0"
+                        Padding="6,0" VerticalAlignment="Stretch"
+                        Cursor="Hand" ToolTip.Tip="Clear">
+                    <TextBlock Text="✕" FontSize="11" VerticalAlignment="Center"
+                               Foreground="{StaticResource ChromeFgSecBrush}"/>
+                </Button>
+            </Template>
+        </Setter>
+    </Style>
+    <Style Selector="Button.clearBtn:pointerover TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+    </Style>
 
     <!-- ============ Window root ============ -->
     <Style Selector="Window">

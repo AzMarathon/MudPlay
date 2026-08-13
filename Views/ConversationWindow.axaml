@@ -68,7 +68,7 @@
                      freely as the window narrows without shoving these around. -->
                 <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4"
                             VerticalAlignment="Top">
-                    <TextBox MinWidth="200"
+                    <TextBox Classes="clearable" MinWidth="200"
                              VerticalAlignment="Top"
                              PlaceholderText="Search speaker / message…"
                              Text="{Binding SearchText, Mode=TwoWay}"/>
