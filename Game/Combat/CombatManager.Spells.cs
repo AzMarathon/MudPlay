@@ -1089,8 +1089,14 @@ public sealed partial class CombatManager
     // Resolve the MonsterNumber of the entity matching rawName in obs, or -1 when
     // no match carries a number — which the eligibility helpers treat as "no
     // data, fail open".
-    private static int ResolveMonsterNumber(RoomEntitiesObservation obs, string rawName)
+    private int ResolveMonsterNumber(RoomEntitiesObservation obs, string rawName)
     {
+        // Prefer the record actually placed / summoned in the current room so a
+        // display name shared across zones resolves this room's variant's overrides
+        // (a graveyard zombie's spell, not a tunnels zombie's). Falls through to the
+        // first-match entity scan below when the room has no monster with this name.
+        if (_roomAwareResolve?.Invoke(rawName) is { } roomId) return roomId;
+
         for (int i = 0; i < obs.Entities.Count; i++)
         {
             RoomEntity e = obs.Entities[i];

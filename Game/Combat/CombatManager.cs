@@ -74,6 +74,10 @@ public sealed partial class CombatManager : IDisposable
     private readonly RoomEntityClassifier _classifier;
     private readonly MonsterMessageStore _monsters;
     private readonly Func<int, MonsterOverlay> _resolveOverlay;
+    // Optional room-aware name→Number resolver: prefers the record actually in the
+    // current room so a display name shared across zones picks this room's variant.
+    // Null (tests / legacy ctor) → the name→Number step keeps its first-match scan.
+    private readonly Func<string, int?>? _roomAwareResolve;
     private readonly PartyState _party;
     private readonly Func<CombatSettings> _readSettings;
     private readonly Func<PartySettings>? _readPartySettings;
@@ -473,7 +477,8 @@ public sealed partial class CombatManager : IDisposable
         Func<string?> readOwnGivenName,
         Action<Action> post,
         LogService? log = null,
-        Func<PartySettings>? readPartySettings = null)
+        Func<PartySettings>? readPartySettings = null,
+        Func<string, int?>? roomAwareResolve = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(classifier);
@@ -488,6 +493,7 @@ public sealed partial class CombatManager : IDisposable
         _classifier   = classifier;
         _monsters     = monsters;
         _resolveOverlay = resolveOverlay;
+        _roomAwareResolve = roomAwareResolve;
         _party        = party;
         _readSettings = readSettings;
         _isEnabled    = isEnabled;

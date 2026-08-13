@@ -1,16 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.39**
-> - Filter/search boxes across the app now show a ✕ clear button on the right while they hold text (click to clear)
-> - Navigation rail right-click: loops and Auto-Lair setups now offer Edit… and Add/Remove from favourites, matching the goto menu (favourited loops/lairs join the terminal Favorites flyout)
-> - Character Info attack table: new Swings column showing swings/round per attack type (Attack, Bash, Smash, Backstab, Punch/Kick/Jumpkick), computed from your stats + weapon via the same energy-budget model the Calculators tab uses
-> - Item Finder: new Negates column listing the spells an item cancels while worn, plus a Negates dropdown in the stat filters (populated with every spell any item negates; `(none)` = off) to narrow to items that negate a chosen spell
-> - Item record: flag-style properties (LoyalItem, Del@Maint, QuestItem, NotSellable, …) now read "Yes" instead of a misleading "0", and the never-drop (Not Droppable) / delete-on-death columns are now surfaced
-> - Status bar: connection indicator is now just the coloured dot (green/yellow/red), with the state text moved to its hover tooltip — freeing room on the bar
-> - Status bar: the exp/hr slot now appends "- TNL: <time>" (estimated time to next level at the current rate)
-> - Monster look: the HP estimate slot is relabelled "TGT HP:" and also prints a yellow "[<name> remaining Hitpoints: <est>]" line to the terminal; a new Settings → Other "Show monster HP lookup" checkbox (default on) gates both
-> - Auto-get MaxToGet cap no longer overshoots: a stacked pack count ("50 orc-head") is now read at its true quantity after an inventory refresh, so collection stops at the limit instead of topping up past it
+> **Version 3.8.40**
+> - Monster HP lookup now reads the record placed/summoned in your current room, so a display name shared across zones (an orc lieutenant in the barracks vs the slums) shows the right monster's HP instead of the first same-named game-data match
+> - Per-monster spell overrides now match that same room-aware record, so an override set on one zone's monster (a graveyard zombie) no longer bleeds onto a same-named monster elsewhere (a tunnels zombie)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
