@@ -1059,6 +1059,35 @@ public sealed class InventoryManagerTests
     }
 
     [Fact]
+    public void Hide_SubtractsItemWeightFromEncumbrance()
+    {
+        using Harness h = new(TestWeight);
+        FeedCarriedBaseline(h);   // 50/2880, holds lantern (30)
+
+        h.Feed("You hid lantern.");   // a stash leaves the pack like a drop
+
+        Assert.Equal(20, Weight(h));   // 50 - 30
+    }
+
+    [Fact]
+    public void HideBatch_SubtractsCountTimesItemWeight()
+    {
+        // Paradigm batches a stash into one line ("You hid 35 orc-head.") — the
+        // weight estimate must drop by N*weight, else it reads too heavy until the
+        // next full 'i' and the collect gates wrongly skip a pickup while the
+        // character actually has room (report paradigm-20260812-201631).
+        using Harness h = new(TestWeight);
+        h.Feed("You are carrying torch, torch, torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    170/2880  -  Light  [5%]");   // 50 + 3*40
+
+        h.Feed("You hid 3 torch.");
+
+        Assert.Equal(50, Weight(h));    // 170 - 3*40
+        Assert.DoesNotContain("torch", Carried(h));
+    }
+
+    [Fact]
     public void Buy_AddsItemWeightToEncumbrance()
     {
         using Harness h = new(TestWeight);

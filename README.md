@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.22**
+> **Version 3.8.23**
+> - Stashing items now lowers the encumbrance estimate immediately (a `hide` leaves the pack like a `drop`, including Paradigm's counted `You hid 35 orc-head.`) — so cash/item collection no longer skips a pickup thinking you're still Heavy right after a stash when you actually have room
 > - Auto-get no longer re-sends `get` for the same floor items when a room re-renders (Cash re-grabbing ground coin, the post-kill re-look, the combat-clear redisplay) — four ground orc-heads no longer become eight-plus gets; dedup keys on the `You took <item>` pickup confirmation, so a fresh drop still collects
 > - Looting resumes movement the instant pickups are confirmed (`You took <item>` / `You picked up <coin>`) instead of waiting out a fixed timer
 >

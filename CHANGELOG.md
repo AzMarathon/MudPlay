@@ -2,11 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.8.22
+## 3.8.23
 
+- Stashing items now lowers the encumbrance estimate immediately (a `hide` leaves the pack like a `drop`) — including Paradigm's counted batch form (`You hid 35 orc-head.`) — so cash/item collection no longer skips a pickup thinking you're still Heavy right after a stash when you actually have room
 - Auto-get no longer re-sends `get` for the same floor items when a room re-renders (Cash re-grabbing ground coin, the post-kill re-look, the combat-clear redisplay) — four ground orc-heads no longer become eight-plus gets; dedup keys on the `You took <item>` pickup confirmation, so a genuinely fresh drop still collects
 - Looting resumes movement the instant pickups are confirmed (`You took <item>` / `You picked up <coin>`) instead of waiting out a fixed timer — the settle window is now only a fallback for a get that never confirms
-- bug reports addressed: paradigm-20260812-182429
+- bug reports addressed: paradigm-20260812-182429, paradigm-20260812-201631
 
 ## 3.8.20
 
