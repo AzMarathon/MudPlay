@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.36**
+> **Version 3.8.37**
+> - Character Info attack table: new Swings column showing swings/round per attack type (Attack, Bash, Smash, Backstab, Punch/Kick/Jumpkick), computed from your stats + weapon via the same energy-budget model the Calculators tab uses
 > - Item Finder: new Negates column listing the spells an item cancels while worn, plus a Negates dropdown in the stat filters (populated with every spell any item negates; `(none)` = off) to narrow to items that negate a chosen spell
 > - Item record: flag-style properties (LoyalItem, Del@Maint, QuestItem, NotSellable, …) now read "Yes" instead of a misleading "0", and the never-drop (Not Droppable) / delete-on-death columns are now surfaced
 > - Status bar: connection indicator is now just the coloured dot (green/yellow/red), with the state text moved to its hover tooltip — freeing room on the bar

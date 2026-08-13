@@ -349,7 +349,7 @@ A read-only what-if table: pick a level **from–to** range (and optionally any 
 
 ## Character Info and Calculators
 
-**Character Info** is your read-only character sheet — stats, skills, the attack table, and folded-in quest bonuses. **Calculators** holds what-if tools: Monster Matchup, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings.
+**Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. **Calculators** holds what-if tools: Monster Matchup, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings.
 
 ---
 
