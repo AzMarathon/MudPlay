@@ -344,6 +344,15 @@ public sealed partial class CombatManager : IDisposable
     // resynced roster (or clears the gate on an empty room).
     private DateTimeOffset _lastDeathAt = DateTimeOffset.MinValue;
 
+    // When a monster death was last detected via a MATCHED DEATH LINE — stamped
+    // only by NoteMonsterDied, NOT by the exp+Off fallback below. A matched death
+    // already handled the kill and re-picked the next survivor, so the same
+    // burst's *Combat Off* must not ALSO trip the exp-inference: doing so drops
+    // the freshly-picked survivor and re-attacks it, double-firing "aa <next>"
+    // right after the first kill (report paradigm-20260812-215511). Distinct from
+    // _lastDeathAt, which the exp-inference itself stamps and so can't self-gate on.
+    private DateTimeOffset _lastMatchedDeathAt = DateTimeOffset.MinValue;
+
     // How long after a detected death a *Combat Off* is treated as the kill's Off
     // rather than a cast interrupt. A death line and its *Combat Off* arrive in the
     // same server burst (milliseconds apart), so this only needs to bridge that gap
@@ -672,6 +681,7 @@ public sealed partial class CombatManager : IDisposable
         // target: any death in the room means a re-observe is coming that owns the
         // re-engage.
         _lastDeathAt = DateTimeOffset.Now;
+        _lastMatchedDeathAt = DateTimeOffset.Now;   // death LINE matched — gates the exp-inference off
         _attackSentSinceDeath = false;
 
         // The guarded priority itself fell — the redirect chase is over. Drop the
@@ -2153,7 +2163,12 @@ public sealed partial class CombatManager : IDisposable
             // beside one — from being misread as a kill (that path resumes below).
             if (_currentTarget is not null
                 && DateTimeOffset.Now - _lastExpGainAt < ExpKillWindow
-                && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow)
+                && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow
+                // ...and NO matched death line just handled this kill. If one did,
+                // it already dropped the corpse and re-picked the next survivor —
+                // this *Combat Off* is that kill's Off, so inferring a second kill
+                // here would drop the fresh target and re-attack it (double-fire).
+                && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
             {
                 _lastExpGainAt = DateTimeOffset.MinValue;   // consume — a later non-kill Off must not reuse it
                 _lastDeathAt = DateTimeOffset.Now;

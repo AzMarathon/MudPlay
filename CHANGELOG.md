@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.30
+
+- Transaction history: the stash tint now fills the whole entry edge-to-edge (consecutive stashes read as one gold band, no gaps), and the timestamp / type / room-location text is brighter for readability
+- After the last monster in a room dies, the room re-displays once instead of twice — the item and cash collect engines now share one post-kill re-render
+- Fixed a doubled attack command after the first kill in a room: a matched death line no longer lets the same kill's exp/*Combat Off* re-drop and re-attack the freshly-picked next target
+- Navigation goto flyout: "Clear destination" now closes the flyout, like picking a recent destination already does
+- bug reports addressed: paradigm-20260812-215306, paradigm-20260812-215511
+
 ## 3.8.26
 
 - Transaction history: stash entries are tinted faint gold (the map's stash-marker colour) to stand out from bank deposits

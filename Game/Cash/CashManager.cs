@@ -92,6 +92,7 @@ public sealed class CashManager : IDisposable
 
     private Action<byte[]>? _wireSender;
     private Game.Inventory.AcquisitionGate? _gate;
+    private Game.Inventory.RoomRedisplayCoordinator? _redisplay;
     private readonly Dictionary<string, long> _held = new(StringComparer.OrdinalIgnoreCase);
 
     // Collect-after-combat. When CashSettings.CollectAfterCombatFinished is set (the
@@ -272,6 +273,15 @@ public sealed class CashManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(gate);
         _gate = gate;
+    }
+
+    // Bind the shared room-redisplay coordinator so the combat-clear re-display
+    // coalesces with the item engine's post-kill re-look (one Enter, not two).
+    // Optional — unbound (tests) the engine sends its own Enter as before.
+    public void SetRoomRedisplay(Game.Inventory.RoomRedisplayCoordinator coordinator)
+    {
+        ArgumentNullException.ThrowIfNull(coordinator);
+        _redisplay = coordinator;
     }
 
     // Current held count of currency as observed via CashPickedUp / CashDropped
@@ -705,9 +715,13 @@ public sealed class CashManager : IDisposable
     private void FlushDeferredCollects()
     {
         _cashPendingAfterCombat = false;
-        _log?.Info(LogCategory, "combat cleared — re-displaying room to collect ground cash");
+        _log?.Info(LogCategory, "combat cleared — collecting ground cash");
         _gate?.NoteDeferredPending(1);
-        Send("");   // bare carriage return, not `look` — respects brief mode
+        // Re-render once. The item engine's post-kill re-look fires the same
+        // instant on the last kill; coalesce so the room isn't displayed twice
+        // (our collect still runs off the shared "You notice" survey either way).
+        if (_redisplay is null || _redisplay.ShouldSend())
+            Send("");   // bare carriage return, not `look` — respects brief mode
         ArmResurveyRelease();
     }
 

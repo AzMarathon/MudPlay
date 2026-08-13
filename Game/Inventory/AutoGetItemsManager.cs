@@ -94,6 +94,7 @@ public sealed class AutoGetItemsManager : IDisposable
 
     private Action<byte[]>? _wireSender;
     private AcquisitionGate? _gate;
+    private RoomRedisplayCoordinator? _redisplay;
     private bool _disposed;
 
     public AutoGetItemsManager(
@@ -161,6 +162,15 @@ public sealed class AutoGetItemsManager : IDisposable
         _gate = gate;
     }
 
+    // Bind the shared room-redisplay coordinator so the post-kill re-look
+    // coalesces with Cash's combat-clear re-display (one Enter, not two). Optional
+    // — unbound (tests) the engine sends its own Enter as before.
+    public void SetRoomRedisplay(RoomRedisplayCoordinator coordinator)
+    {
+        ArgumentNullException.ThrowIfNull(coordinator);
+        _redisplay = coordinator;
+    }
+
     // Bind the per-session LineExtractor so the manager can stitch a wrapped
     // "You notice" survey back together.
     public void AttachLineExtractor(Terminal.LineExtractor lines)
@@ -217,6 +227,12 @@ public sealed class AutoGetItemsManager : IDisposable
         DateTime now = DateTime.UtcNow;
         if ((now - _lastReLookAt).TotalMilliseconds < ReLookCooldownMs) return;
         _lastReLookAt = now;
+        // On the last kill, Cash's combat-clear re-display fires the same instant —
+        // one bare Enter re-renders the room for both engines (they read the same
+        // "You notice" survey). Defer to the shared coordinator so the room isn't
+        // displayed twice; if it already rendered, our collect still runs off that
+        // survey.
+        if (_redisplay is not null && !_redisplay.ShouldSend()) return;
         _log?.Info(LogCategory, "re-look after kill (monster drops a flagged item)");
         Send("");
     }
