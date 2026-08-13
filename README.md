@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.9.8**
-> - Monster record (Game Data → Monsters): each "Spawns In" room now shows that room's lair size — e.g. `1/2122 (lair: 2)`
+> **Version 3.9.9**
+> - Monster table (Game Data → Monsters): four new columns — Lair Exp, # Lairs, Mobs/Lair, and Script — surfacing previously-ignored MDB data
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

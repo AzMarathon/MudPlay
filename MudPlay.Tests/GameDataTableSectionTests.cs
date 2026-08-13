@@ -25,11 +25,13 @@ public sealed class GameDataTableSectionTests : IDisposable
         catch { }
     }
 
-    private void SeedMonsters(string setName, string json)
+    private void SeedMonsters(string setName, string json) => SeedTable(setName, "Monsters", json);
+
+    private void SeedTable(string setName, string tableName, string json)
     {
         string dir = Path.Combine(_root, setName);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "Monsters.json"), json);
+        File.WriteAllText(Path.Combine(dir, tableName + ".json"), json);
     }
 
     [Fact]
@@ -59,6 +61,50 @@ public sealed class GameDataTableSectionTests : IDisposable
         Assert.Equal("Goblin", vm.AllRows[0].Get("Name"));
         Assert.Equal("10",     vm.AllRows[0].Get("HP"));
         Assert.Equal("Orc",    vm.AllRows[1].Get("Name"));
+    }
+
+    [Fact]
+    public async Task LairColumns_AggregateAcrossGroups()
+    {
+        // Monster #1 sits in two lair groups: (Mobs 1, TotalLairs 5) and
+        // (Mobs 11, TotalLairs 9). "# Lairs" sums TotalLairs (14); "Mobs/Lair"
+        // spans the range (1–11). Lair Exp + Script come straight off the row.
+        SeedMonsters("v1.11p",
+            "[{\"Number\":1,\"Name\":\"Sewer Rat\",\"AvgLairExp\":20,\"ScriptValue\":7}]");
+        SeedTable("v1.11p", "Lairs",
+            "[{\"GroupIndex\":\"a\",\"MobList\":\"1\",\"Mobs\":1,\"TotalLairs\":5}," +
+             "{\"GroupIndex\":\"b\",\"MobList\":\"1,2,3\",\"Mobs\":11,\"TotalLairs\":9}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        GameDataRow row = vm.AllRows.Single(r => r.Get("Name") == "Sewer Rat");
+        Assert.Equal("20", row.Get("AvgLairExp"));
+        Assert.Equal("7",  row.Get("ScriptValue"));
+        Assert.Equal("14", row.Get("Lairs"));              // 5 + 9
+        Assert.Equal("1–11", row.Get("MobsPerLair")); // min–max range
+    }
+
+    [Fact]
+    public async Task LairColumns_UniformMobs_ShowsSingleValue_AndAbsentWhenNoLair()
+    {
+        SeedMonsters("v1.11p",
+            "[{\"Number\":1,\"Name\":\"Orc\"},{\"Number\":9,\"Name\":\"Loner\"}]");
+        SeedTable("v1.11p", "Lairs",
+            "[{\"GroupIndex\":\"a\",\"MobList\":\"1\",\"Mobs\":2,\"TotalLairs\":3}," +
+             "{\"GroupIndex\":\"b\",\"MobList\":\"1\",\"Mobs\":2,\"TotalLairs\":4}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        GameDataRow orc = vm.AllRows.Single(r => r.Get("Name") == "Orc");
+        Assert.Equal("7", orc.Get("Lairs"));       // 3 + 4
+        Assert.Equal("2", orc.Get("MobsPerLair")); // uniform → single value
+
+        // A monster in no lair group has blank lair cells (not "0").
+        GameDataRow loner = vm.AllRows.Single(r => r.Get("Name") == "Loner");
+        Assert.True(string.IsNullOrEmpty(loner.Get("Lairs")));
+        Assert.True(string.IsNullOrEmpty(loner.Get("MobsPerLair")));
     }
 
     [Fact]
