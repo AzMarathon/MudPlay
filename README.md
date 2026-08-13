@@ -6,6 +6,8 @@
 > - Turning auto-combat off mid-fight now resumes movement immediately instead of stalling until a manual room redisplay
 > - "Do not rest in this room" no longer suppresses resting for the rest of the loop — the rest gate re-arms on leaving the flagged room
 > - Manually casting a spell mid-combat can no longer make the attack spell burst (rate-limited to once per round for hand-typed casts)
+> - Navigation room tooltip now shows each monster's game-data record number (e.g. `Dark Goblin Archer(#48)`)
+> - Map exit stubs flag command-required exits (a `go path`-style named exit) in the magenta "Action required" colour
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

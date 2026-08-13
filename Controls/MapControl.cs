@@ -481,11 +481,12 @@ public sealed class MapControl : Control
     private static readonly IPen   TileBorderPen = new Pen(new SolidColorBrush(Color.Parse("#2A2A2A")), 1.0);
     private static readonly IPen   ExitPen       = new Pen(new SolidColorBrush(Color.Parse("#C0C0C0")), 2.0);
     private static readonly IPen   TrapPen       = new Pen(new SolidColorBrush(Color.Parse("#DC3C3C")), 2.0);
-    // Dark magenta for exits that require one or more in-room actions
-    // before traversal (RoomExitHint.MultiActionHidden) — e.g. map
-    // 9 / room 1032's east exit on the v1.11p data set, which needs
-    // a lever pull elsewhere before the walker can step E. Distinct
-    // from trap red (more dangerous, takes precedence at render time).
+    // Dark magenta for exits that need a command/action to cross rather than a
+    // plain directional step — RoomExitHint.MultiActionHidden (an in-room lever /
+    // ask-door acted on first, e.g. map 9 / room 1032's east exit on v1.11p) AND
+    // RoomExitHint.Text (a named-command exit like `go path`, e.g. map 1 / room
+    // 1403's NE, where the walker types the word instead of the compass step).
+    // Distinct from trap red (more dangerous, takes precedence at render time).
     private static readonly IPen   ActionPen     = new Pen(new SolidColorBrush(Color.Parse("#8B008B")), 2.0);
     // Dark cyan for plain hidden exits revealed via `sea <dir>`
     // (RoomExitHint.SearchableHidden) — e.g. map 9 / room 1031 on
@@ -1375,7 +1376,8 @@ public sealed class MapControl : Control
                 // Priority at render time: trap > action > hidden >
                 // plain. Trap-red is critical safety info ("don't
                 // walk here unless disarmed"); action-magenta is
-                // routing info ("needs a lever pulled first");
+                // routing info ("needs a command/action — a lever, an
+                // ask-door, or a `go path`-style named exit");
                 // hidden-cyan is reveal info ("needs sea <dir>").
                 bool isTrap = IsTrapEdge(source, dir)
                            || IsTrapEdge(bCoord, Opposite(dir));
@@ -1502,7 +1504,11 @@ public sealed class MapControl : Control
         if (!Layout.CoordToRoom.TryGetValue(coord, out RoomKey key)) return false;
         if (Graph.GetRoom(key) is not { } room) return false;
         if (!room.Exits.TryGetValue(dir, out RoomExit exit)) return false;
-        return exit.Hint == RoomExitHint.MultiActionHidden;
+        // Both shapes read to the player as "you can't just walk this direction —
+        // a command is needed": MultiActionHidden (a lever/ask-door acted on first)
+        // and Text (a named-command exit like `go path` — the walker types the word
+        // instead of the compass step). Same magenta "Action required" stub for both.
+        return exit.Hint is RoomExitHint.MultiActionHidden or RoomExitHint.Text;
     }
 
     // True when the exit at coord heading dir is a

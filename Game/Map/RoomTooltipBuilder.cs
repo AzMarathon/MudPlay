@@ -169,7 +169,9 @@ public static class RoomTooltipBuilder
         if (refs.Count == 0) return string.Empty;
 
         string prefix = max is { } m ? $"Also Here ({m}): " : "Also Here: ";
-        return prefix + string.Join(", ", refs.Select(r => r.Name));
+        // Append each monster's Monsters-table record number so the tooltip
+        // doubles as a quick lookup key — "Dark Goblin Archer(#48)".
+        return prefix + string.Join(", ", refs.Select(r => $"{r.Name}(#{r.Id})"));
     }
 
     // ----- Light description ---------------------------------------

@@ -144,7 +144,7 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Room room = graph.GetRoom(new RoomKey(1, 2))!;
         string text = RoomTooltipBuilder.Build(room, graph, cache);
 
-        Assert.Contains("Also Here (2): Sewer Rat, Sewer Snake", text);
+        Assert.Contains("Also Here (2): Sewer Rat(#100), Sewer Snake(#101)", text);  // record numbers appended
         Assert.Contains("Max Regen: 2 @ 4m 30s", text);     // Delay=5 → 4m 30s
     }
 
@@ -293,7 +293,7 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Room room = graph.GetRoom(new RoomKey(1, 1678))!;
         string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo: null, spawnIndex: spawnIndex);
 
-        Assert.Contains("Also Here: giant spider", text);
+        Assert.Contains("Also Here: giant spider(#52)", text);   // boss spawn, with record number
     }
 
     [Fact]
