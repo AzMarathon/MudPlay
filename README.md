@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.20**
-> - Help window: a failed/missing guide asset now logs a warning instead of silently opening an empty compendium, so a "Help is empty" report has a program-log trail
-> - Fixed a stale comment on the Help menu's composition describing the "Help topics…" item as a disabled placeholder — it's a live command
+> **Version 3.8.22**
+> - Auto-get no longer re-sends `get` for the same floor items when a room re-renders (Cash re-grabbing ground coin, the post-kill re-look, the combat-clear redisplay) — four ground orc-heads no longer become eight-plus gets; a genuinely larger pile from a fresh drop still tops up
+> - Looting resumes movement more fluidly: the post-get settle is shorter and duplicate gets no longer re-arm it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

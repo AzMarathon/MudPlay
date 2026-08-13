@@ -70,6 +70,25 @@ public sealed class AutoGetItemsManager : IDisposable
     // and on room change. Holds canonical names (already resolved).
     private readonly List<string> _deferred = new();
 
+    // Command-side dedup ledger: gets already sent for the current room's floor,
+    // keyed by item name. There is no server-side pickup-confirmation line to key
+    // on (see AcquisitionGate), so a burst of "You notice" re-renders — the Cash
+    // engine re-displaying to grab ground coin, our own post-kill re-look, the
+    // combat-clear redisplay — all re-list the same still-unprocessed floor items.
+    // Without this ledger every re-render fired another get, so four ground
+    // orc-heads became eight-plus gets. Reconciled against the survey's current
+    // count so a genuinely larger pile (a fresh drop) still tops up. Cleared on
+    // room change and once the window below elapses — by then the sent gets are
+    // reflected on the floor, so the next survey is authoritative again.
+    private readonly Dictionary<string, int> _floorCollected =
+        new(StringComparer.OrdinalIgnoreCase);
+    private DateTime _floorCollectedAt = DateTime.MinValue;
+
+    // How long a sent get counts against re-collection. Long enough to outlast a
+    // re-render burst (observed well under a second), short enough that a later
+    // kill's drop — a full combat round away — starts from a clean slate.
+    private const int FloorLedgerWindowMs = 1500;
+
     private Action<byte[]>? _wireSender;
     private AcquisitionGate? _gate;
     private bool _disposed;
@@ -153,9 +172,13 @@ public sealed class AutoGetItemsManager : IDisposable
         FlushDeferred();
     }
 
-    // Called on actual room change. Discards any un-flushed deferred gets — the
-    // items belonged to the room we just left.
-    public void OnRoomChanged() => CancelDeferredCollect("room changed");
+    // Called on actual room change. Discards any un-flushed deferred gets and the
+    // dedup ledger — both belonged to the room we just left.
+    public void OnRoomChanged()
+    {
+        _floorCollected.Clear();
+        CancelDeferredCollect("room changed");
+    }
 
     // Drop any deferred gets and release the acquisition hold — the items belonged
     // to a room/session we're no longer collecting for. Shared by the room-change
@@ -261,6 +284,8 @@ public sealed class AutoGetItemsManager : IDisposable
             return;
         }
 
+        ExpireFloorLedgerIfStale();
+
         bool deferMode = _collectAfterCombatFinished() && _hasEngageableHostiles();
         if (deferMode) _deferred.Clear();   // rebuild for this survey
 
@@ -268,6 +293,16 @@ public sealed class AutoGetItemsManager : IDisposable
         // holds even when a single "You notice" lists the same item twice
         // (the held-count snapshot doesn't move until the get echoes back).
         Dictionary<int, int>? decidedThisPass = null;
+
+        // Floor-dedup bookkeeping for this survey (immediate path). _floorCollected
+        // is read (not mutated) during the pass so the dedup skip is measured
+        // against the pre-survey count — two separate "long sword" entries in ONE
+        // survey are two floor copies and both collect, while the SAME sword
+        // re-listed by a later re-render is skipped. seenThisSurvey tracks copies
+        // encountered so far (to know our position past the already-sent count);
+        // sentThisSurvey is merged into _floorCollected once, after the pass.
+        Dictionary<string, int>? seenThisSurvey = null;
+        Dictionary<string, int>? sentThisSurvey = null;
 
         // Encumbrance gate. With a known carry weight, cap what we grab this
         // survey so a pickup can't push past the character's capacity (the
@@ -303,8 +338,28 @@ public sealed class AutoGetItemsManager : IDisposable
             // so a cap or weight ceiling stops the pile partway rather than after
             // the whole stack.
             int units = ParseLeadingCount(entry);
-            for (int u = 0; u < units; u++)
+            // Command-side dedup (immediate path only — the deferred build is
+            // reconciled at flush). Skip the copies a re-render of this same floor
+            // already sent a get for; anything the survey lists beyond that count
+            // is a genuinely larger pile (a fresh drop) and still gets collected.
+            // Measured against the pre-survey count minus copies of this item
+            // already seen earlier in THIS survey, so duplicate entries in one
+            // survey collect while a re-render's re-listing is skipped.
+            int skip = 0;
+            if (!deferMode)
             {
+                int alreadySent = _floorCollected.GetValueOrDefault(item.Name);
+                int seenBefore = seenThisSurvey?.GetValueOrDefault(item.Name) ?? 0;
+                skip = Math.Min(units, Math.Max(0, alreadySent - seenBefore));
+                (seenThisSurvey ??= new(StringComparer.OrdinalIgnoreCase))[item.Name] =
+                    seenBefore + units;
+                if (skip > 0)
+                    _log?.Debug(LogCategory,
+                        $"re-render: skipping {skip} already-collected {item.Name} this room");
+            }
+            for (int u = skip; u < units; u++)
+            {
+
                 // MaxToGet carry cap. Count what we already hold (carried + worn +
                 // key ring — key-type items land in the ring, not the pack) plus
                 // anything already decided in this same survey; stop at the cap.
@@ -351,8 +406,19 @@ public sealed class AutoGetItemsManager : IDisposable
                     _log?.Info(LogCategory, $"collect item={item.Name}");
                     _gate?.NoteGetSent();
                     Send($"get {item.Name}");
+                    (sentThisSurvey ??= new(StringComparer.OrdinalIgnoreCase))[item.Name] =
+                        (sentThisSurvey.GetValueOrDefault(item.Name)) + 1;
                 }
             }
+        }
+
+        // Commit this survey's immediate gets to the floor ledger in one shot so a
+        // following re-render of the same floor reconciles against them.
+        if (sentThisSurvey is not null)
+        {
+            foreach ((string name, int n) in sentThisSurvey)
+                _floorCollected[name] = _floorCollected.GetValueOrDefault(name) + n;
+            _floorCollectedAt = DateTime.UtcNow;
         }
 
         // Hold the walker while the queued gets wait for combat to finish.
@@ -364,14 +430,42 @@ public sealed class AutoGetItemsManager : IDisposable
 
     private void FlushDeferred()
     {
+        ExpireFloorLedgerIfStale();
+
+        // Count the deferred gets per name so we can honour any copies a
+        // same-window re-render already grabbed via the immediate path (normally
+        // none — the deferred flush is the room's first collection). Preserves the
+        // deferred order for the sends that do go out.
+        Dictionary<string, int> deferredByName = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string name in _deferred)
+            deferredByName[name] = deferredByName.GetValueOrDefault(name) + 1;
+
+        Dictionary<string, int> flushSent = new(StringComparer.OrdinalIgnoreCase);
         foreach (string name in _deferred)
         {
+            int accounted = _floorCollected.GetValueOrDefault(name) + flushSent.GetValueOrDefault(name);
+            if (accounted >= deferredByName[name]) continue;   // ledger already covers this floor copy
             _log?.Info(LogCategory, $"collect (post-combat) item={name}");
             _gate?.NoteGetSent();
             Send($"get {name}");
+            flushSent[name] = flushSent.GetValueOrDefault(name) + 1;
         }
+        foreach ((string name, int n) in flushSent)
+            _floorCollected[name] = _floorCollected.GetValueOrDefault(name) + n;
+        if (flushSent.Count > 0) _floorCollectedAt = DateTime.UtcNow;
+
         _deferred.Clear();
         _gate?.NoteDeferredCleared();
+    }
+
+    // Drop the dedup ledger once its window has elapsed: by then the sent gets are
+    // reflected on the floor, so a fresh survey is authoritative and a later kill's
+    // drop must be collectable again.
+    private void ExpireFloorLedgerIfStale()
+    {
+        if (_floorCollected.Count == 0) return;
+        if ((DateTime.UtcNow - _floorCollectedAt).TotalMilliseconds > FloorLedgerWindowMs)
+            _floorCollected.Clear();
     }
 
     // The survey prefixes a stacked ground pile with its count ("5 piece of

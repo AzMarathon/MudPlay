@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.22
+
+- Auto-get no longer re-sends `get` for the same floor items when a room re-renders (Cash re-grabbing ground coin, the post-kill re-look, the combat-clear redisplay) — four ground orc-heads no longer become eight-plus gets; a genuinely larger pile from a fresh drop still tops up
+- Looting resumes movement more fluidly: the post-get settle is shorter and duplicate gets no longer re-arm it
+- bug reports addressed: paradigm-20260812-182429
+
 ## 3.8.20
 
 - Help window: a failed/missing guide asset now logs a warning instead of silently opening an empty compendium, so a "Help is empty" report has a program-log trail

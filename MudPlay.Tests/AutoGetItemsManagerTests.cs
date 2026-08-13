@@ -574,6 +574,86 @@ public sealed class AutoGetItemsManagerTests
         Assert.Equal(new[] { "get dagger" }, h.SentText);
     }
 
+    // ----- Floor dedup across re-renders ---------------------------
+
+    [Fact]
+    public void ReRenderSameFloor_WithinWindow_NoDuplicateGet()
+    {
+        // The Cash engine re-displays the room to grab ground coin and the
+        // post-kill re-look fires an Enter; both re-render the same "You notice"
+        // survey before the get lands. The same floor pile must not re-collect.
+        using Harness h = new();
+        h.Flags["long sword"] = true;
+
+        h.Feed("You notice a long sword here.");
+        h.Feed("You notice a long sword here.");   // redisplay of the same floor
+
+        Assert.Single(h.Sent);
+        Assert.Equal("get long sword", h.SentText[0]);
+    }
+
+    [Fact]
+    public void ReRenderLargerPile_CollectsOnlyTheDelta()
+    {
+        // A fresh drop grows the pile between renders — grab only the new copy.
+        using Harness h = new();
+        h.Flags["piece of amber"] = true;
+
+        h.Feed("You notice 2 piece of amber here.");   // grab two
+        h.Feed("You notice 3 piece of amber here.");   // a third dropped
+
+        Assert.Equal(
+            new[] { "get piece of amber", "get piece of amber", "get piece of amber" },
+            h.SentText);
+    }
+
+    [Fact]
+    public void TwoSeparateEntriesSameItem_OneSurvey_CollectsBoth()
+    {
+        // Two distinct copies listed as separate entries in ONE survey are two
+        // floor items — both collect. The dedup is cross-survey, not within one.
+        using Harness h = new();
+        h.Flags["long sword"] = true;
+
+        h.Feed("You notice a long sword and a long sword here.");
+
+        Assert.Equal(new[] { "get long sword", "get long sword" }, h.SentText);
+    }
+
+    [Fact]
+    public void DeferredFlush_ThenReRender_NoDuplicateGet()
+    {
+        // Reported bug: items deferred during combat flush once combat clears,
+        // then the combat-clear redisplay re-lists the same pile — no re-send.
+        using Harness h = new() { CollectAfterCombat = true, HasHostiles = true };
+        h.Flags["orc-head"] = true;
+
+        h.Feed("You notice 2 orc-head here.");   // deferred — still fighting
+        Assert.Empty(h.Sent);
+
+        h.HasHostiles = false;
+        h.Items.OnRoomObserved();                // combat clears — flush the two
+        Assert.Equal(2, h.Sent.Count);
+
+        h.Feed("You notice 2 orc-head here.");   // redisplay of the same floor
+        Assert.Equal(2, h.Sent.Count);           // still two — no re-collect
+    }
+
+    [Fact]
+    public void RoomChange_ClearsLedger_CollectsAgainInNewRoom()
+    {
+        using Harness h = new();
+        h.Flags["long sword"] = true;
+
+        h.Feed("You notice a long sword here.");
+        Assert.Single(h.Sent);
+
+        h.Items.OnRoomChanged();                  // walked to a new room
+        h.Feed("You notice a long sword here.");  // a sword on this floor too
+
+        Assert.Equal(2, h.Sent.Count);
+    }
+
     // ----- Post-kill drop re-look ----------------------------------
 
     [Fact]
