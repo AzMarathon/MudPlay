@@ -47,6 +47,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         "Accuracy",      // synthesised from the primary attack (see ComputeRowCells)
         "Align",
         "Type",
+        "AvgLairExp",    // per-monster avg lair exp (raw MDB field)
+        "Lairs",         // synthesised: Σ TotalLairs across the monster's lair groups
+        "MobsPerLair",   // synthesised: mob-count range across those groups
+        "ScriptValue",   // raw MDB "scripting value"
     };
 
     // Friendly grid headers — the columns above keep their raw MDB keys (so binding / search /
@@ -60,6 +64,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["DamageResist"] = "DR",
             ["MagicRes"]     = "MR",
             ["Align"]        = "Alignment",
+            ["AvgLairExp"]   = "Lair Exp",
+            ["Lairs"]        = "# Lairs",
+            ["MobsPerLair"]  = "Mobs/Lair",
+            ["ScriptValue"]  = "Script",
         };
 
     public override string SearchKeyColumn => "Name";
@@ -121,11 +129,60 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // in attack order ("10/42/8"). Only physical attacks count (AttType 1/3 with a non-zero
     // chance) — spell-attack slots stash a spell id in AttAcc, not an accuracy. Falls back to
     // slot 0 so spell-only mobs still show something.
+    // Monster Number → aggregated lair stats (Σ TotalLairs, and the min/max Mobs
+    // across every lair group whose MobList includes it). Rebuilt each load by the
+    // PopulateRows override below, before the per-row ComputeRowCells calls.
+    private Dictionary<int, (int Lairs, int MinMobs, int MaxMobs)> _lairIndex = new();
+
+    protected override void PopulateRows(System.Collections.Generic.IList<GameDataRow> rows)
+    {
+        BuildLairIndex();
+        base.PopulateRows(rows);
+    }
+
+    // Join the Lairs table onto monsters via MobList (comma-separated monster
+    // Numbers). A monster commonly sits in several lair groups (~63% of v1.11p
+    // monsters), so "# Lairs" sums their TotalLairs and "Mobs/Lair" spans the
+    // min–max mob count across those groups.
+    private void BuildLairIndex()
+    {
+        var index = new Dictionary<int, (int Lairs, int MinMobs, int MaxMobs)>();
+        if (_cache.GetRawTable("Lairs") is { } doc)
+        {
+            foreach (JsonElement el in doc.RootElement.EnumerateArray())
+            {
+                string mobList = ReadString(el, "MobList");
+                if (string.IsNullOrEmpty(mobList)) continue;
+                int mobs = ReadInt(el, "Mobs");
+                int totalLairs = ReadInt(el, "TotalLairs");
+                foreach (string tok in mobList.Split(','))
+                {
+                    if (!int.TryParse(tok.Trim(), out int id) || id <= 0) continue;
+                    index[id] = index.TryGetValue(id, out (int Lairs, int MinMobs, int MaxMobs) a)
+                        ? (a.Lairs + totalLairs, Math.Min(a.MinMobs, mobs), Math.Max(a.MaxMobs, mobs))
+                        : (totalLairs, mobs, mobs);
+                }
+            }
+        }
+        _lairIndex = index;
+    }
+
     protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element)
-        => new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+    {
+        var cells = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             ["Accuracy"] = ComputeAttackAccuracy(element),
         };
+        if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int Lairs, int MinMobs, int MaxMobs) lair))
+        {
+            cells["Lairs"] = lair.Lairs.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            // en-dash range when the mob count varies across the monster's groups.
+            cells["MobsPerLair"] = lair.MinMobs == lair.MaxMobs
+                ? lair.MinMobs.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : $"{lair.MinMobs}–{lair.MaxMobs}";
+        }
+        return cells;
+    }
 
     internal static string? ComputeAttackAccuracy(JsonElement el)
     {
