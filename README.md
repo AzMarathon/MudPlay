@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.19**
-> - Combat attack spells no longer double-fire the normal + alternate: `MaxCasts` is counted per *fired* round instead of at announce, so a `MaxCasts=1` normal spell takes its round before the cascade hands to the alternate — fixing "normal then immediately alternate," the alternate cast at a target the normal just killed, and a fresh mob opening on the alternate. A kill fully drops the target and resets the cascade
-> - Stashing currency now names coins by their full two-word noun (`hide 50 gold crown`) like get/drop already do, instead of the bare denomination that MajorMUD binds to a same-named item
+> **Version 3.8.20**
+> - Help window: a failed/missing guide asset now logs a warning instead of silently opening an empty compendium, so a "Help is empty" report has a program-log trail
+> - Fixed a stale comment on the Help menu's composition describing the "Help topics…" item as a disabled placeholder — it's a live command
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
