@@ -727,12 +727,15 @@ public partial class MainWindowViewModel : ObservableObject
         // player into PlayerDatabase.
         _whoListParser = new Game.WhoListParser(Lines, AppServices.Current.Players, AppServices.Current.Log);
         _lookParser    = new Game.LookParser   (Lines, AppServices.Current.Players, AppServices.Current.Log);
-        // Monster-look HP estimator. Name → Number resolves through the room
-        // classifier (prefers the variant actually present, so shared names hit
-        // the right HP); Number → max HP via the game-data index.
+        // Monster-look HP estimator. Name → Number prefers the record actually
+        // placed / summoned in the current room (so an "orc lieutenant" here hits
+        // this room's record, not a same-named one in another zone), then falls
+        // back to the classifier's first-match. Number → max HP via the game-data
+        // index.
         _monsterLookParser = new Game.MonsterLookParser(
             Lines,
-            AppServices.Current.RoomClassifier.ResolveLookedMonsterNumber,
+            name => AppServices.Current.RoomAwareMonster.ResolveInCurrentRoom(name)
+                    ?? AppServices.Current.RoomClassifier.ResolveLookedMonsterNumber(name),
             AppServices.Current.MonsterHp.MaxHp,
             AppServices.Current.Log);
         _monsterLookParser.TargetObserved += OnMonsterLookTarget;

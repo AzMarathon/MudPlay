@@ -932,6 +932,13 @@ public sealed class AppServices
     public Game.Combat.MonsterDeathSummonIndex MonsterDeathSummon { get; private set; } = null!;
     public Game.Combat.SummonOnDeathSettle SummonSettle { get; private set; } = null!;
 
+    // Room-aware monster-name resolver: disambiguates a display name shared across
+    // zones to the record actually placed / summoned in the current room. Backs the
+    // HP-lookup and per-monster spell-override features. Its summon-targets index
+    // widens the room set with a summoner's minions.
+    public Game.Combat.MonsterSummonTargetsIndex MonsterSummonTargets { get; private set; } = null!;
+    public Game.Combat.RoomAwareMonsterResolver RoomAwareMonster { get; private set; } = null!;
+
     // Engages a monster hidden by darkness. A dark room prints no "Also here:"
     // line, so the only tell a hostile shares it is the mob's dark-cyan attack
     // line; this watcher reads the name off that line (gated on
@@ -2730,6 +2737,19 @@ public sealed class AppServices
         // before the resync's RemoveDeadEntity clears the Combat gate and steps the
         // walker (both synchronous). Wire-sender bound per-session by the VM.
         MonsterDeathSummon = new Game.Combat.MonsterDeathSummonIndex(GameData);
+        MonsterSummonTargets = new Game.Combat.MonsterSummonTargetsIndex(GameData);
+        RoomAwareMonster = new Game.Combat.RoomAwareMonsterResolver(
+            GameData,
+            // Re-fetch from the graph so the lair / NPC fields are populated even
+            // when the tracked room is a lighter snapshot; fall back to the tracked
+            // room, and null when we don't know where we are.
+            () => RoomTracker.State.CurrentRoom is { } r
+                ? RoomGraph.GetRoom(r.Key) ?? r
+                : null,
+            // Strip the display name's flavor prefix to the base Monsters name so a
+            // "short orc lieutenant" matches this room's "orc lieutenant" record.
+            RoomClassifier.ResolveBaseName,
+            MonsterSpawns, MonsterSummonTargets);
         SummonSettle = new Game.Combat.SummonOnDeathSettle(
             MonsterDeath, RoomClassifier, MovementCoordinator, MonsterDeathSummon,
             currentTargetName: () => Combat.CurrentTarget,
@@ -2825,7 +2845,8 @@ public sealed class AppServices
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log,
             readPartySettings: () =>
-                ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"));
+                ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
+            roomAwareResolve: RoomAwareMonster.ResolveInCurrentRoom);
 
         // Dark-room combat. A room too dark to show "Also here:" hides any
         // hostile sharing it — the only evidence is the mob's dark-cyan attack
