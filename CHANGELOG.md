@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.32
+
+- Item Finder: new Negates column listing the spells an item cancels while worn, plus a Negates dropdown in the stat filters (populated with every spell any item negates; `(none)` = off) to narrow to items that negate a chosen spell
+- Item record: flag-style properties (LoyalItem, Del@Maint, QuestItem, NotSellable, …) now read "Yes" instead of a misleading "0", and the never-drop (Not Droppable) / delete-on-death columns are now surfaced
+
 ## 3.8.30
 
 - Transaction history: the stash tint now fills the whole entry edge-to-edge (consecutive stashes read as one gold band, no gaps), and the timestamp / type / room-location text is brighter for readability

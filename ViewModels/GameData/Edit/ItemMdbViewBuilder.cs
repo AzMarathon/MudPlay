@@ -176,6 +176,14 @@ public sealed class ItemMdbViewBuilder
                     ResolveSpellName(spellId)));
             }
 
+            // Standalone never-drop / delete-on-death MDB flag columns (0/1),
+            // surfaced only when set. Distinct from the ability-code flags below
+            // (LoyalItem etc.); these weren't shown at all before.
+            if (ReadInt(el, "Not Droppable") != 0)
+                otherInfo.Add(new KeyValuePair<string, string>("Not Droppable", "Yes"));
+            if (ReadInt(el, "Destroy On Death") != 0)
+                otherInfo.Add(new KeyValuePair<string, string>("Delete on Death", "Yes"));
+
             // Ability pairs — Abil-0..19 / AbilVal-0..19. Render each
             // non-zero code (even when value is 0 — that's how MegaMUD
             // surfaces "Del@Maint: 0"). Code 42 (LearnSpell) and 43
@@ -292,6 +300,23 @@ public sealed class ItemMdbViewBuilder
         58, 65, 66, 67, 68, 69, 70, 145, 187,
     };
 
+    // Ability codes that are boolean PRESENCE flags — the code appearing on the
+    // item IS the whole signal; the paired AbilVal is noise (usually 0). Rendering
+    // the raw value gave a misleading "LoyalItem: 0" (reads as "not loyal" when the
+    // item IS loyal), so these surface presence instead.
+    private static readonly HashSet<int> FlagAbilityCodes = new()
+    {
+        100,   // LoyalItem
+        119,   // Del@Maint
+        149,   // Remove@Maint
+        154,   // Visible@Maint
+        156,   // QuestItem
+        1115,  // NoFirstKillDrop
+        1117,  // NotSellable
+        1118,  // NoRandomRegen
+        1119,  // Del@Ganghouse
+    };
+
     private string AbilityValueForDialog(int code, int rawValue)
     {
         // Codes whose value is a record number in another table (42/43 → Spells,
@@ -299,6 +324,9 @@ public sealed class ItemMdbViewBuilder
         // map lives in LookupEnums; resolution stays here because it needs the cache.
         if (LookupEnums.ReferencedTable(code) is { } table)
             return ResolveTableRef(table, rawValue);
+        // Presence flags read "Yes" — the raw AbilVal (often 0) is meaningless.
+        if (FlagAbilityCodes.Contains(code))
+            return "Yes";
         return SignedAbilityCodes.Contains(code)
             ? FormatSigned(rawValue)
             : rawValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
