@@ -487,7 +487,7 @@ Open **Session Stats** from the **View** menu or its toolbar button (it has no d
 
 - **Right-click** the panel area to show or hide individual panels, and **drag a panel by its title** to reorder them — your layout is saved per character.
 - **Reset session** zeroes every counter and restarts the clocks; individual panels have their own **Reset** too. (These don't ask for confirmation.)
-- **Transaction history** and **Players Seen** open the detailed ledgers — coin banked and stashed this session, and every player you've encountered.
+- **Transaction history** and **Players Seen** open the detailed ledgers — coin banked and stashed this session, and every player you've encountered. In the transaction ledger, **stash** entries are tinted faint gold (the map's stash-marker colour) so they stand out from bank deposits, and **double-clicking any entry** opens the Navigation map centred on the room where that deposit or stash happened.
 
 ## Wire Inspector (F5)
 

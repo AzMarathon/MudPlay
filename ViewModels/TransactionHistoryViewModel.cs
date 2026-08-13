@@ -63,6 +63,31 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
         Count = Rows.Count;
     }
 
+    // Double-click a row → open the Navigation window and centre the map on the
+    // transaction's room. The room lives in the Location label's "(map/room)" tail
+    // (AppServices.CurrentRoomLabel stamps it); parse it back to a RoomKey. No-op
+    // for an entry whose location doesn't carry a parseable room.
+    public void ShowOnMap(TransactionEntry entry)
+    {
+        if (TryParseRoom(entry.Location) is { } key)
+            AppServices.Current.NavigateToRoom(key);
+    }
+
+    private static Game.Map.RoomKey? TryParseRoom(string? location)
+    {
+        if (string.IsNullOrEmpty(location)) return null;
+        int open = location.LastIndexOf('(');
+        int close = location.LastIndexOf(')');
+        if (open < 0 || close <= open) return null;
+        string inner = location[(open + 1)..close];   // "map/room"
+        int slash = inner.IndexOf('/');
+        if (slash <= 0) return null;
+        if (int.TryParse(inner[..slash], out int map)
+            && int.TryParse(inner[(slash + 1)..], out int room))
+            return new Game.Map.RoomKey(map, room);
+        return null;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
