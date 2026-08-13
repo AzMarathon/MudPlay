@@ -1430,8 +1430,18 @@ public partial class MainWindowViewModel : ObservableObject
         });
 
     private void OnMonsterLookTarget(Game.MonsterLookObserved obs)
-        => Avalonia.Threading.Dispatcher.UIThread.Post(
-            () => TargetHpText = $"Target: {obs.Estimate.Describe()}");
+        => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            // Gated by Settings → Other "Show monster HP lookup" (default on).
+            if (!AppServices.Current.Resolver
+                    .Resolve<Models.Profile.OtherSettings>("Other").ShowMonsterHpLookup)
+                return;
+            string hp = obs.Estimate.Describe();
+            TargetHpText = $"TGT HP: {hp}";
+            // Also drop a yellow line into the terminal scrollback so the estimate
+            // is logged, not only shown in the transient status slot.
+            WriteTerminalStatus($"[{obs.Name} remaining Hitpoints: {hp}]", TerminalStatusKind.Notice);
+        });
 
     private void OnMonsterDied(Game.Combat.MonsterDeathEvent _)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() => TargetHpText = "");
@@ -1516,7 +1526,7 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
             double xpHr = AppServices.Current.SessionActivity.Snapshot().ExperiencePerHour;
-            LocationText = $"lap {runner.CompletedLaps + 1} · {Game.Combat.RateText.Compact(xpHr)}/hr";
+            LocationText = $"lap {runner.CompletedLaps + 1} · {RateWithTnl(xpHr)}";
             return;
         }
 
@@ -1550,7 +1560,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (room is not null)
         {
             double xpHr = AppServices.Current.SessionActivity.Snapshot().ExperiencePerHour;
-            LocationText = $"{room.Key} · {Game.Combat.RateText.Compact(xpHr)}/hr";
+            LocationText = $"{room.Key} · {RateWithTnl(xpHr)}";
             return;
         }
         LocationText = state.Confidence switch
@@ -1573,7 +1583,23 @@ public partial class MainWindowViewModel : ObservableObject
         string dest = walker.Destination is { } d ? d.ToString() : "?";
         int remaining = Math.Max(0, walker.StepCount - walker.CurrentStepIndex);
         double xpHr = AppServices.Current.SessionActivity.Snapshot().ExperiencePerHour;
-        return $"C: {cur} D: {dest} Steps: {remaining} - {Game.Combat.RateText.Compact(xpHr)}/hr";
+        return $"C: {cur} D: {dest} Steps: {remaining} - {RateWithTnl(xpHr)}";
+    }
+
+    // "<rate>/hr" with " - TNL: <time>" appended when the time-to-next-level can be
+    // computed (a live rate AND a parsed level span). TNL = ExpToNext ÷ rate; the
+    // LevelExpSpan guard mirrors ExperienceQueryHandler so a not-yet-parsed level
+    // doesn't advertise a bogus "0" ETA.
+    private static string RateWithTnl(double xpHr)
+    {
+        string rate = $"{Game.Combat.RateText.Compact(xpHr)}/hr";
+        Game.PlayerStats stats = AppServices.Current.PlayerStats;
+        if (xpHr <= 0 || stats.LevelExpSpan <= 0) return rate;
+        if (Game.Calculators.ExperienceTableCalculator
+                .CalcTimeToLevel(stats.ExpToNext, 0, (long)xpHr) is not { } tnl)
+            return rate;
+        return $"{rate} - TNL: {(tnl <= TimeSpan.Zero ? "ready"
+            : Game.Calculators.ExperienceTableCalculator.FormatTimeToLevel(tnl))}";
     }
 
     private void RefreshStatusBarTicks()

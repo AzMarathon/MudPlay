@@ -109,6 +109,11 @@ public sealed class OtherSettings
     // worse outcome. Char-tier setting; surfaced in Settings → Other.
     public bool AutoRequestComebackWhenLeftBehind { get; set; } = true;
 
+    // When true (default) a look at a monster surfaces its estimated remaining
+    // hit points — both in the status-bar "TGT HP:" slot and as a yellow line in
+    // the terminal scrollback. Off suppresses both. Char-tier; Settings → Other.
+    public bool ShowMonsterHpLookup { get; set; } = true;
+
     // Note: the former per-character verbose toggles (VerboseCombat /
     // VerboseRoomClassifier / VerboseCasting / VerboseCash / VerboseStealth) +
     // WriteCombatRoundTrace lived here briefly. They moved to the Log pane menu

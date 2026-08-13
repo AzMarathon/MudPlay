@@ -1,9 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.32**
+> **Version 3.8.35**
 > - Item Finder: new Negates column listing the spells an item cancels while worn, plus a Negates dropdown in the stat filters (populated with every spell any item negates; `(none)` = off) to narrow to items that negate a chosen spell
 > - Item record: flag-style properties (LoyalItem, Del@Maint, QuestItem, NotSellable, …) now read "Yes" instead of a misleading "0", and the never-drop (Not Droppable) / delete-on-death columns are now surfaced
+> - Status bar: connection indicator is now just the coloured dot (green/yellow/red), with the state text moved to its hover tooltip — freeing room on the bar
+> - Status bar: the exp/hr slot now appends "- TNL: <time>" (estimated time to next level at the current rate)
+> - Monster look: the HP estimate slot is relabelled "TGT HP:" and also prints a yellow "[<name> remaining Hitpoints: <est>]" line to the terminal; a new Settings → Other "Show monster HP lookup" checkbox (default on) gates both
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

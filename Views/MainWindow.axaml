@@ -433,7 +433,8 @@
                 <StackPanel Grid.Column="6"
                             Orientation="Horizontal" Spacing="6"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="{Binding ConnectionStatusText}">
                     <Ellipse Width="8" Height="8" VerticalAlignment="Center"
                              Fill="{StaticResource AccentRedBrush}"
                              IsVisible="{Binding IsIdle}"/>
@@ -447,7 +448,6 @@
                                Foreground="{StaticResource AccentAmberBrush}"
                                Text="{Binding ReconnectCountdownText}"
                                IsVisible="{Binding IsReconnectCountdownVisible}"/>
-                    <TextBlock Classes="StatusSlot" Text="{Binding ConnectionStatusText}"/>
                 </StackPanel>
             </Grid>
         </Border>
