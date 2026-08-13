@@ -51,7 +51,13 @@
                      SelectionMode="Multiple">
                 <ListBox.ItemTemplate>
                     <DataTemplate DataType="cash:TransactionEntry">
-                        <Grid ColumnDefinitions="120,56,*" Margin="4,2">
+                        <!-- Stash rows wash faint gold (the map's stash-marker
+                             colour). Transparent background keeps every row
+                             hit-testable for the double-click → centre-on-map. -->
+                        <Grid ColumnDefinitions="120,56,*" Margin="4,2" Cursor="Hand"
+                              Background="{Binding Kind, Converter={x:Static vm:TransactionKindBackgroundConverter.Instance}}"
+                              ToolTip.Tip="Double-click to show this room on the map"
+                              DoubleTapped="OnRowDoubleTapped">
                             <TextBlock Grid.Column="0"
                                        Text="{Binding Time, StringFormat='{}{0:ddMMMyy HH:mm:ss}'}"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
