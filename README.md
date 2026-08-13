@@ -1,14 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.51**
-> - Auto-train now returns to the loop after training instead of stalling with the route drawn and nothing on the wire
-> - Loops/Auto-Lairs tree: expanding a folder now scrolls it into view instead of opening off-screen below the fold
-> - Selecting a room via the nav search box or loading a Go-to destination no longer slows a running loop
-> - Terminal now accepts paste (Ctrl+V / Shift+Insert); multi-line pastes send as sequential commands
-> - Monster Matchup: changing the selected attack no longer resizes the Character Workshop window
-> - Status-bar TNL now uses the same banked-aware estimate as Session Stats' "time to next level"
-> - Combat diagnostics now log the cast-interrupt resume path to expose mid-fight re-engage stalls
+> **Version 3.9.0**
+> - Navigation now routes out of sealed rooms via NPC ask-transport — a room whose only exit is asking a resident NPC to port you elsewhere (the Grey Lord → Town Square) is no longer a dead-end
+> - Turning auto-combat off mid-fight now resumes movement immediately instead of stalling until a manual room redisplay
+> - "Do not rest in this room" no longer suppresses resting for the rest of the loop — the rest gate re-arms on leaving the flagged room
+> - Manually casting a spell mid-combat can no longer make the attack spell burst (rate-limited to once per round for hand-typed casts)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

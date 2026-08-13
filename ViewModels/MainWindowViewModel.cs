@@ -4594,6 +4594,13 @@ public partial class MainWindowViewModel : ObservableObject
         // instead of stalling until the next room re-display.
         if (_suppressAutoEngineWriteback) return;
         AppServices.Current.CombatTracker?.OnAutoAttackChanged();
+        // OnAutoAttackChanged clears only the Combat gate. Sibling room-observation
+        // gate-holders (the deferred-cash / get-items / search Acquisition holds)
+        // re-evaluate solely on a fresh observation, so turning combat off with one
+        // of them asserted strands the walker "Paused by: Acquisition" until a
+        // manual room re-display. Re-emit the current observation once the fight is
+        // disengaged so every gate-holder re-evaluates together.
+        if (!value) AppServices.Current.RoomClassifier?.ReemitCurrent();
     }
 
     partial void OnIsAutoNukeActiveChanged(bool value)

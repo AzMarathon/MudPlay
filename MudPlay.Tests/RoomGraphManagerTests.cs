@@ -1256,6 +1256,115 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.Null(ex.MultiAction);
     }
 
+    // ----- NPC ask-transport teleport edges (greet ports player out) ---------
+    //
+    // The Floating Citadel's Grey Lord (#251) stands in the Great Hall (1/160), a
+    // sealed pocket whose only cardinal is S. His greet (366) exposes an UNGATED
+    // `teleport` topic that ports to Town Square (1/224) and a quest-GATED
+    // `code`/`word` topic to the same room. Only the ungated topic is synthesised
+    // into a routable Direction.Teleport edge.
+
+    private const string GreyLordRooms = """
+        [
+          { "Map Number": 1, "Room Number": 160, "Name": "Floating Citadel, Great Hall",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "NPC": 251, "Lair": "", "Delay": 5,
+            "N": "0", "S": "1/158", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 158, "Name": "Floating Citadel, Landing",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 5,
+            "N": "1/160", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 224, "Name": "Town Square",
+            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private const string GreyLordTbInfo = """
+        [
+          { "Number": 366, "LinkTo": 0, "Action": "teleport:369\ncode:368\nword:368\n",
+            "Called From": "Monster #251" },
+          { "Number": 369, "LinkTo": 370, "Action": null, "Called From": "" },
+          { "Number": 370, "LinkTo": 0, "Action": "teleport 224 1:message 837\n", "Called From": "" },
+          { "Number": 368, "LinkTo": 371, "Action": null, "Called From": "" },
+          { "Number": 371, "LinkTo": 0,
+            "Action": "checkability 127 2:giveability 127 3:teleport 224 1:message 837\n",
+            "Called From": "" }
+        ]
+        """;
+
+    private const string GreyLordMonsters = """
+        [ { "Number": 251, "Name": "The Grey Lord", "GreetTXT": 366 } ]
+        """;
+
+    [Fact]
+    public void GreetTeleport_UngatedNpcTransport_SynthesisesTeleportEdge()
+    {
+        (RoomGraphManager graph, _) =
+            BuildWithTbInfoAndMonsters("alpha", GreyLordRooms, GreyLordTbInfo, GreyLordMonsters);
+
+        Room? hall = graph.GetRoom(new RoomKey(1, 160));
+        Assert.NotNull(hall);
+        Assert.True(hall!.Exits.TryGetValue(Direction.Teleport, out RoomExit tele));
+        Assert.Equal(RoomExitHint.Teleport, tele.Hint);
+        Assert.Equal(new RoomKey(1, 224), tele.Target);          // ungated topic → Town Square
+        Assert.NotNull(tele.TextCommands);
+        Assert.Equal("ask Lord teleport", tele.TextCommands![0]); // noun = last word of the name
+        Assert.Equal(0, tele.MinLevel);
+        // The synthetic edge never touches the cardinal fingerprint (only S).
+        Assert.Equal(1u << (int)Direction.S, hall.ExitMask);
+    }
+
+    [Fact]
+    public void GreetTeleport_PocketEgress_IsRoutableByBfs()
+    {
+        // End-to-end: the sealed pocket 1/160 now routes to 1/224 through the
+        // ask-transport edge, where it couldn't before (no cardinal egress).
+        (RoomGraphManager graph, BfsMapper bfs) =
+            BuildWithTbInfoAndMonsters("alpha", GreyLordRooms, GreyLordTbInfo, GreyLordMonsters);
+
+        ProfileService profile = new();
+        MovementFilter filter = new(profile) { StrengthProvider = () => 100 };
+
+        var path = bfs.FindPath(new RoomKey(1, 160), new RoomKey(1, 224), filter);
+        Assert.NotNull(path);
+        Assert.Equal(new[] { Direction.Teleport }, path!);
+    }
+
+    [Fact]
+    public void GreetTeleport_GatedOnlyGreet_MintsNoEdge()
+    {
+        // A greet whose only teleport topic is quest-gated yields no edge — the
+        // client can't verify the gate, so the pocket stays unrouted rather than
+        // routing through a transport that might silently fail.
+        const string gatedTbInfo = """
+            [
+              { "Number": 366, "LinkTo": 0, "Action": "code:368\nword:368\n",
+                "Called From": "Monster #251" },
+              { "Number": 368, "LinkTo": 371, "Action": null, "Called From": "" },
+              { "Number": 371, "LinkTo": 0,
+                "Action": "checkability 127 2:teleport 224 1:message 837\n", "Called From": "" }
+            ]
+            """;
+        (RoomGraphManager graph, _) =
+            BuildWithTbInfoAndMonsters("alpha", GreyLordRooms, gatedTbInfo, GreyLordMonsters);
+
+        Room? hall = graph.GetRoom(new RoomKey(1, 160));
+        Assert.False(hall!.Exits.ContainsKey(Direction.Teleport));
+    }
+
+    [Fact]
+    public void GreetTeleport_WithoutMonstersTable_MintsNoEdge()
+    {
+        // No Monsters table → the greet is never scanned, so no edge is minted —
+        // proves the edge is the Monsters-driven greet path, not room/TBInfo alone.
+        (RoomGraphManager graph, _) = BuildWithTbInfo("alpha", GreyLordRooms, GreyLordTbInfo);
+
+        Room? hall = graph.GetRoom(new RoomKey(1, 160));
+        Assert.False(hall!.Exits.ContainsKey(Direction.Teleport));
+    }
+
     [Fact]
     public void CmdTeleport_SingleDestination_SynthesisesTeleportEdge()
     {

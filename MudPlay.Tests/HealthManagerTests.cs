@@ -2547,4 +2547,44 @@ public sealed class HealthManagerTests
         h.Health.Evaluate();
         Assert.False(h.HealthGateHeld);
     }
+
+    [Fact]
+    public void LeavingDoNotRestRoom_ReArmsRestGate_OnRoomChangeAlone()
+    {
+        // Report 141450: a do-not-rest room suppresses the rest gate with the pool
+        // still low. Leaving it must re-arm the gate on the room change alone — a
+        // plain Standing hop out raises no prompt change to re-run Evaluate, so
+        // without this the deficit rides untended all lap (the "whole loop won't
+        // rest" symptom, worst when the flagged room is the circle-start).
+        using Harness h = new();
+        h.AutoHealRestEnabled = true;
+
+        // Low mana while standing in a do-not-rest room: gate is suppressed.
+        h.SkipRestHere = true;
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 10, maxMa: 100);
+        h.Health.Evaluate();
+        Assert.False(h.ManaGateHeld);
+
+        // Step OUT into a normal room — only the room change, no new prompt.
+        h.SkipRestHere = false;
+        h.Health.NoteRoomChanged();
+
+        // The gate re-arms so the loop rests in the next restable room.
+        Assert.True(h.ManaGateHeld);
+    }
+
+    [Fact]
+    public void LeavingNormalRoom_DoesNotSpuriouslyAssertRestGate()
+    {
+        // Guard: the re-arm only fires after a do-not-rest room. A room change with
+        // pools full and no do-not-rest deferral must not assert a rest gate.
+        using Harness h = new();
+        h.AutoHealRestEnabled = true;
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);
+        h.Health.Evaluate();
+        Assert.False(h.ManaGateHeld);
+
+        h.Health.NoteRoomChanged();
+        Assert.False(h.ManaGateHeld);
+    }
 }

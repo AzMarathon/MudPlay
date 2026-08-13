@@ -1178,6 +1178,21 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   the room (their `appears in a blinding flash of light!` line, or an `Also here:` listing if they
   landed ahead of the leader). A member whose invite lands after arrival rejoins cleanly
   (`You have invited %name% to follow you.` → `%name% started to follow you.`).
+- **[CONFIRMED, report 2026-08-13]** **An NPC can transport a player who ASKS it — a "greet
+  teleport."** Some placed NPCs carry, inside their `Monsters.GreetTXT` chain, an askable keyword
+  whose directive block ends in a `teleport <room> <map>` — asking the NPC that keyword
+  (`ask <noun> <keyword>`, noun = last word of the monster's name, same convention as the guard-door
+  ask commands) ports the asker to that room. Example: the Floating Citadel's **Grey Lord** (`#251`,
+  GreetTXT 366) stands in the Great Hall (`1/160`), a sealed pocket whose only cardinal exit is S;
+  **`ask lord teleport`** ports the character to **Town Square (`1/224`)** — the pocket's only egress
+  toward the rest of the realm. The same greet also exposes quest keywords (`code` / `word`, TBInfo
+  block 371) that reach the same room but sit behind `evilaligned` / `goodaligned` / `checkability`
+  gates; the plain **`teleport`** keyword (block 370) is **ungated** and deterministic. The navigation
+  engine models only the **ungated** greet teleport as a routable exit (GreetTeleportResolver →
+  `RoomGraphManager.BuildGreetTeleportEdges`, a `Direction.Teleport` edge whose command is
+  `ask <noun> <keyword>`); gated keywords are skipped because the client can't verify the gate and a
+  failed transport would strand the walker. **Party behaviour is unverified** — treat a greet teleport
+  the same as a CMD teleport (moves only the asker, likely party-splitting) until captured.
 - **[CONFIRMED, capture 2026-07-10]** A follower client that receives `@join` while it is **already
   following someone** answers the telepath with **`I'm following someone; denied.`** — `@join` is not
   idempotent against an existing follow. This surfaces as a downstream symptom when a reform re-invite

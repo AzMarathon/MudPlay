@@ -78,8 +78,9 @@ public static class GuardDoorCommandResolver
 
     // Follow empty-Action LinkTo hops until an entry with keyword lines (a real
     // greet block) is reached — a pure-dialogue greet hangs its keyword block off
-    // LinkTo. Returns null on a dead or looping chain.
-    private static TBInfoEntry? ResolveGreetBlock(TBInfoStore store, int number, HashSet<int> visited)
+    // LinkTo. Returns null on a dead or looping chain. Shared with
+    // GreetTeleportResolver (the ask-transport analogue of this door decoder).
+    internal static TBInfoEntry? ResolveGreetBlock(TBInfoStore store, int number, HashSet<int> visited)
     {
         while (number > 0 && visited.Add(number))
         {
@@ -184,8 +185,8 @@ public static class GuardDoorCommandResolver
     }
 
     // Strip the hidden-command '*' marker and take the first alternate before a
-    // '|' — the walker types one concrete keyword.
-    private static string CleanKeyword(string raw)
+    // '|' — the walker types one concrete keyword. Shared with GreetTeleportResolver.
+    internal static string CleanKeyword(string raw)
     {
         string s = raw.Replace("*", string.Empty).Trim();
         int bar = s.IndexOf('|');
@@ -193,7 +194,7 @@ public static class GuardDoorCommandResolver
         return s;
     }
 
-    private static int FirstIntAfter(string token, string prefix)
+    internal static int FirstIntAfter(string token, string prefix)
     {
         int idx = token.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
         if (idx < 0) return 0;
@@ -201,7 +202,8 @@ public static class GuardDoorCommandResolver
     }
 
     // Skip leading whitespace, then read the contiguous digit run. 0 when none.
-    private static int LeadingInt(string s)
+    // Shared with GreetTeleportResolver.
+    internal static int LeadingInt(string s)
     {
         int i = 0;
         while (i < s.Length && char.IsWhiteSpace(s[i])) i++;

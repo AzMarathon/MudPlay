@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.9.0
+
+- Navigation now routes out of sealed rooms via an NPC ask-transport exit — a room whose only egress is asking a resident NPC to port you elsewhere (the Floating Citadel's Grey Lord → Town Square) is no longer a dead-end; the walker sends the `ask <npc> <keyword>` itself. Only ungated transports are used
+- Turning auto-combat off mid-fight now resumes movement immediately instead of stalling until a manual room redisplay (a deferred-cash/get-items/search hold was left stranded)
+- "Do not rest in this room" no longer suppresses resting for the rest of the loop — the rest gate re-arms when the loop steps out of the flagged room
+- Manually casting a spell mid-combat can no longer make the attack spell burst — the resume is rate-limited to once per round for hand-typed casts (engine survival casts are unaffected)
+- bug reports addressed: paradigm-20260813-122226, paradigm-20260813-121114, paradigm-20260813-131020, paradigm-20260813-141450
+
 ## 3.8.51
 
 - Auto-train now returns to the loop after training instead of stalling with the route drawn and nothing on the wire (the trainer-menu keyboard hold was still up when the resume step fired, so the move got dropped)

@@ -479,6 +479,40 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(sentAfterFirstResume, h.Sent.Count);   // no further re-announces
     }
 
+    // Report paradigm-20260813-131020: manually hand-casting a room/utility spell
+    // mid-fight arms the same between-round resume, and a user MASHING casts
+    // re-stamps it each keypress — each fresh stamp clears the per-interrupt guard
+    // above, so without a manual-only rate limit each would fire its own re-attack
+    // (the reported manual-cast → mmis spam). Two DISTINCT manual casts inside the
+    // pacing window must resume only once. (The engine's per-round survival casts
+    // are never paced — covered by SpellsFirst_RepeatedSelfHealInterrupts…).
+    [Fact]
+    public void SpellMode_MashedManualCasts_ResumeIsRateLimited()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "small zombie");
+
+        h.Feed("Also here: small zombie.");
+        Assert.Equal("turn small zombie", h.LastSent);
+
+        // First manual cast → its *Combat Off* resumes the attack once.
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteManualBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        int afterFirst = h.Sent.Count;
+
+        // A SECOND, distinct manual cast lands within the pacing window (instant in
+        // a test). Its fresh stamp clears the per-interrupt guard, but the
+        // manual-cast rate limit suppresses the re-attack.
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteManualBetweenRoundCast();
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(afterFirst, h.Sent.Count);   // no second re-announce within the window
+    }
+
     // ----- Auto-Nuke auto-engine gate ----------------------------------
 
     [Fact]

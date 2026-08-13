@@ -404,8 +404,9 @@ public sealed class RoomGraphManager
 
         // Fold in guard-monster doors: a placed monster whose greet dialogue
         // opens a door on its own room contributes an `ask` command that the
-        // promotion below treats exactly like a lever action.
-        InjectGuardDoorActions(byExit);
+        // promotion below treats exactly like a lever action. Returns the greeter
+        // index for BuildGreetTeleportEdges to reuse after the teleport passes run.
+        Dictionary<int, (int Greet, string Name)> greeters = InjectGuardDoorActions(byExit);
 
         // Patch each action-gated exit with the gathered data.
         foreach (((RoomKey roomKey, Direction dir), List<ExitAction> actions) in byExit)
@@ -465,6 +466,7 @@ public sealed class RoomGraphManager
         PromoteCastTeleportExits();
         MarkCastPocketEntrances();
         BuildTeleportEdges();
+        BuildGreetTeleportEdges(greeters);
         BuildBoatEdges();
         BuildSecondaryIndexes();
 
@@ -497,14 +499,18 @@ public sealed class RoomGraphManager
     // door is always made routable and the walker reacts to whether the command
     // actually opens it. No-op without a TBInfo source (parameterless / test
     // construction) or when the set has no Monsters table.
-    private void InjectGuardDoorActions(Dictionary<(RoomKey Room, Direction Dir), List<ExitAction>> byExit)
+    // Returns the id → (greet, name) index it builds so a later pass
+    // (BuildGreetTeleportEdges) can reuse it without re-reading the evicted
+    // Monsters table. Empty when there's no TBInfo source or no greeters.
+    private Dictionary<int, (int Greet, string Name)> InjectGuardDoorActions(
+        Dictionary<(RoomKey Room, Direction Dir), List<ExitAction>> byExit)
     {
-        if (_tbinfo is null) return;
+        if (_tbinfo is null) return new();
 
         // Build a small id → (greet, name) map of only monsters carrying a greet,
         // then evict the raw table — memory-hygiene parity with the Rooms load.
         JsonDocument? monstersDoc = _cache.GetRawTable("Monsters");
-        if (monstersDoc is null) return;
+        if (monstersDoc is null) return new();
 
         var greeters = new Dictionary<int, (int Greet, string Name)>();
         foreach (JsonElement row in monstersDoc.RootElement.EnumerateArray())
@@ -516,7 +522,7 @@ public sealed class RoomGraphManager
             greeters[num] = (greet, TryReadString(row, "Name") ?? string.Empty);
         }
         _cache.EvictTable("Monsters");
-        if (greeters.Count == 0) return;
+        if (greeters.Count == 0) return greeters;
 
         // Gather the alternative ask-commands per guarded exit first. Every greet
         // topic that opens the same door is an ALTERNATIVE — the crossing sends
@@ -563,6 +569,8 @@ public sealed class RoomGraphManager
                     ? $" — gated on {AbilityNames.GetName(abilityGate) ?? $"ability {abilityGate}"}; walker issues the command and reacts to whether it opens."
                     : "."));
         }
+
+        return greeters;
     }
 
     // Monster numbers standing in a room: the single placed NPC (Room.Npc) plus
@@ -805,6 +813,63 @@ public sealed class RoomGraphManager
                     $"Room {key}: synthesised {(isGateway ? "gateway " : string.Empty)}Teleport edge "
                     + $"'{keyword}' → {dest}"
                     + (minLevel > 0 ? $" (Level {minLevel}+)." : "."));
+            }
+        }
+    }
+
+    // NPC ask-transport edges. A placed/lair monster whose greet dialogue ports
+    // the player elsewhere (GreetTeleportResolver) contributes a Direction.Teleport
+    // exit whose crossing command is `ask <noun> <keyword>` — the analogue of the
+    // CMD teleport edges BuildTeleportEdges mints, for pockets whose only egress is
+    // asking an NPC (the Floating Citadel's Grey Lord ports a character to Town
+    // Square). Runs AFTER BuildTeleportEdges so a room's own CMD teleport wins the
+    // single Direction.Teleport slot; only UNGATED transports are synthesised (see
+    // GreetTeleportResolver), so the walker never routes through a quest-gated port
+    // it can't satisfy. Reuses the greeter index InjectGuardDoorActions built.
+    private void BuildGreetTeleportEdges(Dictionary<int, (int Greet, string Name)> greeters)
+    {
+        if (_tbinfo is null || greeters.Count == 0) return;
+
+        foreach (RoomKey key in _rooms.Keys.ToArray())
+        {
+            Room room = _rooms[key];
+            if (room.Exits.ContainsKey(Direction.Teleport)) continue; // CMD teleport already claimed the slot
+
+            HashSet<RoomKey> existingTargets = new();
+            foreach ((Direction _, RoomExit ex) in room.Exits) existingTargets.Add(ex.Target);
+
+            bool minted = false;
+            foreach (int monsterId in EnumerateRoomMonsters(room))
+            {
+                if (!greeters.TryGetValue(monsterId, out (int Greet, string Name) g)) continue;
+
+                foreach (GreetTeleportResolver.GreetTeleport t in
+                         GreetTeleportResolver.Resolve(_tbinfo, g.Greet, g.Name))
+                {
+                    if (existingTargets.Contains(t.Destination)) continue; // reachable the normal way already
+                    if (t.Destination == key) continue;                    // a self-port is no egress
+
+                    RoomExit tele = new(
+                        t.Destination,
+                        RoomExitHint.Teleport,
+                        RawHint: "greet teleport",
+                        TextCommands: new[] { t.Command },
+                        MinLevel: t.MinLevel,
+                        GatewayTeleport: false);
+                    var rebuilt = new Dictionary<Direction, RoomExit>(room.Exits)
+                    {
+                        [Direction.Teleport] = tele
+                    };
+                    _rooms[key] = room with { Exits = rebuilt };
+
+                    _log?.Log(LogSeverity.Info, "RoomGraph",
+                        $"Room {key}: synthesised NPC ask-transport Teleport edge "
+                        + $"'{t.Command}' → {t.Destination}"
+                        + (t.MinLevel > 0 ? $" (Level {t.MinLevel}+)." : "."));
+                    minted = true;
+                    break; // one Direction.Teleport slot per room
+                }
+                if (minted) break; // first NPC that yields a routable transport wins
             }
         }
     }

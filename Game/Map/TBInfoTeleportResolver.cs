@@ -135,8 +135,9 @@ public static class TBInfoTeleportResolver
     }
 
     // `teleport <roomNum> <mapNum>` — note the Action field uses (room, map)
-    // order (verified in real Rooms.json dumps; map is the second token).
-    private static bool TryParseTeleport(string token, out RoomKey dest)
+    // order (verified in real Rooms.json dumps; map is the second token). Shared
+    // with GreetTeleportResolver so the room/map order lives in one place.
+    internal static bool TryParseTeleport(string token, out RoomKey dest)
     {
         dest = default;
         if (!token.StartsWith("teleport ", StringComparison.OrdinalIgnoreCase)) return false;
