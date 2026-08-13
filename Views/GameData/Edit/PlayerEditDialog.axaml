@@ -82,6 +82,8 @@
                                           ToolTip.Tip="{Binding RcQueryInventoryTip}"/>
                                 <CheckBox Content="Query boss timers"    IsChecked="{Binding RcQueryBossTimers, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcQueryBossTimersTip}"/>
+                                <CheckBox Content="Query deaths"         IsChecked="{Binding RcQueryDeaths, Mode=TwoWay}"
+                                          ToolTip.Tip="{Binding RcQueryDeathsTip}"/>
                                 <CheckBox Content="Request invite"       IsChecked="{Binding RcRequestInvite, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcRequestInviteTip}"/>
                                 <CheckBox Content="Move player"          IsChecked="{Binding RcMovePlayer, Mode=TwoWay}"

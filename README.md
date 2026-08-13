@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.16**
+> **Version 3.8.17**
 > - `@path` remote command now names the last loop or auto-lair the player ran when they're stopped/idle — so if a party member dies and halts, you can see which circuit they were on and help them resume without guessing
+> - New `@death` remote command reports unrecovered deaths from the recovery log (most recent, or `@death all`), gated by a new "Query deaths" per-player permission — so you can help a dead party member recover
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

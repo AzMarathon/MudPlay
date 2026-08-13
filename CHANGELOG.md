@@ -2,9 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.8.16
+## 3.8.17
 
 - `@path` remote command now names the last loop or auto-lair the player ran when they're stopped/idle (instead of just "not moving") — so if a party member dies and halts, you can see which circuit they were on and help them resume without guessing
+- New `@death` remote command reports unrecovered deaths from the recovery log — bare `@death` gives the most recent one (when, status, room, lives left), `@death all` lists them all — so you can help a dead party member recover; gated by a new "Query deaths" permission per player in Game Data → Players
 
 ## 3.8.15
 
