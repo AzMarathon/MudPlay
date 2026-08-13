@@ -157,8 +157,8 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel vm) RebuildHelpMenu(vm);
     }
 
-    // Compose the Help menu: the disabled "Help topics…" placeholder, then one
-    // launch item per user-editable website link (edited under Settings →
+    // Compose the Help menu: the "Help topics…" launcher, then one launch item
+    // per user-editable website link (edited under Settings →
     // Toolbar + Shortcuts), then the active BBS's own site, then the static
     // Report / About actions. Same code-composition reason as the Game Data
     // menu — a MenuItem can't mix a bound dynamic list with inline static

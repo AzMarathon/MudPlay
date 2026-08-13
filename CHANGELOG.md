@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.19
+
+- Help window: a failed/missing guide asset now logs a warning instead of silently opening an empty compendium, so a "Help is empty" report has a program-log trail
+- Fixed a stale comment on the Help menu's composition describing the "Help topics…" item as a disabled placeholder — it's a live command
+
 ## 3.8.17
 
 - `@path` remote command now names the last loop or auto-lair the player ran when they're stopped/idle (instead of just "not moving") — so if a party member dies and halts, you can see which circuit they were on and help them resume without guessing
