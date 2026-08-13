@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.27
+
+- Transaction history: the stash tint now fills the whole entry edge-to-edge (consecutive stashes read as one gold band, no gaps), and the timestamp / type / room-location text is brighter for readability
+
 ## 3.8.26
 
 - Transaction history: stash entries are tinted faint gold (the map's stash-marker colour) to stand out from bank deposits

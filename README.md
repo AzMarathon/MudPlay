@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.26**
-> - Transaction history: stash entries are tinted faint gold (the map's stash-marker colour) to stand out from bank deposits
-> - Double-clicking a transaction opens the Navigation map centred on the room where that deposit/stash happened
+> **Version 3.8.27**
+> - Transaction history: the stash tint now fills the whole entry edge-to-edge (consecutive stashes read as one gold band, no gaps), and the timestamp / type / room-location text is brighter for readability
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
