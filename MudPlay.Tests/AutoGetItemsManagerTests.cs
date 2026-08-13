@@ -654,6 +654,40 @@ public sealed class AutoGetItemsManagerTests
         Assert.Equal(2, h.Sent.Count);
     }
 
+    [Fact]
+    public void Confirmation_ThenReListing_IsTreatedAsNewDrop()
+    {
+        // "You took X" means that copy left the floor, so a later survey listing
+        // X again is a fresh drop (not a re-render) and collects.
+        using Harness h = new();
+        h.Flags["orc-head"] = true;
+
+        h.Feed("You notice orc-head here.");   // get sent, in-flight
+        Assert.Single(h.Sent);
+
+        h.Feed("You took orc-head.");           // server confirms — off the floor
+        h.Feed("You notice orc-head here.");   // a fresh orc-head dropped
+
+        Assert.Equal(2, h.Sent.Count);          // collected the new one
+    }
+
+    [Fact]
+    public void OtherPlayerPickup_DoesNotClearInFlight()
+    {
+        // Someone else's "Bob picks up orc-head." is NOT our confirmation — the
+        // in-flight get stands, so a re-render of the same floor still dedups.
+        using Harness h = new();
+        h.Flags["orc-head"] = true;
+
+        h.Feed("You notice orc-head here.");   // get sent, in-flight
+        Assert.Single(h.Sent);
+
+        h.Feed("Bob picks up orc-head.");       // another player, not us
+        h.Feed("You notice orc-head here.");   // re-render of the same floor
+
+        Assert.Single(h.Sent);                  // still deduped
+    }
+
     // ----- Post-kill drop re-look ----------------------------------
 
     [Fact]

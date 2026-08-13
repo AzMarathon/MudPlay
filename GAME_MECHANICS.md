@@ -2095,6 +2095,14 @@ fresh `@level` lands ≥ 10.)
   with coins, so a colour-adjective item (`You dropped a silver key.`) is told apart from coin only
   by the trailing **coin noun** (`nobles`/`farthings`/…) and a numeric count. `You picked up …` is
   coin-exclusive (items never use it).
+- **[CONFIRMED]** The pickup lines are the authoritative "the get landed" signal, and the client
+  keys movement-resume (the acquisition gate) and collection dedup on them: `You took <item>.` per
+  item (one line per collected item), and `You picked up <N> <coin>.` per coin get. **A
+  `You picked up 0 <coin>.` is a FAILURE, not a success** — the character is at its carry limit and
+  took nothing (the coins stay on the ground); for gate purposes the get has still *resolved*, so it
+  stops the walker waiting on it, but nothing was collected. The item-get **failure** wording is not
+  yet captured; until it is, a get that never yields a `You took` line is released by the settle
+  timeout rather than by a confirmation.
 - **[CONFIRMED]** **A get/drop target given as the bare denomination adjective binds to any
   like-named item, not the coins.** `drop 1 silver` can resolve to a *silver ring* instead of a
   silver noble; the game picks whichever object matches first. Emitting the **full two-word coin

@@ -2,8 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.8.22**
-> - Auto-get no longer re-sends `get` for the same floor items when a room re-renders (Cash re-grabbing ground coin, the post-kill re-look, the combat-clear redisplay) — four ground orc-heads no longer become eight-plus gets; a genuinely larger pile from a fresh drop still tops up
-> - Looting resumes movement more fluidly: the post-get settle is shorter and duplicate gets no longer re-arm it
+> - Auto-get no longer re-sends `get` for the same floor items when a room re-renders (Cash re-grabbing ground coin, the post-kill re-look, the combat-clear redisplay) — four ground orc-heads no longer become eight-plus gets; dedup keys on the `You took <item>` pickup confirmation, so a fresh drop still collects
+> - Looting resumes movement the instant pickups are confirmed (`You took <item>` / `You picked up <coin>`) instead of waiting out a fixed timer
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

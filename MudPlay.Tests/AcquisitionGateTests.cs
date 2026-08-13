@@ -106,4 +106,59 @@ public sealed class AcquisitionGateTests
 
         Assert.False(Asserted(coord));
     }
+
+    [Fact]
+    public void GetConfirmed_ReleasesGate_WithoutWaitingOnSettle()
+    {
+        MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        gate.NoteGetSent();
+        Assert.True(Asserted(coord));
+
+        // Server confirmed the pickup — the gate releases immediately.
+        gate.NoteGetConfirmed();
+
+        Assert.False(Asserted(coord));
+    }
+
+    [Fact]
+    public void MultipleGets_ReleaseOnlyAfterAllConfirmed()
+    {
+        MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        gate.NoteGetSent();
+        gate.NoteGetSent();
+
+        gate.NoteGetConfirmed();
+        Assert.True(Asserted(coord));       // one still outstanding
+
+        gate.NoteGetConfirmed();
+        Assert.False(Asserted(coord));      // both confirmed → released
+    }
+
+    [Fact]
+    public void GetConfirmed_WithPendingDeferred_StaysHeld()
+    {
+        MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        gate.NoteDeferredPending(1);        // still waiting on combat
+        gate.NoteGetSent();
+
+        gate.NoteGetConfirmed();
+
+        Assert.True(Asserted(coord));       // deferred items still pending
+    }
+
+    [Fact]
+    public void GetConfirmed_WithNothingOutstanding_IsNoOp()
+    {
+        MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+
+        // A stray confirmation (e.g. a manual get) with nothing pending does
+        // nothing — the gate was never asserted.
+        gate.NoteGetConfirmed();
+
+        Assert.False(Asserted(coord));
+    }
 }

@@ -429,6 +429,11 @@ public sealed class CashManager : IDisposable
         // Confirm our pending `get` — drain the matching in-flight delta so
         // the next gate evaluation works against the parser's fresh view.
         DecayInFlight(currency, count);
+        // Tell the shared acquisition gate this coin get resolved so the walker
+        // can resume without waiting on the settle fallback. A count of 0 (carry
+        // limit hit, took nothing) still resolves the get — there's nothing more
+        // to wait for.
+        _gate?.NoteGetConfirmed();
         CheckAutoDeposit();
         // Picked up a currency the user marked Discard (or settings
         // changed since the last audit) — drop it.
