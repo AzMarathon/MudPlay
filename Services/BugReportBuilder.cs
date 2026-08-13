@@ -423,9 +423,11 @@ public static class BugReportBuilder
                 loop.CircleStartRoom is { } start ? $"{start.Map}/{start.Room}" : "(none)");
         }
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
-        // Last loop run this session, retained past a stop/death — what @path
-        // reports when idle so a party member can help the player resume.
+        // Last loop / auto-lair run this session, retained past a stop/death —
+        // what @path reports when idle so a party member can help the player
+        // resume the circuit they were on.
         Kv(sb, "Last run loop", loop.LastRunLoopName ?? "(none)");
+        Kv(sb, "Last run auto-lair", svc.AutoLair.LastRunLairName ?? "(none)");
         Kv(sb, "Auto-Lair phase", svc.AutoLair.Phase.ToString());
         Kv(sb, "Auto-Lair active", svc.AutoLair.IsActive.ToString());
         Kv(sb, "Auto-Lair paused", svc.AutoLair.IsPaused.ToString());
