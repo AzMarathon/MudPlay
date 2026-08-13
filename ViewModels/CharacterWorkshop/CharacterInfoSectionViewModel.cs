@@ -160,9 +160,9 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     // Worn items split into name + parenthesized slot so the view can align every
     // slot flag in a shared column (like the in-game `look self`), rather than
     // letting each "(Slot)" trail its own name at a ragged offset.
-    public ObservableCollection<EquippedItemRow> EquippedItems { get; } = new();
-    // Carried-but-unworn item names harvested from the last inventory dump.
-    public ObservableCollection<string> CarriedItems { get; } = new();
+    public ObservableCollection<WorkshopItemRow> EquippedItems { get; } = new();
+    // Carried-but-unworn items harvested from the last inventory dump.
+    public ObservableCollection<WorkshopItemRow> CarriedItems { get; } = new();
     // Key-ring contents from the dump's "You have the following keys: …" trailer.
     // The game tracks keys apart from the pack, so they get their own list in the
     // Inventory box rather than mixing into CarriedItems.
@@ -574,15 +574,16 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
         EquippedItems.Clear();
         foreach (EquippedItem item in snap.EquippedItems)
-            EquippedItems.Add(new EquippedItemRow(
+            EquippedItems.Add(new WorkshopItemRow(
                 item.Name,
                 string.IsNullOrEmpty(item.Slot)
                     ? string.Empty
-                    : string.Create(CultureInfo.InvariantCulture, $"({item.Slot})")));
+                    : string.Create(CultureInfo.InvariantCulture, $"({item.Slot})"),
+                ResolveItemNumber(item.Name)));
 
         CarriedItems.Clear();
         foreach (string name in snap.CarriedItems)
-            CarriedItems.Add(name);
+            CarriedItems.Add(new WorkshopItemRow(name, string.Empty, ResolveItemNumber(name)));
 
         Keys.Clear();
         if (snap.Keys is { } keys)
@@ -630,9 +631,16 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         _alignmentTracker.StaleChanged -= OnAlignmentStaleChanged;
         _questBonuses.Changed -= OnQuestBonusesChanged;
     }
-}
 
-// One worn item for the equipped list: the name and its parenthesized slot flag
-// ("(Hands)"), kept apart so the view can align every slot in a shared column.
-// Slot is empty for a worn item the game reported without a slot label.
-public readonly record struct EquippedItemRow(string Name, string Slot);
+    // Resolve an inventory-dump item name to its Items-table Number for a clickable
+    // record link, or 0 when it doesn't resolve (dump names can be truncated /
+    // pluralised, so a few worn/carried items won't link).
+    private int ResolveItemNumber(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return 0;
+        if (_gameData.FindRowByName("Items", name) is not { } row) return 0;
+        return row.TryGetProperty("Number", out JsonElement n) && n.ValueKind == JsonValueKind.Number
+            ? n.GetInt32()
+            : 0;
+    }
+}

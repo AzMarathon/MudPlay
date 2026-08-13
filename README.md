@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.9.5**
-> - Item record (Game Data → Items): a Charm picker (default 50) re-prices the bought/sold buy/sell figures live, to compare charm levels
-> - Item record: each bought/sold shop gains a "Queue Walking here →" link; "Dropped by" monsters are now clickable links to their records
-> - Shop room-detail popup gains the same live Charm picker (replaces the static "prices at 50 charm")
+> **Version 3.9.7**
+> - Player Workshop → Character Info: equipped and carried items are now clickable links to their Game Data item record
+> - Room-detail popup: the "Also here" monsters now show their record number (e.g. `chest(#69)`)
+> - Item record (Game Data → Items): a Charm picker (default 50) re-prices the bought/sold figures live; each shop gains a "Queue Walking here →" link; "Dropped by" monsters are clickable links
+> - Shop room-detail popup gains the same live Charm picker
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

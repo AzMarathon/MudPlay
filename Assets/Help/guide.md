@@ -351,7 +351,7 @@ A read-only what-if table: pick a level **from–to** range (and optionally any 
 
 ## Character Info and Calculators
 
-**Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. **Calculators** holds what-if tools: Monster Matchup, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings.
+**Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. It also lists your worn and carried inventory, each item a clickable link to its Game Data record (an item whose dumped name didn't resolve stays plain text). **Calculators** holds what-if tools: Monster Matchup, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings.
 
 ---
 
@@ -423,7 +423,7 @@ Click a section to open it. Each table has its own **Filter…** box (this one f
 
 - **Items** and **Monsters** open a real **override editor**: an editable pane on the left, the read-only **Other Info (from MDB)** on the right. For an item you can flip its automation flags (**Auto-collect, Auto-discard, Auto-buy, Auto-sell, Auto-stash**, and more), set **Min. to keep / Max to get**, and toggle **Auto-obtain for path**. For a monster you can set its **Relationship** and **Priority**, its pre-attack and override-attack spells, and the combat-message wording. The **Use** dropdown chooses where the override saves — **Character** (this character only), **BBS** (everyone on this BBS), or **Global** (the whole install) — then **OK** writes it and the row's Use column updates to match. On an item, the right-hand info pane is interactive: a **Charm** picker (default 50) re-prices the **Bought / sold** buy/sell figures live so you can compare, say, a higher-charm party member selling; each shop links to its room record and offers **Queue Walking here →** (arms a walk to that shop, like typing it in the nav search box); and **Dropped by** lists the monsters that drop it as links to their records.
 - **Spells** — double-click edits the spell's player-cast **message** wording; the spell's own stats are read-only.
-- **Rooms** — double-click opens a read-only detail popup (exits, lighting, shop, placed monsters, room commands). For a shop room, a **Charm** picker re-prices the stock table live.
+- **Rooms** — double-click opens a read-only detail popup (exits, lighting, shop, placed monsters, room commands); its "Also here" monsters show their record number and link to their records. For a shop room, a **Charm** picker re-prices the stock table live.
 - **Shops** — double-click jumps to the shop's room in the **Rooms** table.
 - The rest (Lairs, Races, Classes, and so on) are read-only reference.
 
