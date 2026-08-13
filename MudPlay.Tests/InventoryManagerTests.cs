@@ -1048,6 +1048,20 @@ public sealed class InventoryManagerTests
     }
 
     [Fact]
+    public void GetBatch_AddsCountTimesItemWeight()
+    {
+        // Paradigm's counted get echoes "You took N <item>." — carried + weight
+        // must move by N, not one.
+        using Harness h = new(TestWeight);
+        FeedCarriedBaseline(h);   // 50/2880
+
+        h.Feed("You took 3 torch.");
+
+        Assert.Equal(170, Weight(h));   // 50 + 3*40
+        Assert.Equal(3, Carried(h).Count(n => string.Equals(n, "torch", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void Drop_SubtractsItemWeightFromEncumbrance()
     {
         using Harness h = new(TestWeight);

@@ -27,6 +27,7 @@ public sealed class AutoBuyManagerTests
         public LineExtractor Lines { get; } = new(new TerminalEmulator(80, 24));
         public List<byte[]> Sent { get; } = new();
         public bool Enabled { get; set; } = true;
+        public bool Paradigm { get; set; }
 
         // name -> (Number, Buy, MaxToGet)
         private readonly Dictionary<string, (int Number, bool Buy, int Max)> _map =
@@ -42,7 +43,8 @@ public sealed class AutoBuyManagerTests
                 resolve: Resolve,
                 countCarried: n => CarriedCount.GetValueOrDefault(n),
                 isEnabled: () => Enabled,
-                log: Log);
+                log: Log,
+                isParadigm: () => Paradigm);
             Buy.AttachLineExtractor(Lines);
             Buy.SetWireSender(b => Sent.Add(b));
         }
@@ -110,6 +112,21 @@ public sealed class AutoBuyManagerTests
         // Cap reached — a stray further result must not push a 4th buy.
         h.Feed("You just bought dagger for 5 gold crowns.");
         Assert.Equal(3, h.SentText.Count);
+    }
+
+    [Fact]
+    public void Paradigm_BuysWholeQuantityInOneCountedCommand()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.Map("dagger", 1, buy: true, max: 3);
+
+        h.ShopList(("dagger", 50));
+        Assert.Equal(new[] { "buy 3 dagger" }, h.SentText);   // one batched command
+
+        // The counted reply's qty group drains the whole order.
+        h.Feed("You just bought 3 dagger for 15 gold crowns.");
+
+        Assert.Single(h.SentText);
     }
 
     [Fact]

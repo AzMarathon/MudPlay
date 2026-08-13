@@ -50,6 +50,7 @@ public sealed class AutoDiscardManager : IDisposable
     private readonly Func<IReadOnlyList<string>> _carried;
     private readonly Func<string, ResolvedDiscard?> _resolve;
     private readonly Func<bool> _isEnabled;
+    private readonly Func<bool> _isParadigm;
     private readonly LogService? _log;
     private readonly IDisposable _dropSub;
     private readonly IDisposable _hideSub;
@@ -74,7 +75,8 @@ public sealed class AutoDiscardManager : IDisposable
         Func<IReadOnlyList<string>> carriedItems,
         Func<string, ResolvedDiscard?> resolve,
         Func<bool> isEnabled,
-        LogService? log = null)
+        LogService? log = null,
+        Func<bool>? isParadigm = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(carriedItems);
@@ -83,6 +85,8 @@ public sealed class AutoDiscardManager : IDisposable
         _carried = carriedItems;
         _resolve = resolve;
         _isEnabled = isEnabled;
+        // Unbound (tests) → Stock behaviour: one drop/hide per copy, never batched.
+        _isParadigm = isParadigm ?? (static () => false);
         _log = log;
 
         _dropSub = router.Subscribe(KnownPatterns.PlayerDrops, OnDropLine);
@@ -129,11 +133,10 @@ public sealed class AutoDiscardManager : IDisposable
                 _suppressLog[number] = _suppressLog.GetValueOrDefault(number) + toDrop;
 
             string verb = HideMode ? "hide" : "drop";
-            for (int i = 0; i < toDrop; i++)
-            {
-                _log?.Info(LogCategory, $"discard item={item.Name} via {verb} (keep {item.KeepCount})");
-                Send($"{verb} {item.Name}");
-            }
+            _log?.Info(LogCategory, $"discard {toDrop}x item={item.Name} via {verb} (keep {item.KeepCount})");
+            // Paradigm offloads the pile in one `{verb} N <item>`; Stock sends one
+            // per copy. The count-prefixed confirmation clears in-flight by N below.
+            CountedCommand.Emit(Send, verb, toDrop, item.Name, _isParadigm());
         }
     }
 
@@ -161,13 +164,17 @@ public sealed class AutoDiscardManager : IDisposable
 
     // Decrement the in-flight count for the item named in a self drop/hide
     // confirmation, so the Changed event that confirmation raises doesn't re-send.
-    private void ClearInFlight(string itemName)
+    // Paradigm confirms a batched offload in one counted line ("You dropped 5
+    // orc-head."), so strip the count and clear that many.
+    private void ClearInFlight(string itemToken)
     {
-        if (_resolve(itemName) is not { } item) return;
+        (int count, string name) = CountedCommand.SplitLeadingCount(itemToken);
+        if (_resolve(name) is not { } item) return;
         if (_inFlight.TryGetValue(item.Number, out int f) && f > 0)
         {
-            if (f == 1) _inFlight.Remove(item.Number);
-            else _inFlight[item.Number] = f - 1;
+            int cleared = Math.Min(f, count);
+            if (f == cleared) _inFlight.Remove(item.Number);
+            else _inFlight[item.Number] = f - cleared;
         }
     }
 
@@ -178,11 +185,13 @@ public sealed class AutoDiscardManager : IDisposable
     // initiated isn't registered (returns false), so it still records.
     public bool TryConsumeSuppressedHide(string itemName)
     {
-        if (_resolve(itemName) is not { } item) return false;
+        (int count, string name) = CountedCommand.SplitLeadingCount(itemName);
+        if (_resolve(name) is not { } item) return false;
         if (_suppressLog.TryGetValue(item.Number, out int n) && n > 0)
         {
-            if (n == 1) _suppressLog.Remove(item.Number);
-            else _suppressLog[item.Number] = n - 1;
+            int consumed = Math.Min(n, count);
+            if (n == consumed) _suppressLog.Remove(item.Number);
+            else _suppressLog[item.Number] = n - consumed;
             return true;
         }
         return false;

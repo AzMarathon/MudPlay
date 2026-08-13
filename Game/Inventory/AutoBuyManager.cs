@@ -49,6 +49,7 @@ public sealed class AutoBuyManager : IDisposable
     private readonly Func<string, ResolvedBuy?> _resolve;
     private readonly Func<int, int> _countCarried;
     private readonly Func<bool> _isEnabled;
+    private readonly Func<bool> _isParadigm;
     private readonly LogService? _log;
     private readonly IDisposable _boughtSub;
     private readonly IDisposable _failedSub;
@@ -76,7 +77,8 @@ public sealed class AutoBuyManager : IDisposable
         Func<string, ResolvedBuy?> resolve,
         Func<int, int> countCarried,
         Func<bool> isEnabled,
-        LogService? log = null)
+        LogService? log = null,
+        Func<bool>? isParadigm = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(resolve);
@@ -85,6 +87,8 @@ public sealed class AutoBuyManager : IDisposable
         _resolve = resolve;
         _countCarried = countCarried;
         _isEnabled = isEnabled;
+        // Unbound (tests) → Stock behaviour: one `buy` per copy, wait for each.
+        _isParadigm = isParadigm ?? (static () => false);
         _log = log;
 
         _boughtSub = router.Subscribe(KnownPatterns.UserBuys, OnBought);
@@ -175,8 +179,12 @@ public sealed class AutoBuyManager : IDisposable
         {
             BuyOrder order = _queue[_active];
             if (order.Remaining <= 0) { _active++; continue; }
-            _log?.Info(LogCategory, $"buy item={order.Name}");
-            Send($"buy {order.Name}");
+            // Paradigm buys the whole remaining quantity in one `buy N <item>` and
+            // gets one `You bought N <item> for …` back; Stock buys one at a time.
+            // Either way the pump sends once and waits for the reply.
+            int qty = _isParadigm() ? order.Remaining : 1;
+            _log?.Info(LogCategory, $"buy {qty}x item={order.Name}");
+            Send(qty > 1 ? $"buy {qty} {order.Name}" : $"buy {order.Name}");
             return;
         }
         _active = -1;
@@ -189,7 +197,9 @@ public sealed class AutoBuyManager : IDisposable
         if (_resolve(m.Groups[1]) is not { } r) return;
         BuyOrder order = _queue[_active];
         if (r.Number != order.Number) return;           // a buy we didn't drive
-        order.Remaining--;
+        // The reply's qty group is the actual count bought (empty → 1 on Stock).
+        int bought = int.TryParse(m.Groups[0], out int q) && q > 0 ? q : 1;
+        order.Remaining -= bought;
         if (order.Remaining <= 0) _active++;
         PumpActive();
     }

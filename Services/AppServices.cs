@@ -3656,13 +3656,19 @@ public sealed class AppServices
         // manual walk through a stash room never triggers a hide. Shares
         // AutoGetCash gating with CashManager (cash automation is one
         // mental toggle).
+        // Paradigm (ParaMud) accepts one counted action per item — the loot engines
+        // batch a pile into a single get/drop/hide/sell/buy N <item>; Stock can only
+        // act on one at a time. Read live so an active-set swap flips it.
+        Func<bool> onParadigm = () => GameData.ActiveRealm == Game.RealmType.ParaMud;
+
         Stash = new Game.Cash.StashRoomManager(Profile,
             readCash: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash"),
             getSnapshot: () => Inventory.Snapshot,
             resolveAutoStashItem: ResolveAutoStashItem,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoGetCash),
             log: Log,
-            naming: Currency);
+            naming: Currency,
+            isParadigm: onParadigm);
         // Count stash-room hides toward the Session Stats stashed/deposited figure
         // (copper value across the dispatched coins). The transaction-history
         // ledger is NOT fed here — it sources from the server's own `You hid …` /
@@ -3723,7 +3729,8 @@ public sealed class AppServices
                     ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
                 return (c.SkipGetItemIfMakesLight, c.SkipGetItemIfMakesMedium, c.SkipGetItemIfMakesHeavy);
             },
-            log: Log);
+            log: Log,
+            isParadigm: onParadigm);
         AutoGetItems.SetAcquisitionGate(Acquisition);
         // Combat-finished flush: every room-entity observation re-checks
         // the deferred queue (CombatStateTracker's handler ran first, so
@@ -3753,7 +3760,8 @@ public sealed class AppServices
             carriedItems: () => Inventory.Snapshot.CarriedItems,
             resolve: ResolveAutoDiscardItem,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
-            log: Log);
+            log: Log,
+            isParadigm: onParadigm);
         // Auto-discard re-evaluates the pack on every inventory change — the
         // seam that surfaces chest dumps and freshly collected loot.
         Inventory.Changed += AutoDiscard.OnInventoryChanged;
@@ -3762,13 +3770,15 @@ public sealed class AppServices
             resolve: ResolveAutoBuyItem,
             countCarried: CountItemCarried,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
-            log: Log);
+            log: Log,
+            isParadigm: onParadigm);
 
         AutoSell = new Game.Inventory.AutoSellManager(Router,
             carriedItems: () => Inventory.Snapshot.CarriedItems,
             resolve: ResolveAutoSellItem,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
-            log: Log);
+            log: Log,
+            isParadigm: onParadigm);
 
         AutoOpen = new Game.Inventory.AutoOpenManager(
             carriedItems: () => Inventory.Snapshot.CarriedItems,

@@ -440,7 +440,7 @@ public sealed partial class InventoryManager : IDisposable
             string hiddenItem = itemHidden.Groups[1].Value.TrimEnd();
             if (hiddenItem.Length > 0 && !CoinNounSuffixRegex().IsMatch(hiddenItem))
             {
-                (int count, string name) = SplitLeadingCount(hiddenItem);
+                (int count, string name) = CountedCommand.SplitLeadingCount(hiddenItem);
                 for (int i = 0; i < count; i++) RemoveCarried(name);
                 AdjustItemWeight(name, -count);
                 _log?.Debug(LogCategory, $"hid item={name} count={count} — carried/weight decremented");
@@ -492,7 +492,12 @@ public sealed partial class InventoryManager : IDisposable
             // The bought item enters the pack unworn (MajorMUD never auto-wields
             // a purchase), so it lands in the carried list until the player wears
             // or sells it.
-            string boughtName = bought.Groups[1].Value.TrimEnd();
+            // Paradigm batches a buy into one counted line ("You bought 5 orc-head
+            // for …") with the singular name and a single total price; strip the
+            // count and apply the item side N times (the price tail below is the
+            // total and needs no split).
+            (int boughtCount, string boughtName) =
+                CountedCommand.SplitLeadingCount(bought.Groups[1].Value.TrimEnd());
             // A purchase is a definitive "item entered the pack" signal, but
             // PatchCarried is gated on a loaded baseline (the first full `i`).
             // During character creation that `i` hasn't run — it only fires on
@@ -500,8 +505,9 @@ public sealed partial class InventoryManager : IDisposable
             // and "Equip all" sees an empty pack (the reported bug). Treat the
             // first purchase as the baseline.
             EnsureLoadedBaseline();
-            PatchCarried(list => { list.Add(boughtName); return true; });
-            AdjustItemWeight(boughtName, +1);
+            for (int i = 0; i < boughtCount; i++)
+                PatchCarried(list => { list.Add(boughtName); return true; });
+            AdjustItemWeight(boughtName, +boughtCount);
 
             string priceTail = bought.Groups[2].Value;
             long priceCopper = ParsePriceToCopper(priceTail);
@@ -529,10 +535,12 @@ public sealed partial class InventoryManager : IDisposable
         Match sold = SoldRegex().Match(line);
         if (sold.Success)
         {
-            // The sold item leaves the pack.
-            string soldName = sold.Groups[1].Value.TrimEnd();
-            RemoveCarried(soldName);
-            AdjustItemWeight(soldName, -1);
+            // The sold item leaves the pack. Paradigm batches a sell into one
+            // counted line ("You sold 5 orc-head for …"); strip the count.
+            (int soldCount, string soldName) =
+                CountedCommand.SplitLeadingCount(sold.Groups[1].Value.TrimEnd());
+            for (int i = 0; i < soldCount; i++) RemoveCarried(soldName);
+            AdjustItemWeight(soldName, -soldCount);
 
             long price = ParsePriceToCopper(sold.Groups[2].Value);
             if (price > 0)
@@ -579,20 +587,23 @@ public sealed partial class InventoryManager : IDisposable
         Match gotItem = TookItemRegex().Match(line);
         if (gotItem.Success)
         {
-            string name = gotItem.Groups[1].Value.TrimEnd();
-            PatchCarried(list => { list.Add(name); return true; });
-            AdjustItemWeight(name, +1);
+            // Paradigm batches a get into one counted line ("You took 5 orc-head.")
+            // with the singular name; strip the count and apply it N times.
+            (int count, string name) = CountedCommand.SplitLeadingCount(gotItem.Groups[1].Value.TrimEnd());
+            for (int i = 0; i < count; i++) PatchCarried(list => { list.Add(name); return true; });
+            AdjustItemWeight(name, +count);
             return;
         }
 
-        // Drop: "You dropped torch." — the item leaves the pack. Currency drops
-        // carry a numeric count and are matched above.
+        // Drop: "You dropped torch." (or Paradigm's counted "You dropped 5 orc-head.")
+        // — the item leaves the pack. Currency drops carry a coin noun and are
+        // matched above.
         Match droppedItem = DropItemRegex().Match(line);
         if (droppedItem.Success)
         {
-            string name = droppedItem.Groups[1].Value.TrimEnd();
-            RemoveCarried(name);
-            AdjustItemWeight(name, -1);
+            (int count, string name) = CountedCommand.SplitLeadingCount(droppedItem.Groups[1].Value.TrimEnd());
+            for (int i = 0; i < count; i++) RemoveCarried(name);
+            AdjustItemWeight(name, -count);
         }
     }
 
@@ -984,19 +995,6 @@ public sealed partial class InventoryManager : IDisposable
             }
         }
         if (changed) Changed?.Invoke();
-    }
-
-    // Split a Paradigm batched-action token ("35 orc-head") into its leading digit
-    // count and the bare item name. A token with no leading digit count ("a rusty
-    // dagger" — Stock's single-item form, or any lone item) is (1, token).
-    // Paradigm names the item SINGULAR even when counted, so the stripped name
-    // matches the carried list and the weight resolver directly.
-    private static (int Count, string Name) SplitLeadingCount(string token)
-    {
-        int sp = token.IndexOf(' ');
-        if (sp > 0 && int.TryParse(token.AsSpan(0, sp), out int n) && n > 0)
-            return (n, token[(sp + 1)..].TrimStart());
-        return (1, token);
     }
 
     private static long ComputeWealth(int copper, int silver, int gold, int platinum, int runic)

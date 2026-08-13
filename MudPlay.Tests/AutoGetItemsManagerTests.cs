@@ -53,6 +53,7 @@ public sealed class AutoGetItemsManagerTests
         public bool CollectAfterCombat { get; set; }
         public bool HasHostiles { get; set; }
         public bool PeekSuppressed { get; set; }
+        public bool Paradigm { get; set; }
 
         // Encumbrance reading + item bracket gates the manager reads each survey.
         // Default Empty (MaxWeight 0) disables the gate — the pre-existing tests
@@ -74,7 +75,8 @@ public sealed class AutoGetItemsManagerTests
                 heldCount: id => Held.GetValueOrDefault(id),
                 encumbrance: () => Enc,
                 itemEncGates: () => (GateLight, GateMedium, GateHeavy),
-                log: Log);
+                log: Log,
+                isParadigm: () => Paradigm);
             Items.SetWireSender(b => Sent.Add(b));
         }
 
@@ -403,6 +405,33 @@ public sealed class AutoGetItemsManagerTests
             new[] { "get piece of amber", "get piece of amber", "get piece of amber",
                     "get piece of amber", "get piece of amber" },
             h.SentText);
+    }
+
+    [Fact]
+    public void Paradigm_StackedPile_SendsOneCountedGet()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.Flags["piece of amber"] = true;
+
+        h.Feed("You notice 5 piece of amber here.");
+
+        Assert.Equal(new[] { "get 5 piece of amber" }, h.SentText);
+    }
+
+    [Fact]
+    public void Paradigm_CountedConfirmation_ClearsInFlightByCount()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.Flags["orc-head"] = true;
+
+        h.Feed("You notice 3 orc-head here.");   // one "get 3 orc-head"
+        Assert.Single(h.Sent);
+
+        h.Feed("You took 3 orc-head.");           // batched confirm — all 3 off the floor
+        h.Feed("You notice 3 orc-head here.");   // a fresh pile dropped
+
+        Assert.Equal(2, h.Sent.Count);            // fresh pile collected again
+        Assert.Equal("get 3 orc-head", h.SentText[1]);
     }
 
     [Fact]

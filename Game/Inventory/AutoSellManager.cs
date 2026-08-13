@@ -38,6 +38,7 @@ public sealed class AutoSellManager : IDisposable
     private readonly Func<IReadOnlyList<string>> _carried;
     private readonly Func<string, ResolvedSell?> _resolve;
     private readonly Func<bool> _isEnabled;
+    private readonly Func<bool> _isParadigm;
     private readonly LogService? _log;
     private readonly IDisposable _headerSub;
     private readonly IDisposable _soldSub;
@@ -61,7 +62,8 @@ public sealed class AutoSellManager : IDisposable
         Func<IReadOnlyList<string>> carriedItems,
         Func<string, ResolvedSell?> resolve,
         Func<bool> isEnabled,
-        LogService? log = null)
+        LogService? log = null,
+        Func<bool>? isParadigm = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(carriedItems);
@@ -70,6 +72,8 @@ public sealed class AutoSellManager : IDisposable
         _carried = carriedItems;
         _resolve = resolve;
         _isEnabled = isEnabled;
+        // Unbound (tests) → Stock behaviour: one `sell` per copy, wait for each.
+        _isParadigm = isParadigm ?? (static () => false);
         _log = log;
 
         _headerSub = router.Subscribe(KnownPatterns.ShopListHeader, OnShopHeader);
@@ -127,8 +131,12 @@ public sealed class AutoSellManager : IDisposable
         {
             SellOrder order = _queue[_active];
             if (order.Remaining <= 0) { _active++; continue; }
-            _log?.Info(LogCategory, $"sell item={order.Name}");
-            Send($"sell {order.Name}");
+            // Paradigm sells the whole remaining quantity in one `sell N <item>`
+            // and gets one counted `You sold N <item> for …` back; Stock sells one
+            // at a time. Either way the pump sends once and waits for the reply.
+            int qty = _isParadigm() ? order.Remaining : 1;
+            _log?.Info(LogCategory, $"sell {qty}x item={order.Name}");
+            Send(qty > 1 ? $"sell {qty} {order.Name}" : $"sell {order.Name}");
             return;
         }
         _active = -1;
@@ -138,10 +146,11 @@ public sealed class AutoSellManager : IDisposable
     {
         if (_active < 0 || _active >= _queue.Count) return;
         if (m.Groups.Count < 1) return;                 // Groups: [item, price]
-        if (_resolve(m.Groups[0]) is not { } r) return;
+        (int count, string name) = CountedCommand.SplitLeadingCount(m.Groups[0]);
+        if (_resolve(name) is not { } r) return;
         SellOrder order = _queue[_active];
         if (r.Number != order.Number) return;           // a sale we didn't drive
-        order.Remaining--;
+        order.Remaining -= count;                        // batched reply reports the actual count
         if (order.Remaining <= 0) _active++;
         PumpActive();
     }
@@ -150,7 +159,8 @@ public sealed class AutoSellManager : IDisposable
     {
         if (_active < 0 || _active >= _queue.Count) return;
         if (m.Groups.Count < 1) return;                 // Groups: [item]
-        if (_resolve(m.Groups[0]) is not { } r) return;
+        (_, string name) = CountedCommand.SplitLeadingCount(m.Groups[0]);
+        if (_resolve(name) is not { } r) return;
         if (r.Number != _queue[_active].Number) return;
         _log?.Info(LogCategory, $"shop refuses item={_queue[_active].Name} — stopping this item");
         _active++;                                      // this shop won't buy the type

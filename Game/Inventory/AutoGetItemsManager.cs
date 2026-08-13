@@ -52,6 +52,7 @@ public sealed class AutoGetItemsManager : IDisposable
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _collectAfterCombatFinished;
     private readonly Func<bool> _hasEngageableHostiles;
+    private readonly Func<bool> _isParadigm;
     private readonly Func<bool> _isPeekSuppressed;
     private readonly Func<EncumbranceReading> _encumbrance;
     private readonly Func<(bool Light, bool Medium, bool Heavy)> _itemEncGates;
@@ -105,7 +106,8 @@ public sealed class AutoGetItemsManager : IDisposable
         Func<int, int>? heldCount = null,
         Func<EncumbranceReading>? encumbrance = null,
         Func<(bool Light, bool Medium, bool Heavy)>? itemEncGates = null,
-        LogService? log = null)
+        LogService? log = null,
+        Func<bool>? isParadigm = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(resolve);
@@ -120,6 +122,8 @@ public sealed class AutoGetItemsManager : IDisposable
         _isEnabled = isEnabled;
         _collectAfterCombatFinished = collectAfterCombatFinished;
         _hasEngageableHostiles = hasEngageableHostiles;
+        // Unbound (tests) → Stock behaviour: one `get` per unit, never batched.
+        _isParadigm = isParadigm ?? (static () => false);
         // Null when unbound (tests) → never a peek. A `look <dir>` peek renders a
         // full "You notice" survey for the adjacent room; gate the get path on it
         // so we don't send get commands (and trigger the get→inventory→equip
@@ -232,14 +236,17 @@ public sealed class AutoGetItemsManager : IDisposable
         string taken = m.Groups[1].Trim();
         if (taken.Length == 0) return;
 
-        // Resolve to the same canonical name the get was keyed under so the
-        // decrement lands on the right entry (the survey and the confirmation both
-        // route through the resolver, which strips articles / counts alike).
-        if (_resolve(taken) is { } item)
+        // Paradigm confirms a batched get in one counted line ("You took 5
+        // orc-head."); strip the count and drain that many. Resolve to the same
+        // canonical name the get was keyed under so the decrement lands on the
+        // right entry (survey and confirmation both route through the resolver).
+        (int count, string name) = CountedCommand.SplitLeadingCount(taken);
+        if (_resolve(name) is { } item)
         {
             int have = _floorInFlight.GetValueOrDefault(item.Name);
-            if (have <= 1) _floorInFlight.Remove(item.Name);
-            else _floorInFlight[item.Name] = have - 1;
+            int cleared = Math.Min(have, count);
+            if (have <= cleared) _floorInFlight.Remove(item.Name);
+            else _floorInFlight[item.Name] = have - cleared;
         }
         _gate?.NoteGetConfirmed();
     }
@@ -388,6 +395,10 @@ public sealed class AutoGetItemsManager : IDisposable
                     _log?.Debug(LogCategory,
                         $"re-render: skipping {skip} already-collected {item.Name} this room");
             }
+            // Immediate-mode units of this entry that clear both gates — emitted as
+            // one `get N <item>` on Paradigm (see after the loop), or N single gets
+            // on Stock.
+            int allowedThisEntry = 0;
             for (int u = skip; u < units; u++)
             {
 
@@ -434,12 +445,20 @@ public sealed class AutoGetItemsManager : IDisposable
                 }
                 else
                 {
-                    _log?.Info(LogCategory, $"collect item={item.Name}");
-                    _gate?.NoteGetSent();
-                    Send($"get {item.Name}");
-                    (sentThisSurvey ??= new(StringComparer.OrdinalIgnoreCase))[item.Name] =
-                        (sentThisSurvey.GetValueOrDefault(item.Name)) + 1;
+                    allowedThisEntry++;
                 }
+            }
+
+            if (!deferMode && allowedThisEntry > 0)
+            {
+                _log?.Info(LogCategory, $"collect {allowedThisEntry}x item={item.Name}");
+                // Paradigm grabs the pile in one `get N <item>`; Stock sends one per
+                // unit. NoteGetSent fires per emitted line so the gate balances the
+                // count-prefixed `You took N <item>` confirmation either way.
+                CountedCommand.Emit(cmd => { _gate?.NoteGetSent(); Send(cmd); },
+                    "get", allowedThisEntry, item.Name, _isParadigm());
+                (sentThisSurvey ??= new(StringComparer.OrdinalIgnoreCase))[item.Name] =
+                    sentThisSurvey.GetValueOrDefault(item.Name) + allowedThisEntry;
             }
         }
 
@@ -463,27 +482,31 @@ public sealed class AutoGetItemsManager : IDisposable
     {
         ExpireFloorLedgerIfStale();
 
-        // Count the deferred gets per name so we can honour any copies a
-        // same-window re-render already grabbed via the immediate path (normally
-        // none — the deferred flush is the room's first collection). Preserves the
-        // deferred order for the sends that do go out.
+        // Count the deferred gets per name (first-seen order) so we can honour any
+        // copies a same-window re-render already grabbed via the immediate path
+        // (normally none — the deferred flush is the room's first collection), then
+        // grab each name's remainder in one `get N <item>` on Paradigm.
         Dictionary<string, int> deferredByName = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string name in _deferred)
-            deferredByName[name] = deferredByName.GetValueOrDefault(name) + 1;
-
-        Dictionary<string, int> flushSent = new(StringComparer.OrdinalIgnoreCase);
+        List<string> flushOrder = new();
         foreach (string name in _deferred)
         {
-            int accounted = _floorInFlight.GetValueOrDefault(name) + flushSent.GetValueOrDefault(name);
-            if (accounted >= deferredByName[name]) continue;   // ledger already covers this floor copy
-            _log?.Info(LogCategory, $"collect (post-combat) item={name}");
-            _gate?.NoteGetSent();
-            Send($"get {name}");
-            flushSent[name] = flushSent.GetValueOrDefault(name) + 1;
+            if (!deferredByName.ContainsKey(name)) flushOrder.Add(name);
+            deferredByName[name] = deferredByName.GetValueOrDefault(name) + 1;
         }
-        foreach ((string name, int n) in flushSent)
-            _floorInFlight[name] = _floorInFlight.GetValueOrDefault(name) + n;
-        if (flushSent.Count > 0) _floorInFlightAt = DateTime.UtcNow;
+
+        bool sentAny = false;
+        foreach (string name in flushOrder)
+        {
+            int have = _floorInFlight.GetValueOrDefault(name);
+            int toSend = deferredByName[name] - have;   // ledger already covers `have`
+            if (toSend <= 0) continue;
+            _log?.Info(LogCategory, $"collect (post-combat) {toSend}x item={name}");
+            CountedCommand.Emit(cmd => { _gate?.NoteGetSent(); Send(cmd); },
+                "get", toSend, name, _isParadigm());
+            _floorInFlight[name] = have + toSend;
+            sentAny = true;
+        }
+        if (sentAny) _floorInFlightAt = DateTime.UtcNow;
 
         _deferred.Clear();
         _gate?.NoteDeferredCleared();
