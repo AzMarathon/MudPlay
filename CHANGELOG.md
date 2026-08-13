@@ -4,7 +4,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.9.7
 
-- Player Workshop → Character Info: equipped and carried items are now clickable links to their Game Data item record (a name the inventory dump truncated stays plain text)
+- Player Workshop → Character Info: equipped, carried, and key-ring items are now clickable links to their Game Data item record — a stacked item's count prefix ("3 piece of amber") is stripped for the lookup; a name the dump truncated stays plain text
 - Room-detail popup: the "Also here" monsters now show their game-data record number — e.g. `chest(#69)`
 
 ## 3.9.5

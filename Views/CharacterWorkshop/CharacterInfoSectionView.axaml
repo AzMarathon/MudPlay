@@ -346,8 +346,12 @@
                                            FontWeight="SemiBold"/>
                                 <ItemsControl ItemsSource="{Binding Keys}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="sys:String">
-                                            <TextBlock Classes="FieldValue" Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,1"/>
+                                        <DataTemplate x:DataType="vm:WorkshopItemRow">
+                                            <Button Classes="ItemLink" Content="{Binding Name}"
+                                                    Command="{Binding Open}"
+                                                    IsEnabled="{Binding CanOpen}"
+                                                    HorizontalAlignment="Left" Margin="0,0,0,1"
+                                                    ToolTip.Tip="Open this item's Game Data record"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
