@@ -1,9 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.40**
-> - Monster HP lookup now reads the record placed/summoned in your current room, so a display name shared across zones (an orc lieutenant in the barracks vs the slums) shows the right monster's HP instead of the first same-named game-data match
-> - Per-monster spell overrides now match that same room-aware record, so an override set on one zone's monster (a graveyard zombie) no longer bleeds onto a same-named monster elsewhere (a tunnels zombie)
+> **Version 3.8.51**
+> - Auto-train now returns to the loop after training instead of stalling with the route drawn and nothing on the wire
+> - Loops/Auto-Lairs tree: expanding a folder now scrolls it into view instead of opening off-screen below the fold
+> - Selecting a room via the nav search box or loading a Go-to destination no longer slows a running loop
+> - Terminal now accepts paste (Ctrl+V / Shift+Insert); multi-line pastes send as sequential commands
+> - Monster Matchup: changing the selected attack no longer resizes the Character Workshop window
+> - Status-bar TNL now uses the same banked-aware estimate as Session Stats' "time to next level"
+> - Combat diagnostics now log the cast-interrupt resume path to expose mid-fight re-engage stalls
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

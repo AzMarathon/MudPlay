@@ -39,6 +39,12 @@ public sealed class EngineSendGate
     // True while any hold is active — engine wire-sends drop on the floor.
     public bool IsLocked => _holds.Count > 0;
 
+    // Fired when the LAST hold clears (locked → unlocked). Lets an engine whose
+    // send was silently dropped while the gate was up re-drive it — e.g. the walker
+    // re-sends a move step swallowed during the trainer-menu hold rather than
+    // stalling forever with a route drawn and nothing on the wire.
+    public event Action? Released;
+
     // Raise a named hold. Idempotent per reason.
     public void Hold(string reason)
     {
@@ -46,11 +52,12 @@ public sealed class EngineSendGate
         _holds.Add(reason);
     }
 
-    // Release a named hold. Sends resume once the last hold clears.
+    // Release a named hold. Fires Released once the last hold clears.
     public void Release(string reason)
     {
         ArgumentException.ThrowIfNullOrEmpty(reason);
-        _holds.Remove(reason);
+        if (_holds.Remove(reason) && _holds.Count == 0)
+            Released?.Invoke();
     }
 
     // Wrap an engine's raw Action<byte[]> wire-sender so it short-circuits while any

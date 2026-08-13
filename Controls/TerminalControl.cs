@@ -734,6 +734,17 @@ public sealed class TerminalControl : Control
             return true;
         }
 
+        // Ctrl+V / Shift+Insert paste the clipboard into the input instead of
+        // Ctrl+V mapping to the SYN control byte (0x16). The clipboard read is
+        // async and a sync key handler can't await, so it runs detached; the key
+        // is consumed either way.
+        if ((key == Key.V && (modifiers & KeyModifiers.Control) != 0)
+            || (key == Key.Insert && (modifiers & KeyModifiers.Shift) != 0))
+        {
+            _ = PasteFromClipboardAsync();
+            return true;
+        }
+
         // Local-line-edit intercept. Enter flushes the buffer + CR;
         // Backspace pops the last buffered char (and consumes the
         // event regardless so we never send 0x08 to the wire when in
@@ -851,6 +862,25 @@ public sealed class TerminalControl : Control
         var bytes = System.Text.Encoding.Latin1.GetBytes(text);
         UserInput?.Invoke(bytes);
         return true;
+    }
+
+    // Read the clipboard and feed it into the input exactly as typed text would
+    // arrive (line-mode buffers it; char-mode sends it). Newlines are folded to
+    // the ';' command separator so a multi-line paste queues several commands the
+    // Enter flush fans out, while a single-line paste just lands in the buffer.
+    private async System.Threading.Tasks.Task PasteFromClipboardAsync()
+    {
+        try
+        {
+            if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
+            if (await clipboard.TryGetDataAsync() is not { } data) return;
+            string? text = await data.TryGetTextAsync();
+            if (string.IsNullOrEmpty(text)) return;
+            string input = text.Replace("\r\n", ";").Replace('\r', ';').Replace('\n', ';');
+            HandleTextCore(input);
+            InvalidateVisual();
+        }
+        catch { /* clipboard access can fail transiently; a dropped paste is a no-op */ }
     }
 
     // Translate non-text key presses into the byte sequence a real terminal

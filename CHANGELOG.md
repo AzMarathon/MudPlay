@@ -2,6 +2,25 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.51
+
+- Auto-train now returns to the loop after training instead of stalling with the route drawn and nothing on the wire (the trainer-menu keyboard hold was still up when the resume step fired, so the move got dropped)
+- Engine send-gate now re-drives a walk step that was dropped while the gate was held, as a general backstop against the same class of stall
+- Loops/Auto-Lairs tree: expanding a folder now scrolls it into view instead of opening off-screen below the fold
+- Selecting a room via the nav search box or loading a Go-to destination no longer slows a running loop (the per-step route preview was recomputing every step during loops/auto-lair)
+- Terminal now accepts paste (Ctrl+V / Shift+Insert); multi-line pastes send as sequential commands
+- Monster Matchup: changing the selected attack no longer resizes the Character Workshop window
+- Status-bar TNL now uses the same banked-aware estimate as Session Stats' "time to next level", so the two no longer de-sync
+- Combat diagnostics now log the cast-interrupt resume path (cast armed → *Combat Off* in the resume window → weapon/spell resume fired or why not), to expose mid-fight re-engage stalls
+- bug reports addressed: paradigm-20260813-063517, paradigm-20260813-090629, paradigm-20260813-100939, paradigm-20260813-102748, paradigm-20260813-125617
+
+## 3.8.43
+
+- Game Data → Monsters → Override Attack: typing a spell's cast-code (e.g. "turn") now auto-resolves to its Number and lands on the mana-gated, cascading spell rung — same as typing the number directly, instead of silently becoming an ungated raw command
+- Combat no longer stalls at 0 mana: a mana-costing action (a spell cascade, or a forced attack-command that's really a spell cast-code) stands down for the physical weapon at 0 mana — the server silently no-ops such casts, so re-sending them just left the player getting hit until a regen tick. A free command verb (bash/kick) still fires, and backstab is preserved; resumes automatically once mana recovers
+- Fixed a self-sustaining cast-spam loop where a between-round-cast resume kept re-triggering off its own resulting *Combat Off*, firing dozens of casts from one interrupt — now fires at most once per interrupt
+- bug reports addressed: paradigm-20260813-064159, paradigm-20260813-070249, paradigm-20260813-081016
+
 ## 3.8.40
 
 - Monster HP lookup now reads the record placed/summoned in your current room, so a display name shared across zones (an orc lieutenant in the barracks vs the slums) shows the right monster's HP instead of the first same-named game-data match

@@ -310,6 +310,21 @@ public sealed partial class CombatManager : IDisposable
     // never trips this path.
     private DateTimeOffset _betweenRoundCastAt = DateTimeOffset.MinValue;
 
+    // Which _betweenRoundCastAt stamp the spell-resume branch (below) has
+    // already fired a re-announce for. Casting — unlike a weapon swing —
+    // itself drops *Combat Off* every time (CONFIRMED mechanic), so the
+    // resume's OWN re-announce produces another Off that satisfies the exact
+    // same "within CastInterruptResumeWindow of _betweenRoundCastAt" check
+    // that fired it. Without this guard that self-triggers every round for
+    // the full 3s window — dozens of casts in a burst (report
+    // paradigm-20260813-081016: "why did it spam turn like that", triggered
+    // by a single legitimate mihe self-heal interrupt). Set to the stamp just
+    // resumed for; compared, not cleared, so a genuinely NEW interrupt (a
+    // fresh NoteBetweenRoundCast stamp) still resumes exactly once. The
+    // weapon-resume branch needs no equivalent guard — a physical swing
+    // doesn't itself cause an Off, so it can't retrigger itself this way.
+    private DateTimeOffset _lastSpellResumeForBetweenRoundCastAt = DateTimeOffset.MinValue;
+
     // How recent a between-round cast must be for the next *Combat Off* to count
     // as that cast's interrupt. Generous enough to cover send→Off network
     // latency, far shorter than a round so a later pummel Off can't be
@@ -2137,6 +2152,12 @@ public sealed partial class CombatManager : IDisposable
         _betweenRoundCastAt = DateTimeOffset.Now;
         if (_castingSpellTarget is not null)
             _spellAttackOwed = true;
+        // Start of the resume-timing chain: a between-round cast (a survival heal /
+        // buff) will drop *Combat Off* and stop our sustained attack, so the next
+        // Off within the window should re-engage. Logged so the cast→Off→resume
+        // sequence is traceable end to end (report paradigm-20260813-065138).
+        _log?.Combat(LogCategory,
+            $"between-round cast noted — resume armed (spellTarget={_castingSpellTarget ?? "(none)"})");
     }
 
     // "You gain N experience." — the prompt kill signal (see _lastExpGainAt). Only
@@ -2235,6 +2256,21 @@ public sealed partial class CombatManager : IDisposable
             // guard there fires a redundant second `aa <target>` on top of it — the
             // reported "doubled down on the physical attack". Fall through to the
             // guarded resume so ResumeAfterAttackGuard suppresses the double.
+            // Diagnostic for the "won't re-engage after a mid-fight buff/heal" class
+            // of stall (report paradigm-20260813-065138): while a between-round cast
+            // is still within the resume window, log the exact state that decides the
+            // weapon- and spell-mode resumes below, so a capture shows why a resume
+            // did or didn't fire instead of leaving it invisible. Combat-level, so
+            // it only surfaces with combat diagnostics on.
+            if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow)
+                _log?.Combat(LogCategory,
+                    $"*Combat Off* in resume window ({(DateTimeOffset.Now - _betweenRoundCastAt).TotalMilliseconds:F0}ms "
+                    + $"after cast): spellTarget={_castingSpellTarget ?? "(none)"}, "
+                    + $"engageable={_classifier.Current is { } cc && HasEngageable(cc)}, "
+                    + $"sinceDeath={(DateTimeOffset.Now - _lastDeathAt).TotalMilliseconds:F0}ms, "
+                    + $"castAtOrAfterLastSwing={_lastAttackSentAt <= _betweenRoundCastAt}, "
+                    + $"spellResumeAlreadyFired={_betweenRoundCastAt == _lastSpellResumeForBetweenRoundCastAt}");
+
             if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _castingSpellTarget is null
                 && _classifier.Current is { } live
@@ -2246,7 +2282,10 @@ public sealed partial class CombatManager : IDisposable
                         "between-round-cast resume suppressed — kill this burst; " +
                         "deferring re-engage to the death→re-observe path");
                 else
+                {
+                    _log?.Combat(LogCategory, "between-round-cast resume → re-engaging weapon attack");
                     TryResumeEngage(live, bypassAttackGuard: _lastAttackSentAt <= _betweenRoundCastAt);
+                }
             }
 
             // Spell analogue of the weapon resume above. A spell attack auto-repeats
@@ -2257,6 +2296,7 @@ public sealed partial class CombatManager : IDisposable
             // so a lapsed spell condition switches cleanly, and it forces a fresh
             // announce because the server dropped the repeat.
             if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
+                && _betweenRoundCastAt != _lastSpellResumeForBetweenRoundCastAt
                 && _castingSpellTarget is { } spellTarget
                 && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
                 && _classifier.Current is { } liveSpell
@@ -2276,12 +2316,20 @@ public sealed partial class CombatManager : IDisposable
                 // until manual input" stall.
                 _combatOff = false;
                 _announcedSpellCode = null;
+                // Mark this specific interrupt as resumed BEFORE dispatching — the
+                // resume's own cast drops its own *Combat Off* a moment later, and
+                // without this stamped first that Off would satisfy the exact same
+                // condition above and re-fire again (see
+                // _lastSpellResumeForBetweenRoundCastAt).
+                _lastSpellResumeForBetweenRoundCastAt = _betweenRoundCastAt;
+                _log?.Combat(LogCategory,
+                    $"between-round-cast resume → re-announcing attack spell on {spellTarget}");
                 // bypassRecastInterval: this re-attack lands within 500ms of the
                 // survival buff/heal that dropped *Combat Off*; without the bypass the
                 // burst guard defers it to the next tick and the mob swings free (the
                 // "broke combat to cast armr, didn't re-attack until after they swung"
-                // report). Safe here because this resume fires once per interrupt, not a
-                // frame-burst — the ordinary dispatch paths keep the guard.
+                // report). This resume is now guarded to fire once per interrupt (see
+                // above), so the bypass can't compound into a burst.
                 DispatchRoundAction(_readSettings(), spellCand, CountEngageable(liveSpell), liveSpell,
                     bypassRecastInterval: true);
             }

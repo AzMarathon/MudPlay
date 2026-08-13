@@ -811,7 +811,19 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentRoomText))]
     private RoomKey? _currentRoomKey;
-    partial void OnCurrentRoomKeyChanged(RoomKey? value) => RefreshPreviewPath();
+    partial void OnCurrentRoomKeyChanged(RoomKey? value)
+    {
+        // Don't recompute the armed goto/search preview on every room while a loop
+        // or auto-lair is running. That recompute is an uncached full-graph BFS plus
+        // a full-map repaint, and the loop is round-trip-driven on this same UI
+        // thread, so paying it per step throttled the loop (report
+        // paradigm-20260813-100939). The preview computed when it was armed stays as
+        // a static reference line until automation stops; on-arm still refreshes.
+        if (_services.LoopRunner.State != Game.Map.LoopState.Idle
+            || _services.AutoLair.IsActive)
+            return;
+        RefreshPreviewPath();
+    }
     [ObservableProperty] private RoomKey? _destinationRoomKey;
 
     [ObservableProperty] private RoomGraphManager? _graph;

@@ -3306,7 +3306,7 @@ public sealed class AppServices
         // Short. Wire the resolver so the chooser can substitute a numbered
         // override in place of the global Combat-tab cast-code slot.
         SpellShort = new Game.Combat.SpellShortIndex(GameData);
-        Combat.SetSpellShortResolver(SpellShort.ShortByNumber);
+        Combat.SetSpellShortResolver(SpellShort.ShortByNumber, SpellShort.NumberByShort);
 
         // Light catalogue + live carried illumination. The snapshot provider is
         // deferred (Inventory is assigned later in this method), so reading
