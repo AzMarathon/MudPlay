@@ -610,38 +610,56 @@
                 <controls:MapControl.ContextMenu>
                     <ContextMenu Name="RoomContextMenu">
                         <ContextMenu.Resources>
-                            <!-- Item theme for the Favorites / Recent-destinations
-                                 walk-to sub-lists: each generated item shows its label
-                                 and carries its own Walk command. ReflectionBinding
-                                 sidesteps the compiled-binding DataType on the generated
-                                 child items. -->
+                            <!-- Item theme for the Favorites / Recent-destinations walk-to
+                                 sub-lists — mirrors the terminal right-click flyout's theme
+                                 (MainWindow.axaml WalkFlyoutItemTheme) so both menus render
+                                 identically: a numbered "N)" prefix in the default colour
+                                 then the room name in goto-blue. Duplicated because the two
+                                 menus live in separate windows and a keyed ControlTheme with
+                                 BasedOn="{x:Type MenuItem}" doesn't resolve reliably from
+                                 App-level resources. ReflectionBinding sidesteps the
+                                 compiled-binding DataType on the generated child items. -->
                             <ControlTheme x:Key="RoomWalkItemTheme" TargetType="MenuItem"
                                           BasedOn="{StaticResource {x:Type MenuItem}}">
-                                <Setter Property="Header"  Value="{ReflectionBinding Name}"/>
-                                <Setter Property="Command" Value="{ReflectionBinding Command}"/>
+                                <Setter Property="Header"    Value="{ReflectionBinding}"/>
+                                <Setter Property="Command"   Value="{ReflectionBinding Command}"/>
+                                <Setter Property="IsEnabled" Value="{ReflectionBinding IsEnabled}"/>
+                                <Setter Property="HeaderTemplate">
+                                    <Setter.Value>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <TextBlock Text="{ReflectionBinding Prefix}"/>
+                                                <TextBlock Text="{ReflectionBinding Name}"
+                                                           Foreground="{ReflectionBinding NameBrush}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </Setter.Value>
+                                </Setter>
                             </ControlTheme>
                         </ContextMenu.Resources>
                         <MenuItem Header="{Binding ContextRoomName, StringFormat='At: {0}'}"
                                   IsEnabled="False" FontWeight="SemiBold"/>
                         <Separator/>
-                        <MenuItem Header="Walk here"
-                                  Command="{Binding WalkToContextRoomCommand}"/>
-                        <MenuItem Header="I am here (set located)"
-                                  Command="{Binding SetContextRoomLocatedCommand}"/>
-                        <MenuItem Header="Add to favorites"
-                                  Command="{Binding ToggleContextRoomFavoriteCommand}"
-                                  IsVisible="{Binding !ContextIsFavorite}"/>
-                        <MenuItem Header="Remove from favorites"
-                                  Command="{Binding ToggleContextRoomFavoriteCommand}"
-                                  IsVisible="{Binding ContextIsFavorite}"/>
-                        <!-- Starred favourites + recent GOTO destinations, each walks
-                             there on click (same route picker as "Walk here"). -->
+                        <!-- Starred favourites + recent GOTO destinations right under the
+                             room header, each walking there on click (same route picker as
+                             "Walk here"), rendered like the terminal's flyout. -->
                         <MenuItem Header="Favorites" IsVisible="{Binding HasContextFavorites}"
                                   ItemsSource="{Binding ContextFavorites}"
                                   ItemContainerTheme="{StaticResource RoomWalkItemTheme}"/>
                         <MenuItem Header="Recent destinations" IsVisible="{Binding HasContextRecentDestinations}"
                                   ItemsSource="{Binding ContextRecentDestinations}"
                                   ItemContainerTheme="{StaticResource RoomWalkItemTheme}"/>
+                        <Separator IsVisible="{Binding HasContextWalkLists}"/>
+                        <MenuItem Header="Walk here"
+                                  Command="{Binding WalkToContextRoomCommand}"/>
+                        <MenuItem Header="I am here (set located)"
+                                  Command="{Binding SetContextRoomLocatedCommand}"/>
+                        <MenuItem Header="Save as Go To"
+                                  Command="{Binding ToggleContextRoomFavoriteCommand}"
+                                  IsVisible="{Binding !ContextIsFavorite}"/>
+                        <MenuItem Header="Remove from Go To"
+                                  Command="{Binding ToggleContextRoomFavoriteCommand}"
+                                  IsVisible="{Binding ContextIsFavorite}"/>
                         <MenuItem Header="Use Teleport"
                                   Command="{Binding UseTeleportCommand}"
                                   IsVisible="{Binding ContextTeleportSingle}"/>

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -1012,6 +1013,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public bool HasContextFavorites => ContextFavorites.Count > 0;
     public bool HasContextRecentDestinations => ContextRecentDestinations.Count > 0;
 
+    // Drives the separator that groups the two walk-to sub-lists at the top of the
+    // room menu — shown when either has rows.
+    public bool HasContextWalkLists => ContextFavorites.Count > 0 || ContextRecentDestinations.Count > 0;
+
+    // Same goto-blue the terminal Favorites flyout uses for room names, so the two
+    // menus read identically (numbered "N)" prefix in the default colour + blue name).
+    private static readonly IBrush GotoWalkBrush = new SolidColorBrush(Color.Parse("#5FB3D9"));
+
     private void RebuildContextFavorites()
     {
         ContextFavorites.Clear();
@@ -1025,27 +1034,31 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             rows.Add((label, key));
         }
         rows.Sort((a, b) => string.Compare(a.label, b.label, StringComparison.OrdinalIgnoreCase));
+        int number = 0;
         foreach ((string label, RoomKey key) in rows)
         {
             RoomKey target = key;
             ContextFavorites.Add(new MudPlay.ViewModels.FavoriteMenuItem(
-                string.Empty, label, null, new AsyncRelayCommand(() => WalkToRoom(target))));
+                $"{++number})", label, GotoWalkBrush, new AsyncRelayCommand(() => WalkToRoom(target))));
         }
         OnPropertyChanged(nameof(HasContextFavorites));
+        OnPropertyChanged(nameof(HasContextWalkLists));
     }
 
     private void RebuildContextRecentDestinations()
     {
         ContextRecentDestinations.Clear();
+        int number = 0;
         foreach (RoomKey key in _services.GotoHistory.All)
         {
             RoomKey target = key;
             string name = Graph?.GetRoom(key)?.DisplayName ?? "???";
             ContextRecentDestinations.Add(new MudPlay.ViewModels.FavoriteMenuItem(
-                string.Empty, $"{name} {key.Map}/{key.Room}", null,
+                $"{++number})", $"{name} {key.Map}/{key.Room}", GotoWalkBrush,
                 new AsyncRelayCommand(() => WalkToRoom(target))));
         }
         OnPropertyChanged(nameof(HasContextRecentDestinations));
+        OnPropertyChanged(nameof(HasContextWalkLists));
     }
 
     // Bound TwoWay to the history flyout's ListBox SelectedItem. Picking a row arms
