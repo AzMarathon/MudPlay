@@ -627,17 +627,19 @@ public sealed class CombatManagerSpellsTests
     [Fact]
     public void Heartbeat_MaxCastsReached_SwitchesToWeapon()
     {
-        // MaxCasts is the number of rounds to cast the spell; after that the client
-        // re-announces the next cascade action (here the weapon, no attack spells
-        // configured). The spell is announced ONCE and the heartbeat counts each
-        // round toward the cap.
+        // MaxCasts is the number of ROUNDS the spell actually fires; only after that
+        // does the client re-announce the next cascade action (here the weapon, no
+        // attack spells configured). Announcing is round 0 — the spell fires on the
+        // NEXT tick — so the announce does NOT count toward the cap; each heartbeat
+        // that keeps the same decision counts one fired round.
         using Harness h = new();
         h.Settings.MultiAttackSpell =
             new CombatSpellSlot { SpellName = "blast", MinEnemies = 1, MaxCastsPerRoom = 2 };
         h.AddMonster(1, "giant rat");
 
-        h.Feed("Also here: giant rat.");      // announce (round 1 of 2)
-        h.Tick();                             // round 2 of 2 — still repeating, no send
+        h.Feed("Also here: giant rat.");      // announce — round 0 (fires next tick), not counted
+        h.Tick();                             // fired round 1 of 2 — still repeating, no send
+        h.Tick();                             // fired round 2 of 2 — cap now reached, still no send
         h.Tick();                             // cap reached → switch to weapon
 
         Assert.Equal(1, h.AllSent.Count(s => s == "blast"));   // announced once
@@ -706,6 +708,81 @@ public sealed class CombatManagerSpellsTests
         h.Tick();
 
         Assert.Equal("harm orc", h.LastSent);   // spell again, not weapon
+    }
+
+    // ----- report paradigm-20260812-200128: normal/alternate double-fire ------
+
+    [Fact]
+    public void NormalKills_MaxCasts1_WithAlternate_NoAlternateAtCorpse()
+    {
+        // Screenshots 1/2: lbol (MaxCasts=1) kills → the engine must NOT advance the
+        // cascade and fire the alternate (mmis) at the just-dead target. A kill wins
+        // over the MaxCasts switch. Uses the custom-death-line kill shape (exp + Off).
+        using Harness h = new();
+        h.Settings.NormalAttackSpell =
+            new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);
+        int sentAtKill = h.Sent.Count;
+
+        h.Feed("You gain 100 experience.");
+        h.Feed("*Combat Off*");
+        h.Tick();
+        h.Tick();
+
+        Assert.Equal(sentAtKill, h.Sent.Count);                 // nothing cast after the kill
+        Assert.DoesNotContain("mmis giant rat", h.AllSent);     // no alternate at the corpse
+    }
+
+    [Fact]
+    public void NormalSpell_MaxCasts1_FiresARoundBeforeCascadingToAlternate()
+    {
+        // Screenshot 3: lbol (MaxCasts=1) must get its own fired round — it must NOT
+        // flip to the alternate the same round it's announced. MaxCasts counts fired
+        // rounds, not the announce.
+        using Harness h = new();
+        h.Settings.NormalAttackSpell =
+            new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");        // announce lbol — round 0, not counted
+        Assert.Equal("lbol giant rat", h.LastSent);
+
+        h.Tick();                               // fired round 1 — lbol still the decision, no re-send
+        Assert.Equal("lbol giant rat", h.LastSent);
+        Assert.DoesNotContain("mmis giant rat", h.AllSent);
+
+        h.Tick();                               // round 1 spent → cascade to alt (mob still alive)
+        Assert.Equal("mmis giant rat", h.LastSent);
+    }
+
+    [Fact]
+    public void AfterKill_NextMonster_ReOpensWithNormalNotAlternate()
+    {
+        // Screenshot 4 / bug #3: after the normal caps and the cascade advances to
+        // the alternate, a KILL resets the cascade so the NEXT mob reconsiders the
+        // normal spell first — it must not inherit the dead mob's advanced cascade.
+        using Harness h = new();
+        h.Settings.NormalAttackSpell =
+            new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "orc");
+
+        h.Feed("Also here: giant rat.");        // lbol at the rat
+        h.Tick();                               // fired round 1
+        h.Tick();                               // cascade to mmis (rat survived)
+        Assert.Equal("mmis giant rat", h.LastSent);
+
+        h.Feed("The giant rat dies.");          // kill → cascade reset
+        h.Feed("Also here: orc.");              // next monster
+        h.Tick();
+
+        Assert.Equal("lbol orc", h.LastSent);   // re-opened with the NORMAL, not the alternate
     }
 
     [Fact]

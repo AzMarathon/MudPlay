@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.8.18
+
+- Combat attack spells no longer double-fire the normal + alternate: `MaxCasts` is now counted per *fired* round instead of at announce, so a `MaxCasts=1` normal spell actually takes its round before the cascade can hand to the alternate — fixing "normal fires then immediately the alternate," the alternate cast at a target the normal just killed ("You don't see X here!"), and a fresh mob opening on the alternate. A kill now fully drops the target and resets the cascade so the next mob reconsiders the normal spell first
+- bug reports addressed: paradigm-20260812-200128
+
 ## 3.8.17
 
 - `@path` remote command now names the last loop or auto-lair the player ran when they're stopped/idle (instead of just "not moving") — so if a party member dies and halts, you can see which circuit they were on and help them resume without guessing
