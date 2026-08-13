@@ -14,7 +14,7 @@ namespace MudPlay.Game.Inventory;
 // clear would drop it while the other still wanted it held. This driver is the
 // single owner; engines report activity and it ANDs.
 //
-// The gate is held while either condition is live:
+// The gate is held while any condition is live:
 //   - Pending deferred items: AutoGetItemsManager queued gets that wait for
 //     the room's combat to finish. Held with no timeout until flushed or the
 //     room changes. Asserting here — while the Combat gate is still up, on the
@@ -22,22 +22,25 @@ namespace MudPlay.Game.Inventory;
 //     the Combat gate — is what defeats the synchronous walker-resume race:
 //     without it the walker would step out the instant Combat clears, before
 //     the loot flush runs.
-//   - Settle window: a short quiet period after the last get command. There is
-//     no server-side item-pickup confirmation line to key on, so get-clear for
-//     items is command-side: once gets stop flowing for SettleWindow,
-//     collection is treated as finished and the walker may resume.
+//   - Outstanding gets: get commands dispatched but not yet confirmed. The
+//     server DOES echo a per-get confirmation — `You took <item>.` for an item,
+//     `You picked up <N> <coin>.` for coin (N=0 meaning "full, took nothing" —
+//     still a resolution) — so the engines call NoteGetConfirmed as each lands
+//     and the gate releases the instant the last one is accounted for. Movement
+//     resumes as soon as looting is actually done, not on a fixed timer.
+//   - Settle window: a fallback ceiling on the wait. A get that never confirms
+//     (a failure line we don't yet parse) would otherwise strand the hold, so
+//     once gets stop flowing for SettleWindow the gate releases regardless.
 public sealed class AcquisitionGate : IDisposable
 {
     // Asserter identity recorded in the [Gate] log + MovementCoordinator.History.
     public const string AsserterName = "Acquisition";
 
-    // Quiet period after the last get before the gate releases. No server-side
-    // item-pickup confirmation line exists, so get-clear is command-side: once
-    // gets stop flowing for this long with no pending deferred items,
-    // collection is treated as done. Kept short so a cleared room's loop resumes
-    // promptly — consecutive corpse-drop gets arrive within the same server
-    // frame (tens of ms), so this only has to outlast that burst, not a full
-    // combat round.
+    // Fallback ceiling on the post-get hold. Normally the gate releases the
+    // moment the last get is confirmed (NoteGetConfirmed); this timer only fires
+    // when a get never confirms — a failure line we don't yet parse — so it can't
+    // strand the walker. Re-armed on each get; released this long after the last
+    // one with no confirmation. Kept short so even the fallback resumes promptly.
     private static readonly TimeSpan SettleWindow = TimeSpan.FromMilliseconds(400);
 
     private readonly MovementCoordinator _coordinator;
@@ -45,6 +48,7 @@ public sealed class AcquisitionGate : IDisposable
     private readonly DispatcherTimer _settle;
 
     private int _pendingDeferred;
+    private int _outstandingGets;   // dispatched but not yet confirmed
     private bool _asserted;
     private bool _disposed;
 
@@ -67,14 +71,33 @@ public sealed class AcquisitionGate : IDisposable
         if (count > 0) Assert($"deferred-pending={count}");
     }
 
-    // Note a get command was just dispatched (item or cash). Asserts the gate
-    // and re-arms the settle window; the gate releases SettleWindow after the
-    // last get with no further activity and no pending deferred items.
+    // Note a get command was just dispatched (item or cash). Asserts the gate,
+    // counts the get as outstanding, and re-arms the fallback settle window. The
+    // gate normally releases on the matching NoteGetConfirmed; the settle only
+    // catches a get that never confirms.
     public void NoteGetSent()
     {
+        _outstandingGets++;
         Assert("get-sent");
         _settle.Stop();
         _settle.Start();
+    }
+
+    // Note the server confirmed a get landed — `You took <item>.` (item) or
+    // `You picked up <N> <coin>.` (cash, N=0 = full/took-nothing but still a
+    // resolution). Drains one outstanding get; once none remain and no deferred
+    // items are pending, the gate releases immediately (the fluid path — no wait
+    // on the settle timer). A stray confirmation with nothing outstanding (e.g. a
+    // manual get) is ignored.
+    public void NoteGetConfirmed()
+    {
+        if (_outstandingGets == 0) return;
+        _outstandingGets--;
+        if (_outstandingGets == 0 && _pendingDeferred == 0)
+        {
+            _settle.Stop();
+            Release("gets-confirmed");
+        }
     }
 
     // The deferred queue was flushed or discarded — no items wait on combat
@@ -91,6 +114,8 @@ public sealed class AcquisitionGate : IDisposable
     {
         _settle.Stop();
         if (_pendingDeferred > 0) return;   // still waiting on combat — keep held
+        // Fallback: gets that never confirmed are presumed done — drop them.
+        _outstandingGets = 0;
         Release("settle-elapsed");
     }
 
@@ -105,6 +130,7 @@ public sealed class AcquisitionGate : IDisposable
     {
         if (!_asserted) return;
         _asserted = false;
+        _outstandingGets = 0;   // clean slate for the next collection cycle
         _coordinator.ClearGate(MovementCoordinator.AcquisitionGate, AsserterName, reason);
     }
 

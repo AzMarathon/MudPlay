@@ -22,6 +22,7 @@ public sealed class AutoSellManagerTests
         public List<byte[]> Sent { get; } = new();
         public List<string> Carried { get; } = new();
         public bool Enabled { get; set; } = true;
+        public bool Paradigm { get; set; }
 
         // name -> (Number, Sell, KeepCount)
         private readonly Dictionary<string, (int Number, bool Sell, int Keep)> _map =
@@ -34,7 +35,8 @@ public sealed class AutoSellManagerTests
                 carriedItems: () => Carried,
                 resolve: Resolve,
                 isEnabled: () => Enabled,
-                log: Log);
+                log: Log,
+                isParadigm: () => Paradigm);
             Sell.SetWireSender(b => Sent.Add(b));
         }
 
@@ -73,6 +75,23 @@ public sealed class AutoSellManagerTests
 
         Assert.Equal(3, h.SentText.Count);
         Assert.All(h.SentText, s => Assert.Equal("sell dagger", s));
+    }
+
+    [Fact]
+    public void Paradigm_SellsWholeQuantityInOneCountedCommand()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.Map("dagger", 1, sell: true);
+        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+
+        h.ShopHeader();
+        Assert.Equal(new[] { "sell 3 dagger" }, h.SentText);   // one batched command
+
+        // The counted confirmation drains all three; the pump finishes without a
+        // second send.
+        h.Feed("You sold 3 dagger for 15 gold crowns.");
+
+        Assert.Single(h.SentText);
     }
 
     [Fact]

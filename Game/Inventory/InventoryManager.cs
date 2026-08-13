@@ -420,16 +420,32 @@ public sealed partial class InventoryManager : IDisposable
             return;
         }
 
-        // Item stash: "You hid <item>." — same verb as the coin line above, which
-        // already returned for a `(\d+) <coin>` match. The singular "a <coin>" form
-        // (which HidCurrencyRegex's leading digit misses) still reaches here, so
-        // skip any coin-noun-suffixed text; CashManager's coin path records those.
+        // Item stash: "You hid <item>." (Stock) or Paradigm's counted batch form
+        // "You hid <N> <item>." — same verb as the coin line above, which already
+        // returned for a `(\d+) <coin>` match. The singular "a <coin>" form (which
+        // HidCurrencyRegex's leading digit misses) still reaches here, so skip any
+        // coin-noun-suffixed text; CashManager's coin path records those.
+        //
+        // A stashed item leaves the pack exactly like a drop, so decrement the
+        // carried list + weight estimate — otherwise the reading stays inflated
+        // until the next full `i`, and the collect gates over-estimate weight and
+        // wrongly skip (report paradigm-20260812-201631: 35 stashed orc-heads left
+        // the estimate reading Heavy while the character was actually Medium, so
+        // the cash "skip if Heavy" gate skipped a collect). Paradigm names the item
+        // SINGULAR with a leading count ("You hid 35 orc-head."), so strip the
+        // count and apply it N times.
         Match itemHidden = HidItemRegex().Match(line);
         if (itemHidden.Success)
         {
-            string item = itemHidden.Groups[1].Value.TrimEnd();
-            if (item.Length > 0 && !CoinNounSuffixRegex().IsMatch(item))
-                ItemHidden?.Invoke(item);
+            string hiddenItem = itemHidden.Groups[1].Value.TrimEnd();
+            if (hiddenItem.Length > 0 && !CoinNounSuffixRegex().IsMatch(hiddenItem))
+            {
+                (int count, string name) = CountedCommand.SplitLeadingCount(hiddenItem);
+                for (int i = 0; i < count; i++) RemoveCarried(name);
+                AdjustItemWeight(name, -count);
+                _log?.Debug(LogCategory, $"hid item={name} count={count} — carried/weight decremented");
+                ItemHidden?.Invoke(hiddenItem);
+            }
             return;
         }
 
@@ -476,7 +492,12 @@ public sealed partial class InventoryManager : IDisposable
             // The bought item enters the pack unworn (MajorMUD never auto-wields
             // a purchase), so it lands in the carried list until the player wears
             // or sells it.
-            string boughtName = bought.Groups[1].Value.TrimEnd();
+            // Paradigm batches a buy into one counted line ("You bought 5 orc-head
+            // for …") with the singular name and a single total price; strip the
+            // count and apply the item side N times (the price tail below is the
+            // total and needs no split).
+            (int boughtCount, string boughtName) =
+                CountedCommand.SplitLeadingCount(bought.Groups[1].Value.TrimEnd());
             // A purchase is a definitive "item entered the pack" signal, but
             // PatchCarried is gated on a loaded baseline (the first full `i`).
             // During character creation that `i` hasn't run — it only fires on
@@ -484,8 +505,9 @@ public sealed partial class InventoryManager : IDisposable
             // and "Equip all" sees an empty pack (the reported bug). Treat the
             // first purchase as the baseline.
             EnsureLoadedBaseline();
-            PatchCarried(list => { list.Add(boughtName); return true; });
-            AdjustItemWeight(boughtName, +1);
+            for (int i = 0; i < boughtCount; i++)
+                PatchCarried(list => { list.Add(boughtName); return true; });
+            AdjustItemWeight(boughtName, +boughtCount);
 
             string priceTail = bought.Groups[2].Value;
             long priceCopper = ParsePriceToCopper(priceTail);
@@ -513,10 +535,12 @@ public sealed partial class InventoryManager : IDisposable
         Match sold = SoldRegex().Match(line);
         if (sold.Success)
         {
-            // The sold item leaves the pack.
-            string soldName = sold.Groups[1].Value.TrimEnd();
-            RemoveCarried(soldName);
-            AdjustItemWeight(soldName, -1);
+            // The sold item leaves the pack. Paradigm batches a sell into one
+            // counted line ("You sold 5 orc-head for …"); strip the count.
+            (int soldCount, string soldName) =
+                CountedCommand.SplitLeadingCount(sold.Groups[1].Value.TrimEnd());
+            for (int i = 0; i < soldCount; i++) RemoveCarried(soldName);
+            AdjustItemWeight(soldName, -soldCount);
 
             long price = ParsePriceToCopper(sold.Groups[2].Value);
             if (price > 0)
@@ -563,20 +587,23 @@ public sealed partial class InventoryManager : IDisposable
         Match gotItem = TookItemRegex().Match(line);
         if (gotItem.Success)
         {
-            string name = gotItem.Groups[1].Value.TrimEnd();
-            PatchCarried(list => { list.Add(name); return true; });
-            AdjustItemWeight(name, +1);
+            // Paradigm batches a get into one counted line ("You took 5 orc-head.")
+            // with the singular name; strip the count and apply it N times.
+            (int count, string name) = CountedCommand.SplitLeadingCount(gotItem.Groups[1].Value.TrimEnd());
+            for (int i = 0; i < count; i++) PatchCarried(list => { list.Add(name); return true; });
+            AdjustItemWeight(name, +count);
             return;
         }
 
-        // Drop: "You dropped torch." — the item leaves the pack. Currency drops
-        // carry a numeric count and are matched above.
+        // Drop: "You dropped torch." (or Paradigm's counted "You dropped 5 orc-head.")
+        // — the item leaves the pack. Currency drops carry a coin noun and are
+        // matched above.
         Match droppedItem = DropItemRegex().Match(line);
         if (droppedItem.Success)
         {
-            string name = droppedItem.Groups[1].Value.TrimEnd();
-            RemoveCarried(name);
-            AdjustItemWeight(name, -1);
+            (int count, string name) = CountedCommand.SplitLeadingCount(droppedItem.Groups[1].Value.TrimEnd());
+            for (int i = 0; i < count; i++) RemoveCarried(name);
+            AdjustItemWeight(name, -count);
         }
     }
 
@@ -946,13 +973,14 @@ public sealed partial class InventoryManager : IDisposable
         _category = DeriveCategory(_percentage);
     }
 
-    // Move the live encumbrance estimate as a single item enters (+1) or leaves
-    // (-1) the pack, reading its carry weight (MDB Encum) from the active game
-    // data. A null resolver, an unresolved name, or a zero-weight item is a
-    // no-op — and the next full 'i' dump re-bases the reading regardless, so a
-    // stale estimate self-corrects. Gated on a loaded baseline like the carried
-    // list: adjusting from a 0/0 reading would be meaningless.
-    private void AdjustItemWeight(string itemName, int sign)
+    // Move the live encumbrance estimate as `delta` copies of an item enter (+n)
+    // or leave (-n) the pack, reading its carry weight (MDB Encum) from the active
+    // game data. Single get/drop pass ±1; a Paradigm counted stash passes -N. A
+    // null resolver, an unresolved name, or a zero-weight item is a no-op — and the
+    // next full 'i' dump re-bases the reading regardless, so a stale estimate
+    // self-corrects. Gated on a loaded baseline like the carried list: adjusting
+    // from a 0/0 reading would be meaningless.
+    private void AdjustItemWeight(string itemName, int delta)
     {
         if (_itemWeight is null) return;
         if (_itemWeight(itemName) is not int weight || weight == 0) return;
@@ -961,7 +989,7 @@ public sealed partial class InventoryManager : IDisposable
         {
             if (_loaded)
             {
-                _curWeight = (int)Math.Max(0, _curWeight + (long)sign * weight);
+                _curWeight = (int)Math.Max(0, _curWeight + (long)delta * weight);
                 RecomputeEncumbrancePercent();
                 changed = true;
             }

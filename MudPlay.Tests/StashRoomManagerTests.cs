@@ -33,6 +33,7 @@ public sealed class StashRoomManagerTests
         // item is flagged AutoStash). Anything not here resolves to null.
         public HashSet<string> AutoStashItems { get; } = new();
         public List<StashRoomManager.StashDispatch> Executed { get; } = new();
+        public bool Paradigm { get; set; }
 
         public Harness()
         {
@@ -42,7 +43,8 @@ public sealed class StashRoomManagerTests
                 getSnapshot: () => Snapshot,
                 resolveAutoStashItem: entry => AutoStashItems.Contains(entry) ? entry : null,
                 isEnabled: () => AutoGetCashEnabled,
-                log: Log);
+                log: Log,
+                isParadigm: () => Paradigm);
             Stash.SetWireSender(b => Sent.Add(b));
             Stash.StashExecuted += d => Executed.Add(d);
         }
@@ -306,6 +308,20 @@ public sealed class StashRoomManagerTests
 
         Assert.Equal(3, h.Sent.Count);
         Assert.Equal(3, h.Executed[0].Items.Count);
+    }
+
+    [Fact]
+    public void Paradigm_BatchesDuplicateHidesIntoOneCountedCommand()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.MarkRoomAsStash(1, 42);
+        h.Snapshot = Coins(carried: new[] { "a torch", "a torch", "a torch" });
+        h.AutoStashItems.Add("a torch");
+
+        h.Stash.ExecuteStash(new RoomKey(1, 42));
+
+        Assert.Equal("hide 3 a torch", Assert.Single(h.SentLines()));
+        Assert.Equal(3, h.Executed[0].Items.Count);   // dispatched count preserved
     }
 
     [Fact]

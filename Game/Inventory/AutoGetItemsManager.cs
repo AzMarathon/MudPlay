@@ -24,9 +24,9 @@ namespace MudPlay.Game.Inventory;
 // Movement gate: collecting (or deferring) items asserts the shared
 // AcquisitionGate so the walker holds until get-clear — deferred items hold the
 // gate before CombatStateTracker clears the Combat gate, defeating the
-// synchronous walker-resume race; immediate gets hold it through a settle
-// window. Bound via SetAcquisitionGate (optional — unbound, the engine doesn't
-// gate movement).
+// synchronous walker-resume race; immediate gets hold it until the `You took`
+// confirmations land (settle window as fallback). Bound via SetAcquisitionGate
+// (optional — unbound, the engine doesn't gate movement).
 //
 // Master switch: AutoActionDefaults.AutoGetItems (shared with the Settings →
 // General toggle and the toolbar Toggle command).
@@ -52,11 +52,13 @@ public sealed class AutoGetItemsManager : IDisposable
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _collectAfterCombatFinished;
     private readonly Func<bool> _hasEngageableHostiles;
+    private readonly Func<bool> _isParadigm;
     private readonly Func<bool> _isPeekSuppressed;
     private readonly Func<EncumbranceReading> _encumbrance;
     private readonly Func<(bool Light, bool Medium, bool Heavy)> _itemEncGates;
     private readonly LogService? _log;
     private readonly IDisposable _noticeSub;
+    private readonly IDisposable _gotSub;
 
     // Cooldown so an area kill whose several corpses each drop a flagged item
     // re-surveys the room once, not once per corpse.
@@ -69,6 +71,26 @@ public sealed class AutoGetItemsManager : IDisposable
     // Items deferred until the room's combat finishes. Cleared on flush
     // and on room change. Holds canonical names (already resolved).
     private readonly List<string> _deferred = new();
+
+    // In-flight gets for the current room's floor, keyed by item name — gets we
+    // sent but the server hasn't confirmed with `You took <item>.` yet. A burst of
+    // "You notice" re-renders (the Cash engine re-displaying to grab ground coin,
+    // our own post-kill re-look, the combat-clear redisplay) all re-list the same
+    // still-unprocessed floor items; without this the engine re-sent a get for each,
+    // so four ground orc-heads became eight-plus gets. Reconciled against the
+    // survey's current count so a genuinely larger pile (a fresh drop) still tops
+    // up. Decremented on the `You took` confirmation (the copy left the floor, so a
+    // later re-listing is a new drop and collects again); cleared on room change;
+    // and swept after the window below as a backstop for a get that never confirms
+    // (a failure line we don't yet parse).
+    private readonly Dictionary<string, int> _floorInFlight =
+        new(StringComparer.OrdinalIgnoreCase);
+    private DateTime _floorInFlightAt = DateTime.MinValue;
+
+    // Backstop only: how long an unconfirmed get keeps blocking re-collection
+    // before it's presumed failed and swept. Confirmations normally clear entries
+    // well before this; kept short so a stuck entry can't strand collection.
+    private const int FloorLedgerWindowMs = 1500;
 
     private Action<byte[]>? _wireSender;
     private AcquisitionGate? _gate;
@@ -84,7 +106,8 @@ public sealed class AutoGetItemsManager : IDisposable
         Func<int, int>? heldCount = null,
         Func<EncumbranceReading>? encumbrance = null,
         Func<(bool Light, bool Medium, bool Heavy)>? itemEncGates = null,
-        LogService? log = null)
+        LogService? log = null,
+        Func<bool>? isParadigm = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(resolve);
@@ -99,6 +122,8 @@ public sealed class AutoGetItemsManager : IDisposable
         _isEnabled = isEnabled;
         _collectAfterCombatFinished = collectAfterCombatFinished;
         _hasEngageableHostiles = hasEngageableHostiles;
+        // Unbound (tests) → Stock behaviour: one `get` per unit, never batched.
+        _isParadigm = isParadigm ?? (static () => false);
         // Null when unbound (tests) → never a peek. A `look <dir>` peek renders a
         // full "You notice" survey for the adjacent room; gate the get path on it
         // so we don't send get commands (and trigger the get→inventory→equip
@@ -113,6 +138,10 @@ public sealed class AutoGetItemsManager : IDisposable
         _log = log;
 
         _noticeSub = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
+        // `You took <item>.` (own pickup) confirms one of our gets landed. The
+        // pattern is shared with `<player> picks up <item>.`; the player group is
+        // empty on our own line, which is how OnPlayerGets tells them apart.
+        _gotSub = router.Subscribe(KnownPatterns.PlayerGets, OnPlayerGets);
     }
 
     // Bind the wire sender — the gate-wrapped engine pipeline from
@@ -153,9 +182,13 @@ public sealed class AutoGetItemsManager : IDisposable
         FlushDeferred();
     }
 
-    // Called on actual room change. Discards any un-flushed deferred gets — the
-    // items belonged to the room we just left.
-    public void OnRoomChanged() => CancelDeferredCollect("room changed");
+    // Called on actual room change. Discards any un-flushed deferred gets and the
+    // dedup ledger — both belonged to the room we just left.
+    public void OnRoomChanged()
+    {
+        _floorInFlight.Clear();
+        CancelDeferredCollect("room changed");
+    }
 
     // Drop any deferred gets and release the acquisition hold — the items belonged
     // to a room/session we're no longer collecting for. Shared by the room-change
@@ -189,6 +222,34 @@ public sealed class AutoGetItemsManager : IDisposable
     }
 
     // ----- notice parsing ----------------------------------------------
+
+    // `You took <item>.` / `<player> picks up <item>.` — the shared PlayerGets
+    // pattern. Only our OWN pickup ("You took", empty player group) confirms one
+    // of our gets: drain the item's in-flight count (that copy left the floor, so
+    // a later re-listing is a fresh drop) and tell the acquisition gate so the
+    // walker can resume without waiting on the settle fallback. Someone else's
+    // pickup is ignored here.
+    private void OnPlayerGets(MatchResult m)
+    {
+        // Groups: [0]=player (empty for our "You took"), [1]=item.
+        if (m.Groups.Count < 2 || m.Groups[0].Length != 0) return;
+        string taken = m.Groups[1].Trim();
+        if (taken.Length == 0) return;
+
+        // Paradigm confirms a batched get in one counted line ("You took 5
+        // orc-head."); strip the count and drain that many. Resolve to the same
+        // canonical name the get was keyed under so the decrement lands on the
+        // right entry (survey and confirmation both route through the resolver).
+        (int count, string name) = CountedCommand.SplitLeadingCount(taken);
+        if (_resolve(name) is { } item)
+        {
+            int have = _floorInFlight.GetValueOrDefault(item.Name);
+            int cleared = Math.Min(have, count);
+            if (have <= cleared) _floorInFlight.Remove(item.Name);
+            else _floorInFlight[item.Name] = have - cleared;
+        }
+        _gate?.NoteGetConfirmed();
+    }
 
     // Single-line "You notice <list> here." — the pattern subscription path.
     // Multi-line wraps stitch through OnLine and feed the same dispatch.
@@ -261,6 +322,8 @@ public sealed class AutoGetItemsManager : IDisposable
             return;
         }
 
+        ExpireFloorLedgerIfStale();
+
         bool deferMode = _collectAfterCombatFinished() && _hasEngageableHostiles();
         if (deferMode) _deferred.Clear();   // rebuild for this survey
 
@@ -268,6 +331,16 @@ public sealed class AutoGetItemsManager : IDisposable
         // holds even when a single "You notice" lists the same item twice
         // (the held-count snapshot doesn't move until the get echoes back).
         Dictionary<int, int>? decidedThisPass = null;
+
+        // Floor-dedup bookkeeping for this survey (immediate path). _floorInFlight
+        // is read (not mutated) during the pass so the dedup skip is measured
+        // against the pre-survey count — two separate "long sword" entries in ONE
+        // survey are two floor copies and both collect, while the SAME sword
+        // re-listed by a later re-render is skipped. seenThisSurvey tracks copies
+        // encountered so far (to know our position past the already-sent count);
+        // sentThisSurvey is merged into _floorInFlight once, after the pass.
+        Dictionary<string, int>? seenThisSurvey = null;
+        Dictionary<string, int>? sentThisSurvey = null;
 
         // Encumbrance gate. With a known carry weight, cap what we grab this
         // survey so a pickup can't push past the character's capacity (the
@@ -303,8 +376,32 @@ public sealed class AutoGetItemsManager : IDisposable
             // so a cap or weight ceiling stops the pile partway rather than after
             // the whole stack.
             int units = ParseLeadingCount(entry);
-            for (int u = 0; u < units; u++)
+            // Command-side dedup (immediate path only — the deferred build is
+            // reconciled at flush). Skip the copies a re-render of this same floor
+            // already sent a get for; anything the survey lists beyond that count
+            // is a genuinely larger pile (a fresh drop) and still gets collected.
+            // Measured against the pre-survey count minus copies of this item
+            // already seen earlier in THIS survey, so duplicate entries in one
+            // survey collect while a re-render's re-listing is skipped.
+            int skip = 0;
+            if (!deferMode)
             {
+                int alreadySent = _floorInFlight.GetValueOrDefault(item.Name);
+                int seenBefore = seenThisSurvey?.GetValueOrDefault(item.Name) ?? 0;
+                skip = Math.Min(units, Math.Max(0, alreadySent - seenBefore));
+                (seenThisSurvey ??= new(StringComparer.OrdinalIgnoreCase))[item.Name] =
+                    seenBefore + units;
+                if (skip > 0)
+                    _log?.Debug(LogCategory,
+                        $"re-render: skipping {skip} already-collected {item.Name} this room");
+            }
+            // Immediate-mode units of this entry that clear both gates — emitted as
+            // one `get N <item>` on Paradigm (see after the loop), or N single gets
+            // on Stock.
+            int allowedThisEntry = 0;
+            for (int u = skip; u < units; u++)
+            {
+
                 // MaxToGet carry cap. Count what we already hold (carried + worn +
                 // key ring — key-type items land in the ring, not the pack) plus
                 // anything already decided in this same survey; stop at the cap.
@@ -348,11 +445,30 @@ public sealed class AutoGetItemsManager : IDisposable
                 }
                 else
                 {
-                    _log?.Info(LogCategory, $"collect item={item.Name}");
-                    _gate?.NoteGetSent();
-                    Send($"get {item.Name}");
+                    allowedThisEntry++;
                 }
             }
+
+            if (!deferMode && allowedThisEntry > 0)
+            {
+                _log?.Info(LogCategory, $"collect {allowedThisEntry}x item={item.Name}");
+                // Paradigm grabs the pile in one `get N <item>`; Stock sends one per
+                // unit. NoteGetSent fires per emitted line so the gate balances the
+                // count-prefixed `You took N <item>` confirmation either way.
+                CountedCommand.Emit(cmd => { _gate?.NoteGetSent(); Send(cmd); },
+                    "get", allowedThisEntry, item.Name, _isParadigm());
+                (sentThisSurvey ??= new(StringComparer.OrdinalIgnoreCase))[item.Name] =
+                    sentThisSurvey.GetValueOrDefault(item.Name) + allowedThisEntry;
+            }
+        }
+
+        // Commit this survey's immediate gets to the floor ledger in one shot so a
+        // following re-render of the same floor reconciles against them.
+        if (sentThisSurvey is not null)
+        {
+            foreach ((string name, int n) in sentThisSurvey)
+                _floorInFlight[name] = _floorInFlight.GetValueOrDefault(name) + n;
+            _floorInFlightAt = DateTime.UtcNow;
         }
 
         // Hold the walker while the queued gets wait for combat to finish.
@@ -364,14 +480,46 @@ public sealed class AutoGetItemsManager : IDisposable
 
     private void FlushDeferred()
     {
+        ExpireFloorLedgerIfStale();
+
+        // Count the deferred gets per name (first-seen order) so we can honour any
+        // copies a same-window re-render already grabbed via the immediate path
+        // (normally none — the deferred flush is the room's first collection), then
+        // grab each name's remainder in one `get N <item>` on Paradigm.
+        Dictionary<string, int> deferredByName = new(StringComparer.OrdinalIgnoreCase);
+        List<string> flushOrder = new();
         foreach (string name in _deferred)
         {
-            _log?.Info(LogCategory, $"collect (post-combat) item={name}");
-            _gate?.NoteGetSent();
-            Send($"get {name}");
+            if (!deferredByName.ContainsKey(name)) flushOrder.Add(name);
+            deferredByName[name] = deferredByName.GetValueOrDefault(name) + 1;
         }
+
+        bool sentAny = false;
+        foreach (string name in flushOrder)
+        {
+            int have = _floorInFlight.GetValueOrDefault(name);
+            int toSend = deferredByName[name] - have;   // ledger already covers `have`
+            if (toSend <= 0) continue;
+            _log?.Info(LogCategory, $"collect (post-combat) {toSend}x item={name}");
+            CountedCommand.Emit(cmd => { _gate?.NoteGetSent(); Send(cmd); },
+                "get", toSend, name, _isParadigm());
+            _floorInFlight[name] = have + toSend;
+            sentAny = true;
+        }
+        if (sentAny) _floorInFlightAt = DateTime.UtcNow;
+
         _deferred.Clear();
         _gate?.NoteDeferredCleared();
+    }
+
+    // Drop the dedup ledger once its window has elapsed: by then the sent gets are
+    // reflected on the floor, so a fresh survey is authoritative and a later kill's
+    // drop must be collectable again.
+    private void ExpireFloorLedgerIfStale()
+    {
+        if (_floorInFlight.Count == 0) return;
+        if ((DateTime.UtcNow - _floorInFlightAt).TotalMilliseconds > FloorLedgerWindowMs)
+            _floorInFlight.Clear();
     }
 
     // The survey prefixes a stacked ground pile with its count ("5 piece of
@@ -428,6 +576,7 @@ public sealed class AutoGetItemsManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         _noticeSub.Dispose();
+        _gotSub.Dispose();
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
     }

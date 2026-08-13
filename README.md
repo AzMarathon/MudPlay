@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.20**
-> - Help window: a failed/missing guide asset now logs a warning instead of silently opening an empty compendium, so a "Help is empty" report has a program-log trail
-> - Fixed a stale comment on the Help menu's composition describing the "Help topics…" item as a disabled placeholder — it's a live command
+> **Version 3.8.24**
+> - On Paradigm, the loot engines now batch multiple copies into one counted action (`get 5 piece of amber`, `hide 35 orc-head`, `drop/sell/buy N <item>`) instead of one command per copy; Stock still sends one at a time
+> - Stashing items now lowers the encumbrance estimate immediately (a `hide` leaves the pack like a `drop`, including Paradigm's counted `You hid 35 orc-head.`) — so cash/item collection no longer skips a pickup thinking you're still Heavy right after a stash when you actually have room
+> - Auto-get no longer re-sends `get` for the same floor items when a room re-renders (Cash re-grabbing ground coin, the post-kill re-look, the combat-clear redisplay) — four ground orc-heads no longer become eight-plus gets; dedup keys on the `You took <item>` pickup confirmation, so a fresh drop still collects
+> - Looting resumes movement the instant pickups are confirmed (`You took <item>` / `You picked up <coin>`) instead of waiting out a fixed timer
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

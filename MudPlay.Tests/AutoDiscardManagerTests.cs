@@ -24,6 +24,7 @@ public sealed class AutoDiscardManagerTests
         public List<byte[]> Sent { get; } = new();
         public List<string> Carried { get; } = new();
         public bool Enabled { get; set; } = true;
+        public bool Paradigm { get; set; }
 
         // name -> (Number, Discard, Keep)
         private readonly Dictionary<string, (int Number, bool Discard, int Keep)> _map =
@@ -36,7 +37,8 @@ public sealed class AutoDiscardManagerTests
                 carriedItems: () => Carried,
                 resolve: Resolve,
                 isEnabled: () => Enabled,
-                log: Log);
+                log: Log,
+                isParadigm: () => Paradigm);
             Discard.SetWireSender(b => Sent.Add(b));
         }
 
@@ -68,6 +70,37 @@ public sealed class AutoDiscardManagerTests
 
         Assert.Equal(3, h.SentText.Count);
         Assert.All(h.SentText, s => Assert.Equal("drop dagger", s));
+    }
+
+    [Fact]
+    public void Paradigm_BatchesDropIntoOneCountedCommand()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.Map("dagger", 1, discard: true);
+        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+
+        h.Discard.OnInventoryChanged();
+
+        Assert.Equal("drop 3 dagger", Assert.Single(h.SentText));
+    }
+
+    [Fact]
+    public void Paradigm_CountedConfirmation_ClearsInFlight_NoResend()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.Map("dagger", 1, discard: true);
+        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+
+        h.Discard.OnInventoryChanged();
+        Assert.Single(h.SentText);                 // one batched "drop 3 dagger"
+
+        // The batched confirmation clears all three in-flight at once, so the
+        // Changed re-evaluation it triggers doesn't re-drop.
+        h.Feed("You dropped 3 dagger.");
+        h.Carried.Clear();                          // dropped items gone from the pack
+        h.Discard.OnInventoryChanged();
+
+        Assert.Single(h.SentText);                 // still just the one command
     }
 
     [Fact]

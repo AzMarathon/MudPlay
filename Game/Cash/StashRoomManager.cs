@@ -52,6 +52,7 @@ public sealed class StashRoomManager : IDisposable
     private readonly Func<InventorySnapshot> _getSnapshot;
     private readonly Func<string, string?> _resolveAutoStashItem;
     private readonly Func<bool> _isEnabled;
+    private readonly Func<bool> _isParadigm;
     private readonly LogService? _log;
     private readonly CurrencyNaming _naming;
 
@@ -69,7 +70,8 @@ public sealed class StashRoomManager : IDisposable
         Func<string, string?> resolveAutoStashItem,
         Func<bool> isEnabled,
         LogService? log = null,
-        CurrencyNaming? naming = null)
+        CurrencyNaming? naming = null,
+        Func<bool>? isParadigm = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(readCash);
@@ -81,6 +83,8 @@ public sealed class StashRoomManager : IDisposable
         _getSnapshot = getSnapshot;
         _resolveAutoStashItem = resolveAutoStashItem;
         _isEnabled = isEnabled;
+        // Unbound (tests) → Stock behaviour: one `hide` per item, never batched.
+        _isParadigm = isParadigm ?? (static () => false);
         _log = log;
         // Resolves the per-BBS runic word; unbound (tests) falls back to stock
         // "runic" so the stable-realm behaviour is unchanged.
@@ -141,17 +145,25 @@ public sealed class StashRoomManager : IDisposable
             dispatched.Add((denom, count));
         }
 
-        // Stash rooms hold items too (banks are cash-only). Hide every
-        // carried, unworn item flagged AutoStash by its canonical name.
-        // One hide per listed carry entry: MajorMUD lists each carried
-        // item slot as its own token, so repeated names hide repeated
-        // copies naturally.
-        List<string> hiddenItems = new();
+        // Stash rooms hold items too (banks are cash-only). Hide every carried,
+        // unworn item flagged AutoStash by its canonical name. Group repeated
+        // copies so Paradigm can stash the pile in one `hide N <item>` (Stock
+        // still sends one `hide <item>` per copy); the server echoes the count
+        // back and InventoryManager decrements weight by N.
+        Dictionary<string, int> toHide = new(StringComparer.OrdinalIgnoreCase);
+        List<string> hideOrder = new();
         foreach (string entry in snapshot.CarriedItems)
         {
             if (_resolveAutoStashItem(entry) is not { } name) continue;
-            Send($"hide {name}");
-            hiddenItems.Add(name);
+            if (!toHide.ContainsKey(name)) hideOrder.Add(name);
+            toHide[name] = toHide.GetValueOrDefault(name) + 1;
+        }
+        List<string> hiddenItems = new();
+        foreach (string name in hideOrder)
+        {
+            int count = toHide[name];
+            CountedCommand.Emit(Send, "hide", count, name, _isParadigm());
+            for (int i = 0; i < count; i++) hiddenItems.Add(name);
         }
 
         if (dispatched.Count > 0 || hiddenItems.Count > 0)
