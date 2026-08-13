@@ -30,8 +30,11 @@ public static class HelpBook
         {
             // Missing / unreadable asset → an empty book (the window shows no
             // topics rather than failing to open), but logged so a report of
-            // "Help is empty" has a program-log trail instead of none.
-            AppServices.Current.Log.Warn("Help", $"Failed to load bundled guide: {ex.Message}");
+            // "Help is empty" has a program-log trail instead of none. Use the
+            // null-safe accessor: this runs at design time too (the previewer's
+            // parameterless HelpWindowViewModel ctor), where AppServices isn't
+            // up — LoadBundled must still never throw.
+            AppServices.CurrentOrNull?.Log.Warn("Help", $"Failed to load bundled guide: {ex.Message}");
             return Array.Empty<HelpTopic>();
         }
     }

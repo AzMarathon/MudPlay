@@ -45,6 +45,26 @@ public sealed class CurrencyNaming
     public string Canonicalize(string word) =>
         IsRunic(word) ? DefaultRunicName : word.Trim().ToLowerInvariant();
 
+    // Full two-word coin noun for an outgoing currency command (get / drop /
+    // hide). A bare denomination adjective binds ambiguously — MajorMUD
+    // resolves "drop 1 silver" to a silver ring instead of the silver-noble
+    // coins — so every currency command names the coin in full to force a
+    // currency match. The four lower denominations have fixed nouns; the runic
+    // word's leading token is board-configurable while its "coin" suffix is
+    // stable. Accepts a canonical key ("runic") or the live board word alike.
+    public string WireNoun(string currency)
+    {
+        if (IsRunic(currency)) return $"{RunicName} coin";
+        return currency.ToLowerInvariant() switch
+        {
+            "copper"   => "copper farthing",
+            "silver"   => "silver noble",
+            "gold"     => "gold crown",
+            "platinum" => "platinum piece",
+            _          => currency,
+        };
+    }
+
     private static string Normalize(string? raw) =>
         string.IsNullOrWhiteSpace(raw) ? DefaultRunicName : raw.Trim().ToLowerInvariant();
 }

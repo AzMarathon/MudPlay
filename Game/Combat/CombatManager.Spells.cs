@@ -290,7 +290,16 @@ public sealed partial class CombatManager
                     ? null : picked.RawName;
                 if (_cast!.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true, bypassRecastInterval: bypassRecastInterval))
                 {
-                    _spellChooser.MarkCast(decision, picked.RawName);
+                    // Do NOT tally MaxCasts here. Announcing is round 0 — the spell
+                    // fires on the NEXT combat tick, not now — so the round is
+                    // counted by the per-round heartbeat (OnCombatTick, once the
+                    // same decision has actually held a round). Tallying at announce
+                    // capped MaxCasts=1 the instant the spell went out, so the very
+                    // next re-choose skipped the normal spell and cascaded to the
+                    // alternate before the normal ever fired a round — the reported
+                    // "fires normal then immediately the alternate", and the
+                    // corpse-cast of the alternate after the normal's kill (the
+                    // cascade had already advanced by the time the kill landed).
                     _lastCastAction = decision.Action;
                     _announcedSpellCode = decision.Spell;
                     _combatOff = false;

@@ -2,10 +2,16 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.8.19
+## 3.8.20
 
 - Help window: a failed/missing guide asset now logs a warning instead of silently opening an empty compendium, so a "Help is empty" report has a program-log trail
 - Fixed a stale comment on the Help menu's composition describing the "Help topics…" item as a disabled placeholder — it's a live command
+
+## 3.8.19
+
+- Combat attack spells no longer double-fire the normal + alternate: `MaxCasts` is now counted per *fired* round instead of at announce, so a `MaxCasts=1` normal spell actually takes its round before the cascade can hand to the alternate — fixing "normal fires then immediately the alternate," the alternate cast at a target the normal just killed ("You don't see X here!"), and a fresh mob opening on the alternate. A kill now fully drops the target and resets the cascade so the next mob reconsiders the normal spell first
+- Stashing currency now names coins by their full two-word noun (`hide 50 gold crown`) like get/drop already do, instead of the bare denomination that MajorMUD binds to a same-named item
+- bug reports addressed: paradigm-20260812-200128
 
 ## 3.8.17
 

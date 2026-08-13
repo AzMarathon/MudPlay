@@ -697,6 +697,7 @@ public sealed partial class CombatManager : IDisposable
                 $"target died — clearing _currentTarget='{current}' (raw-name match)");
             _currentTarget = null;
             _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
+            _spellChooser.ResetForNewTarget();   // a kill resets the cascade so the next mob (even same-named) reconsiders the normal spell
             ClearBackstabResolution();
             return;
         }
@@ -719,6 +720,7 @@ public sealed partial class CombatManager : IDisposable
                     $"target died — clearing _currentTarget='{current}' (resolved-name match)");
                 _currentTarget = null;
                 _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
+                _spellChooser.ResetForNewTarget();   // a kill resets the cascade so the next mob (even same-named) reconsiders the normal spell
                 ClearBackstabResolution();
                 return;
             }
@@ -2156,7 +2158,15 @@ public sealed partial class CombatManager : IDisposable
                 _lastExpGainAt = DateTimeOffset.MinValue;   // consume — a later non-kill Off must not reuse it
                 _lastDeathAt = DateTimeOffset.Now;
                 _attackSentSinceDeath = false;
+                // Drop the target FULLY (mirroring NoteMonsterDied): null both
+                // _currentTarget and _castingSpellTarget and reset the cascade.
+                // Keeping _currentTarget left a same-named sibling looking like the
+                // still-engaged target (the RawName-keyed "already engaged" guard),
+                // so it was never re-engaged AND inherited the dead mob's advanced
+                // cascade — a fresh mob opening on the alternate instead of the normal.
+                _currentTarget = null;
                 _castingSpellTarget = null;
+                _spellChooser.ResetForNewTarget();
                 _log?.Combat(LogCategory,
                     "kill inferred from exp + *Combat Off* (no between-round cast) — " +
                     "dropping target so the resume can't re-attack the corpse");

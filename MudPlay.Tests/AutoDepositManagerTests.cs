@@ -586,7 +586,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         // Walk to the stash room (1/1 → 1/2) → hide fires on arrival.
         Arrive(h, new RoomKey(1, 2));
         Assert.Empty(h.Deposited);
-        Assert.Equal("hide 50 gold", Assert.Single(h.StashLines()));
+        Assert.Equal("hide 50 gold crown", Assert.Single(h.StashLines()));
 
         // Walk back to origin (1/2 → 1/1) → lair resumes.
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
@@ -766,7 +766,7 @@ public sealed class AutoDepositManagerTests : IDisposable
 
         // Character laps through the stash room → stash in passing.
         Arrive(h, new RoomKey(1, 2));
-        Assert.Equal("hide 50 gold", Assert.Single(h.StashLines()));
+        Assert.Equal("hide 50 gold crown", Assert.Single(h.StashLines()));
         Assert.Equal(LoopState.Running, h.Loop.State);
     }
 
@@ -790,7 +790,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         // Lair walks the character through its marked room → stash in passing.
         Arrive(h, new RoomKey(1, 2));
         Arrive(h, new RoomKey(1, 3));
-        Assert.Equal("hide 50 gold", Assert.Single(h.StashLines()));
+        Assert.Equal("hide 50 gold crown", Assert.Single(h.StashLines()));
     }
 
     [Fact]

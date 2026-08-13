@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.8.19**
+> **Version 3.8.20**
 > - Help window: a failed/missing guide asset now logs a warning instead of silently opening an empty compendium, so a "Help is empty" report has a program-log trail
 > - Fixed a stale comment on the Help menu's composition describing the "Help topics…" item as a disabled placeholder — it's a live command
 >
