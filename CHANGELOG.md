@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.11.5
+
+- Combat: an attack spell set to **Max casts = 1** now fires exactly once per target before cascading to the next slot — the switch is announced on the round the cap is reached instead of one round late, so the server no longer auto-repeats the capped spell one extra time (VAMP was firing twice)
+- Monsters game-data table: every stat threshold filter is now **at least (≥)** — filter for HP ≥ N, AC ≥ N, Damage ≥ N, and so on, so stacking Exp ≥ with HP ≥ narrows the results instead of appearing to do nothing
+- bug reports addressed: paradigm-20260814-061340, paradigm-20260814-103219
+
 ## 3.11.3
 
 - Help Topics readability: the recurring field labels (**Default:**, **What it does:**, **Important notes:**, …) now render in an accent colour so the field name is scannable at a glance, and the "⚠️ not currently functional" notes render in a tinted callout box instead of blending into the prose

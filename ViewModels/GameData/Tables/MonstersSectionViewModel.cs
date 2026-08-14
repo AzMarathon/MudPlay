@@ -78,7 +78,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     // Carried on each row for filtering but not shown as grid columns: Alignment
     // (its dropdown reads the formatted value), and the raw AC / DR fields so the
-    // AC ≤ / DR ≤ threshold filters work even though the table shows them combined.
+    // AC ≥ / DR ≥ threshold filters work even though the table shows them combined.
     protected override IReadOnlyList<string> FilterOnlyColumns { get; } =
         new[] { "Align", "ArmourClass", "DamageResist" };
 
@@ -140,26 +140,28 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         _roomGraph = roomGraph;
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
 
-        // Filter panel: each stat carries one single-threshold bound with the natural
-        // direction — difficulty stats ≤, reward stats ≥. The value tested is the leading
-        // integer of each cell's raw value (so "80/10" AC/DR filters on 80). Undead is a
-        // checkbox; Alignment is a dropdown built after load (see OnRowsLoaded).
-        foreach ((string label, string column, ThresholdDirection dir) in new (string, string, ThresholdDirection)[]
+        // Filter panel: each stat carries one single-threshold bound, all "at least" (≥).
+        // You're finding monsters that HAVE at least this much of a stat — HP ≥ 5000 to
+        // surface the tough targets, Exp ≥ 5000 for the rewarding ones, Acc ≥ N for the
+        // dangerous hitters. The value tested is the leading integer of each cell's raw
+        // value (so "80/10" AC/DR filters on 80). Undead is a checkbox; Alignment is a
+        // dropdown built after load (see OnRowsLoaded).
+        foreach ((string label, string column) in new (string, string)[]
         {
-            ("Exp",      "EXP",          ThresholdDirection.AtLeast),
-            ("HP",       "HP",           ThresholdDirection.AtMost),
-            ("AC",       "ArmourClass",  ThresholdDirection.AtMost),
-            ("DR",       "DamageResist", ThresholdDirection.AtMost),
-            ("Dodge",    "Dodge",        ThresholdDirection.AtMost),
-            ("MR",       "MagicRes",     ThresholdDirection.AtMost),
-            ("Acc",      "Accuracy",     ThresholdDirection.AtLeast),
-            ("Damage",   "Damage",       ThresholdDirection.AtMost),
-            ("Mag",      "Mag",          ThresholdDirection.AtMost),
-            ("Lair Exp", "AvgLairExp",   ThresholdDirection.AtLeast),
-            ("# Lairs",  "Lairs",        ThresholdDirection.AtLeast),
-            ("Rgn",      "RegenTime",    ThresholdDirection.AtMost),
+            ("Exp",      "EXP"),
+            ("HP",       "HP"),
+            ("AC",       "ArmourClass"),
+            ("DR",       "DamageResist"),
+            ("Dodge",    "Dodge"),
+            ("MR",       "MagicRes"),
+            ("Acc",      "Accuracy"),
+            ("Damage",   "Damage"),
+            ("Mag",      "Mag"),
+            ("Lair Exp", "AvgLairExp"),
+            ("# Lairs",  "Lairs"),
+            ("Rgn",      "RegenTime"),
         })
-            ThresholdFilters.Add(new ThresholdFilter(label, column, dir));
+            ThresholdFilters.Add(new ThresholdFilter(label, column, ThresholdDirection.AtLeast));
 
         BoolFilters.Add(new BoolFilter("Undead only", "Undead",
             static raw => !(raw is null or "" or "0")));

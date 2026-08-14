@@ -444,10 +444,9 @@ Click a section to open it. Each table has its own **Filter…** box (this one f
 
 The **Monsters** table carries a full column set for browsing and filtering monster stats: **Rgn** (respawn timer), **Exp** (the actual experience earned per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **MR**, **Acc (Maj/Mx)** (majority/highest attack accuracy), **Damage**, **Exp/(Dmg+HP)** (an exp-per-effort efficiency score), **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**, **Mag** (the hitmag level a weapon must meet to land a hit), and **Undead**.
 
-It also carries a **filter sidebar** on the right — drag its left edge to resize it — with one threshold per stat in the natural direction:
+It also carries a **filter sidebar** on the right — drag its left edge to resize it — with one **at-least (≥)** threshold per stat, so you filter for monsters that *have at least* that much of a stat:
 
-- For difficulty: **HP ≤**, **AC ≤**, **DR ≤**, **Dodge ≤**, **MR ≤**, **Damage ≤**, **Mag ≤**, **Rgn ≤**.
-- For reward: **Acc ≥** (monsters accurate enough to threaten you), **Exp ≥**, **Lair Exp ≥**, **# Lairs ≥**.
+- **HP ≥**, **AC ≥**, **DR ≥**, **Dodge ≥**, **MR ≥**, **Damage ≥**, **Mag ≥**, **Rgn ≥**, **Acc ≥** (monsters accurate enough to threaten you), **Exp ≥**, **Lair Exp ≥**, **# Lairs ≥**.
 - Plus an **Undead only** checkbox and an **Alignment** dropdown.
 
 Values group with thousands separators. Unlike the live **Filter…** text box, the sidebar filters are applied on demand: edit the boxes, then press **Apply filter** to run them (a ticker's outline turns amber while you're editing and green once applied), or **Clear filters** to empty them. Everything AND's together.

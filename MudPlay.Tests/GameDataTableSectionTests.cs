@@ -117,29 +117,33 @@ public sealed class GameDataTableSectionTests : IDisposable
     }
 
     [Fact]
-    public async Task ThresholdFilter_AtMost_And_AtLeast()
+    public async Task ThresholdFilters_AtLeast_StackWithAnd()
     {
+        // Every Monsters threshold is "at least" (≥). Stacking two of them AND's — the
+        // report paradigm-20260814-103219 scenario: EXP ≥ then HP ≥ narrows the set
+        // rather than leaving it unchanged.
         SeedMonsters("v1.11p",
             "[{\"Number\":1,\"Name\":\"Goblin\",\"HP\":10,\"EXP\":3}," +
-             "{\"Number\":2,\"Name\":\"Orc\",\"HP\":25,\"EXP\":10}," +
+             "{\"Number\":2,\"Name\":\"Orc\",\"HP\":25,\"EXP\":9000}," +
              "{\"Number\":3,\"Name\":\"Dragon\",\"HP\":500,\"EXP\":9000}]");
         _cache.SwitchSet("v1.11p");
         MonstersSectionViewModel vm = new(_cache);
         await vm.LoadAsync();
 
-        // HP ≤ (difficulty stat): HP ≤ 25 keeps Goblin, Orc.
-        ThresholdFilter hp = vm.ThresholdFilters.Single(t => t.Column == "HP");
-        hp.Value = 25;
+        // EXP ≥ 9000 keeps Orc, Dragon (Goblin excluded).
+        ThresholdFilter exp = vm.ThresholdFilters.Single(t => t.Column == "EXP");
+        exp.Value = 9000;
         vm.ApplyFiltersCommand.Execute(null);  // panel filters are pending until applied
         Assert.Equal(2, vm.FilteredRows.Count);
-        Assert.DoesNotContain(vm.FilteredRows, r => r.Get("Name") == "Dragon");
+        Assert.DoesNotContain(vm.FilteredRows, r => r.Get("Name") == "Goblin");
 
-        // Exp ≥ (reward stat) stacks: EXP ≥ 10 leaves only Orc (Dragon is HP-excluded).
-        ThresholdFilter exp = vm.ThresholdFilters.Single(t => t.Column == "EXP");
-        exp.Value = 10;
+        // HP ≥ 100 stacks on top: only Dragon (HP 500) survives — the Orc drops out.
+        ThresholdFilter hp = vm.ThresholdFilters.Single(t => t.Column == "HP");
+        Assert.Equal(ThresholdDirection.AtLeast, hp.Direction);
+        hp.Value = 100;
         vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
-        Assert.Equal("Orc", vm.FilteredRows[0].Get("Name"));
+        Assert.Equal("Dragon", vm.FilteredRows[0].Get("Name"));
     }
 
     [Fact]
