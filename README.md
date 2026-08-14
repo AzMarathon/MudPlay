@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.11.2**
-> - Exp/Hr estimator now simulates the loop's real room order with a per-mob respawn clock, so an out-and-back line loop (which re-crosses just-cleared lairs on the return, wasting ticks) is estimated correctly lower instead of ~15% high; a saturated ring still reports its full rate, and the 720-kills/hr tick cap is treated as a ceiling loops rarely reach
+> **Version 3.11.3**
+> - Help Topics readability: recurring field labels (**Default:**, **What it does:**, **Important notes:**) render in an accent colour so they're scannable, and "⚠️ not currently functional" notes render in a tinted callout box
+> - Split the longest guide paragraphs into shorter blocks (Chest Offload, Monsters filter sidebar, navigation obstacles, remote-command permissions, the spell cascade) — same content, easier to scan
+> - Thanks to @AzMarathon for the contribution
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
