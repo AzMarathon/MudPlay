@@ -212,6 +212,49 @@ public sealed class RoomTrackerTests : IDisposable
         Assert.Equal(0, tracker.State.SuspectStrikes);
     }
 
+    // ----- manual-move signal (pauses navigation) --------------------
+
+    [Fact]
+    public void ManualCardinalMove_FiresManualMoveObserved()
+    {
+        RoomTracker tracker = NewTracker();
+        int fired = 0;
+        tracker.ManualMoveObserved += () => fired++;
+
+        // A hand-typed cardinal — no engine pre-announce, so no echo claim to consume.
+        tracker.NoteMoveSentByObserver(Direction.N);
+
+        Assert.Equal(1, fired);
+    }
+
+    [Fact]
+    public void EngineCardinalMove_DoesNotFireManualMoveObserved()
+    {
+        RoomTracker tracker = NewTracker();
+        int fired = 0;
+        tracker.ManualMoveObserved += () => fired++;
+
+        // The walker pre-announces (arms the echo claim); its bytes then echo back
+        // through the observer and are consumed — not treated as a manual step.
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.NoteMoveSent(Direction.N, t0);
+        tracker.NoteMoveSentByObserver(Direction.N, t0.AddMilliseconds(5));
+
+        Assert.Equal(0, fired);
+    }
+
+    [Fact]
+    public void ManualTextExitMove_FiresManualMoveObserved()
+    {
+        RoomTracker tracker = NewTracker();
+        int fired = 0;
+        tracker.ManualMoveObserved += () => fired++;
+
+        tracker.NoteMoveSentByObserver("go path");   // hand-typed text exit, no engine claim
+
+        Assert.Equal(1, fired);
+    }
+
     // ----- Unknown → Located -----------------------------------------
 
     [Fact]

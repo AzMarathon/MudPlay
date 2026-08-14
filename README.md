@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.11.9**
-> - Chest Offload: per-shop **Sell** → **Sell All**; each item row gets its own **Sell** (sells the picked quantity) and **Drop** now drops the *leftover* you're not selling (held − picked)
-> - Chest Offload: the list reconciles against the game's own `You sold …` / `You dropped …` confirmations — rows shrink (and clear at zero) only when the action actually lands, leaving your other pickings and ⇄ shop moves untouched
-> - Chest Offload: full program-log trail for diagnosis, plus a session-only **Simulate Chest button** toggle in the Program Log window
+> **Version 3.11.10**
+> - Typing a movement command yourself (a direction, or a `go path`-style text exit) while a walk / loop / auto-lair is running now **pauses navigation** — a user pause you resume with Start, so the automation never fights a hand-driven step
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

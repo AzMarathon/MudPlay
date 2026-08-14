@@ -4471,6 +4471,20 @@ public sealed class AppServices
         MovementControl = new Game.Map.MovementController(
             Walker, LoopRunner, AutoLair, MovementCoordinator, Log);
 
+        // A manually-typed movement step (one the walker / loop / auto-lair didn't
+        // send — RoomTracker's echo-claim tells them apart) pauses the active nav
+        // engine as a user override: the automation must never fight a hand-driven
+        // move. Manual resume, exactly like the Pause button — the user hits Start
+        // when they're ready to hand control back. No-op when nav is idle or already
+        // user-paused (MovementControl.Pause guards both).
+        RoomTracker.ManualMoveObserved += () =>
+        {
+            if (!MovementControl.IsActive || MovementControl.IsUserPaused) return;
+            Log.Info("Navigation",
+                "manual movement command — pausing navigation (user override; press Start to resume)");
+            MovementControl.Pause();
+        };
+
         // Auto-All kill switch also parks navigation: engaging it suspends any
         // in-flight walk / loop / auto-lair (retaining where it is), and restoring
         // it resumes exactly that. Both the toolbar button and the @auto-all remote
