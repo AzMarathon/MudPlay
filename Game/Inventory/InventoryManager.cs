@@ -119,6 +119,14 @@ public sealed partial class InventoryManager : IDisposable
     // double-record a `You hid N <coin>.` line.
     public event Action<string>? ItemHidden;
 
+    // Fired (singular name + count) each time the player's own `You sold …` /
+    // `You dropped …` confirmation is parsed — the counted Paradigm form and the
+    // one-at-a-time Stock form both resolve to (name, N). Lets a consumer react to
+    // exactly what left the pack (e.g. the Chest Offload window reconciling its list
+    // against confirmed sales/drops rather than optimistically or by re-diffing).
+    public event Action<string, int>? ItemSold;
+    public event Action<string, int>? ItemDropped;
+
     // True after at least one successful full 'i' parse.
     public bool IsLoaded
     {
@@ -541,6 +549,7 @@ public sealed partial class InventoryManager : IDisposable
                 CountedCommand.SplitLeadingCount(sold.Groups[1].Value.TrimEnd());
             for (int i = 0; i < soldCount; i++) RemoveCarried(soldName);
             AdjustItemWeight(soldName, -soldCount);
+            ItemSold?.Invoke(soldName, soldCount);
 
             long price = ParsePriceToCopper(sold.Groups[2].Value);
             if (price > 0)
@@ -604,6 +613,7 @@ public sealed partial class InventoryManager : IDisposable
             (int count, string name) = CountedCommand.SplitLeadingCount(droppedItem.Groups[1].Value.TrimEnd());
             for (int i = 0; i < count; i++) RemoveCarried(name);
             AdjustItemWeight(name, -count);
+            ItemDropped?.Invoke(name, count);
         }
     }
 

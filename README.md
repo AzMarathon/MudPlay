@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.11.7**
-> - Chest Offload: the per-shop **Sell** button is now labelled **Sell All**, and each item row gets its own **Sell** button so you can sell a single item's quantity instead of the whole shop group
+> **Version 3.11.9**
+> - Chest Offload: per-shop **Sell** → **Sell All**; each item row gets its own **Sell** (sells the picked quantity) and **Drop** now drops the *leftover* you're not selling (held − picked)
+> - Chest Offload: the list reconciles against the game's own `You sold …` / `You dropped …` confirmations — rows shrink (and clear at zero) only when the action actually lands, leaving your other pickings and ⇄ shop moves untouched
+> - Chest Offload: full program-log trail for diagnosis, plus a session-only **Simulate Chest button** toggle in the Program Log window
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -2,9 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.11.7
+## 3.11.9
 
-- Chest Offload: the per-shop **Sell** button is now labelled **Sell All**, and each item row gets its own **Sell** button so you can sell a single item's quantity instead of the whole shop group
+- Chest Offload: per-shop **Sell** button relabelled **Sell All**; each item row gets its own **Sell** button (sells the picked quantity) and its **Drop** now drops the *leftover* you're not selling (held − picked)
+- Chest Offload: the list now reconciles against the game's own `You sold …` / `You dropped …` confirmations — a row shrinks (and clears at zero) only when the sale/drop actually lands, so a refused sale or blocked drop leaves your per-item pickings and ⇄ shop moves untouched
+- Chest Offload: program-log trail through the whole flow (open, coin attribution, sell/drop sent, sold/dropped reconciled) for future diagnosis
+- New **Simulate Chest button** toggle in the Program Log window (off by default, session-only) reveals a test button that seeds random containers to exercise the window without real chests
 
 ## 3.11.6
 

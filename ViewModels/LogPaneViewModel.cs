@@ -84,6 +84,11 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // displayed rows, so no Rebuild.
     [ObservableProperty] private bool _showSimulateDeath;
 
+    // Reveals the Chest Offload window's "Simulate Chest" test button. Mirrors
+    // LogDiagnosticState.ShowSimulateChest — session-only (off every launch), same
+    // contract as ShowSimulateDeath. Doesn't touch displayed rows, so no Rebuild.
+    [ObservableProperty] private bool _showSimulateChest;
+
     // When true, every appended row scrolls the list to the bottom. The XAML
     // hooks the actual scroll-into-view call; this flag gates it.
     [ObservableProperty] private bool _autoScroll = true;
@@ -125,6 +130,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             _autoCollectLogs   = _diagnostics.AutoCollectLogs;
             _hopTiming         = _diagnostics.HopTiming;
             _showSimulateDeath = _diagnostics.ShowSimulateDeath;
+            _showSimulateChest = _diagnostics.ShowSimulateChest;
             _suppressDiagnosticEcho = false;
             _diagnostics.Changed += OnDiagnosticsChanged;
         }
@@ -168,6 +174,12 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             {
                 _suppressDiagnosticEcho = true;
                 ShowSimulateDeath = _diagnostics.ShowSimulateDeath;
+                _suppressDiagnosticEcho = false;
+            }
+            if (ShowSimulateChest != _diagnostics.ShowSimulateChest)
+            {
+                _suppressDiagnosticEcho = true;
+                ShowSimulateChest = _diagnostics.ShowSimulateChest;
                 _suppressDiagnosticEcho = false;
             }
         });
@@ -216,6 +228,14 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
         if (_suppressDiagnosticEcho) return;
         if (_diagnostics is null) return;
         _diagnostics.ShowSimulateDeath = value;
+    }
+
+    partial void OnShowSimulateChestChanged(bool value)
+    {
+        // Only gates the Chest Offload window's test button visibility — no displayed rows change.
+        if (_suppressDiagnosticEcho) return;
+        if (_diagnostics is null) return;
+        _diagnostics.ShowSimulateChest = value;
     }
 
     private void OnEntryAdded(LogEntry entry)
