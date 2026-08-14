@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.11.10**
+> **Version 3.11.11**
 > - Typing a movement command yourself (a direction, or a `go path`-style text exit) while a walk / loop / auto-lair is running now **pauses navigation** — a user pause you resume with Start, so the automation never fights a hand-driven step
+> - Fixed a wedge where combat force-clearing via the idle-stall watchdog left a deferred cash/loot pickup stranded on the Acquisition gate (the walker sat "looting" forever) — the force-clear now flushes the deferred collect
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

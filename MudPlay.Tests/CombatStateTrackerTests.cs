@@ -183,6 +183,33 @@ public sealed class CombatStateTrackerTests
     }
 
     [Fact]
+    public void ResetCombatState_FiresCombatForceCleared_WithGateAlreadyDown()
+    {
+        // The force-clear (idle-stall watchdog / Reset States) must fire
+        // CombatForceCleared AFTER dropping the gate, so a deferred cash/item
+        // collect re-run from that event sees no engageable hostiles and flushes
+        // instead of stranding the Acquisition gate (report paradigm-20260814-131551).
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.True(h.Tracker.HasEngageableHostiles);
+
+        bool gateDownWhenFired = true;   // negated below if the event sees the gate still up
+        bool fired = false;
+        h.Tracker.CombatForceCleared += () =>
+        {
+            fired = true;
+            gateDownWhenFired = !h.Tracker.HasEngageableHostiles;
+        };
+
+        h.Tracker.ResetCombatState("test force-clear");
+
+        Assert.True(fired);
+        Assert.True(gateDownWhenFired);
+        Assert.False(h.Tracker.HasEngageableHostiles);
+    }
+
+    [Fact]
     public void ShopkeeperFlaggedFriend_DoesNotAssertGate()
     {
         using Harness h = new();

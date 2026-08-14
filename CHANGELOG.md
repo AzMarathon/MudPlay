@@ -2,9 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.11.10
+## 3.11.11
 
-- Typing a movement command yourself (a direction, or a `go path`-style text exit) while a walk / loop / auto-lair is running now **pauses navigation** — a user pause you resume with Start, so the automation never fights a hand-driven step (`l <dir>` peeks don't count)
+- Typing a movement command yourself (a direction, or a `go path`-style text exit) while a walk / loop / auto-lair is running now **pauses navigation** — a user pause you resume with Start, so the automation never fights a hand-driven step (`l <dir>` peeks don't count); the pause now applies cleanly instead of racing the move it rode in on
+- Fixed a wedge where combat force-clearing via the idle-stall watchdog (a mob wandered off mid-fight with cash/loot on the ground) left the deferred pickup stranded on the Acquisition gate — the walker sat "looting" forever; the force-clear now flushes the deferred cash/item collect
+- bug reports addressed: paradigm-20260814-131551
 
 ## 3.11.9
 

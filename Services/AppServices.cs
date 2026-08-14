@@ -3779,6 +3779,18 @@ public sealed class AppServices
         // the hostile flag is current).
         RoomClassifier.EntitiesObserved += _ => AutoGetItems.OnRoomObserved();
 
+        // Force-clear flush: the normal end-of-fight flushes deferred cash/item
+        // pickups off the clean room re-look that follows a kill, but a FORCE-clear
+        // (idle-stall watchdog / Reset States) produces no such observation — so a
+        // pickup deferred "until combat clears" would strand the Acquisition gate and
+        // wedge the walker (report paradigm-20260814-131551). Re-run both engines'
+        // deferred flush now that the gate is down (HasEngageableHostiles is false).
+        CombatTracker.CombatForceCleared += () =>
+        {
+            Cash.OnRoomObserved();
+            AutoGetItems.OnRoomObserved();
+        };
+
         // A disconnect can strand the Acquisition gate's deferred-collect hold
         // (cash/items queued mid-fight), pausing the loop until a manual `rm`. On the
         // first in-game prompt after a reconnect, drop those stale holds so the loop
@@ -4477,12 +4489,23 @@ public sealed class AppServices
         // move. Manual resume, exactly like the Pause button — the user hits Start
         // when they're ready to hand control back. No-op when nav is idle or already
         // user-paused (MovementControl.Pause guards both).
+        //
+        // Marshalled to the next dispatcher turn, NOT called inline: this fires
+        // synchronously deep inside the manual move's own send → observe → track
+        // stack, and pausing re-entrantly there raced the move's own state update —
+        // the gate asserted but the toolbar / coalesced state didn't cleanly reflect
+        // the pause (report paradigm-20260814-131551). Deferring lets the move fully
+        // settle first, then the pause applies exactly like a Pause-button click.
         RoomTracker.ManualMoveObserved += () =>
         {
             if (!MovementControl.IsActive || MovementControl.IsUserPaused) return;
-            Log.Info("Navigation",
-                "manual movement command — pausing navigation (user override; press Start to resume)");
-            MovementControl.Pause();
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!MovementControl.IsActive || MovementControl.IsUserPaused) return;
+                Log.Info("Navigation",
+                    "manual movement command — pausing navigation (user override; press Start to resume)");
+                MovementControl.Pause();
+            });
         };
 
         // Auto-All kill switch also parks navigation: engaging it suspends any
