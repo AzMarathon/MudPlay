@@ -157,7 +157,7 @@
                                         <TextBlock Classes="FieldLabel" Text="Hits me" VerticalAlignment="Center"/>
                                         <NumericUpDown Value="{Binding HitPercentTarget, Mode=TwoWay}"
                                                        Minimum="0" Maximum="100" Increment="5" FormatString="0"
-                                                       Width="92" VerticalAlignment="Center"/>
+                                                       Width="128" MinWidth="128" VerticalAlignment="Center"/>
                                         <TextBlock Classes="FieldLabel" Text="%" VerticalAlignment="Center"/>
                                         <Button Content="Show me the Monsters"
                                                 Command="{Binding ShowMonstersAtHitPercentCommand}"
