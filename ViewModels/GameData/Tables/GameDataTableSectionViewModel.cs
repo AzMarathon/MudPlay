@@ -5,6 +5,7 @@ using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Services;
 using MudPlay.Views.GameData.Tables;
 
@@ -126,6 +127,29 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // ObservableCollection once for the bulk-replace.
     protected abstract void PopulateRows(IList<GameDataRow> rows);
 
+    // Extra columns to carry in each row's value/display maps but NOT render as grid
+    // columns — used for filter-only fields (e.g. Monsters' Alignment dropdown reads
+    // "Align" without the table showing an Alignment column, and the AC / DR filters
+    // read the raw fields even though the grid shows them combined). The grid still
+    // builds its columns from Columns alone; these are appended after them so the
+    // visible columns keep their cell indices (the sort comparer is index-based).
+    protected virtual IReadOnlyList<string> FilterOnlyColumns => System.Array.Empty<string>();
+
+    // Columns whose values are materialised on each row = visible columns plus any
+    // filter-only ones. Cached; visible columns come first so their indices are stable.
+    private IReadOnlyList<string>? _valueColumns;
+    protected IReadOnlyList<string> ValueColumns => _valueColumns ??=
+        FilterOnlyColumns.Count == 0
+            ? Columns
+            : System.Linq.Enumerable.ToList(System.Linq.Enumerable.Concat(Columns, FilterOnlyColumns));
+
+    // Called on the UI thread once AllRows is materialised (both Reload and the async
+    // LoadAsync path). Subclasses rebuild data-derived UI state here — e.g. category-filter
+    // option lists computed from the loaded rows. PopulateRows itself runs on a worker thread
+    // under LoadAsync, so it must never touch observable collections; this hook is where that
+    // work belongs.
+    protected virtual void OnRowsLoaded() { }
+
     // Called by GameDataBrowserViewModel whenever this section becomes the selected one. Lets
     // expensive sections (10k+ rows of MDB-derived JSON) defer their parse + row-build work
     // until the user actually opens the tab. Base implementation is a no-op;
@@ -148,6 +172,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         List<GameDataRow> rows = new();
         PopulateRows(rows);
         AllRows = new ObservableCollection<GameDataRow>(rows);
+        OnRowsLoaded();
         ApplyFilter();
         IsLoaded = true;
         OnPropertyChanged(nameof(StatusText));
@@ -172,6 +197,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         // single thread per call).
         SelectedRow = null;
         AllRows = new ObservableCollection<GameDataRow>(rows);
+        OnRowsLoaded();
         ApplyFilter();
         IsLoaded = true;
         OnPropertyChanged(nameof(StatusText));
@@ -245,10 +271,12 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         OnPropertyChanged(nameof(StatusText));
     }
 
-    private void ApplyFilter()
+    // Callable by subclasses so a richer filter surface (e.g. the Monsters
+    // multi-field panel) can re-filter when one of its fields changes.
+    protected void ApplyFilter()
     {
         string filter = (SearchText ?? string.Empty).Trim();
-        if (filter.Length == 0)
+        if (filter.Length == 0 && !HasExtraFilter)
         {
             // Unfiltered — alias the AllRows collection directly so the
             // DataGrid sees identical content with zero extra allocation.
@@ -267,13 +295,101 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         FilteredRows = new ObservableCollection<GameDataRow>(matched);
     }
 
+    // Panel filters (thresholds / checkboxes / dropdowns) are pending until applied —
+    // editing a box doesn't re-filter. "Apply filter" commits every box's current value
+    // and runs the filter; "Clear filters" empties the boxes (and the text search) and
+    // applies that. The always-present "Filter…" text box stays live on its own.
+    [RelayCommand]
+    private void ApplyFilters()
+    {
+        CommitPanelFilters();
+        ApplyFilter();
+        OnPropertyChanged(nameof(StatusText));
+    }
+
+    private void CommitPanelFilters()
+    {
+        foreach (ThresholdFilter t in ThresholdFilters) t.Commit();
+        foreach (BoolFilter b in BoolFilters) b.Commit();
+        foreach (CategoryFilter c in CategoryFilters) c.Commit();
+    }
+
     // A row matches the filter when any column's raw value contains the filter substring
     // (case-insensitive). Raw values drive the match so numeric codes (e.g. 1) are findable
     // even when the grid renders them via a formatter ("Weapon"). Virtual so a tab with a
     // richer notion of a match (e.g. Rooms' "map,room" coordinate query) can intercept
     // before falling back to this substring pass.
+    // ----- Multi-field filter panel (subclasses populate; empty = no panel) -----
+    // An always-visible sidebar beside the grid: single-threshold numeric filters,
+    // boolean checkboxes, and categorical dropdowns, on top of the always-present
+    // text box. All empty by default, so tables that declare none render no sidebar.
+    public ObservableCollection<ThresholdFilter> ThresholdFilters { get; } = new();
+    public ObservableCollection<BoolFilter> BoolFilters { get; } = new();
+    public ObservableCollection<CategoryFilter> CategoryFilters { get; } = new();
+    public bool HasFilterPanel => ThresholdFilters.Count > 0 || BoolFilters.Count > 0 || CategoryFilters.Count > 0;
+
+    // Drives ApplyFilter's "run even with an empty text box" path (see ApplyFilter).
+    protected bool HasExtraFilter
+    {
+        get
+        {
+            foreach (ThresholdFilter t in ThresholdFilters) if (t.IsActive) return true;
+            foreach (BoolFilter b in BoolFilters) if (b.IsActive) return true;
+            foreach (CategoryFilter c in CategoryFilters) if (c.IsActive) return true;
+            return false;
+        }
+    }
+
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        foreach (ThresholdFilter t in ThresholdFilters) t.Clear();
+        foreach (BoolFilter b in BoolFilters) b.Clear();
+        foreach (CategoryFilter c in CategoryFilters) c.Clear();
+        SearchText = string.Empty;   // OnSearchTextChanged re-applies
+        CommitPanelFilters();        // make the cleared boxes take effect
+        ApplyFilter();
+        OnPropertyChanged(nameof(StatusText));
+    }
+
+    // Panel filters (threshold + bool + category), all AND'd together. Empty
+    // collections pass everything, so non-panel tables are unaffected. Threshold
+    // filters test the leading integer of the raw cell; bool filters test the raw
+    // value via their predicate; category filters match the rendered display value.
+    private bool PassesPanelFilters(GameDataRow row)
+    {
+        foreach (ThresholdFilter t in ThresholdFilters)
+            if (t.IsActive && (!TryLeadingInt(row.Get(t.Column), out int v) || !t.Passes(v)))
+                return false;
+        foreach (BoolFilter b in BoolFilters)
+            if (b.IsActive && !b.Passes(row.Get(b.Column)))
+                return false;
+        foreach (CategoryFilter c in CategoryFilters)
+            if (c.IsActive && !c.Passes(row.GetDisplay(c.Column)))
+                return false;
+        return true;
+    }
+
+    // Leading signed integer of a cell string — "12345" → 12345, "2hp@90s" → 2,
+    // "10/42/8" → 10, "1–11" → 1. False when there's no leading number.
+    private static bool TryLeadingInt(string? s, out int value)
+    {
+        value = 0;
+        if (string.IsNullOrEmpty(s)) return false;
+        int i = s[0] == '-' ? 1 : 0;
+        int start = i;
+        while (i < s.Length && s[i] is >= '0' and <= '9') i++;
+        if (i == start) return false;
+        if (!int.TryParse(s.AsSpan(start, i - start), out value)) return false;
+        if (s[0] == '-') value = -value;
+        return true;
+    }
+
     protected virtual bool RowMatches(GameDataRow row, string filter)
     {
+        if (!PassesPanelFilters(row)) return false;
+        // Empty text box + active panel: the panel alone decides the match.
+        if (filter.Length == 0) return true;
         foreach (string column in Columns)
         {
             string? value = row.Get(column);
@@ -364,7 +480,7 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
             // by a real MDB field (e.g. Races / Classes synthesise an
             // "Abilities" column from Abil-N / AbilVal-N pairs).
             IReadOnlyDictionary<string, string?>? computed = ComputeRowCells(el);
-            GameDataRow row = GameDataRow.FromJson(el, Columns, formatters, computed);
+            GameDataRow row = GameDataRow.FromJson(el, ValueColumns, formatters, computed);
             // Per-row tier resolution: look up the record by its primary
             // key column value (typically Number) and ask the resolver
             // which tier owns the highest-priority override, if any.
@@ -417,6 +533,18 @@ public sealed class GameDataRow
     // Read a column value by name. Returns null if the column wasn't in the source row.
     public string? Get(string column)
         => _values.TryGetValue(column, out string? value) ? value : null;
+
+    // Read a column's *display* value (formatter-applied), as shown in the grid.
+    // Category filters match on this so their dropdowns show "Living"/"Undead" or
+    // "Lawful Good" rather than the raw MDB codes; range filters use Get (raw
+    // numeric) instead. Falls back to the raw value when the column has no cell.
+    public string? GetDisplay(string column)
+    {
+        foreach (GameDataCell cell in Cells)
+            if (string.Equals(cell.Column, column, StringComparison.OrdinalIgnoreCase))
+                return cell.Value;
+        return Get(column);
+    }
 
     // Build a row from a JSON element. Columns missing from the source render as null in the
     // resulting row so subclasses see a uniform shape regardless of schema drift. The raw cell

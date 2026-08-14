@@ -213,6 +213,22 @@ public partial class GameDataTableSectionView : UserControl
                 Width   = DataGridLength.Auto,
             });
         }
+
+        // Give the filter sidebar its column an initial width when the section has
+        // a panel; the GridSplitter resizes it from there. Sections without a panel
+        // keep the column collapsed (0) so the layout is unchanged. The sidebar is
+        // the third column (content, splitter, sidebar).
+        ColumnDefinition sidebarColumn = OuterGrid.ColumnDefinitions[2];
+        if (vm.HasFilterPanel)
+        {
+            sidebarColumn.Width    = new GridLength(272);
+            sidebarColumn.MinWidth = 200;
+        }
+        else
+        {
+            sidebarColumn.Width    = new GridLength(0);
+            sidebarColumn.MinWidth = 0;
+        }
         _columnsBuilt = true;
     }
 }

@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.9.10
+
+- Monsters game-data table: expanded column set for browsing/filtering monster stats — Rgn, Exp (actual earned = base × multiplier), HP, AC/DR, Dodge, MR, Acc (Maj/Mx), Damage, Exp/(Dmg+HP), Lair Exp, # Lairs, Avg Lair Size, Biggest Lair, Mag, Undead
+- Dodge and Mag (hitmag level) decoded from monster ability data; Exp/(Dmg+HP) is an exp-per-effort efficiency score
+- New filter sidebar, resizable via a drag handle: one threshold per stat (HP ≤, Exp ≥, AC ≤, DR ≤, Dodge ≤, MR ≤, Acc ≤, Damage ≤, Mag ≤, Lair Exp ≥, # Lairs ≥, Rgn ≤), an Undead-only checkbox, and an Alignment dropdown — thousands-grouped values, all stacking with the text filter
+- Filters apply on an explicit **Apply filter** button (with **Clear filters** beside it); a ticker's outline shows amber while edited/pending and green once applied
+
 ## 3.9.9
 
 - Monster table (Game Data → Monsters): four new columns — **Lair Exp** (per-monster `AvgLairExp`), **# Lairs** (total lair rooms the monster spawns in, summed across its lair groups), **Mobs/Lair** (mob-count range across those groups), and **Script** (`ScriptValue`) — all previously-ignored MDB data
