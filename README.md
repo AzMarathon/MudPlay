@@ -7,7 +7,6 @@
 > - Coin gained is measured per open (coins before vs after, so selling loot never inflates it) and listed by denomination, most-valuable first
 > - Per item: an adjustable sell quantity, its value, and a Drop button; per shop: a running total, a walk-there header showing map/room and steps from where you are, and Sell / Drop All buttons; a Total to sell sums the whole plan
 > - Shops are ordered into a short nearest-first trip using the real walker routing (avoid rooms, teleport gates, item/hazard/boat gates)
-> - A Simulate Chest button seeds random containers whose loot is rolled from the chest's own drop table, to test the window without real chests
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

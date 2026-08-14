@@ -55,8 +55,11 @@
                     <StackPanel Spacing="6">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" Classes="Section" Text="Containers you're holding" VerticalAlignment="Center"/>
+                            <!-- Parked test affordance — the SimulateChest command + roller stay in the VM.
+                                 Re-enable this button to seed random containers and exercise the window without real chests.
                             <Button Grid.Column="1" Content="Simulate Chest" Command="{Binding SimulateChestCommand}"
                                     ToolTip.Tip="Seed a few random containers whose loot is rolled from the chest's own table — test the window without real chests."/>
+                            -->
                         </Grid>
                         <TextBlock Text="No containers in your inventory."
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
