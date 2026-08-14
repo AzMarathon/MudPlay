@@ -4,6 +4,8 @@ using System.ComponentModel;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using MudPlay.Game;
+using MudPlay.Game.Map;
 using MudPlay.ViewModels.CharacterWorkshop;
 
 namespace MudPlay.Views.CharacterWorkshop;
@@ -14,8 +16,8 @@ public partial class BossesSectionView : UserControl
     private const int Early1 = 4, Early2 = 5, Early3 = 6;
 
     private BossesSectionViewModel? _vm;
-    private string? _timerSortPath;
-    private ListSortDirection _timerSortDir = ListSortDirection.Ascending;
+    private string? _sortPath;
+    private ListSortDirection _sortDir = ListSortDirection.Ascending;
 
     public BossesSectionView()
     {
@@ -52,68 +54,88 @@ public partial class BossesSectionView : UserControl
         DataGrid? grid = BossGrid ?? this.FindControl<DataGrid>("BossGrid");
         if (grid is null || grid.Columns.Count <= Early3) return;
         bool para = _vm?.IsParadigmRealm ?? true;
-        grid.Columns[Early1].Header = para ? "5%" : "87.5%";
+        IReadOnlyList<string> labels = BossTimerMath.EarlyColumnLabels(para ? RealmType.ParaMud : RealmType.Stock);
+        grid.Columns[Early1].Header = labels[0];
         grid.Columns[Early2].IsVisible = para;
         grid.Columns[Early3].IsVisible = para;
+        if (para)
+        {
+            grid.Columns[Early2].Header = labels[1];
+            grid.Columns[Early3].Header = labels[2];
+        }
     }
 
-    // Timer columns sort in three fixed groups regardless of direction — cleanup
-    // spawns (DEAD/ALIVE) first, then active (counting) timed respawns, then unset /
-    // expired rows — with the toggled direction ordering only within each group. The
-    // built-in single-key sort can't express that (it would float the inactive
-    // sentinel to the top when descending). Non-timer columns fall through to the
-    // DataGrid's default sort.
+    // Sort in three fixed groups regardless of direction — cleanup spawns
+    // (DEAD/ALIVE) first, then active (counting) respawns, then unset / expired rows
+    // — with the toggled direction ordering only within each group. The built-in
+    // single-key sort can't express that (it would float the inactive sentinel to
+    // the top when descending). The timer columns group by their remaining-time key;
+    // the Boss (name) and Respawn (regen) columns reuse the SAME active/idle grouping
+    // but order within each group by name / respawn length, so a name or respawn sort
+    // still floats your running timers to the top. Every other column falls through.
     private void OnSorting(object? sender, DataGridColumnEventArgs e)
     {
-        Func<BossRowViewModel, long>? key = e.Column.SortMemberPath switch
-        {
-            "FullSortKey" => static r => r.FullSortKey,
-            "Early1SortKey" => static r => r.Early1SortKey,
-            "Early2SortKey" => static r => r.Early2SortKey,
-            "Early3SortKey" => static r => r.Early3SortKey,
-            _ => null,
-        };
-        if (key is null || _vm is null) return;
-        e.Handled = true;
+        if (_vm is null) return;
+        string? path = e.Column.SortMemberPath;
 
-        string path = e.Column.SortMemberPath!;
-        _timerSortDir = _timerSortPath == path && _timerSortDir == ListSortDirection.Ascending
+        Func<BossRowViewModel, int> group;
+        Comparison<BossRowViewModel> within;
+        switch (path)
+        {
+            case "FullSortKey":    (group, within) = TimerSort(static r => r.FullSortKey); break;
+            case "Early1SortKey":  (group, within) = TimerSort(static r => r.Early1SortKey); break;
+            case "Early2SortKey":  (group, within) = TimerSort(static r => r.Early2SortKey); break;
+            case "Early3SortKey":  (group, within) = TimerSort(static r => r.Early3SortKey); break;
+            case "Name":           group = StatusGroup; within = static (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase); break;
+            case "RespawnSortKey": group = StatusGroup; within = static (a, b) => a.RespawnSortKey.CompareTo(b.RespawnSortKey); break;
+            default: return;
+        }
+
+        e.Handled = true;
+        _sortDir = _sortPath == path && _sortDir == ListSortDirection.Ascending
             ? ListSortDirection.Descending
             : ListSortDirection.Ascending;
-        _timerSortPath = path;
+        _sortPath = path;
 
         _vm.Rows.SortDescriptions.Clear();
         _vm.Rows.SortDescriptions.Add(DataGridSortDescription.FromComparer(
-            new ActiveFirstComparer(key, _timerSortDir == ListSortDirection.Descending)));
+            new GroupedComparer(group, within, _sortDir == ListSortDirection.Descending)));
     }
 
-    // Three fixed groups: cleanup spawns (0), active timed respawns (1), unset /
-    // expired (2). Groups never reverse; the toggled direction orders within a group.
-    private sealed class ActiveFirstComparer : IComparer
+    // Cleanup spawns (0), active (counting) timers (1), unset / expired (2) — derived
+    // from the clicked timer column's key, which reads long.MaxValue when that window
+    // isn't counting. Within-group order is by that same key.
+    private static (Func<BossRowViewModel, int>, Comparison<BossRowViewModel>) TimerSort(Func<BossRowViewModel, long> key)
+        => (r => r.IsCleanup ? 0 : key(r) == long.MaxValue ? 2 : 1,
+            (a, b) => key(a).CompareTo(key(b)));
+
+    // Cleanup, then bosses with a running timer, then idle ones — independent of any
+    // per-column key, so the name / respawn sorts can share the timer grouping.
+    private static int StatusGroup(BossRowViewModel r) => r.IsCleanup ? 0 : r.IsActive ? 1 : 2;
+
+    // Sorts rows into fixed status groups (never reversed), ordering within each group
+    // by the supplied comparison; the toggled direction flips only the within-group
+    // order, so the active/idle split stays put whichever way you sort.
+    private sealed class GroupedComparer : IComparer
     {
-        private readonly Func<BossRowViewModel, long> _key;
+        private readonly Func<BossRowViewModel, int> _group;
+        private readonly Comparison<BossRowViewModel> _within;
         private readonly bool _descending;
 
-        public ActiveFirstComparer(Func<BossRowViewModel, long> key, bool descending)
+        public GroupedComparer(Func<BossRowViewModel, int> group, Comparison<BossRowViewModel> within, bool descending)
         {
-            _key = key;
+            _group = group;
+            _within = within;
             _descending = descending;
         }
 
         public int Compare(object? x, object? y)
         {
             if (x is not BossRowViewModel a || y is not BossRowViewModel b) return 0;
-            int ga = Group(a), gb = Group(b);
+            int ga = _group(a), gb = _group(b);
             if (ga != gb) return ga.CompareTo(gb);     // cleanup, then active, then inactive
-            if (ga == 2) return 0;                     // both inactive → stable
-            int c = _key(a).CompareTo(_key(b));
+            int c = _within(a, b);
             return _descending ? -c : c;
-        }
-
-        private int Group(BossRowViewModel r)
-        {
-            if (r.IsCleanup) return 0;                 // cleanup spawns always at the top
-            return _key(r) == long.MaxValue ? 2 : 1;   // active respawns, then unset / expired
         }
     }
 }

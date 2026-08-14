@@ -416,7 +416,7 @@ public sealed class BossTimerTests : IDisposable
     {
         Assert.Equal(new[] { 0.95, 0.90, 0.80 }, BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.ParaMud));
         Assert.Equal(new[] { 0.875 }, BossTimerMath.EarlyFractionsInDisplayOrder(RealmType.Stock));
-        Assert.Equal(new[] { "5%", "10%", "20%" }, BossTimerMath.EarlyColumnLabels(RealmType.ParaMud));
+        Assert.Equal(new[] { "-5%", "-10%", "-20%" }, BossTimerMath.EarlyColumnLabels(RealmType.ParaMud));
         Assert.Equal(new[] { "87.5%" }, BossTimerMath.EarlyColumnLabels(RealmType.Stock));
     }
 

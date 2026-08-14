@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.10.3
+
+- Bosses tab: sorting by **Boss** or **Respawn** now uses the same active/idle grouping the timer columns do — cleanup spawns first, then bosses with a running timer, then idle ones — ordered by name / respawn length within each group
+- Bosses tab: the early-window columns are relabelled **-5% / -10% / -20%** (how far before 100% the boss can spawn), matching how they're described
+- Bosses tab: widened the **100%** column so the `(NN%)` progress no longer clips
+
 ## 3.10.0
 
 - New **Chest Offload** window (Player Workshop → Bosses → **Chest Offload…**): open the boss chests you're carrying, then vendor the loot shop-by-shop

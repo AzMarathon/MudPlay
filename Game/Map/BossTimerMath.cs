@@ -32,11 +32,13 @@ public static class BossTimerMath
             ? new[] { 0.95, 0.90, 0.80 }
             : new[] { 0.875 };
 
-    // Column header labels paired with EarlyFractionsInDisplayOrder — "5%" / "10%" /
-    // "20%" for Paradigm, "87.5%" for Stock.
+    // Column header labels paired with EarlyFractionsInDisplayOrder. Paradigm names
+    // the early points by discount off the full timer ("-5%" / "-10%" / "-20%", i.e.
+    // the boss can spawn that far before 100%); Stock names its single watch point by
+    // elapsed fraction ("87.5%").
     public static IReadOnlyList<string> EarlyColumnLabels(RealmType realm)
         => realm == RealmType.ParaMud
-            ? new[] { "5%", "10%", "20%" }
+            ? new[] { "-5%", "-10%", "-20%" }
             : new[] { "87.5%" };
 
     // Label for a spawn fraction, matching how the realm expresses it: Paradigm
