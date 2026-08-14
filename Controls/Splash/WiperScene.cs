@@ -51,7 +51,7 @@ public sealed class WiperScene : SplashScene
                     : evenRow || x > wx;
                 if (cleared) continue;
                 double it = SplashCanvas.SplatAt(x, y, cx, cy, maxR);
-                if (it > 0) c.Put(x, y, SplashCanvas.MudChar(it, x, y), SplashCanvas.MudAttr(it, x, y));
+                if (it > 0) c.PutMud(x, y, it, x, y);
             }
         }
 

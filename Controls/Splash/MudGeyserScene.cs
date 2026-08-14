@@ -53,13 +53,17 @@ public sealed class MudGeyserScene : SplashScene
         if (f < MoundEnd) return;
 
         // Column rockets to the top, then holds there (climb clamped) so it stays
-        // standing under the fill until the descending mud buries it.
+        // standing under the fill until the descending mud buries it. It erupts from
+        // the PEAK of the mound (moundTop), narrow at that origin and fanning wider as
+        // it climbs — so the jet reads as spouting out the top of the mound rather
+        // than rooted at the ground floor.
+        int moundTop = ground - mh;
         double climb = SplashCanvas.EaseOut(Math.Min(1.0, (f - MoundEnd) / (double)(RocketEnd - MoundEnd)));
-        int colTop = (int)Math.Round(SplashCanvas.Lerp(ground - mh, topY, climb));
+        int colTop = (int)Math.Round(SplashCanvas.Lerp(moundTop, topY, climb));
         int wob = f % 2;
-        for (int y = colTop; y <= ground; y++)
+        for (int y = colTop; y <= moundTop; y++)
         {
-            int w = 1 + (ground - y) / 7;
+            int w = 1 + (moundTop - y) / 7;
             c.Str(cx - w + wob, y, new string('█', w * 2 + 1), SplashCanvas.MudAttr(0.7, cx, y));
         }
         if (climb > 0.7 && f <= RocketEnd)   // crown of gobs while still rising

@@ -93,6 +93,37 @@ public sealed class SplashCanvas
         for (int i = 0; i < text.Length; i++) Put(x + i, y, text[i], attr);
     }
 
+    // Emit a settled-mud cell as a BACKGROUND fill (a space whose bg is the mud
+    // colour) rather than a foreground block glyph. A '█' block and a bg-filled cell
+    // look identical, and the softer dither shades flatten to solid colour — the win
+    // is that a run of same-colour mud renders as ONE batched rectangle with no
+    // per-cell FormattedText, which is what made the whole-band mud fills (cover /
+    // slide) throttle the splash. Colour still varies by intensity + noise (MudAttr),
+    // so the mud keeps its shading; only the fine ░▒▓ grain is gone. Unlike Put, this
+    // writes an opaque cell even though the glyph is a space, so it can't be skipped.
+    public void PutMud(int x, int y, double it, int sx, int sy)
+        => PutBg(x, y, BgAttr.WithBackground(MudAttr(it, sx, sy).Foreground));
+
+    // Write an opaque BACKGROUND-only cell (a space carrying a bg colour). Unlike Put
+    // it is NOT skipped for a space — flat colour fills (mud, the chocobo's plain) use
+    // it so a run of same-colour cells renders as one batched rectangle with no glyph.
+    public void PutBg(int x, int y, CellAttributes attr)
+    {
+        if (x < 0 || x >= Cols || y < TitleRows || y >= Rows) return;
+        Screen.Put(x, y, new Cell(' ', attr));
+        int idx = y * Cols + x;
+        _footprint.Add(idx);
+        _dirty.Add(idx);
+    }
+
+    // Flat background-colour rectangle (inclusive bounds) — cheap batched fill.
+    public void FillBg(int x0, int y0, int x1, int y1, CellAttributes attr)
+    {
+        for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; x++)
+            PutBg(x, y, attr);
+    }
+
     // Draw each line of a multi-line sprite (rows split on '\n') anchored at
     // (x, y). Spaces are transparent — see Str.
     public void Sprite(int x, int y, string[] rows, CellAttributes attr)
@@ -148,7 +179,7 @@ public sealed class SplashCanvas
         for (int x = 0; x < Cols; x++)
         {
             double it = SplatAt(x, y, cx, cy, r);
-            if (it > 0) Put(x, y, MudChar(it, x, y), MudAttr(it, x, y));
+            if (it > 0) PutMud(x, y, it, x, y);
         }
     }
 
@@ -162,7 +193,7 @@ public sealed class SplashCanvas
             double d = Math.Sqrt(dx * dx + dy * dy);
             if (d > rad + 0.4) continue;
             double it = 1.0 - d / Math.Max(1.0, rad + 0.4);
-            Put(x, y, MudChar(it, x, y), MudAttr(it, x, y));
+            PutMud(x, y, it, x, y);
         }
     }
 
@@ -217,7 +248,7 @@ public sealed class SplashCanvas
                     continue;
                 }
                 double it = SplatAt(x, y - off, cx, cy, maxR);
-                if (it > 0) Put(x, y, MudChar(it, x, y - off), MudAttr(it, x, y - off));
+                if (it > 0) PutMud(x, y, it, x, y - off);
             }
         }
     }
@@ -292,7 +323,7 @@ public sealed class SplashCanvas
     public void PutSheet(int x, int y, int sx, int sy)
     {
         double it = 0.35 + 0.33 * Noise(sx, sy);
-        Put(x, y, MudChar(it, sx, sy), MudAttr(it, sx, sy));
+        PutMud(x, y, it, sx, sy);
     }
 
     // Stamp a round patch of the canonical sheet (sampled at each cell's own
@@ -325,12 +356,26 @@ public sealed class SplashCanvas
         }
     }
 
-    public static char MudChar(double it, int x, int y)
+    // Clear a caked lens from the EDGES IN: the surviving mud is a shrinking central
+    // island, the outer ring clearing first, until p=1 clears everything. The mirror
+    // of ClearFromCenter, for scenes that read better closing in than opening up.
+    public void ClearFromEdges(double p)
     {
-        double v = Math.Clamp(it + (Noise(x, y) - 0.5) * 0.3, 0, 1);
-        return v > 0.72 ? '█' : v > 0.48 ? '▓' : v > 0.24 ? '▒' : '░';
+        int cx = Cols / 2, cy = (Rows + TitleRows) / 2;
+        double r = (1.0 - Smooth(p)) * MaxRadius() * 1.45;
+        for (int y = TitleRows; y < Rows; y++)
+        for (int x = 0; x < Cols; x++)
+        {
+            double dx = x - cx, dy = (y - cy) * 2.0;
+            double edge = r * (0.85 + 0.3 * Noise(x, y));
+            if (Math.Sqrt(dx * dx + dy * dy) > edge) continue;   // cleared (outer ring)
+            PutSheet(x, y, x, y);
+        }
     }
 
+    // Mud colour for a cell — foreground on a glyph, or (via PutMud) the background of
+    // a flattened bg-fill. Colour varies by intensity + a stable per-cell noise so the
+    // mud reads shaded rather than a flat slab.
     public static CellAttributes MudAttr(double it, int x, int y)
     {
         double n = Noise(y, x);

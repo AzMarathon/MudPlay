@@ -34,8 +34,12 @@ public sealed class MudPieScene : SplashScene
 
         if (f <= FlyEnd && f > ThrowEnd)
         {
-            // Pie in flight — a growing mud disc from the release point to centre.
+            // Pie in flight — a growing mud disc from the release point to centre. The
+            // throwing arm stays put at its follow-through, drawn FIRST so the growing
+            // pie covers it as it flies at the lens, instead of the arm blinking out
+            // the instant it releases.
             (int rx, int ry) = Hand(c, ThrowEnd);
+            DrawArm(c, rx, ry);
             double p = (f - ThrowEnd) / (double)(FlyEnd - ThrowEnd);
             int bx = (int)Math.Round(SplashCanvas.Lerp(rx - 3, cx, p));
             int by = (int)Math.Round(SplashCanvas.Lerp(ry, cy, p));
@@ -44,6 +48,11 @@ public sealed class MudPieScene : SplashScene
         }
         if (f > FlyEnd && f <= SplatEnd)
         {
+            // Mud floods out over the lens; the arm is still behind it and gets
+            // swallowed as the splat grows to fill the view — so it's occluded, never
+            // popped away with clear lens still showing.
+            (int rx, int ry) = Hand(c, ThrowEnd);
+            DrawArm(c, rx, ry);
             double p = (f - FlyEnd) / (double)(SplatEnd - FlyEnd);
             c.CoverMud(cx, cy, c.MaxRadius() * SplashCanvas.EaseOut(p));
             c.Flecks(cx, cy, c.MaxRadius() * SplashCanvas.EaseOut(p), 22);

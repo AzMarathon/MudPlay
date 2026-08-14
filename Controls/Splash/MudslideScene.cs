@@ -63,7 +63,7 @@ public sealed class MudslideScene : SplashScene
             {
                 int w = 1 + (y - peakY) / 3;
                 for (int x = cx - w; x <= cx + w; x++)
-                    c.Put(x, y, SplashCanvas.MudChar(0.8, x, y), SplashCanvas.MudAttr(0.8, x, y));
+                    c.PutMud(x, y, 0.8, x, y);
             }
         }
 

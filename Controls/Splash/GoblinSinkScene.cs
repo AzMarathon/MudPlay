@@ -39,8 +39,9 @@ public sealed class GoblinSinkScene : SplashScene
 
         if (f > SinkEnd && f <= SlideEnd)
         {
-            // Clear the filled pool from the centre outwards.
-            c.ClearFromCenter((f - SinkEnd) / (double)(SlideEnd - SinkEnd));
+            // Wipe the filled pool from the edges inward — it closes over the spot he
+            // sank, the surface receding to nothing at the centre last.
+            c.ClearFromEdges((f - SinkEnd) / (double)(SlideEnd - SinkEnd));
             return;
         }
         if (f > SlideEnd) return;   // clear
