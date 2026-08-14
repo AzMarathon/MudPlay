@@ -1,12 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.10.0**
-> - New Chest Offload window (Player Workshop → Bosses → Chest Offload…): open the boss chests you're carrying, then vendor the loot shop-by-shop
-> - It snapshots your carried inventory, lists your containers, and after opening shows every new item — grouped into the fewest shops, priced by a charm picker
-> - Coin gained is measured per open (coins before vs after, so selling loot never inflates it) and listed by denomination, most-valuable first
-> - Per item: an adjustable sell quantity, its value, a Drop button, and a ⇄ button to move it to another shop that buys it (each alternate shows name, map/room, and distance); per shop: a running total, a walk-there header showing map/room and steps from where you are, and Sell / Drop All buttons; a Total to sell sums the whole plan
-> - Shops are ordered into a short nearest-first trip using the real walker routing (avoid rooms, teleport gates, item/hazard/boat gates)
+> **Version 3.10.3**
+> - Bosses tab: sorting by Boss or Respawn now uses the same active/idle grouping the timer columns do (cleanup, then running timers, then idle), ordered by name / respawn within each group
+> - Bosses tab: the early-window columns are relabelled -5% / -10% / -20% (how far before 100% the boss can spawn)
+> - Bosses tab: widened the 100% column so the (NN%) progress no longer clips
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

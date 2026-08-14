@@ -56,7 +56,7 @@
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
                 <!-- Live 100% countdown for timed bosses; DEAD (red) / ALIVE (green)
                      for cleanup bosses. Template column so the text colours per row. -->
-                <DataGridTemplateColumn Header="100%" Width="100" SortMemberPath="FullSortKey">
+                <DataGridTemplateColumn Header="100%" Width="130" SortMemberPath="FullSortKey">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate x:DataType="vm:BossRowViewModel">
                             <TextBlock Text="{Binding StatusDisplay}" VerticalAlignment="Center" Margin="8,0"
@@ -66,17 +66,18 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <!-- Early-window columns (indices 4-6). Code-behind relabels /
-                     collapses these per realm: Paradigm 5 / 10 / 20%, Stock a single
-                     87.5% column. -->
-                <DataGridTextColumn Header="5%" Width="100" IsReadOnly="True" SortMemberPath="Early1SortKey"
+                     collapses these per realm from BossTimerMath.EarlyColumnLabels:
+                     Paradigm -5 / -10 / -20% (spawn this far before 100%), Stock a
+                     single 87.5% column. -->
+                <DataGridTextColumn Header="-5%" Width="100" IsReadOnly="True" SortMemberPath="Early1SortKey"
                                     Binding="{ReflectionBinding Early1Display}"
                                     FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="10%" Width="100" IsReadOnly="True" SortMemberPath="Early2SortKey"
+                <DataGridTextColumn Header="-10%" Width="100" IsReadOnly="True" SortMemberPath="Early2SortKey"
                                     Binding="{ReflectionBinding Early2Display}"
                                     FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="20%" Width="100" IsReadOnly="True" SortMemberPath="Early3SortKey"
+                <DataGridTextColumn Header="-20%" Width="100" IsReadOnly="True" SortMemberPath="Early3SortKey"
                                     Binding="{ReflectionBinding Early3Display}"
                                     FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
