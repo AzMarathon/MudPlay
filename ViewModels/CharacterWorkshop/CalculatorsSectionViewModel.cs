@@ -23,7 +23,7 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // CALCULATORS section — combat what-if tools that sit apart from the live
 // stat sheet:
-//   Monster Matchup — pick a monster by name and see the You → Monster
+//   Hit Calculator — pick a monster by name and see the You → Monster
 //     projection (hit%, damage, swings, DPS) computed from your gear-derived
 //     offense, with an attack-type dropdown (Attack / Bash / Smash and the
 //     Mystic strikes Punch / Kick / Jumpkick, filtered to what the class can
@@ -105,6 +105,11 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     [ObservableProperty] private int _playerAc;
     // Your raw dodge used in the incoming-hit calc — seeded from actuals, editable. May be negative.
     [ObservableProperty] private int _playerDodge;
+
+    // "Show me the Monsters" picker: the % chance a monster hits you (vs your AC +
+    // dodge above). The button below finds the accuracy that produces this hit-% and
+    // opens the Monsters game-data tab filtered to Acc ≥ that value.
+    [ObservableProperty] private int _hitPercentTarget = 50;
 
     // ----- Monster → You (incoming) --------------------------------------
     // One row per monster physical attack — or a single "Custom attack" row when
@@ -1242,6 +1247,16 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         MonsterAttacks.Add(row);
         RenumberAttacks();
         RecomputeRow(row);
+    }
+
+    // "Show me the Monsters": turn the hit-% picker into the monster accuracy that
+    // hits you that often (inverting the live hit formula against your AC + dodge),
+    // then open the Monsters game-data tab filtered to Acc ≥ that accuracy.
+    [RelayCommand]
+    private void ShowMonstersAtHitPercent()
+    {
+        int acc = CombatCalculator.AccuracyForHitChance(HitPercentTarget, PlayerAc, PlayerDodge, _realm);
+        AppServices.Current.OpenMonstersWithAccuracy(acc);
     }
 
     // Row-invoked removal. Keep at least one row so the incoming calc is never

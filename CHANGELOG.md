@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.9.16
+
+- Monster table **Biggest Lair** / **Avg Lair Size** now read each spawn room's lair `(Max N)` cap — matching the record's "Spawns In" list — instead of the Lairs table's group-level `Mobs` count, which overstated the biggest lair
+- Monster table **Acc** column is blank for spell-only monsters (no physical attack) instead of showing a spell id
+- Renamed the **Monster Matchup** calculator to **Hit Calculator**
+- Hit Calculator: a **"hits me %"** picker + **"Show me the Monsters"** button opens the Monsters game-data tab filtered to monsters accurate enough to hit you at least that often, given your AC + dodge (the monster table's Acc filter is now "at least")
+
 ## 3.9.12
 
 - Navigation GOTO right-click menu: the destructive "Remove from favourites" is now labelled "Delete this Go To", and a new "Add to / Remove from favourites" toggle stars a Go To for the terminal Favorites flyout without deleting it

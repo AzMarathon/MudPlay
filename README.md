@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.9.12**
-> - Navigation GOTO right-click menu: the destructive "Remove from favourites" is now "Delete this Go To", and a new "Add to / Remove from favourites" toggle stars a Go To for the terminal Favorites flyout without deleting it
-> - Filtering the GOTO or loop lists by "favourite" / "favorite" (or any 3+ character part) now also surfaces your favourited Go Tos and loops
+> **Version 3.9.16**
+> - Monster table Biggest Lair / Avg Lair Size now read each spawn room's lair `(Max N)` cap (matching the record's "Spawns In" list), fixing an overstated biggest-lair count
+> - Monster table Acc column is blank for spell-only monsters instead of showing a spell id
+> - Renamed the Monster Matchup calculator to the Hit Calculator
+> - Hit Calculator: a "hits me %" picker + "Show me the Monsters" button opens the Monsters game-data tab filtered to monsters accurate enough to hit you at least that often (given your AC + dodge)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
