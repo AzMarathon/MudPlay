@@ -22,14 +22,16 @@ public sealed partial class ChestOffloadShopGroup : ObservableObject
 
     public IRelayCommand WalkCommand { get; }
     public IRelayCommand SellCommand { get; }
+    public IRelayCommand DropAllCommand { get; }
 
     public ChestOffloadShopGroup(string shopName, RoomKey? room,
-        Action<RoomKey> queueWalk, Action<ChestOffloadShopGroup> sell)
+        Action<RoomKey> queueWalk, Action<ChestOffloadShopGroup> sell, Action<ChestOffloadShopGroup> dropAll)
     {
         ShopName = shopName;
         CanWalk = room is not null;
         WalkCommand = new RelayCommand(() => { if (room is { } key) queueWalk(key); }, () => room is not null);
         SellCommand = new RelayCommand(() => sell(this));
+        DropAllCommand = new RelayCommand(() => dropAll(this));
     }
 
     // Re-price every item at the current charm, then re-total.

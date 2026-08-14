@@ -3,7 +3,10 @@
 <!-- current-version:start -->
 > **Version 3.10.0**
 > - New Chest Offload window (Player Workshop → Bosses → Chest Offload…): open the boss chests you're carrying, then vendor the loot shop-by-shop
-> - It snapshots your carried inventory + coin, lists your containers, and after opening shows the coin gained plus every new item — grouped into the fewest shops, priced by a charm picker, with per-item sell quantities and a per-shop walk + Sell (realm-batched)
+> - It snapshots your carried inventory + coin, lists your containers, and after opening shows the coin gained plus every new item — grouped into the fewest shops, priced by a charm picker
+> - Per item: an adjustable sell quantity, its value, and a Drop button; per shop: a running total, a walk-there header, and Sell / Drop All buttons; a Total to sell sums the whole plan
+> - Shops are ordered into a short nearest-first trip using the real walker routing (avoid rooms, teleport gates, item/hazard/boat gates)
+> - A Simulate Chest button seeds random containers whose loot is rolled from the chest's own drop table, to test the window without real chests
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
