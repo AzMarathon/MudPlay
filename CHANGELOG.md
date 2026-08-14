@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.11.7
+
+- Chest Offload: the per-shop **Sell** button is now labelled **Sell All**, and each item row gets its own **Sell** button so you can sell a single item's quantity instead of the whole shop group
+
 ## 3.11.6
 
 - Navigation: moving and then peeking (`l <dir>`) in quick succession no longer loses your spot — the look's preview no longer eats the move's confirming room display, so the tracker stays synced instead of drifting into Suspect

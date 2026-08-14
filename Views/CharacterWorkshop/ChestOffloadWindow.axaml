@@ -138,16 +138,16 @@
                                             <TextBlock Grid.Column="1" Text="{Binding Total}" VerticalAlignment="Center"
                                                        Margin="8,0,10,0"
                                                        Foreground="{StaticResource AccentAmberBrush}"/>
-                                            <Button Grid.Column="2" Content="Sell" Command="{Binding SellCommand}"
+                                            <Button Grid.Column="2" Content="Sell All" Command="{Binding SellCommand}"
                                                     Margin="0,0,6,0"
-                                                    ToolTip.Tip="Send the sell commands for the quantities below (do this while standing in the shop)"/>
+                                                    ToolTip.Tip="Send the sell commands for every item's quantity below (do this while standing in the shop)"/>
                                             <Button Grid.Column="3" Content="Drop All" Command="{Binding DropAllCommand}"
                                                     ToolTip.Tip="Drop every item in this shop's listing and remove it from the sell plan"/>
                                         </Grid>
                                         <ItemsControl ItemsSource="{Binding Items}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ChestOffloadItemRow">
-                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,2">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
                                                         <Panel Grid.Column="0" VerticalAlignment="Center">
                                                             <Button x:Name="ShopBtn" Command="{Binding OpenShopMenuCommand}"
                                                                     IsEnabled="{Binding CanChangeShop}"
@@ -200,7 +200,10 @@
                                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
                                                         <TextBlock Grid.Column="4" Text="{Binding LineValue}" VerticalAlignment="Center"
                                                                    Margin="10,0,8,0" MinWidth="90"/>
-                                                        <Button Grid.Column="5" Content="Drop" Command="{Binding DropCommand}"
+                                                        <Button Grid.Column="5" Content="Sell" Command="{Binding SellCommand}"
+                                                                Margin="0,0,6,0"
+                                                                ToolTip.Tip="Sell this item's quantity above (do this while standing in the shop)"/>
+                                                        <Button Grid.Column="6" Content="Drop" Command="{Binding DropCommand}"
                                                                 ToolTip.Tip="Drop this whole stack and remove it from the sell plan"/>
                                                     </Grid>
                                                 </DataTemplate>

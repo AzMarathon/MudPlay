@@ -42,12 +42,14 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
     public bool HasShopChoices => ShopChoices.Count > 0;
 
     public IRelayCommand DropCommand { get; }
+    public IRelayCommand SellCommand { get; }
 
     public ChestOffloadItemRow(string name, int gained, double baseCopper,
         IReadOnlyCollection<int> candidateShops, int currentShop,
         Action<ChestOffloadItemRow>? onQtyChanged, Action<ChestOffloadItemRow>? onDrop = null,
         Func<ChestOffloadItemRow, IReadOnlyList<ShopChoiceRow>>? buildChoices = null,
-        Action<ChestOffloadItemRow, int>? moveToShop = null)
+        Action<ChestOffloadItemRow, int>? moveToShop = null,
+        Action<ChestOffloadItemRow>? onSell = null)
     {
         Name = name;
         Gained = gained;
@@ -59,6 +61,7 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         _moveToShop = moveToShop;
         _sellQty = gained;   // default: sell all of what the chest gave
         DropCommand = new RelayCommand(() => onDrop?.Invoke(this));
+        SellCommand = new RelayCommand(() => onSell?.Invoke(this));
     }
 
     public void Reprice(int charm, RealmType realm)

@@ -204,7 +204,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
                 group.Items.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper,
                     li.Shops, shopNum,
                     it => { GroupOf(it)?.Retotal(); UpdateGrandTotal(); },
-                    DropItem, BuildShopChoices, MoveItemToShop));
+                    DropItem, BuildShopChoices, MoveItemToShop, SellItem));
             group.Reprice(Charm, _gameData.ActiveRealm);
             ShopGroups.Add(group);
         }
@@ -377,10 +377,16 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
     private void SellGroup(ChestOffloadShopGroup group)
     {
-        bool paradigm = _gameData.ActiveRealm == RealmType.ParaMud;
         foreach (ChestOffloadItemRow item in group.Items)
-            CountedCommand.Emit(_send, "sell", item.SellQty, item.Name, paradigm);
+            SellItem(item);
     }
+
+    // Sell just this one row's selected quantity (do it while standing in the shop).
+    // Mirrors SellGroup per item: emits the sell command and leaves the row in the
+    // plan, unlike DropItem which removes it.
+    private void SellItem(ChestOffloadItemRow item)
+        => CountedCommand.Emit(_send, "sell", item.SellQty, item.Name,
+            _gameData.ActiveRealm == RealmType.ParaMud);
 
     private ChestOffloadShopGroup? GroupOf(ChestOffloadItemRow item)
         => ShopGroups.FirstOrDefault(g => g.Items.Contains(item));
