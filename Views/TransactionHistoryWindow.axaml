@@ -38,16 +38,11 @@
                 BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                 BorderThickness="0,1,0,0"
                 Padding="10,6">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                <Button Content="Clear unkept"
-                        Command="{Binding ClearUnkeptCommand}"
-                        IsVisible="{Binding HasKept}"
-                        ToolTip.Tip="Clear every entry except the ones you've checked to keep"/>
-                <Button Content="Clear history"
-                        Command="{Binding ClearCommand}"
-                        IsEnabled="{Binding !IsEmpty}"
-                        ToolTip.Tip="Wipe the whole ledger, kept entries included"/>
-            </StackPanel>
+            <Button Content="Clear history"
+                    HorizontalAlignment="Right"
+                    Command="{Binding ClearCommand}"
+                    IsEnabled="{Binding !IsEmpty}"
+                    ToolTip.Tip="Clear the ledger — any entries you've checked to keep are left behind"/>
         </Border>
 
         <!-- ============ Entries list (+ empty placeholder) ============ -->
@@ -102,11 +97,11 @@
                                                          FontSize="10"
                                                          TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <!-- Keep this entry through a "Clear unkept". -->
+                                <!-- Keep this entry when Clear history runs. -->
                                 <CheckBox Grid.Column="3"
                                           IsChecked="{Binding Keep, Mode=TwoWay}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          ToolTip.Tip="Keep this entry when you Clear unkept"/>
+                                          ToolTip.Tip="Keep this entry — Clear history won't remove it"/>
                             </Grid>
                         </Border>
                     </DataTemplate>

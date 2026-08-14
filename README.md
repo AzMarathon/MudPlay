@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.11.1**
-> - Transaction history: a Keep checkbox on each row, plus a Clear unkept button that wipes every entry except the ones you've kept (in memory and on disk) — prune a full ledger without losing the rows that matter
+> - Transaction history: a Keep checkbox on each row — Clear history now leaves the checked entries behind (in memory and on disk), so you can prune a full ledger without losing the rows that matter
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

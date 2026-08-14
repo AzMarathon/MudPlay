@@ -34,9 +34,6 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
     // Drives the "no transactions yet" placeholder.
     public bool IsEmpty => Count == 0;
 
-    // Drives the "Clear unkept" button — only meaningful once something's marked.
-    public bool HasKept => _kept.Count > 0;
-
     public TransactionHistoryViewModel(TransactionHistoryTracker tracker)
     {
         ArgumentNullException.ThrowIfNull(tracker);
@@ -55,35 +52,37 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
     // persisted transactions.log so the on-disk copy matches — this is the
     // explicit user wipe, distinct from the session-boundary Reset the tracker
     // takes on connect / character switch (which must leave the log intact).
+    // The user-driven clear — entries checked "keep" are left behind, so this is
+    // "clear everything except what I marked". With nothing kept it's a full wipe
+    // (tracker reset + truncated log); with some kept it retains those in memory
+    // (Hydrate) and rewrites the on-disk log to match. No-op when there's nothing
+    // to drop (everything's kept, or the ledger is already empty).
     [RelayCommand]
     private void Clear()
     {
-        _kept.Clear();
-        _tracker.Reset();
-        AppServices.Current.SessionLog.TruncateTransactions();
-        OnPropertyChanged(nameof(HasKept));
-    }
-
-    // Selective clear: drop every entry NOT marked "keep", in memory and on disk,
-    // leaving the kept rows behind. The kept rows keep their marks. No-op when
-    // nothing would be dropped (everything is kept, or nothing is).
-    [RelayCommand]
-    private void ClearUnkept()
-    {
         IReadOnlyList<TransactionEntry> snap = _tracker.Snapshot();
         List<TransactionEntry> keep = snap.Where(_kept.Contains).ToList();   // chronological
-        if (keep.Count == 0 || keep.Count == snap.Count) return;
-        // Hydrate replaces the in-memory ledger and fires Changed → Rebuild; it
-        // skips the persistence append hook, so rewrite the on-disk log to match.
-        _tracker.Hydrate(keep);
-        AppServices.Current.SessionLog.RewriteTransactions(keep);
+        if (keep.Count == snap.Count) return;
+
+        if (keep.Count == 0)
+        {
+            _kept.Clear();
+            _tracker.Reset();
+            AppServices.Current.SessionLog.TruncateTransactions();
+        }
+        else
+        {
+            // Hydrate replaces the in-memory ledger and fires Changed → Rebuild; it
+            // skips the persistence append hook, so rewrite the on-disk log to match.
+            _tracker.Hydrate(keep);
+            AppServices.Current.SessionLog.RewriteTransactions(keep);
+        }
     }
 
     private void OnRowKeepChanged(TransactionRowViewModel row)
     {
         if (row.Keep) _kept.Add(row.Entry);
         else _kept.Remove(row.Entry);
-        OnPropertyChanged(nameof(HasKept));
     }
 
     private void Rebuild()
@@ -94,7 +93,6 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
         for (int i = snap.Count - 1; i >= 0; i--) // newest first
             Rows.Add(new TransactionRowViewModel(snap[i], _kept.Contains(snap[i]), OnRowKeepChanged));
         Count = Rows.Count;
-        OnPropertyChanged(nameof(HasKept));
     }
 
     // Double-click a row → open the Navigation window and centre the map on the
