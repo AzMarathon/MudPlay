@@ -141,6 +141,13 @@ public static class LoopExpSimulator
         double step = Math.Max(0.0, s.SecondsPerStep);
         bool area = s.CombatMode == ExpCombatMode.AreaAllTargets;
         bool quickKill = roundsPerMob <= 2.0;
+        // A lair that comes back within one combat tick of your arrival counts as
+        // caught: combat resolves on tick boundaries and real movement is never
+        // perfectly even (round alignment, a beat of latency), so you reliably land
+        // the kill on a mob that's ready "in the next tick" rather than walking past
+        // it. Without this a perfectly-even model marks a barely-early return-leg
+        // lair as a clean miss and reads a few percent under real throughput.
+        double grace = tick;
 
         // Lair / fixture defs, DEDUPED by (room, target index): a room revisited in
         // the lap is the SAME physical lair, so its mobs share one set of respawn
@@ -252,7 +259,7 @@ public static class LoopExpSimulator
                 foreach (int d in posDefs[p])
                 {
                     double[] mc = availAt[d];
-                    int up = defInstant[d] ? defMobs[d] : CountReady(mc, now);
+                    int up = defInstant[d] ? defMobs[d] : CountReady(mc, now + grace);
                     if (up > 0)
                     {
                         double ct = area
@@ -271,8 +278,11 @@ public static class LoopExpSimulator
                             int order = 0;
                             for (int m = 0; m < mc.Length; m++)
                             {
-                                if (mc[m] > now) continue;
-                                double death = area ? now + ct : now + (order + 1) * perKill;
+                                if (mc[m] > now + grace) continue;
+                                // Can't die before it spawns: a graced (barely-early)
+                                // mob is killed just after its respawn, not at arrival.
+                                double engage = Math.Max(now, mc[m]);
+                                double death = area ? now + ct : engage + (order + 1) * perKill;
                                 mc[m] = death + defRespawn[d];
                                 order++;
                             }
