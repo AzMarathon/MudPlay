@@ -2779,6 +2779,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 if (BuildWalkToStatus() is { } stepLine)
                     _services.Log?.Debug("Navigation", stepLine);
                 break;
+            case WalkEventKind.Failed:
+                // A blocked walk is a lifecycle event an operator needs to see with
+                // its full reason (which door/room/key) — Info, not just the chip.
+                if (!string.IsNullOrWhiteSpace(e.Detail))
+                    _services.Log?.Info("Navigation", $"walk-to failed: {e.Detail}");
+                break;
         }
 
         RefreshFromWalker();

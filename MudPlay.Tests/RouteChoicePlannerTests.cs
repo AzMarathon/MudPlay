@@ -140,6 +140,27 @@ public sealed class RouteChoicePlannerTests
         ]
         """;
 
+    // A plain door the crosser can't open walls off the ONLY route to 1/9. Not an
+    // acquirable gate (no key), so suspending acquirable gates doesn't open it —
+    // Evaluate returns null, and PlanBlocked offers "run to the blocked room".
+    // Only route: 1/1 ──E── 1/2 ──E (Door [200 picklocks])── 1/9.
+    private const string PlainDoorOnlyJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Antechamber",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9 (Door [200 picklocks])", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     // Direct route steps THROUGH hazard room 1/5 (Spell 700, countered by item 42).
     // Direct: 1/1 ──E── 1/5 ──E── 1/9              (2 hops, enters the hazard).
     // Free:   1/1 ──N── 1/2 ──N── 1/3 ──E── 1/9    (3 hops, avoids it).
@@ -496,6 +517,73 @@ public sealed class RouteChoicePlannerTests
             RouteRequirement req = Assert.Single(choice!.Requirements);
             Assert.Equal(RouteRequirementKind.DoorKey, req.Kind);
             Assert.Equal(new[] { 7 }, req.ItemIds);
+        });
+    }
+
+    // Fully blocked by a non-acquirable door → Evaluate offers nothing, but
+    // PlanBlocked walks to the room just before it.
+    [Fact]
+    public void PlanBlocked_PlainDoorWallsOnlyRoute_StopsBeforeIt()
+    {
+        WithGraph(PlainDoorOnlyJson, (bfs, graph, filter) =>
+        {
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;
+            filter.StrengthProvider = () => 10;
+            filter.PicklocksProvider = () => 0;            // can't pick statReq 200
+            filter.MaxBashableStrengthProvider = () => 200;
+
+            // Evaluate offers nothing (a plain door isn't acquirable).
+            Assert.Null(RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+
+            BlockedRoutePlan? plan = RouteChoicePlanner.PlanBlocked(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(plan);
+            Assert.Equal(new RoomKey(1, 2), plan!.StopRoom);       // room just before the door
+            Assert.Equal(Direction.E, plan.BlockDir);
+            Assert.Equal(new RoomKey(1, 9), plan.BlockExit.Target);
+            Assert.Equal(new[] { new RoomKey(1, 1), new RoomKey(1, 2) }, plan.Preview);
+        });
+    }
+
+    [Fact]
+    public void PlanBlocked_ReachableRoute_ReturnsNull()
+    {
+        WithGraph(ItemShortcutJson, (bfs, graph, filter) =>
+            // The free (gate-free) route to 1/9 is open, so there's nothing to run up to.
+            Assert.Null(RouteChoicePlanner.PlanBlocked(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9))));
+    }
+
+    [Fact]
+    public void PlanBlocked_BlockedAtDoorstep_ReturnsNull()
+    {
+        // 1/1 ──E (Door [200 picklocks])── 1/9: the block is the very first hop, so
+        // there's no reachable room to run to short of it.
+        const string doorstepJson = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "Start",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "1/9 (Door [200 picklocks])", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "1/1",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        WithGraph(doorstepJson, (bfs, graph, filter) =>
+        {
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;
+            filter.StrengthProvider = () => 10;
+            filter.PicklocksProvider = () => 0;
+            filter.MaxBashableStrengthProvider = () => 200;
+
+            Assert.Null(RouteChoicePlanner.PlanBlocked(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
         });
     }
 

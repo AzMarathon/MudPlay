@@ -111,6 +111,24 @@ public sealed partial class RouteChoiceDialogViewModel
         IsTeleportChoice = choice.Kind == RouteChoiceKind.Teleport;
         HasFreeRoute = choice.HasFreeRoute;
 
+        // A fully-blocked route: no way through at all, but the destination is
+        // physically reachable up to an obstacle. Offer to walk as far as possible
+        // and stop at the block, naming it so the user knows what to clear by hand.
+        if (choice.Kind == RouteChoiceKind.Blocked)
+        {
+            HazardObtain = false;
+            string reason = choice.BlockedReason ?? "a blocked exit";
+            Heading = $"Only route to {destinationLabel} is blocked";
+            FreeSummary = $"No open route — blocked by {reason}";
+            GatedSummary = $"Run to the blocked room anyway — {StepsEta(choice.GatedStepCount, gatedEta)}";
+            SendItSummary = string.Empty;
+            RequirementSummary = string.Empty;
+            TeleportCaveat = string.Empty;
+            Footnote = "Click the route to preview it on the map, then Go to walk as far as you "
+                + $"can toward {destinationLabel} and stop at the block — clear it by hand to continue.";
+            return;
+        }
+
         // A sole hazard-only route the caller resolved an obtainable counter for:
         // Go fetches it then crosses, and a "cross unprotected" card is offered as
         // the take-the-damage escape.

@@ -180,7 +180,7 @@ public sealed class RoomTooltipBuilderTests : IDisposable
 
         Assert.Contains("Obvious exits:", text);
         Assert.Contains("north → North Square (1/2)", text);
-        Assert.Contains("east → Inn (1/3) (Door)", text);
+        Assert.Contains("east → Inn (1/3) (Door: any picklocks/strength)", text);
     }
 
     private const string ItemExitRooms = """
@@ -786,10 +786,18 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
-    public void FormatExitHint_Door_NoRequirement_RendersBareDoor()
+    public void FormatExitHint_Door_NoRequirement_RendersAny()
     {
+        // A bare door anyone can bash / pick reads "any" rather than showing nothing.
         Assert.True(RoomExit.TryParseWire("1/2666 (Door)", out RoomExit exit));
-        Assert.Equal("Door", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+        Assert.Equal("Door: any picklocks/strength", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    [Fact]
+    public void FormatExitHint_Door_AnyPicklocksStrength_RendersAny()
+    {
+        Assert.True(RoomExit.TryParseWire("12/51 (Door [any picklocks/strength])", out RoomExit exit));
+        Assert.Equal("Door: any picklocks/strength", RoomTooltipBuilder.FormatExitHint(exit, data: null));
     }
 
     [Fact]

@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.11.0
+
+- Blocked walk-to messages now name the obstacle: which room the door is in, the direction, and what it takes to pass (the key and/or the picklocks/strength) — e.g. "a locked door south from 10/218 (Frozen Cavern) — needs the glass key, or 61 picklocks/strength" — instead of a bare "a locked door you can't open". Requirements are per-direction, so a door's far side (which may differ) is never confused for the way you're heading
+- Blocked walk-to reasons are now written to the program log (Info), not just the top-bar chip
+- New **"run to the blocked room anyway"** option: when the only route to a destination is fully blocked but you can still reach the obstacle, the route picker offers to walk as far as possible and stop at the block so you can clear it by hand
+- Room tooltips show **"any"** for doors anyone can bash or pick (a bare door, or "[any picklocks/strength]"), instead of showing nothing
+
 ## 3.10.3
 
 - Bosses tab: sorting by **Boss** or **Respawn** now uses the same active/idle grouping the timer columns do — cleanup spawns first, then bosses with a running timer, then idle ones — ordered by name / respawn length within each group

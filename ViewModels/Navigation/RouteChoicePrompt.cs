@@ -58,8 +58,18 @@ public static class RouteChoicePrompt
             services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
         if (choice is null)
         {
-            // No shorter gated route (or it needs nothing acquirable) — just walk
-            // the free-preferring route.
+            // No shorter gated route. If instead the route is fully blocked but the
+            // destination is physically reachable up to an obstacle, offer to run to
+            // the blocked room; otherwise walk the free route (which reports its own
+            // failure if it can't).
+            if (RouteChoicePlanner.PlanBlocked(
+                    services.Bfs, services.Movement, services.RoomGraph, source.Key, destination)
+                is { } blocked)
+            {
+                await RunPickerAsync(services, destination, source.Key,
+                    BuildBlockedChoice(services, source.Key, destination, blocked), previewSink);
+                return;
+            }
             CommitWalk(services, destination, gated: false);
             return;
         }
@@ -122,6 +132,7 @@ public static class RouteChoicePrompt
         List<int> detourCounters = new();    // sourced via the give/shop/drop pipeline
         List<string> hazardSources = new();
         bool soleHazardOnly = !choice.HasFreeRoute && choice.Kind != RouteChoiceKind.Teleport
+            && choice.Requirements.Count > 0
             && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
         if (soleHazardOnly)
             foreach (RouteRequirement req in choice.Requirements)
@@ -185,6 +196,16 @@ public static class RouteChoicePrompt
         finally
         {
             previewSink?.Invoke(null);
+        }
+
+        if (choice.Kind == RouteChoiceKind.Blocked)
+        {
+            // Go = "run to the blocked room anyway": a plain walk to the furthest
+            // reachable room, landing the walker adjacent to the obstacle. Cancel /
+            // any other result walks nothing.
+            if (result == RouteChoiceResult.Gated && choice.StopRoom is { } stop)
+                CommitWalk(services, stop, gated: false);
+            return;
         }
 
         if (choice.Kind == RouteChoiceKind.Teleport)
@@ -263,4 +284,26 @@ public static class RouteChoicePrompt
         services.RoomGraph.GetRoom(destination)?.Name is { Length: > 0 } name
             ? $"{name} ({destination})"
             : destination.ToString();
+
+    // Turn a "run to the blocked room" plan into a Blocked RouteChoice: the
+    // reachable prefix as the previewed path, and the obstacle named via the shared
+    // describer (which room, which way, the key / picklocks-strength it needs) so
+    // the picker states exactly what's in the way.
+    private static RouteChoice BuildBlockedChoice(
+        AppServices services, RoomKey source, RoomKey destination, BlockedRoutePlan plan)
+    {
+        string reason = BlockedExitDescriber.Describe(
+            plan.StopRoom, plan.BlockDir, plan.BlockExit,
+            key => services.RoomGraph.GetRoom(key)?.Name,
+            services.ItemNames.GetName);
+        return new RouteChoice(
+            FreeStepCount: 0,
+            GatedStepCount: plan.Preview.Count > 0 ? plan.Preview.Count - 1 : 0,
+            Requirements: Array.Empty<RouteRequirement>(),
+            FreePath: Array.Empty<RoomKey>(),
+            GatedPath: plan.Preview,
+            Kind: RouteChoiceKind.Blocked,
+            StopRoom: plan.StopRoom,
+            BlockedReason: reason);
+    }
 }
