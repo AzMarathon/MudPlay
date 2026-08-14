@@ -1273,7 +1273,7 @@
                                                             FontSize="10"
                                                             Padding="6,2"
                                                             Foreground="{StaticResource AccentRedBrush}"
-                                                            ToolTip.Tip="Remove from favourites"
+                                                            ToolTip.Tip="Delete this Go To"
                                                             Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).RemoveFavoriteCommand}"
                                                             CommandParameter="{Binding}"/>
                                                     <Grid.ContextMenu>
@@ -1288,8 +1288,11 @@
                                                                       IsVisible="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).HasGotoFolders}"
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).MoveFavoriteToFolderPromptCommand}"
                                                                       CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="{Binding FavoriteMenuHeader}"
+                                                                      Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).ToggleFavoriteStarCommand}"
+                                                                      CommandParameter="{Binding}"/>
                                                             <Separator/>
-                                                            <MenuItem Header="Remove from favourites"
+                                                            <MenuItem Header="Delete this Go To"
                                                                       Command="{Binding $parent[TreeView].((vm:NavigationViewModel)DataContext).RemoveFavoriteCommand}"
                                                                       CommandParameter="{Binding}"/>
                                                         </ContextMenu>
