@@ -599,14 +599,32 @@ public sealed class RoomTracker
 
         if (_suppressObservationUntil is { } until)
         {
-            _suppressObservationUntil = null;
             if (when <= until)
             {
-                _log?.Log(LogSeverity.Info, "RoomTracker",
-                    $"Dropped peek observation: '{observation.Name}'.");
-                return;
+                // A look-<dir> peek is armed. The server answers commands IN ORDER,
+                // so when a move is still pending its confirming display arrives
+                // BEFORE the peek's adjacent-room display. Dropping that confirmation
+                // here was the reported desync: a peek armed the instant after a move
+                // ate the move's own landing display, and the peek's adjacent room
+                // then mismatched the pending move and bumped Suspect (report
+                // paradigm-20260813-201720, "move + l <dir> too fast"). So drop ONLY a
+                // display that isn't the pending move's outcome; let a move-related
+                // display through and keep the peek armed for the real peek that
+                // follows it.
+                if (!ObservationLooksLikePendingMoveOutcome(observation))
+                {
+                    _suppressObservationUntil = null;
+                    _log?.Log(LogSeverity.Info, "RoomTracker",
+                        $"Dropped peek observation: '{observation.Name}'.");
+                    return;
+                }
+                // Falls through: this is the pending move's own display — confirm it
+                // normally; the peek stays armed for the following adjacent-room peek.
             }
-            // window expired — fall through and process normally
+            else
+            {
+                _suppressObservationUntil = null;   // window expired — process normally
+            }
         }
 
         // A normal room display parsed — the room is lit enough to print its
@@ -665,6 +683,32 @@ public sealed class RoomTracker
         // doesn't masquerade as the last real observation.
         _lastObservation = observation;
         _lastObservationAt = when;
+    }
+
+    // Would this observation be handled by the pending-move reconcile as this move's
+    // outcome rather than a stray display? True when it matches the head pending
+    // move's predicted target (its forward confirmation, incl. the null-name-learned
+    // case) OR the source room (a passive re-look while the move is in flight). Used
+    // by the peek-suppression path to avoid dropping a move's confirming display as if
+    // it were a look-<dir> peek: only a display that is NEITHER — the peeked adjacent
+    // room — is the actual peek. Mirrors ReconcileFromPending's Strategy 1 / 1a / 1b
+    // match tests without mutating any state.
+    private bool ObservationLooksLikePendingMoveOutcome(RoomObservation observation)
+    {
+        if (State.Confidence != RoomConfidence.Pending) return false;
+        if (State.CurrentRoom is not { } source) return false;
+        if (!_pending.TryPeek(out PendingMove head)) return false;
+
+        // Passive re-look / self-confirm of the source room (Strategy 1b).
+        if (MatchesPredicted(source, observation)) return true;
+
+        // Forward confirmation: the predicted target room (Strategy 1 / 1a).
+        if (!TryResolvePendingExit(source, head, out RoomExit exit)) return false;
+        if (_graph.GetRoom(exit.Target) is not { } expected) return false;
+        return MatchesPredicted(expected, observation)
+            || (expected.HasUnknownName
+                && MatchesPredictedNameless(expected, observation)
+                && !string.IsNullOrWhiteSpace(observation.Name));
     }
 
     // The death-message detector saw a post-death lives readout — either "You now

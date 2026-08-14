@@ -182,6 +182,36 @@ public sealed class RoomTrackerTests : IDisposable
         Assert.False(tracker.IsPeekSuppressed());
     }
 
+    [Fact]
+    public void PeekArmedDuringPendingMove_ConfirmsMove_ThenDropsPeek()
+    {
+        // report paradigm-20260813-201720 ("move and l <dir> too fast"): a peek
+        // armed the instant after a move must NOT eat the move's confirming
+        // display. The server answers in order, so the move's landing arrives
+        // before the peek's adjacent-room display — the peek drops the SECOND, not
+        // the first. Before the fix, the peek ate the move's landing and the peek's
+        // own display then mismatched the pending move → Suspect.
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.NoteRoomObserved(Obs("Town Gates", Direction.N, Direction.E), t0);
+
+        tracker.NoteMoveSent(Direction.N, t0.AddMilliseconds(10));   // predicted target North Square 1/3 {S}
+        tracker.NoteLookSent(t0.AddMilliseconds(20));                // peek armed the instant after the move
+
+        // The move's confirming display lands FIRST — it matches the predicted
+        // target, so it must confirm the move rather than being dropped as a peek.
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S), t0.AddMilliseconds(1500));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 3), tracker.State.CurrentRoom!.Key);
+
+        // The look's adjacent-room display lands SECOND — THIS is the peek, and it
+        // is dropped without disturbing the just-confirmed position or bumping Suspect.
+        tracker.NoteRoomObserved(Obs("Inn", Direction.N, Direction.W), t0.AddMilliseconds(1600));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 3), tracker.State.CurrentRoom!.Key);
+        Assert.Equal(0, tracker.State.SuspectStrikes);
+    }
+
     // ----- Unknown → Located -----------------------------------------
 
     [Fact]
