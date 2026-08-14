@@ -4,9 +4,10 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.9.10
 
-- Monsters game-data table reworked to mirror MegaMUD's Monsters tab — columns: Rgn, Exp (base ×multiplier, e.g. `65000 (20x)`), HP, AC/DR, Dodge, MR, Acc (Maj/Mx), Damage, Exp/(Dmg+HP), Lair Exp, # Lairs, Mag, Undead
+- Monsters game-data table reworked to mirror MegaMUD's Monsters tab — columns: Rgn, Exp (actual earned = base × multiplier), HP, AC/DR, Dodge, MR, Acc (Maj/Mx), Damage, Exp/(Dmg+HP), Lair Exp, # Lairs, Avg Lair Size, Biggest Lair, Mag, Undead
 - Dodge and Mag (hitmag level) decoded from monster ability data; Exp/(Dmg+HP) exp-efficiency metric reproduces MME's figures
-- New MME-style filter sidebar: one threshold per stat (HP ≤, Exp ≥, AC ≤, DR ≤, Dodge ≤, MR ≤, Acc ≤, Damage ≤, Mag ≤, Lair Exp ≥, # Lairs ≥, Rgn ≤), an Undead-only checkbox, and an Alignment dropdown — all stack with the text filter; Clear filters resets everything
+- New MME-style filter sidebar, resizable via a drag handle: one threshold per stat (HP ≤, Exp ≥, AC ≤, DR ≤, Dodge ≤, MR ≤, Acc ≤, Damage ≤, Mag ≤, Lair Exp ≥, # Lairs ≥, Rgn ≤), an Undead-only checkbox, and an Alignment dropdown — all stack with the text filter; Clear filters resets everything
+- Filter changes debounced so holding a spinner no longer rebuilds the table on every tick
 
 ## 3.9.9
 

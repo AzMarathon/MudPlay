@@ -80,7 +80,10 @@ public sealed class GameDataTableSectionTests : IDisposable
 
         GameDataRow row = vm.AllRows.Single(r => r.Get("Name") == "Sewer Rat");
         Assert.Equal("20", row.Get("AvgLairExp"));
-        Assert.Equal("14", row.Get("Lairs"));              // 5 + 9
+        Assert.Equal("14", row.Get("Lairs"));                 // 5 + 9
+        // Avg lair size weighted by lair count: (1×5 + 11×9) / 14 = 7.43 → "7.4".
+        Assert.Equal("7.4", row.Get("AvgLairSize"));
+        Assert.Equal("11", row.Get("BiggestLair"));           // max mob count
     }
 
     [Fact]
@@ -97,10 +100,14 @@ public sealed class GameDataTableSectionTests : IDisposable
 
         GameDataRow orc = vm.AllRows.Single(r => r.Get("Name") == "Orc");
         Assert.Equal("7", orc.Get("Lairs"));       // 3 + 4
+        Assert.Equal("2", orc.Get("AvgLairSize")); // uniform size 2 → "2"
+        Assert.Equal("2", orc.Get("BiggestLair"));
 
-        // A monster in no lair group has a blank lair cell (not "0").
+        // A monster in no lair group has blank lair cells (not "0").
         GameDataRow loner = vm.AllRows.Single(r => r.Get("Name") == "Loner");
         Assert.True(string.IsNullOrEmpty(loner.Get("Lairs")));
+        Assert.True(string.IsNullOrEmpty(loner.Get("AvgLairSize")));
+        Assert.True(string.IsNullOrEmpty(loner.Get("BiggestLair")));
     }
 
     [Fact]
@@ -134,12 +141,14 @@ public sealed class GameDataTableSectionTests : IDisposable
         // HP ≤ (difficulty stat): HP ≤ 25 keeps Goblin, Orc.
         ThresholdFilter hp = vm.ThresholdFilters.Single(t => t.Column == "HP");
         hp.Value = 25;
+        vm.ApplyFiltersNow();   // filter changes debounce; flush for the assert
         Assert.Equal(2, vm.FilteredRows.Count);
         Assert.DoesNotContain(vm.FilteredRows, r => r.Get("Name") == "Dragon");
 
-        // Exp ≥ (reward stat) stacks: base EXP ≥ 10 leaves only Orc (Dragon is HP-excluded).
+        // Exp ≥ (reward stat) stacks: EXP ≥ 10 leaves only Orc (Dragon is HP-excluded).
         ThresholdFilter exp = vm.ThresholdFilters.Single(t => t.Column == "EXP");
         exp.Value = 10;
+        vm.ApplyFiltersNow();
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Orc", vm.FilteredRows[0].Get("Name"));
     }
@@ -157,6 +166,7 @@ public sealed class GameDataTableSectionTests : IDisposable
 
         BoolFilter undead = vm.BoolFilters.Single(b => b.Column == "Undead");
         undead.IsChecked = true;
+        vm.ApplyFiltersNow();
         Assert.Equal(2, vm.FilteredRows.Count);    // Skeleton, Zombie
         Assert.All(vm.FilteredRows, r => Assert.Equal("✗", r.GetDisplay("Undead")));
     }
@@ -176,7 +186,7 @@ public sealed class GameDataTableSectionTests : IDisposable
         await vm.LoadAsync();
 
         GameDataRow r = vm.AllRows.Single();
-        Assert.Equal("30000 (10x)", r.GetDisplay("EXP"));   // base + multiplier, not 300000
+        Assert.Equal("300,000", r.GetDisplay("EXP"));       // actual earned exp = 30000 × 10
         Assert.Equal("80/10", r.GetDisplay("AcDr"));
         Assert.Equal("290", r.GetDisplay("Damage"));        // round(290.4)
         Assert.Equal("250", r.GetDisplay("Accuracy"));      // maj == max → single
@@ -203,6 +213,7 @@ public sealed class GameDataTableSectionTests : IDisposable
         Assert.Contains(fiendAlign, align.Options);
 
         align.Selected = fiendAlign;
+        vm.ApplyFiltersNow();
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Fiend", vm.FilteredRows[0].Get("Name"));
     }

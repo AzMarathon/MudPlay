@@ -52,6 +52,8 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         "Efficiency",    // synthesised "Exp/(Dmg+HP)" exp-per-effort metric
         "AvgLairExp",    // "Lair Exp"
         "Lairs",         // synthesised: Σ TotalLairs across the monster's lair groups
+        "AvgLairSize",   // synthesised: lair-count-weighted average mobs per lair
+        "BiggestLair",   // synthesised: largest mob count across the monster's lair groups
         "Mag",           // synthesised hitmag level from ability code 28
         "Undead",        // raw MDB flag (0 = living), rendered + filterable
     };
@@ -67,9 +69,11 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["AcDr"]       = "AC/DR",
             ["MagicRes"]   = "MR",
             ["Accuracy"]   = "Acc (Maj/Mx)",
-            ["Efficiency"] = "Exp/(Dmg+HP)",
-            ["AvgLairExp"] = "Lair Exp",
-            ["Lairs"]      = "# Lairs",
+            ["Efficiency"]  = "Exp/(Dmg+HP)",
+            ["AvgLairExp"]  = "Lair Exp",
+            ["Lairs"]       = "# Lairs",
+            ["AvgLairSize"] = "Avg Lair Size",
+            ["BiggestLair"] = "Biggest Lair",
         };
 
     // Carried on each row for filtering but not shown as grid columns: Alignment
@@ -94,6 +98,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     protected override IReadOnlyDictionary<string, Func<string?, string?>> ColumnFormatters { get; } =
         new Dictionary<string, Func<string?, string?>>(StringComparer.OrdinalIgnoreCase)
         {
+            ["EXP"]        = FormatThousands,
             ["HP"]         = FormatThousands,
             ["AvgLairExp"] = FormatThousands,
             ["Efficiency"] = FormatThousands,
@@ -109,8 +114,8 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     internal static string? FormatThousands(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return raw;
-        if (!int.TryParse(raw, System.Globalization.NumberStyles.Integer,
-                System.Globalization.CultureInfo.InvariantCulture, out int n))
+        if (!long.TryParse(raw, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out long n))
             return raw;
         return n == 0 ? "" : n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     }
@@ -155,15 +160,17 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ("# Lairs",  "Lairs",        ThresholdDirection.AtLeast),
             ("Rgn",      "RegenTime",    ThresholdDirection.AtMost),
         })
-            ThresholdFilters.Add(new ThresholdFilter(label, column, dir, ApplyFilter));
+            ThresholdFilters.Add(new ThresholdFilter(label, column, dir, RequestApplyFilter));
 
         BoolFilters.Add(new BoolFilter("Undead only", "Undead",
-            static raw => !(raw is null or "" or "0"), ApplyFilter));
+            static raw => !(raw is null or "" or "0"), RequestApplyFilter));
     }
 
-    // Monster Number → Σ TotalLairs across every lair group whose MobList includes it.
+    // Monster Number → aggregated lair stats across every lair group whose MobList
+    // includes it: Σ TotalLairs (# Lairs), the lair-count-weighted mob total (for the
+    // average lair size), and the largest single group's mob count (biggest lair).
     // Rebuilt each load by the PopulateRows override below, before ComputeRowCells.
-    private Dictionary<int, int> _lairIndex = new();
+    private Dictionary<int, (int TotalLairs, long MobsWeighted, int MaxMobs)> _lairIndex = new();
 
     protected override void PopulateRows(System.Collections.Generic.IList<GameDataRow> rows)
     {
@@ -194,7 +201,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             .Select(v => v!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(v => v, StringComparer.OrdinalIgnoreCase));
-        return new CategoryFilter(label, column, options, ApplyFilter);
+        return new CategoryFilter(label, column, options, RequestApplyFilter);
     }
 
     // Join the Lairs table onto monsters via MobList (comma-separated monster Numbers).
@@ -202,18 +209,21 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // "# Lairs" sums their TotalLairs.
     private void BuildLairIndex()
     {
-        var index = new Dictionary<int, int>();
+        var index = new Dictionary<int, (int TotalLairs, long MobsWeighted, int MaxMobs)>();
         if (_cache.GetRawTable("Lairs") is { } doc)
         {
             foreach (JsonElement el in doc.RootElement.EnumerateArray())
             {
                 string mobList = ReadString(el, "MobList");
                 if (string.IsNullOrEmpty(mobList)) continue;
+                int mobs = ReadInt(el, "Mobs");
                 int totalLairs = ReadInt(el, "TotalLairs");
                 foreach (string tok in mobList.Split(','))
                 {
                     if (!int.TryParse(tok.Trim(), out int id) || id <= 0) continue;
-                    index[id] = (index.TryGetValue(id, out int a) ? a : 0) + totalLairs;
+                    index[id] = index.TryGetValue(id, out (int TotalLairs, long MobsWeighted, int MaxMobs) a)
+                        ? (a.TotalLairs + totalLairs, a.MobsWeighted + (long)mobs * totalLairs, Math.Max(a.MaxMobs, mobs))
+                        : (totalLairs, (long)mobs * totalLairs, mobs);
                 }
             }
         }
@@ -237,10 +247,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
         var cells = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
-            // Exp shows the base reward with its multiplier ("65000 (20x)") rather than
-            // the multiplied-out total, so both pieces stay visible. Comma-free so the
-            // threshold filter's leading-int read lands on the base value.
-            ["EXP"]        = mult > 1 ? $"{baseExp} ({mult}x)" : baseExp.ToString(Inv),
+            // Exp = the actual experience earned per kill = base × multiplier. Stored
+            // comma-free (the formatter groups it) so the threshold filter's leading-int
+            // read lands on the full value.
+            ["EXP"]        = effExp.ToString(Inv),
             ["AcDr"]       = $"{ac}/{dr}",
             ["Dodge"]      = dodge > 0 ? dodge.ToString(Inv) : null,
             ["Mag"]        = mag > 0 ? mag.ToString(Inv) : null,
@@ -248,8 +258,13 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["Accuracy"]   = ComputeAttackAccuracy(element),
             ["Efficiency"] = ComputeEfficiency(effExp, damage, hp),
         };
-        if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out int lairs))
-            cells["Lairs"] = lairs.ToString(Inv);
+        if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int TotalLairs, long MobsWeighted, int MaxMobs) lair)
+            && lair.TotalLairs > 0)
+        {
+            cells["Lairs"]       = lair.TotalLairs.ToString(Inv);
+            cells["AvgLairSize"] = ((double)lair.MobsWeighted / lair.TotalLairs).ToString("0.#", Inv);
+            cells["BiggestLair"] = lair.MaxMobs.ToString(Inv);
+        }
         return cells;
     }
 

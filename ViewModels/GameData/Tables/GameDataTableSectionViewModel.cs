@@ -294,6 +294,30 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         FilteredRows = new ObservableCollection<GameDataRow>(matched);
     }
 
+    // Coalesce rapid panel-filter changes (holding / spamming a spinner button) into
+    // a single ApplyFilter ~180 ms after the last change, so the table isn't rebuilt
+    // — a full re-scan of every row plus a DataGrid refresh — on every tick.
+    private DispatcherTimer? _filterDebounce;
+    protected void RequestApplyFilter()
+    {
+        if (_filterDebounce is null)
+        {
+            _filterDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+            _filterDebounce.Tick += (_, _) => ApplyFiltersNow();
+        }
+        _filterDebounce.Stop();
+        _filterDebounce.Start();
+    }
+
+    // Apply pending filter changes immediately — the debounce tick, Clear filters, and
+    // tests (which have no dispatcher loop to fire the timer) all route through here.
+    internal void ApplyFiltersNow()
+    {
+        _filterDebounce?.Stop();
+        ApplyFilter();
+        OnPropertyChanged(nameof(StatusText));
+    }
+
     // A row matches the filter when any column's raw value contains the filter substring
     // (case-insensitive). Raw values drive the match so numeric codes (e.g. 1) are findable
     // even when the grid renders them via a formatter ("Weapon"). Virtual so a tab with a
@@ -328,7 +352,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         foreach (BoolFilter b in BoolFilters) b.Clear();
         foreach (CategoryFilter c in CategoryFilters) c.Clear();
         SearchText = string.Empty;   // OnSearchTextChanged re-applies
-        ApplyFilter();
+        ApplyFiltersNow();           // flush now instead of waiting out the debounce
     }
 
     // Panel filters (threshold + bool + category), all AND'd together. Empty
