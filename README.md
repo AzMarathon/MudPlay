@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.9.16**
-> - Monster table Biggest Lair / Avg Lair Size now read each spawn room's lair `(Max N)` cap (matching the record's "Spawns In" list), fixing an overstated biggest-lair count
-> - Monster table Acc column is blank for spell-only monsters instead of showing a spell id
-> - Renamed the Monster Matchup calculator to the Hit Calculator
-> - Hit Calculator: a "hits me %" picker + "Show me the Monsters" button opens the Monsters game-data tab filtered to monsters accurate enough to hit you at least that often (given your AC + dodge)
+> **Version 3.10.0**
+> - New Chest Offload window (Player Workshop → Bosses → Chest Offload…): open the boss chests you're carrying, then vendor the loot shop-by-shop
+> - It snapshots your carried inventory, lists your containers, and after opening shows every new item — grouped into the fewest shops, priced by a charm picker
+> - Coin gained is measured per open (coins before vs after, so selling loot never inflates it) and listed by denomination, most-valuable first
+> - Per item: an adjustable sell quantity, its value, a Drop button, and a ⇄ button to move it to another shop that buys it (each alternate shows name, map/room, and distance); per shop: a running total, a walk-there header showing map/room and steps from where you are, and Sell / Drop All buttons; a Total to sell sums the whole plan
+> - Shops are ordered into a short nearest-first trip using the real walker routing (avoid rooms, teleport gates, item/hazard/boat gates)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

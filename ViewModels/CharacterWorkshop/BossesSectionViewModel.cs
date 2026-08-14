@@ -175,6 +175,13 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
         if (saved) Rebuild();
     }
 
+    // Open the Chest Offload helper: open the containers a boss dropped, then sell
+    // the loot shop-by-shop. Modeless — the terminal stays live so you can walk.
+    [RelayCommand]
+    private async Task OpenChestOffload()
+        => await AppServices.Current.Dialogs
+            .OpenWindowAsync<ChestOffloadViewModel, bool>(new ChestOffloadViewModel());
+
     // Export the active realm's boss table (names, rooms, flags, respawn overrides)
     // to a JSON file the user can share.
     [RelayCommand]
