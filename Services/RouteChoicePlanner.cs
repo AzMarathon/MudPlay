@@ -30,7 +30,16 @@ public enum RouteChoiceKind
 {
     ItemGate,
     Teleport,
+    Blocked,   // no route at all — offer to walk as far as possible, up to the block.
 }
+
+// A "run to the blocked room anyway" plan: the furthest room the walker can
+// actually reach toward a destination it can't fully reach, plus the exit that
+// stops it there (so the picker can name the obstacle) and the reachable path for
+// the map preview. StopRoom is always reachable under the live filter, so a plain
+// WalkTo(StopRoom) lands the walker adjacent to the block.
+public sealed record BlockedRoutePlan(
+    RoomKey StopRoom, Direction BlockDir, RoomExit BlockExit, IReadOnlyList<RoomKey> Preview);
 
 // A free-vs-direct route comparison for one destination: the free route's step
 // count, the shorter direct route's step count, the requirements the direct
@@ -52,7 +61,9 @@ public sealed record RouteChoice(
     IReadOnlyList<RoomKey> FreePath,
     IReadOnlyList<RoomKey> GatedPath,
     RouteChoiceKind Kind = RouteChoiceKind.ItemGate,
-    string? TeleportLanding = null)
+    string? TeleportLanding = null,
+    RoomKey? StopRoom = null,
+    string? BlockedReason = null)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -196,6 +207,56 @@ public static class RouteChoicePlanner
             BuildKeyPath(graph, source, tele),
             RouteChoiceKind.Teleport,
             landing);
+    }
+
+    // When every route to the destination is blocked — no gate-free route, and
+    // even suspending the acquirable gates (item/ticket/key/hazard) doesn't open
+    // one — but the destination is physically reachable if the block weren't there,
+    // plan a "run to the blocked room anyway": the furthest room the walker can
+    // actually reach toward it, plus the exit that stops it. Null when the
+    // destination is already reachable (nothing to run up to), when the acquirable
+    // gated picker already covers it (that's Evaluate's job), when it's genuinely
+    // disconnected, or when the block sits right at the current room (nowhere to
+    // walk). The physical route is the shortest with every gate ignored; the
+    // walker halts at the first exit the LIVE filter still blocks along it.
+    public static BlockedRoutePlan? PlanBlocked(
+        BfsMapper bfs,
+        MovementFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+
+        // Reachable outright, or reachable by clearing an acquirable gate → not a
+        // "blocked, run anyway" case (the plain walk / gated picker handle those).
+        if (bfs.FindPath(source, destination, filter) is { Count: > 0 }) return null;
+        using (filter.SuspendAcquirableGates())
+            if (bfs.FindPath(source, destination, filter) is { Count: > 0 }) return null;
+
+        // The route the walk would take with nothing in the way.
+        IReadOnlyList<Direction>? physical =
+            bfs.FindPath(source, destination, filter, ignoreExitGates: true);
+        if (physical is null || physical.Count == 0) return null;   // truly disconnected
+
+        // Follow it under the live filter; stop at the first exit that still blocks.
+        RoomKey cur = source;
+        var reached = new List<RoomKey> { source };
+        foreach (Direction dir in physical)
+        {
+            Room? room = graph.GetRoom(cur);
+            if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            if (filter.IsExitBlocked(in exit))
+            {
+                if (cur.Equals(source)) return null;   // blocked at the doorstep — nowhere to run
+                return new BlockedRoutePlan(cur, dir, exit, reached);
+            }
+            cur = exit.Target;
+            reached.Add(cur);
+        }
+        return null;   // nothing blocked along the physical route (unexpected when free==null)
     }
 
     // The first teleport hop's landing-room label ("Silver River (12/34)"), or

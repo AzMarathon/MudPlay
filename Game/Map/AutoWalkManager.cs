@@ -1130,6 +1130,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // The first level-gated hop's target + window, so the message can name the
         // actual barrier room and level instead of a bare "a level requirement".
         (RoomKey Room, int Min, int Max)? levelGate = null;
+        // The first door hop (locked or plain), kept whole so the message can name
+        // the room it's in, the direction, and the key / picklocks-strength it needs
+        // — directional, from the blocking room's own exit, so it can't be confused
+        // with the far side (which may have a different requirement entirely).
+        (RoomKey From, Direction Dir, RoomExit Exit)? doorGate = null;
         RoomKey cur = source;
         foreach (Direction dir in ungatedPath)
         {
@@ -1143,10 +1148,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 if (hop.HasFlag(ExitBlockReason.Item)) CollectGateItems(in exit, missingItems);
                 if (hop.HasFlag(ExitBlockReason.Level) && levelGate is null)
                     levelGate = (exit.Target, exit.MinLevel, exit.MaxLevel);
+                if ((hop.HasFlag(ExitBlockReason.LockedDoor) || hop.HasFlag(ExitBlockReason.Door))
+                    && doorGate is null)
+                    doorGate = (cur, dir, exit);
             }
             cur = exit.Target;
         }
-        return FormatBlockReasons(reasons, missingItems, levelGate);
+        return FormatBlockReasons(reasons, missingItems, levelGate, doorGate);
     }
 
     // No gated route resolved even with gates ignored. Before reporting a bare
@@ -1191,7 +1199,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
     }
 
     private string FormatBlockReasons(ExitBlockReason reasons, IReadOnlyList<int> missingItems,
-        (RoomKey Room, int Min, int Max)? levelGate)
+        (RoomKey Room, int Min, int Max)? levelGate,
+        (RoomKey From, Direction Dir, RoomExit Exit)? doorGate)
     {
         // Classification came up empty (e.g. a bare IRoomFilter with no gate
         // model) — keep a truthful generic line rather than inventing a cause.
@@ -1202,11 +1211,27 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (reasons.HasFlag(ExitBlockReason.Level)) parts.Add(DescribeLevelGate(levelGate));
         if (reasons.HasFlag(ExitBlockReason.Toll)) parts.Add("a toll you can't afford");
         if (reasons.HasFlag(ExitBlockReason.Class)) parts.Add("a class restriction");
-        if (reasons.HasFlag(ExitBlockReason.LockedDoor)) parts.Add("a locked door you can't open (no key, pick, or bash)");
+        // A locked or plain door blocks the same way to the user — name the one
+        // barrier once, with its room / direction / key / skill, rather than two
+        // generic lines.
+        if (reasons.HasFlag(ExitBlockReason.LockedDoor) || reasons.HasFlag(ExitBlockReason.Door))
+            parts.Add(DescribeDoorGate(doorGate));
         if (reasons.HasFlag(ExitBlockReason.Item)) parts.Add(DescribeMissingItems(missingItems));
-        if (reasons.HasFlag(ExitBlockReason.Door)) parts.Add("a door you can't pick or bash");
         if (reasons.HasFlag(ExitBlockReason.Hazard)) parts.Add("a room hazard you can't survive");
         return "all routes blocked by " + string.Join(" or ", parts);
+    }
+
+    // "a locked door south from 10/218 (Frozen Cavern) — needs the glass key, or 61
+    // picklocks/strength" — names the barrier room, the way you're heading, and what
+    // it takes to pass, so the user knows exactly which crossing is blocked (and
+    // never mistakes it for the door's far side, which can differ).
+    private string DescribeDoorGate((RoomKey From, Direction Dir, RoomExit Exit)? gate)
+    {
+        if (gate is not { } g) return "a locked door you can't open (no key, pick, or bash)";
+        RoomExit exit = g.Exit;
+        return BlockedExitDescriber.Describe(g.From, g.Dir, in exit,
+            key => _graph.GetRoom(key)?.Name,
+            id => _itemNameResolver?.Invoke(id));
     }
 
     // "a level requirement (1/1420 (Marble Passage) needs level 30+)" — names the

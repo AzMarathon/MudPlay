@@ -404,12 +404,12 @@ public static class RoomTooltipBuilder
                 return baseText;
             }
 
-            // A plain (keyless) door: surface the pick / bash skill requirement
-            // so the user sees what it takes to open it.
+            // A plain (keyless) door: surface the pick / bash skill requirement so
+            // the user sees what it takes to open it. A zero requirement (a bare
+            // "(Door)" or "(Door [any picklocks/strength])") reads "any" — anyone
+            // can bash / pick it — rather than showing nothing.
             case RoomExitHint.Door:
-                return FormatDoorRequirement(exit) is { Length: > 0 } req
-                    ? $"Door: {req}"
-                    : "Door";
+                return $"Door: {FormatDoorSkill(exit)}";
 
             case RoomExitHint.Toll when exit.TollGold > 0:
                 return $"Toll: {exit.TollGold} gold";
@@ -479,6 +479,18 @@ public static class RoomTooltipBuilder
         return exit.CanBash
             ? $"{exit.StatRequirement} picklocks/strength"
             : $"{exit.StatRequirement} picklocks";
+    }
+
+    // Like FormatDoorRequirement but never blank: a zero requirement renders "any"
+    // (any bash / pick opens it) instead of an empty string. Used for a plain door,
+    // where "any" is meaningful; the key-locked alternative keeps the blank-on-zero
+    // FormatDoorRequirement (a key-only door has no stat alternative to append).
+    private static string FormatDoorSkill(RoomExit exit)
+    {
+        string qty = exit.StatRequirement > 0
+            ? exit.StatRequirement.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : "any";
+        return exit.CanBash ? $"{qty} picklocks/strength" : $"{qty} picklocks";
     }
 
     public static string DirectionLabel(Direction d) => d switch

@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.10.3**
-> - Bosses tab: sorting by Boss or Respawn now uses the same active/idle grouping the timer columns do (cleanup, then running timers, then idle), ordered by name / respawn within each group
-> - Bosses tab: the early-window columns are relabelled -5% / -10% / -20% (how far before 100% the boss can spawn)
-> - Bosses tab: widened the 100% column so the (NN%) progress no longer clips
+> **Version 3.11.0**
+> - Blocked walk-to messages now name the obstacle — which room the door is in, the direction, and the key and/or picklocks/strength it takes to pass — instead of a bare "a locked door you can't open" (and per-direction, so a door's far side is never confused for the way you're heading)
+> - Blocked walk-to reasons are written to the program log, not just the top-bar chip
+> - New "run to the blocked room anyway" option: when the only route is fully blocked but you can still reach the obstacle, the picker offers to walk as far as possible and stop at the block
+> - Room tooltips show "any" for doors anyone can bash or pick, instead of nothing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
