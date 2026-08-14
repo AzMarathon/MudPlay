@@ -54,6 +54,16 @@ it isn't here and you're unsure, ask.
   as wall-clock time *added to* combat (as a naive lap model does) understates a tight loop, because
   in reality that travel overlaps the downtime and doesn't consume ticks. See [[project_nav_obstacle_traversal]]-adjacent
   exp-estimator work.
+- **[CONFIRMED, user 2026-08-14] 720/hr is only the *single-target* ceiling, and few loops reach it.**
+  It's the max a melee / single-target-spell player can kill (one mob per 5s tick); **rooming (AoE)
+  clears a whole room per pass, so it runs ABOVE 720/hr.** Whether a loop approaches its ceiling
+  depends entirely on geometry. **In a line (out-and-back / A→B→A) loop you re-cross just-cleared
+  lairs on the return — an empty room you simply walk through** (no pause, no fight); with a 30s
+  respawn and a sub-30s return you find them still down, so that return walk is dead time that wastes
+  combat ticks. So the middle lairs of a line are hit less than a naive "each lair once per lap"
+  count, and the end lairs less than the middle. A faithful estimate must **replay the actual room
+  order** with per-mob respawn clocks (per "Lair respawn timers" below), not assume a uniform per-lap
+  fire rate — that's what the Exp/Hr estimator now does.
 
 ## Equipment & gear
 

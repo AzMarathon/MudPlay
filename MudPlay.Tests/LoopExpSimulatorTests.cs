@@ -129,18 +129,17 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
-    public void GreaterWyvernLikeLoop_ReachesTickCap_NotSyncWave()
+    public void GreaterWyvernLikeLoop_LandsBelowCeiling_NotSyncWave()
     {
         // Mirrors the real greater-wyvern loop: 31 lairs, respawn mix 270/330/390s,
-        // Max 2-3 wyverns (9000 exp) per room, walked at 1.0s/step. Combined respawn
-        // throughput (~800/hr) exceeds the 720 tick cap, so an hours-deep loop runs
-        // at the cap — the estimate must not collapse into a synchronised
-        // kill-then-idle wave (which pinned it near 4.7M).
-        // 31 wyvern lairs with 2 empty transit rooms between each, walked at 1.0s/step.
-        // The 2-room hops (~3 steps) hide in the combat downtime, so travel is free and
-        // the loop is tick-limited: even though every respawn (270-390s) exceeds a
-        // single lap, the rate-based fixed point shortens the lap so the total lands at
-        // the 720/hr cap (720 × 9000 = 6.48M) — NOT the ~5.2M greedy-skip floor.
+        // Max 2-3 wyverns (9000 exp) per room, 2 empty transit rooms between each,
+        // walked at 1.0s/step (93 rooms). The 720/hr tick cap is a *ceiling*, not a
+        // given — a 93-room ring can't keep a mob engaged on every tick (you lap each
+        // lair roughly every ~370s against a ~305s respawn, so you're rarely arriving
+        // to a full room), so the loop settles a fair bit BELOW the 6.48M ceiling.
+        // The estimate must land in that realistic sub-ceiling band — neither pinned
+        // optimistically at the cap nor collapsed into a synchronised kill-then-idle
+        // wave (~2M).
         var rooms = new ExpRoomVisit[93];
         for (int i = 0; i < 31; i++)
         {
@@ -151,7 +150,7 @@ public sealed class LoopExpSimulatorTests
             rooms[i * 3 + 2] = Empty(2, 13000 + i);
         }
         ExpSimResult e = LoopExpSimulator.Simulate(Route(rooms), Single(secPerStep: 1.0));
-        Assert.InRange(e.ExpPerHour, 6_400_000, 6_500_000);
+        Assert.InRange(e.ExpPerHour, 4_800_000, 6_000_000);
     }
 
     [Fact]
@@ -241,10 +240,10 @@ public sealed class LoopExpSimulatorTests
     {
         // A death-summon lair clears in ClearWaves AoE passes — one per summon tier
         // — so a 3-tier lair takes ~3× the rounds of a plain 1-wave lair of the same
-        // mob count. Steps free (0s) and respawn short (1s) to isolate combat time.
+        // mob count. Steps free (0s) and instant mobs (respawn 0) isolate combat time.
         var area = new ExpSimSettings(0, ExpCombatMode.AreaAllTargets, RoundsPerMob: 2, RealConditionsMultiplier: 1);
-        double plain  = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(2, 1000, 1))), area).AvgLapSeconds;
-        double summon = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(2, 1000, 1, ClearWaves: 3))), area).AvgLapSeconds;
+        double plain  = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(2, 1000, 0))), area).AvgLapSeconds;
+        double summon = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(2, 1000, 0, ClearWaves: 3))), area).AvgLapSeconds;
 
         Assert.Equal(plain * 3, summon, 1);
     }
@@ -253,10 +252,11 @@ public sealed class LoopExpSimulatorTests
     public void SingleTarget_SummonTree_ScalesKillCount()
     {
         // Single-target fights every monster the spawn becomes (MobCount × KillsPerMob),
-        // so a mob whose tree is 8 costs ~8× the rounds of a plain mob.
+        // so a mob whose tree is 8 costs ~8× the rounds of a plain mob. Instant mobs
+        // (respawn 0) isolate combat time — no respawn wait between passes.
         var single = new ExpSimSettings(0, ExpCombatMode.SingleTarget, RoundsPerMob: 1, RealConditionsMultiplier: 1);
-        double plain  = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(1, 1000, 1))), single).AvgLapSeconds;
-        double summon = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(1, 1000, 1, KillsPerMob: 8))), single).AvgLapSeconds;
+        double plain  = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(1, 1000, 0))), single).AvgLapSeconds;
+        double summon = LoopExpSimulator.Simulate(Route(Room(1, 100, new ExpTarget(1, 1000, 0, KillsPerMob: 8))), single).AvgLapSeconds;
 
         Assert.Equal(plain * 8, summon, 1);
     }
@@ -315,6 +315,30 @@ public sealed class LoopExpSimulatorTests
         double summed = LoopExpSimulator.Simulate(Route(withSummon, Empty(13, 3574)), s).ExpPerHour;
 
         Assert.True(summed > baseline, $"summon must add exp: {summed:N0} vs {baseline:N0}");
+    }
+
+    [Fact]
+    public void OutAndBackLine_YieldsLessThanRing_ReturnLegWastesTicks()
+    {
+        // 8 back-to-back 30s single-mob lairs. As a RING each lair is visited once
+        // per lap and stays saturated (combat-bound, the 720/hr ceiling). As an
+        // OUT-AND-BACK LINE the middle lairs are re-crossed EMPTY on the return
+        // (killed <30s ago, not respawned), and walking that dead stretch wastes a
+        // tick per lap — so the line yields meaningfully less than the identical
+        // rooms walked as a ring. This is the diamond-mine line-loop report.
+        var s = new ExpSimSettings(1.4, ExpCombatMode.SingleTarget, RoundsPerMob: 1, RealConditionsMultiplier: 0.9);
+
+        var ringRooms = new ExpRoomVisit[8];
+        for (int i = 0; i < 8; i++) ringRooms[i] = Room(15, 1700 + i, Lair(1, 8500, 30));
+        double ring = LoopExpSimulator.Simulate(new ExpRoute(ringRooms), s).ExpPerHour;
+
+        var line = new System.Collections.Generic.List<ExpRoomVisit>();
+        for (int i = 0; i < 8; i++) line.Add(Room(15, 1700 + i, Lair(1, 8500, 30)));
+        for (int i = 6; i >= 1; i--) line.Add(Room(15, 1700 + i, Lair(1, 8500, 30)));   // walk back down
+        double lineExp = LoopExpSimulator.Simulate(new ExpRoute(line), s).ExpPerHour;
+
+        Assert.True(lineExp < ring, $"line {lineExp:N0} should trail ring {ring:N0}");
+        Assert.True(lineExp > ring * 0.8, $"but not collapse: line {lineExp:N0} vs ring {ring:N0}");
     }
 
     [Fact]

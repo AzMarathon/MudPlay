@@ -138,20 +138,37 @@ public static class LoopExpSimulator
 
         double tick = s.SecondsPerRound > 0 ? s.SecondsPerRound : 5.0;   // combat cadence
         double roundsPerMob = Math.Max(0.01, s.RoundsPerMob);
+        double step = Math.Max(0.0, s.SecondsPerStep);
         bool area = s.CombatMode == ExpCombatMode.AreaAllTargets;
+        bool quickKill = roundsPerMob <= 2.0;
 
-        // Deduped lair / fixture targets (a room revisited in the lap shares one
-        // respawn clock, so count it once). Bosses are pulled aside here: one boss
-        // is a single entity across every room it can spawn in, so it's keyed by
-        // monster id (deduped loop-wide) and kept OUT of the lap combat — it's a
-        // flat exp/hr addition (once per its regen), added after the fixed point.
-        var lairs = new List<(RoomKey Room, double Respawn, int Mobs, double ExpPerMob, bool Instant, int Waves, double Kills)>();
+        // Lair / fixture defs, DEDUPED by (room, target index): a room revisited in
+        // the lap is the SAME physical lair, so its mobs share one set of respawn
+        // clocks. posDefs keeps the real VISIT SEQUENCE — which def(s) sit at each
+        // lap position — so a middle room of an out-and-back line appears twice, an
+        // instant fixture fires on every pass, and a return leg re-crosses cleared
+        // lairs. That geometry is exactly what the sim below replays. Bosses are
+        // pulled aside (one entity across every room it spawns in, keyed by monster
+        // id) and added as a flat once-per-regen term after the sim.
+        var defRoom = new List<RoomKey>();
+        var defRespawn = new List<double>();
+        var defMobs = new List<int>();
+        var defExp = new List<double>();
+        var defInstant = new List<bool>();
+        var defWaves = new List<int>();
+        var defKills = new List<double>();
+        var defSummons = new List<bool>();
+        var defKey = new Dictionary<(RoomKey, int), int>();
+        var posDefs = new List<int>[lap.Count];
         var bosses = new Dictionary<int, (double Exp, int RegenSeconds, string Name)>();
-        var seen = new HashSet<(RoomKey, int)>();
-        for (int i = 0; i < lap.Count; i++)
-            for (int j = 0; j < lap[i].Targets.Count; j++)
+        double maxRespawn = 0;
+        for (int p = 0; p < lap.Count; p++)
+        {
+            posDefs[p] = new List<int>();
+            IReadOnlyList<ExpTarget> tgs = lap[p].Targets;
+            for (int j = 0; j < tgs.Count; j++)
             {
-                ExpTarget tg = lap[i].Targets[j];
+                ExpTarget tg = tgs[j];
                 if (!tg.Included || tg.MobCount <= 0 || tg.ExpPerMob <= 0) continue;
                 if (tg.IsBoss)
                 {
@@ -159,91 +176,167 @@ public static class LoopExpSimulator
                         bosses.TryAdd(tg.MonsterId, (tg.ExpPerMob, tg.RespawnSeconds, tg.MonsterName));
                     continue;
                 }
-                if (!seen.Add((lap[i].Room, j))) continue;
-                lairs.Add((lap[i].Room, tg.RespawnSeconds, tg.MobCount, tg.ExpPerMob, tg.IsInstant,
-                    Math.Max(1, tg.ClearWaves), Math.Max(1.0, tg.KillsPerMob)));
+                var key = (lap[p].Room, j);
+                if (!defKey.TryGetValue(key, out int idx))
+                {
+                    idx = defRoom.Count;
+                    defRoom.Add(lap[p].Room);
+                    defRespawn.Add(tg.RespawnSeconds);
+                    defMobs.Add(tg.MobCount);
+                    defExp.Add(tg.ExpPerMob);
+                    defInstant.Add(tg.IsInstant);
+                    defWaves.Add(Math.Max(1, tg.ClearWaves));
+                    defKills.Add(Math.Max(1.0, tg.KillsPerMob));
+                    defSummons.Add(tg.ClearWaves > 1 || tg.KillsPerMob > 1.0);
+                    defKey[key] = idx;
+                    if (!tg.IsInstant) maxRespawn = Math.Max(maxRespawn, tg.RespawnSeconds);
+                }
+                posDefs[p].Add(idx);
             }
-        // A room-spell summon still yields exp even in a room with no placed lair, so
-        // it keeps the loop alive here (and computes a lap time from the walk alone).
+        }
+
         bool hasSummons = false;
         foreach (ExpRoomVisit v in lap)
             if (v.Summon is { ExpPerRoll: > 0 }) { hasSummons = true; break; }
-        if (lairs.Count == 0 && bosses.Count == 0 && !hasSummons)
+        int defCount = defRoom.Count;
+        if (defCount == 0 && bosses.Count == 0 && !hasSummons)
             return new ExpSimResult(0, 0, 0,
                 Array.Empty<ExpLairStat>(), Array.Empty<ExpBossStat>(), Array.Empty<ExpSummonStat>());
 
-        // Full-path walk time (continuous) plus travel waste — whole ticks lost to
-        // lair-to-lair hops too long to hide in a kill's downtime. Both fixed by the
-        // route's geometry; computed once.
-        double walkSeconds = 0;
-        double travelWasteSeconds = 0;
-        int stepsSinceLair = 0;
-        bool firstRoom = true;
-        for (int i = 0; i < lap.Count; i++)
-        {
-            if (!firstRoom) { walkSeconds += s.SecondsPerStep; stepsSinceLair++; }
-            firstRoom = false;
-            bool isLair = false;
-            foreach (ExpTarget tg in lap[i].Targets)
-                if (tg.Included && !tg.IsBoss && tg.MobCount > 0 && tg.ExpPerMob > 0) { isLair = true; break; }
-            if (isLair)
-            {
-                travelWasteSeconds += Math.Floor(stepsSinceLair * s.SecondsPerStep / tick) * tick;
-                stepsSinceLair = 0;
-            }
-        }
-        walkSeconds += s.SecondsPerStep;   // wrap back to the first room
-        travelWasteSeconds += Math.Floor((stepsSinceLair + 1) * s.SecondsPerStep / tick) * tick;
+        // The route's continuous walk time is the hard floor on a lap: you can't
+        // lap faster than you can physically step through every room.
+        double walkSeconds = lap.Count * step;
 
-        // Rate-based fixed point on lap time. A step-by-step replay of a fixed loop
-        // either cascades DOWN (greedy skip: skip a not-up lair → lap shortens →
-        // more get outrun → "fire every 2nd lap" floor) or balloons UP (hold for
-        // every lair → the waits compound into a 20-minute lap); both are artifacts
-        // of deterministic phase timing, not the loop's real behaviour. So solve for
-        // the steady lap L directly: each lair fires a fraction min(1, L/respawn) of
-        // the laps (instant/NPC fixtures every lap); the lap is the combat that fires
-        // plus travel waste, but never less than the time to physically walk the
-        // route. Rate-based, so it converges (no phase resonance) and reproduces a
-        // well-run loop's real throughput. See GAME_MECHANICS.md "Combat tick & exp
-        // accrual".
-        double lapSeconds = 60;
-        for (int it = 0; it < 300; it++)
+        // ----- Discrete visit-sequence simulation -----
+        // Walk the real room order over a measured hour. Each lair mob carries its
+        // own respawn clock keyed to WHEN THAT MOB WAS KILLED — killable only at or
+        // after (last kill + T); arriving early just finds the room empty (confirmed
+        // mechanic). Killing what's up and walking straight through what isn't means
+        // an out-and-back line re-crosses just-cleared lairs as EMPTY rooms, whose
+        // walk wastes whole combat ticks (floor(stretch/tick)) — the throughput the
+        // old rate model gave away by treating those rooms as always-productive.
+        // Single-target kills one mob per round (720/hr ceiling); AoE clears the room
+        // in Waves passes regardless of count, so it runs above that ceiling. Per-mob
+        // clocks desynchronise the loop so a dense loop settles at its real operating
+        // point instead of a synchronised kill-then-idle wave, and the lap is floored
+        // at walkSeconds so it can't beat walking speed. A warm-up burns off the cold
+        // start (every mob ready at t=0) so the measured hour is steady state.
+        var availAt = new double[defCount][];
+        for (int d = 0; d < defCount; d++) availAt[d] = new double[defMobs[d]];   // 0 = ready now
+
+        var clears = new int[defCount];    // visits that killed ≥1 mob (fires)
+        var misses = new int[defCount];    // visits that found the room empty
+        var closest = new double[defCount];
+        for (int d = 0; d < defCount; d++) closest[d] = double.MaxValue;
+        var summonExp = new Dictionary<RoomKey, (string Spell, double Exp, double Chance)>();
+
+        double warmup = Math.Min(3600.0, Math.Max(maxRespawn * 3.0, 0.0));
+        double t = 0, measuredExp = 0, measuredDur = 0, measuredLaps = 0;
+        bool measuring = false;
+        for (int guard = 0; guard < 5_000_000; guard++)
         {
-            double combat = 0;
-            foreach (var l in lairs)
+            if (!measuring && t >= warmup) measuring = true;
+            if (measuring && measuredDur >= HorizonSeconds) break;
+
+            double lapStart = t, engaged = 0, combat = 0, waste = 0, lapExp = 0;
+            int stepsSinceKill = 0;
+            for (int p = 0; p < lap.Count; p++)
             {
-                double frac = l.Instant ? 1.0 : Math.Min(1.0, lapSeconds / l.Respawn);
-                // AoE re-hits every summon tier (Waves passes, count-independent);
-                // single-target fights every monster the room becomes (Mobs × Kills).
-                double rounds = area ? l.Waves * roundsPerMob : l.Mobs * l.Kills * roundsPerMob;
-                combat += frac * rounds * tick;
+                stepsSinceKill++;   // the hop into room p
+                // Time at this visit: whichever of walking / fighting has you further
+                // along the lap (you can't be past a room you haven't walked to, nor
+                // have killed faster than combat allows).
+                double now = lapStart + Math.Max(engaged, (p + 1) * step);
+                bool killedHere = false;
+
+                foreach (int d in posDefs[p])
+                {
+                    double[] mc = availAt[d];
+                    int up = defInstant[d] ? defMobs[d] : CountReady(mc, now);
+                    if (up > 0)
+                    {
+                        double ct = area
+                            ? defWaves[d] * roundsPerMob * tick               // room-at-once
+                            : up * defKills[d] * roundsPerMob * tick;         // serial
+                        combat += ct; engaged += ct;
+                        lapExp += up * defExp[d];
+                        killedHere = true;
+                        if (measuring) clears[d]++;
+                        if (!defInstant[d])
+                        {
+                            // Stamp each killed mob's next-available time. AoE drops
+                            // them together at the clear; single-target staggers them
+                            // across the serial kills, which is what desyncs the loop.
+                            double perKill = defKills[d] * roundsPerMob * tick;
+                            int order = 0;
+                            for (int m = 0; m < mc.Length; m++)
+                            {
+                                if (mc[m] > now) continue;
+                                double death = area ? now + ct : now + (order + 1) * perKill;
+                                mc[m] = death + defRespawn[d];
+                                order++;
+                            }
+                        }
+                    }
+                    else if (!defInstant[d])
+                    {
+                        if (measuring)
+                        {
+                            misses[d]++;
+                            double soonest = Soonest(mc);
+                            double shortfall = soonest - now;
+                            if (shortfall > 0 && shortfall < closest[d]) closest[d] = shortfall;
+                        }
+                    }
+                }
+
+                if (killedHere)
+                {
+                    // The empty stretch that led into this kill wastes whole ticks;
+                    // a stretch short enough to hide in the kill's downtime is free.
+                    double w = Math.Floor(stepsSinceKill * step / tick) * tick;
+                    waste += w; engaged += w;
+                    stepsSinceKill = 0;
+                }
+
+                if (lap[p].Summon is { ExpPerRoll: > 0 } su)
+                {
+                    double roll = su.ExpPerRoll * (1.0 + (quickKill ? su.SummonChance : 0.0));
+                    lapExp += roll;
+                    if (measuring)
+                    {
+                        (_, double acc, _) = summonExp.TryGetValue(lap[p].Room, out var prev)
+                            ? prev : (su.SpellName, 0.0, su.SummonChance);
+                        summonExp[lap[p].Room] = (su.SpellName, acc + roll, su.SummonChance);
+                    }
+                }
             }
-            double newLap = Math.Max(Math.Max(combat + travelWasteSeconds, walkSeconds), tick);
-            if (Math.Abs(newLap - lapSeconds) < 0.05) { lapSeconds = newLap; break; }
-            lapSeconds = newLap;
+            waste += Math.Floor(stepsSinceKill * step / tick) * tick;   // trailing empty stretch
+
+            double lapDur = Math.Max(Math.Max(combat + waste, walkSeconds), tick);
+            t += lapDur;
+            if (measuring) { measuredExp += lapExp; measuredDur += lapDur; measuredLaps++; }
         }
 
-        double lapsPerHour = HorizonSeconds / lapSeconds;
-        double expPerHour = 0;
+        double scale = measuredDur > 0 ? HorizonSeconds / measuredDur : 0;
+        double avgLap = measuredLaps > 0 ? measuredDur / measuredLaps : 0;
+        double lapsPerHour = avgLap > 0 ? HorizonSeconds / avgLap : 0;
+        double expPerHour = measuredExp * scale;
+
         var stats = new List<ExpLairStat>();
-        foreach (var l in lairs)
+        for (int d = 0; d < defCount; d++)
         {
-            double frac = l.Instant ? 1.0 : Math.Min(1.0, lapSeconds / l.Respawn);
-            double firesPerHour = frac * lapsPerHour;
-            expPerHour += l.Mobs * l.ExpPerMob * firesPerHour;
-            if (!l.Instant)
-                stats.Add(new ExpLairStat(
-                    l.Room,
-                    (int)Math.Round(firesPerHour),
-                    (int)Math.Round((1.0 - frac) * lapsPerHour),   // laps you arrive early on
-                    Math.Max(0.0, l.Respawn - lapSeconds),          // how early
-                    Summons: l.Waves > 1 || l.Kills > 1.0));
+            if (defInstant[d]) continue;   // fixtures always fire — not a timer row
+            stats.Add(new ExpLairStat(
+                defRoom[d],
+                (int)Math.Round(clears[d] * scale),
+                (int)Math.Round(misses[d] * scale),
+                closest[d] == double.MaxValue ? 0.0 : Math.Max(0.0, closest[d]),
+                Summons: defSummons[d]));
         }
 
-        // Bosses: a flat once-per-regen contribution, independent of the lap. Each
-        // is counted ONCE across the loop (already deduped by monster id), at
-        // exp ÷ regen-hours — a 15h-regen 1.2M boss adds 80k/hr, not 1.2M per pass
-        // in every room it can appear.
+        // Bosses: flat once-per-regen, independent of the lap. Counted ONCE across
+        // the loop (already deduped by monster id) at exp ÷ regen-hours.
         var bossStats = new List<ExpBossStat>();
         foreach (var b in bosses.Values)
         {
@@ -254,26 +347,27 @@ public static class LoopExpSimulator
                 (int)Math.Round(regenHours)));
         }
 
-        // Room-spell summons: each summoning room hands you one averaged roll per
-        // visit (Σ band% × monster exp), plus a second roll's worth when a quick kill
-        // (rounds ≤ 2) lets another spawn before you leave — a per-lap fixture-style
-        // contribution scaled by laps/hr. Not gated on lair time; the nomonsters roll
-        // fires once the room's own placed mob (if any) is down.
         var summonStats = new List<ExpSummonStat>();
-        bool quickKill = roundsPerMob <= 2.0;
-        foreach (ExpRoomVisit v in lap)
-        {
-            if (v.Summon is not { ExpPerRoll: > 0 } su) continue;
-            double perVisit = su.ExpPerRoll * (1.0 + (quickKill ? su.SummonChance : 0.0));
-            double hr = perVisit * lapsPerHour;
-            expPerHour += hr;
-            summonStats.Add(new ExpSummonStat(
-                v.Room, su.SpellName, hr * s.RealConditionsMultiplier, su.SummonChance));
-        }
+        foreach ((RoomKey room, (string spell, double exp, double chance)) in summonExp)
+            summonStats.Add(new ExpSummonStat(room, spell, exp * scale * s.RealConditionsMultiplier, chance));
 
         expPerHour *= s.RealConditionsMultiplier;
 
         return new ExpSimResult(
-            expPerHour, lapSeconds, (int)Math.Round(lapsPerHour), stats, bossStats, summonStats);
+            expPerHour, avgLap, (int)Math.Round(lapsPerHour), stats, bossStats, summonStats);
+    }
+
+    private static int CountReady(double[] clocks, double now)
+    {
+        int up = 0;
+        for (int i = 0; i < clocks.Length; i++) if (clocks[i] <= now) up++;
+        return up;
+    }
+
+    private static double Soonest(double[] clocks)
+    {
+        double min = double.MaxValue;
+        for (int i = 0; i < clocks.Length; i++) if (clocks[i] < min) min = clocks[i];
+        return min;
     }
 }
