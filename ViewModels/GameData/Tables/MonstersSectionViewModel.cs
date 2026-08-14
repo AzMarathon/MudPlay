@@ -51,6 +51,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         "Lairs",         // synthesised: Σ TotalLairs across the monster's lair groups
         "MobsPerLair",   // synthesised: mob-count range across those groups
         "ScriptValue",   // raw MDB "scripting value"
+        "Undead",        // raw MDB flag (0 = living), rendered + filterable
     };
 
     // Friendly grid headers — the columns above keep their raw MDB keys (so binding / search /
@@ -68,6 +69,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["Lairs"]        = "# Lairs",
             ["MobsPerLair"]  = "Mobs/Lair",
             ["ScriptValue"]  = "Script",
+            ["Undead"]       = "Undead",
         };
 
     public override string SearchKeyColumn => "Name";
@@ -89,6 +91,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["Type"]    = LookupEnums.FormatMonType,
             ["Align"]   = LookupEnums.FormatMonAlignment,
             ["HPRegen"] = FormatHpRegen,
+            ["Undead"]  = static raw => raw is null or "" or "0" ? "Living" : "Undead",
         };
 
     // "2hp@90s" — HP healed per regen tick @ the tick interval, so the regen rate reads at a
@@ -122,6 +125,18 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         _overlaySeed = overlaySeed;
         _roomGraph = roomGraph;
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
+
+        // Filter panel: min–max ranges on the numeric columns (category dropdowns
+        // are built after load from the data — see PopulateRows). Column keys must
+        // match the grid columns; the leading integer of each cell is what's tested
+        // (so "2hp@90s" / "10/42/8" range-filter on their leading number).
+        foreach ((string label, string column) in new[]
+        {
+            ("EXP", "EXP"), ("HP", "HP"), ("HP Regen", "HPRegen"),
+            ("AC", "ArmourClass"), ("DR", "DamageResist"), ("MR", "MagicRes"),
+            ("Accuracy", "Accuracy"), ("Lair Exp", "AvgLairExp"), ("# Lairs", "Lairs"),
+        })
+            RangeFilters.Add(new NumericRangeFilter(label, column, ApplyFilter));
     }
 
     // Synthesise the grid's "Accuracy" column — not a real MDB field. Monsters store accuracy
@@ -138,6 +153,31 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     {
         BuildLairIndex();
         base.PopulateRows(rows);
+        RebuildCategoryFilters(rows);
+    }
+
+    // Category dropdowns are data-driven: their options are the distinct rendered
+    // values present in the loaded rows, so a set with no undead monsters simply
+    // won't offer "Undead". Rebuilt on every load / set switch (rows changed).
+    private void RebuildCategoryFilters(System.Collections.Generic.IList<GameDataRow> rows)
+    {
+        CategoryFilters.Clear();
+        CategoryFilters.Add(BuildCategoryFilter("Type", "Type", rows));
+        CategoryFilters.Add(BuildCategoryFilter("Alignment", "Align", rows));
+        CategoryFilters.Add(BuildCategoryFilter("Undead", "Undead", rows));
+        OnPropertyChanged(nameof(HasFilterPanel));
+    }
+
+    private CategoryFilter BuildCategoryFilter(string label, string column, System.Collections.Generic.IList<GameDataRow> rows)
+    {
+        var options = new List<string> { CategoryFilter.AnyOption };
+        options.AddRange(rows
+            .Select(r => r.GetDisplay(column))
+            .Where(v => !string.IsNullOrEmpty(v))
+            .Select(v => v!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(v => v, StringComparer.OrdinalIgnoreCase));
+        return new CategoryFilter(label, column, options, ApplyFilter);
     }
 
     // Join the Lairs table onto monsters via MobList (comma-separated monster

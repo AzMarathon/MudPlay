@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.9.9**
-> - Monster table (Game Data → Monsters): four new columns — Lair Exp, # Lairs, Mobs/Lair, and Script — surfacing previously-ignored MDB data
+> **Version 3.9.10**
+> - Monster table (Game Data → Monsters): new filter sidebar — min/max ranges on every numeric column plus Type / Alignment / Undead dropdowns, stacking with the text filter; Clear filters resets all
+> - Undead surfaced as a rendered, filterable column (Living / Undead)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

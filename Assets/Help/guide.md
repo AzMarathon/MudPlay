@@ -415,7 +415,7 @@ The window is a sidebar plus a content pane:
 - **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Messages**. (The macro/alias/trigger editors are covered in the **Automation** section.)
 - **Imported tables** (bottom group) holds the game data: **Monsters, Items, Spells, Rooms, Lairs, Shops, Races, Classes, TextBlocks, Info, Unobtainable, Quest Flags.**
 
-Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it. The **Monsters** table also surfaces lair data: **Lair Exp**, **# Lairs** (total lair rooms it spawns in), **Mobs/Lair** (how many mob types share its lairs, as a range when it varies), and **Script**.
+Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it. The **Monsters** table also surfaces lair data: **Lair Exp**, **# Lairs** (total lair rooms it spawns in), **Mobs/Lair** (how many mob types share its lairs, as a range when it varies), and **Script**. It carries a **filter sidebar** on the right: min/max ranges on every numeric column (EXP, HP, HP Regen, AC, DR, MR, Accuracy, Lair Exp, # Lairs) plus **Type**, **Alignment**, and **Undead** dropdowns. These stack with the **Filter…** text box (all AND'd together); **Clear filters** resets them and the text box.
 
 ## Overriding a record
 

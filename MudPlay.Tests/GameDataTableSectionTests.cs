@@ -125,6 +125,71 @@ public sealed class GameDataTableSectionTests : IDisposable
     }
 
     [Fact]
+    public async Task RangeFilter_NarrowsByLeadingNumericValue()
+    {
+        SeedMonsters("v1.11p",
+            "[{\"Number\":1,\"Name\":\"Goblin\",\"HP\":10}," +
+             "{\"Number\":2,\"Name\":\"Orc\",\"HP\":25}," +
+             "{\"Number\":3,\"Name\":\"Dragon\",\"HP\":500}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        NumericRangeFilter hp = vm.RangeFilters.Single(r => r.Column == "HP");
+        hp.Min = 20;
+        Assert.Equal(2, vm.FilteredRows.Count);   // Orc, Dragon
+
+        hp.Max = 100;
+        Assert.Single(vm.FilteredRows);            // Orc only
+        Assert.Equal("Orc", vm.FilteredRows[0].Get("Name"));
+    }
+
+    [Fact]
+    public async Task CategoryFilter_MatchesRenderedValue()
+    {
+        SeedMonsters("v1.11p",
+            "[{\"Number\":1,\"Name\":\"Goblin\",\"Undead\":0}," +
+             "{\"Number\":2,\"Name\":\"Skeleton\",\"Undead\":255}," +
+             "{\"Number\":3,\"Name\":\"Zombie\",\"Undead\":1}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        CategoryFilter undead = vm.CategoryFilters.Single(c => c.Column == "Undead");
+        Assert.Contains("Living", undead.Options);
+        Assert.Contains("Undead", undead.Options);
+
+        undead.Selected = "Undead";
+        Assert.Equal(2, vm.FilteredRows.Count);    // Skeleton, Zombie
+        Assert.All(vm.FilteredRows, r => Assert.Equal("Undead", r.GetDisplay("Undead")));
+
+        undead.Selected = "Living";
+        Assert.Single(vm.FilteredRows);            // Goblin
+    }
+
+    [Fact]
+    public async Task FiltersAndText_CombineThenClearResets()
+    {
+        SeedMonsters("v1.11p",
+            "[{\"Number\":1,\"Name\":\"Goblin\",\"HP\":10}," +
+             "{\"Number\":2,\"Name\":\"Orc\",\"HP\":25}," +
+             "{\"Number\":3,\"Name\":\"Dragon\",\"HP\":500}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        vm.RangeFilters.Single(r => r.Column == "HP").Min = 20;
+        vm.SearchText = "dragon";
+        Assert.Single(vm.FilteredRows);            // HP>=20 AND name~dragon
+        Assert.Equal("Dragon", vm.FilteredRows[0].Get("Name"));
+
+        vm.ClearFiltersCommand.Execute(null);
+        Assert.Equal(3, vm.FilteredRows.Count);
+        Assert.Equal(string.Empty, vm.SearchText);
+        Assert.All(vm.RangeFilters, r => Assert.False(r.IsActive));
+    }
+
+    [Fact]
     public async Task MissingColumn_RendersAsNull()
     {
         SeedMonsters("v1.11p", "[{\"Name\":\"Goblin\"}]"); // no HP / EXP

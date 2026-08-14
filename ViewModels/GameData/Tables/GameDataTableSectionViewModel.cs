@@ -5,6 +5,7 @@ using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Services;
 using MudPlay.Views.GameData.Tables;
 
@@ -245,10 +246,12 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         OnPropertyChanged(nameof(StatusText));
     }
 
-    private void ApplyFilter()
+    // Callable by subclasses so a richer filter surface (e.g. the Monsters
+    // multi-field panel) can re-filter when one of its fields changes.
+    protected void ApplyFilter()
     {
         string filter = (SearchText ?? string.Empty).Trim();
-        if (filter.Length == 0)
+        if (filter.Length == 0 && !HasExtraFilter)
         {
             // Unfiltered — alias the AllRows collection directly so the
             // DataGrid sees identical content with zero extra allocation.
@@ -272,8 +275,67 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // even when the grid renders them via a formatter ("Weapon"). Virtual so a tab with a
     // richer notion of a match (e.g. Rooms' "map,room" coordinate query) can intercept
     // before falling back to this substring pass.
+    // ----- Multi-field filter panel (subclasses populate; empty = no panel) -----
+    // An always-visible sidebar beside the grid with per-column min–max range
+    // filters and categorical dropdowns, on top of the always-present text box.
+    // Empty by default, so tables that declare none render no sidebar.
+    public ObservableCollection<NumericRangeFilter> RangeFilters { get; } = new();
+    public ObservableCollection<CategoryFilter> CategoryFilters { get; } = new();
+    public bool HasFilterPanel => RangeFilters.Count > 0 || CategoryFilters.Count > 0;
+
+    // Drives ApplyFilter's "run even with an empty text box" path (see ApplyFilter).
+    protected bool HasExtraFilter
+    {
+        get
+        {
+            foreach (NumericRangeFilter r in RangeFilters) if (r.IsActive) return true;
+            foreach (CategoryFilter c in CategoryFilters) if (c.IsActive) return true;
+            return false;
+        }
+    }
+
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        foreach (NumericRangeFilter r in RangeFilters) r.Clear();
+        foreach (CategoryFilter c in CategoryFilters) c.Clear();
+        SearchText = string.Empty;   // OnSearchTextChanged re-applies
+        ApplyFilter();
+    }
+
+    // Panel filters (range + category), all AND'd together. Empty collections pass
+    // everything, so non-panel tables are unaffected.
+    private bool PassesPanelFilters(GameDataRow row)
+    {
+        foreach (NumericRangeFilter r in RangeFilters)
+            if (r.IsActive && (!TryLeadingInt(row.Get(r.Column), out int v) || !r.Passes(v)))
+                return false;
+        foreach (CategoryFilter c in CategoryFilters)
+            if (c.IsActive && !c.Passes(row.GetDisplay(c.Column)))
+                return false;
+        return true;
+    }
+
+    // Leading signed integer of a cell string — "12345" → 12345, "2hp@90s" → 2,
+    // "10/42/8" → 10, "1–11" → 1. False when there's no leading number.
+    private static bool TryLeadingInt(string? s, out int value)
+    {
+        value = 0;
+        if (string.IsNullOrEmpty(s)) return false;
+        int i = s[0] == '-' ? 1 : 0;
+        int start = i;
+        while (i < s.Length && s[i] is >= '0' and <= '9') i++;
+        if (i == start) return false;
+        if (!int.TryParse(s.AsSpan(start, i - start), out value)) return false;
+        if (s[0] == '-') value = -value;
+        return true;
+    }
+
     protected virtual bool RowMatches(GameDataRow row, string filter)
     {
+        if (!PassesPanelFilters(row)) return false;
+        // Empty text box + active panel: the panel alone decides the match.
+        if (filter.Length == 0) return true;
         foreach (string column in Columns)
         {
             string? value = row.Get(column);
@@ -417,6 +479,18 @@ public sealed class GameDataRow
     // Read a column value by name. Returns null if the column wasn't in the source row.
     public string? Get(string column)
         => _values.TryGetValue(column, out string? value) ? value : null;
+
+    // Read a column's *display* value (formatter-applied), as shown in the grid.
+    // Category filters match on this so their dropdowns show "Living"/"Undead" or
+    // "Lawful Good" rather than the raw MDB codes; range filters use Get (raw
+    // numeric) instead. Falls back to the raw value when the column has no cell.
+    public string? GetDisplay(string column)
+    {
+        foreach (GameDataCell cell in Cells)
+            if (string.Equals(cell.Column, column, StringComparison.OrdinalIgnoreCase))
+                return cell.Value;
+        return Get(column);
+    }
 
     // Build a row from a JSON element. Columns missing from the source render as null in the
     // resulting row so subclasses see a uniform shape regardless of schema drift. The raw cell

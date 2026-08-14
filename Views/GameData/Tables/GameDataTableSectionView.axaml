@@ -17,56 +17,134 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
         </Style>
+        <Style Selector="NumericUpDown.range">
+            <Setter Property="Width" Value="96"/>
+            <Setter Property="HorizontalContentAlignment" Value="Right"/>
+            <Setter Property="Increment" Value="1"/>
+            <Setter Property="FormatString" Value="0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.FilterLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
     </UserControl.Styles>
 
-    <Grid Margin="22" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="8">
+    <!-- Two columns: the table content, and an always-visible filter sidebar
+         on the right. Tables that don't expose RangeFilters / CategoryFilters
+         (everything but Monsters today) have HasFilterPanel = false, so the
+         sidebar collapses and the layout looks exactly as before. -->
+    <Grid Margin="22" ColumnDefinitions="*,Auto" ColumnSpacing="14">
 
-        <!-- Tab header. -->
-        <TextBlock Grid.Row="0" Classes="Header" Text="{Binding Title}"/>
+        <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="8">
 
-        <!-- Optional muted banner — collapses when the VM doesn't set BannerText. -->
-        <Border Grid.Row="1"
-                Padding="10,6"
+            <!-- Tab header. -->
+            <TextBlock Grid.Row="0" Classes="Header" Text="{Binding Title}"/>
+
+            <!-- Optional muted banner — collapses when the VM doesn't set BannerText. -->
+            <Border Grid.Row="1"
+                    Padding="10,6"
+                    BorderBrush="{StaticResource ChromeBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    IsVisible="{Binding BannerText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <TextBlock Text="{Binding BannerText}"
+                           Classes="StatusText"
+                           TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- Search box + Add/Remove buttons (Add/Remove only render
+                 when the section implements IEditableTableSectionViewModel
+                 with non-null AddCommand / RemoveCommand — wired in
+                 code-behind via FindControl). -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
+                <TextBox Classes="clearable" Text="{Binding SearchText, Mode=TwoWay}"
+                         PlaceholderText="Filter…"
+                         ToolTip.Tip="{Binding FilterHint}"
+                         Width="320"/>
+                <Button x:Name="AddButton"    Content="Add"    IsVisible="False"/>
+                <Button x:Name="RemoveButton" Content="Remove" IsVisible="False"/>
+            </StackPanel>
+
+            <!-- Tabular row grid. Columns are populated in code-behind from
+                 the VM's Columns list so they auto-size and align with their
+                 headers. -->
+            <DataGrid Grid.Row="3"
+                      x:Name="RowsGrid"
+                      ItemsSource="{Binding FilteredRows}"
+                      SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                      SelectionMode="Extended"
+                      IsReadOnly="True"
+                      AutoGenerateColumns="False"
+                      CanUserSortColumns="True"
+                      CanUserResizeColumns="True"
+                      CanUserReorderColumns="False"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto"/>
+
+            <!-- Footer status -->
+            <TextBlock Grid.Row="4" Classes="StatusText" Text="{Binding StatusText}"/>
+
+        </Grid>
+
+        <!-- Filter sidebar: numeric min–max ranges + category dropdowns. Always
+             visible for tables that populate the filter collections; scrolls
+             vertically when the filter list is long. -->
+        <Border Grid.Column="1"
+                Width="272"
+                Padding="12"
+                IsVisible="{Binding HasFilterPanel}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="1"
-                CornerRadius="3"
-                IsVisible="{Binding BannerText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <TextBlock Text="{Binding BannerText}"
-                       Classes="StatusText"
-                       TextWrapping="Wrap"/>
+                CornerRadius="3">
+            <DockPanel LastChildFill="True">
+                <TextBlock DockPanel.Dock="Top"
+                           Text="Filters"
+                           Foreground="{StaticResource ChromeFgBrush}"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,10"/>
+                <Button DockPanel.Dock="Bottom"
+                        Content="Clear filters"
+                        Command="{Binding ClearFiltersCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Margin="0,10,0,0"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="8">
+                        <ItemsControl ItemsSource="{Binding RangeFilters}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:NumericRangeFilter">
+                                    <StackPanel Margin="0,0,0,4">
+                                        <TextBlock Classes="FilterLabel" Text="{Binding Label}"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <NumericUpDown Classes="range" Value="{Binding Min, Mode=TwoWay}"
+                                                           ToolTip.Tip="Minimum (blank = no lower bound)"/>
+                                            <TextBlock Text="–" VerticalAlignment="Center"/>
+                                            <NumericUpDown Classes="range" Value="{Binding Max, Mode=TwoWay}"
+                                                           ToolTip.Tip="Maximum (blank = no upper bound)"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <ItemsControl ItemsSource="{Binding CategoryFilters}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CategoryFilter">
+                                    <StackPanel Margin="0,0,0,4">
+                                        <TextBlock Classes="FilterLabel" Text="{Binding Label}"/>
+                                        <ComboBox HorizontalAlignment="Stretch"
+                                                  ItemsSource="{Binding Options}"
+                                                  SelectedItem="{Binding Selected, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
         </Border>
-
-        <!-- Search box + Add/Remove buttons (Add/Remove only render
-             when the section implements IEditableTableSectionViewModel
-             with non-null AddCommand / RemoveCommand — wired in
-             code-behind via FindControl). -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
-            <TextBox Classes="clearable" Text="{Binding SearchText, Mode=TwoWay}"
-                     PlaceholderText="Filter…"
-                     ToolTip.Tip="{Binding FilterHint}"
-                     Width="320"/>
-            <Button x:Name="AddButton"    Content="Add"    IsVisible="False"/>
-            <Button x:Name="RemoveButton" Content="Remove" IsVisible="False"/>
-        </StackPanel>
-
-        <!-- Tabular row grid. Columns are populated in code-behind from
-             the VM's Columns list so they auto-size and align with their
-             headers. -->
-        <DataGrid Grid.Row="3"
-                  x:Name="RowsGrid"
-                  ItemsSource="{Binding FilteredRows}"
-                  SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
-                  SelectionMode="Extended"
-                  IsReadOnly="True"
-                  AutoGenerateColumns="False"
-                  CanUserSortColumns="True"
-                  CanUserResizeColumns="True"
-                  CanUserReorderColumns="False"
-                  HorizontalScrollBarVisibility="Auto"
-                  VerticalScrollBarVisibility="Auto"/>
-
-        <!-- Footer status -->
-        <TextBlock Grid.Row="4" Classes="StatusText" Text="{Binding StatusText}"/>
 
     </Grid>
 </UserControl>
