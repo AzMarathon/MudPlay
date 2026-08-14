@@ -196,6 +196,10 @@ public partial class App : Application
                 MudPlay.ViewModels.CharacterWorkshop.ItemFinderViewModel,
                 MudPlay.Views.CharacterWorkshop.ItemFinderWindow>();
 
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.CharacterWorkshop.ChestOffloadViewModel,
+                MudPlay.Views.CharacterWorkshop.ChestOffloadWindow>();
+
             // Right-click → "Center on…" — two-int (map / room) input
             // that returns a RoomKey for the Navigation window to
             // rebuild its layout around.
