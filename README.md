@@ -2,8 +2,9 @@
 
 <!-- current-version:start -->
 > **Version 3.9.10**
-> - Monster table (Game Data → Monsters): new filter sidebar — min/max ranges on every numeric column plus Type / Alignment / Undead dropdowns, stacking with the text filter; Clear filters resets all
-> - Undead surfaced as a rendered, filterable column (Living / Undead)
+> - Monsters game-data table reworked to mirror MegaMUD's Monsters tab — columns: Rgn, Exp (base ×multiplier, e.g. `65000 (20x)`), HP, AC/DR, Dodge, MR, Acc (Maj/Mx), Damage, Exp/(Dmg+HP), Lair Exp, # Lairs, Mag, Undead
+> - Dodge and Mag (hitmag level) decoded from monster ability data; Exp/(Dmg+HP) exp-efficiency metric reproduces MME's figures
+> - New MME-style filter sidebar: one threshold per stat plus an Undead-only checkbox and an Alignment dropdown, all stacking with the text filter; Clear filters resets everything
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -113,26 +113,32 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Spacing="8">
-                        <ItemsControl ItemsSource="{Binding RangeFilters}">
+                        <ItemsControl ItemsSource="{Binding ThresholdFilters}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:NumericRangeFilter">
-                                    <StackPanel Margin="0,0,0,4">
-                                        <TextBlock Classes="FilterLabel" Text="{Binding Label}"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <NumericUpDown Classes="range" Value="{Binding Min, Mode=TwoWay}"
-                                                           ToolTip.Tip="Minimum (blank = no lower bound)"/>
-                                            <TextBlock Text="–" VerticalAlignment="Center"/>
-                                            <NumericUpDown Classes="range" Value="{Binding Max, Mode=TwoWay}"
-                                                           ToolTip.Tip="Maximum (blank = no upper bound)"/>
-                                        </StackPanel>
-                                    </StackPanel>
+                                <DataTemplate x:DataType="vm:ThresholdFilter">
+                                    <DockPanel Margin="0,0,0,4">
+                                        <NumericUpDown DockPanel.Dock="Right" Classes="range"
+                                                       Value="{Binding Value, Mode=TwoWay}"
+                                                       ToolTip.Tip="Blank = no limit"/>
+                                        <TextBlock Classes="FilterLabel" VerticalAlignment="Center"
+                                                   Text="{Binding LabelWithGlyph}"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <ItemsControl ItemsSource="{Binding BoolFilters}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BoolFilter">
+                                    <CheckBox Margin="0,2,0,2"
+                                              Content="{Binding Label}"
+                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"/>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <ItemsControl ItemsSource="{Binding CategoryFilters}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:CategoryFilter">
-                                    <StackPanel Margin="0,0,0,4">
+                                    <StackPanel Margin="0,2,0,4">
                                         <TextBlock Classes="FilterLabel" Text="{Binding Label}"/>
                                         <ComboBox HorizontalAlignment="Stretch"
                                                   ItemsSource="{Binding Options}"

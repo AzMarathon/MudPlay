@@ -34,23 +34,25 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     protected override string TableName => "Monsters";
 
+    // Column set + order mirror MegaMUD's Monsters tab. Several are synthesised in
+    // ComputeRowCells (AcDr, Dodge, Mag, Damage, Efficiency, Accuracy, EXP, Lairs)
+    // rather than being raw MDB fields — see there for how each is derived.
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
         "Number",
         "Name",
-        "EXP",
+        "RegenTime",     // "Rgn" — respawn timer
+        "EXP",           // "65000 (20x)" — base reward with its multiplier (see ComputeRowCells)
         "HP",
-        "HPRegen",
-        "ArmourClass",
-        "DamageResist",
-        "MagicRes",
-        "Accuracy",      // synthesised from the primary attack (see ComputeRowCells)
-        "Align",
-        "Type",
-        "AvgLairExp",    // per-monster avg lair exp (raw MDB field)
+        "AcDr",          // synthesised "AC/DR"
+        "Dodge",         // synthesised from ability code 34
+        "MagicRes",      // "MR"
+        "Accuracy",      // synthesised majority/max attack accuracy
+        "Damage",        // rounded AvgDmg
+        "Efficiency",    // synthesised "Exp/(Dmg+HP)" exp-per-effort metric
+        "AvgLairExp",    // "Lair Exp"
         "Lairs",         // synthesised: Σ TotalLairs across the monster's lair groups
-        "MobsPerLair",   // synthesised: mob-count range across those groups
-        "ScriptValue",   // raw MDB "scripting value"
+        "Mag",           // synthesised hitmag level from ability code 28
         "Undead",        // raw MDB flag (0 = living), rendered + filterable
     };
 
@@ -59,18 +61,22 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     public override IReadOnlyDictionary<string, string> ColumnHeaders { get; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Number"]       = "ID",
-            ["HPRegen"]      = "HP Regen",
-            ["ArmourClass"]  = "AC",
-            ["DamageResist"] = "DR",
-            ["MagicRes"]     = "MR",
-            ["Align"]        = "Alignment",
-            ["AvgLairExp"]   = "Lair Exp",
-            ["Lairs"]        = "# Lairs",
-            ["MobsPerLair"]  = "Mobs/Lair",
-            ["ScriptValue"]  = "Script",
-            ["Undead"]       = "Undead",
+            ["Number"]     = "ID",
+            ["RegenTime"]  = "Rgn",
+            ["EXP"]        = "Exp",
+            ["AcDr"]       = "AC/DR",
+            ["MagicRes"]   = "MR",
+            ["Accuracy"]   = "Acc (Maj/Mx)",
+            ["Efficiency"] = "Exp/(Dmg+HP)",
+            ["AvgLairExp"] = "Lair Exp",
+            ["Lairs"]      = "# Lairs",
         };
+
+    // Carried on each row for filtering but not shown as grid columns: Alignment
+    // (its dropdown reads the formatted value), and the raw AC / DR fields so the
+    // AC ≤ / DR ≤ threshold filters work even though the table shows them combined.
+    protected override IReadOnlyList<string> FilterOnlyColumns { get; } =
+        new[] { "Align", "ArmourClass", "DamageResist" };
 
     public override string SearchKeyColumn => "Name";
 
@@ -88,22 +94,25 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     protected override IReadOnlyDictionary<string, Func<string?, string?>> ColumnFormatters { get; } =
         new Dictionary<string, Func<string?, string?>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Type"]    = LookupEnums.FormatMonType,
-            ["Align"]   = LookupEnums.FormatMonAlignment,
-            ["HPRegen"] = FormatHpRegen,
-            ["Undead"]  = static raw => raw is null or "" or "0" ? "Living" : "Undead",
+            ["HP"]         = FormatThousands,
+            ["AvgLairExp"] = FormatThousands,
+            ["Efficiency"] = FormatThousands,
+            // MegaMUD marks undead with an "✗"; living monsters read blank.
+            ["Undead"]     = static raw => raw is null or "" or "0" ? "" : "✗",
+            // Filter-only column: format so the Alignment dropdown reads names, not codes.
+            ["Align"]      = LookupEnums.FormatMonAlignment,
         };
 
-    // "2hp@90s" — HP healed per regen tick @ the tick interval, so the regen rate reads at a
-    // glance. Zero-regen mobs show a plain "0"; non-numeric / empty values pass through
-    // unchanged.
-    internal static string? FormatHpRegen(string? raw)
+    // Thousands-separated display for big counts ("300,000"); 0 / blank render empty.
+    // The raw value stays comma-free, so the leading-int threshold filters read it
+    // directly while the grid shows the grouped form (the sort comparer parses either).
+    internal static string? FormatThousands(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return raw;
         if (!int.TryParse(raw, System.Globalization.NumberStyles.Integer,
                 System.Globalization.CultureInfo.InvariantCulture, out int n))
             return raw;
-        return n > 0 ? $"{n}hp@{RegenIntervalSeconds}s" : raw;
+        return n == 0 ? "" : n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     public IRelayCommand<GameDataRow?> OpenEditAsyncCommand { get; }
@@ -126,45 +135,53 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         _roomGraph = roomGraph;
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
 
-        // Filter panel: min–max ranges on the numeric columns (category dropdowns
-        // are built after load from the data — see PopulateRows). Column keys must
-        // match the grid columns; the leading integer of each cell is what's tested
-        // (so "2hp@90s" / "10/42/8" range-filter on their leading number).
-        foreach ((string label, string column) in new[]
+        // Filter panel (MegaMUD-style single-threshold): each stat carries one bound
+        // with the direction MME uses — difficulty stats ≤, reward stats ≥. The value
+        // tested is the leading integer of each cell's raw value (so "80/10" AC/DR
+        // filters on 80, "65000 (20x)" Exp filters on the base 65000). Undead is a
+        // checkbox; Alignment is a dropdown built after load (see OnRowsLoaded).
+        foreach ((string label, string column, ThresholdDirection dir) in new (string, string, ThresholdDirection)[]
         {
-            ("EXP", "EXP"), ("HP", "HP"), ("HP Regen", "HPRegen"),
-            ("AC", "ArmourClass"), ("DR", "DamageResist"), ("MR", "MagicRes"),
-            ("Accuracy", "Accuracy"), ("Lair Exp", "AvgLairExp"), ("# Lairs", "Lairs"),
+            ("Exp",      "EXP",          ThresholdDirection.AtLeast),
+            ("HP",       "HP",           ThresholdDirection.AtMost),
+            ("AC",       "ArmourClass",  ThresholdDirection.AtMost),
+            ("DR",       "DamageResist", ThresholdDirection.AtMost),
+            ("Dodge",    "Dodge",        ThresholdDirection.AtMost),
+            ("MR",       "MagicRes",     ThresholdDirection.AtMost),
+            ("Acc",      "Accuracy",     ThresholdDirection.AtMost),
+            ("Damage",   "Damage",       ThresholdDirection.AtMost),
+            ("Mag",      "Mag",          ThresholdDirection.AtMost),
+            ("Lair Exp", "AvgLairExp",   ThresholdDirection.AtLeast),
+            ("# Lairs",  "Lairs",        ThresholdDirection.AtLeast),
+            ("Rgn",      "RegenTime",    ThresholdDirection.AtMost),
         })
-            RangeFilters.Add(new NumericRangeFilter(label, column, ApplyFilter));
+            ThresholdFilters.Add(new ThresholdFilter(label, column, dir, ApplyFilter));
+
+        BoolFilters.Add(new BoolFilter("Undead only", "Undead",
+            static raw => !(raw is null or "" or "0"), ApplyFilter));
     }
 
-    // Synthesise the grid's "Accuracy" column — not a real MDB field. Monsters store accuracy
-    // per attack (AttAcc-N); a mob with several attacks shows each one's accuracy slash-joined
-    // in attack order ("10/42/8"). Only physical attacks count (AttType 1/3 with a non-zero
-    // chance) — spell-attack slots stash a spell id in AttAcc, not an accuracy. Falls back to
-    // slot 0 so spell-only mobs still show something.
-    // Monster Number → aggregated lair stats (Σ TotalLairs, and the min/max Mobs
-    // across every lair group whose MobList includes it). Rebuilt each load by the
-    // PopulateRows override below, before the per-row ComputeRowCells calls.
-    private Dictionary<int, (int Lairs, int MinMobs, int MaxMobs)> _lairIndex = new();
+    // Monster Number → Σ TotalLairs across every lair group whose MobList includes it.
+    // Rebuilt each load by the PopulateRows override below, before ComputeRowCells.
+    private Dictionary<int, int> _lairIndex = new();
 
     protected override void PopulateRows(System.Collections.Generic.IList<GameDataRow> rows)
     {
         BuildLairIndex();
         base.PopulateRows(rows);
-        RebuildCategoryFilters(rows);
     }
 
-    // Category dropdowns are data-driven: their options are the distinct rendered
-    // values present in the loaded rows, so a set with no undead monsters simply
-    // won't offer "Undead". Rebuilt on every load / set switch (rows changed).
+    // Runs on the UI thread after AllRows lands (PopulateRows runs on a worker thread,
+    // so the observable-collection mutation must happen here, not there — doing it in
+    // PopulateRows corrupted the ItemsControl and doubled the dropdowns).
+    protected override void OnRowsLoaded() => RebuildCategoryFilters(AllRows);
+
+    // The Alignment dropdown is data-driven: its options are the distinct alignments
+    // actually present in the loaded set. Rebuilt on every load / set switch.
     private void RebuildCategoryFilters(System.Collections.Generic.IList<GameDataRow> rows)
     {
         CategoryFilters.Clear();
-        CategoryFilters.Add(BuildCategoryFilter("Type", "Type", rows));
         CategoryFilters.Add(BuildCategoryFilter("Alignment", "Align", rows));
-        CategoryFilters.Add(BuildCategoryFilter("Undead", "Undead", rows));
         OnPropertyChanged(nameof(HasFilterPanel));
     }
 
@@ -180,62 +197,107 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         return new CategoryFilter(label, column, options, ApplyFilter);
     }
 
-    // Join the Lairs table onto monsters via MobList (comma-separated monster
-    // Numbers). A monster commonly sits in several lair groups (~63% of v1.11p
-    // monsters), so "# Lairs" sums their TotalLairs and "Mobs/Lair" spans the
-    // min–max mob count across those groups.
+    // Join the Lairs table onto monsters via MobList (comma-separated monster Numbers).
+    // A monster commonly sits in several lair groups (~63% of v1.11p monsters), so
+    // "# Lairs" sums their TotalLairs.
     private void BuildLairIndex()
     {
-        var index = new Dictionary<int, (int Lairs, int MinMobs, int MaxMobs)>();
+        var index = new Dictionary<int, int>();
         if (_cache.GetRawTable("Lairs") is { } doc)
         {
             foreach (JsonElement el in doc.RootElement.EnumerateArray())
             {
                 string mobList = ReadString(el, "MobList");
                 if (string.IsNullOrEmpty(mobList)) continue;
-                int mobs = ReadInt(el, "Mobs");
                 int totalLairs = ReadInt(el, "TotalLairs");
                 foreach (string tok in mobList.Split(','))
                 {
                     if (!int.TryParse(tok.Trim(), out int id) || id <= 0) continue;
-                    index[id] = index.TryGetValue(id, out (int Lairs, int MinMobs, int MaxMobs) a)
-                        ? (a.Lairs + totalLairs, Math.Min(a.MinMobs, mobs), Math.Max(a.MaxMobs, mobs))
-                        : (totalLairs, mobs, mobs);
+                    index[id] = (index.TryGetValue(id, out int a) ? a : 0) + totalLairs;
                 }
             }
         }
         _lairIndex = index;
     }
 
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
     protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element)
     {
+        int baseExp = ReadInt(element, "EXP");
+        int mult = ReadInt(element, "ExpMulti");
+        if (mult <= 0) mult = 1;
+        long effExp = (long)baseExp * mult;
+        int hp = ReadInt(element, "HP");
+        int ac = ReadInt(element, "ArmourClass");
+        int dr = ReadInt(element, "DamageResist");
+        int damage = (int)Math.Round(ReadDouble(element, "AvgDmg"), MidpointRounding.AwayFromZero);
+        int dodge = ReadAbilValue(element, 34);   // ability code 34 = Dodge
+        int mag = ReadAbilValue(element, 28);     // ability code 28 = Magical (hitmag level)
+
         var cells = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Accuracy"] = ComputeAttackAccuracy(element),
+            // Exp shows the base reward with its multiplier ("65000 (20x)") rather than
+            // the multiplied-out total, so both pieces stay visible. Comma-free so the
+            // threshold filter's leading-int read lands on the base value.
+            ["EXP"]        = mult > 1 ? $"{baseExp} ({mult}x)" : baseExp.ToString(Inv),
+            ["AcDr"]       = $"{ac}/{dr}",
+            ["Dodge"]      = dodge > 0 ? dodge.ToString(Inv) : null,
+            ["Mag"]        = mag > 0 ? mag.ToString(Inv) : null,
+            ["Damage"]     = damage > 0 ? damage.ToString(Inv) : null,
+            ["Accuracy"]   = ComputeAttackAccuracy(element),
+            ["Efficiency"] = ComputeEfficiency(effExp, damage, hp),
         };
-        if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int Lairs, int MinMobs, int MaxMobs) lair))
-        {
-            cells["Lairs"] = lair.Lairs.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            // en-dash range when the mob count varies across the monster's groups.
-            cells["MobsPerLair"] = lair.MinMobs == lair.MaxMobs
-                ? lair.MinMobs.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                : $"{lair.MinMobs}–{lair.MaxMobs}";
-        }
+        if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out int lairs))
+            cells["Lairs"] = lairs.ToString(Inv);
         return cells;
     }
 
+    // MegaMUD's "Exp/(Dmg+HP)" exp-per-effort metric — effective exp per (two rounds of
+    // the monster's damage + its HP), ×100. Reverse-engineered to match MME's figures.
+    private static string? ComputeEfficiency(long effExp, int damage, int hp)
+    {
+        int denom = 2 * damage + hp;
+        if (denom <= 0 || effExp <= 0) return null;
+        long eff = (long)Math.Round(effExp * 100.0 / denom, MidpointRounding.AwayFromZero);
+        return eff.ToString(Inv);
+    }
+
+    // Value of an ability code in the monster's Abil-0..9 slots (0 if absent). Monster
+    // Dodge (code 34) and hitmag level (code 28 "Magical") are stored as abilities, not
+    // base columns, so both surface through here.
+    private static int ReadAbilValue(JsonElement el, int code)
+    {
+        for (int i = 0; i < 10; i++)
+            if (ReadInt(el, $"Abil-{i}") == code)
+                return ReadInt(el, $"AbilVal-{i}");
+        return 0;
+    }
+
+    // "Acc (Maj/Mx)" — the accuracy of the monster's majority (most-frequent) physical
+    // attack, then its highest accuracy across all physical attacks. Collapses to one
+    // number when they match. Only physical attacks count (AttType 1/3 with a non-zero
+    // chance); spell-attack slots stash a spell id in AttAcc. Falls back to slot 0.
     internal static string? ComputeAttackAccuracy(JsonElement el)
     {
-        List<string> accuracies = new();
-        for (int i = 0; i < 5; i++)
+        int majAcc = 0, maxAcc = 0;
+        double bestChance = -1;
+        for (int i = 0; i < 6; i++)
         {
             int attType = ReadInt(el, $"AttType-{i}");
-            if ((attType == 1 || attType == 3) && ReadInt(el, $"Att%-{i}") > 0)
-                accuracies.Add(ReadInt(el, $"AttAcc-{i}").ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (attType != 1 && attType != 3) continue;
+            if (ReadInt(el, $"Att%-{i}") <= 0) continue;
+            int acc = ReadInt(el, $"AttAcc-{i}");
+            double chance = ReadDouble(el, $"AttTrue%-{i}");
+            if (chance > bestChance) { bestChance = chance; majAcc = acc; }
+            if (acc > maxAcc) maxAcc = acc;
         }
-        if (accuracies.Count > 0) return string.Join("/", accuracies);
-        int slot0 = ReadInt(el, "AttAcc-0");
-        return slot0 != 0 ? slot0.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
+        if (bestChance < 0)
+        {
+            int slot0 = ReadInt(el, "AttAcc-0");
+            return slot0 != 0 ? slot0.ToString(Inv) : null;
+        }
+        return majAcc == maxAcc ? majAcc.ToString(Inv) : $"{majAcc}/{maxAcc}";
     }
 
     private async Task OpenEditAsync(GameDataRow? row)

@@ -80,13 +80,11 @@ public sealed class GameDataTableSectionTests : IDisposable
 
         GameDataRow row = vm.AllRows.Single(r => r.Get("Name") == "Sewer Rat");
         Assert.Equal("20", row.Get("AvgLairExp"));
-        Assert.Equal("7",  row.Get("ScriptValue"));
         Assert.Equal("14", row.Get("Lairs"));              // 5 + 9
-        Assert.Equal("1–11", row.Get("MobsPerLair")); // min–max range
     }
 
     [Fact]
-    public async Task LairColumns_UniformMobs_ShowsSingleValue_AndAbsentWhenNoLair()
+    public async Task LairColumns_SumTotalLairs_AndAbsentWhenNoLair()
     {
         SeedMonsters("v1.11p",
             "[{\"Number\":1,\"Name\":\"Orc\"},{\"Number\":9,\"Name\":\"Loner\"}]");
@@ -99,12 +97,10 @@ public sealed class GameDataTableSectionTests : IDisposable
 
         GameDataRow orc = vm.AllRows.Single(r => r.Get("Name") == "Orc");
         Assert.Equal("7", orc.Get("Lairs"));       // 3 + 4
-        Assert.Equal("2", orc.Get("MobsPerLair")); // uniform → single value
 
-        // A monster in no lair group has blank lair cells (not "0").
+        // A monster in no lair group has a blank lair cell (not "0").
         GameDataRow loner = vm.AllRows.Single(r => r.Get("Name") == "Loner");
         Assert.True(string.IsNullOrEmpty(loner.Get("Lairs")));
-        Assert.True(string.IsNullOrEmpty(loner.Get("MobsPerLair")));
     }
 
     [Fact]
@@ -125,27 +121,31 @@ public sealed class GameDataTableSectionTests : IDisposable
     }
 
     [Fact]
-    public async Task RangeFilter_NarrowsByLeadingNumericValue()
+    public async Task ThresholdFilter_AtMost_And_AtLeast()
     {
         SeedMonsters("v1.11p",
-            "[{\"Number\":1,\"Name\":\"Goblin\",\"HP\":10}," +
-             "{\"Number\":2,\"Name\":\"Orc\",\"HP\":25}," +
-             "{\"Number\":3,\"Name\":\"Dragon\",\"HP\":500}]");
+            "[{\"Number\":1,\"Name\":\"Goblin\",\"HP\":10,\"EXP\":3}," +
+             "{\"Number\":2,\"Name\":\"Orc\",\"HP\":25,\"EXP\":10}," +
+             "{\"Number\":3,\"Name\":\"Dragon\",\"HP\":500,\"EXP\":9000}]");
         _cache.SwitchSet("v1.11p");
         MonstersSectionViewModel vm = new(_cache);
         await vm.LoadAsync();
 
-        NumericRangeFilter hp = vm.RangeFilters.Single(r => r.Column == "HP");
-        hp.Min = 20;
-        Assert.Equal(2, vm.FilteredRows.Count);   // Orc, Dragon
+        // HP ≤ (difficulty stat): HP ≤ 25 keeps Goblin, Orc.
+        ThresholdFilter hp = vm.ThresholdFilters.Single(t => t.Column == "HP");
+        hp.Value = 25;
+        Assert.Equal(2, vm.FilteredRows.Count);
+        Assert.DoesNotContain(vm.FilteredRows, r => r.Get("Name") == "Dragon");
 
-        hp.Max = 100;
-        Assert.Single(vm.FilteredRows);            // Orc only
+        // Exp ≥ (reward stat) stacks: base EXP ≥ 10 leaves only Orc (Dragon is HP-excluded).
+        ThresholdFilter exp = vm.ThresholdFilters.Single(t => t.Column == "EXP");
+        exp.Value = 10;
+        Assert.Single(vm.FilteredRows);
         Assert.Equal("Orc", vm.FilteredRows[0].Get("Name"));
     }
 
     [Fact]
-    public async Task CategoryFilter_MatchesRenderedValue()
+    public async Task UndeadCheckbox_KeepsUndeadOnly()
     {
         SeedMonsters("v1.11p",
             "[{\"Number\":1,\"Name\":\"Goblin\",\"Undead\":0}," +
@@ -155,50 +155,70 @@ public sealed class GameDataTableSectionTests : IDisposable
         MonstersSectionViewModel vm = new(_cache);
         await vm.LoadAsync();
 
-        CategoryFilter undead = vm.CategoryFilters.Single(c => c.Column == "Undead");
-        Assert.Contains("Living", undead.Options);
-        Assert.Contains("Undead", undead.Options);
-
-        undead.Selected = "Undead";
+        BoolFilter undead = vm.BoolFilters.Single(b => b.Column == "Undead");
+        undead.IsChecked = true;
         Assert.Equal(2, vm.FilteredRows.Count);    // Skeleton, Zombie
-        Assert.All(vm.FilteredRows, r => Assert.Equal("Undead", r.GetDisplay("Undead")));
-
-        undead.Selected = "Living";
-        Assert.Single(vm.FilteredRows);            // Goblin
+        Assert.All(vm.FilteredRows, r => Assert.Equal("✗", r.GetDisplay("Undead")));
     }
 
     [Fact]
-    public async Task FiltersAndText_CombineThenClearResets()
+    public async Task SynthesizedColumns_MatchMmeTransforms()
     {
+        // white-king-like: EXP 30000 ×10; AC 80 / DR 10; AvgDmg 290.4; HP 3000;
+        // ability 28 (Magical) = 4 → Mag; no ability 34 → blank Dodge.
         SeedMonsters("v1.11p",
-            "[{\"Number\":1,\"Name\":\"Goblin\",\"HP\":10}," +
-             "{\"Number\":2,\"Name\":\"Orc\",\"HP\":25}," +
-             "{\"Number\":3,\"Name\":\"Dragon\",\"HP\":500}]");
+            "[{\"Number\":1,\"Name\":\"King\",\"EXP\":30000,\"ExpMulti\":10,\"HP\":3000," +
+             "\"ArmourClass\":80,\"DamageResist\":10,\"AvgDmg\":290.4," +
+             "\"AttType-0\":1,\"Att%-0\":100,\"AttAcc-0\":250,\"AttTrue%-0\":100," +
+             "\"Abil-0\":28,\"AbilVal-0\":4}]");
         _cache.SwitchSet("v1.11p");
         MonstersSectionViewModel vm = new(_cache);
         await vm.LoadAsync();
 
-        vm.RangeFilters.Single(r => r.Column == "HP").Min = 20;
-        vm.SearchText = "dragon";
-        Assert.Single(vm.FilteredRows);            // HP>=20 AND name~dragon
-        Assert.Equal("Dragon", vm.FilteredRows[0].Get("Name"));
+        GameDataRow r = vm.AllRows.Single();
+        Assert.Equal("30000 (10x)", r.GetDisplay("EXP"));   // base + multiplier, not 300000
+        Assert.Equal("80/10", r.GetDisplay("AcDr"));
+        Assert.Equal("290", r.GetDisplay("Damage"));        // round(290.4)
+        Assert.Equal("250", r.GetDisplay("Accuracy"));      // maj == max → single
+        Assert.Equal("4", r.GetDisplay("Mag"));
+        Assert.True(string.IsNullOrEmpty(r.GetDisplay("Dodge")));
+        // effective exp 300000 → round(300000×100 / (2×290 + 3000)) = 8380.
+        Assert.Equal("8,380", r.GetDisplay("Efficiency"));
+    }
 
-        vm.ClearFiltersCommand.Execute(null);
-        Assert.Equal(3, vm.FilteredRows.Count);
-        Assert.Equal(string.Empty, vm.SearchText);
-        Assert.All(vm.RangeFilters, r => Assert.False(r.IsActive));
+    [Fact]
+    public async Task AlignmentDropdown_FiltersOnFilterOnlyColumn()
+    {
+        // Alignment isn't a grid column but is carried for its dropdown filter.
+        SeedMonsters("v1.11p",
+            "[{\"Number\":1,\"Name\":\"Paladin\",\"Align\":1}," +
+             "{\"Number\":2,\"Name\":\"Knight\",\"Align\":1}," +
+             "{\"Number\":3,\"Name\":\"Fiend\",\"Align\":6}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        CategoryFilter align = vm.CategoryFilters.Single(c => c.Column == "Align");
+        string fiendAlign = vm.AllRows.Single(r => r.Get("Name") == "Fiend").GetDisplay("Align")!;
+        Assert.Contains(fiendAlign, align.Options);
+
+        align.Selected = fiendAlign;
+        Assert.Single(vm.FilteredRows);
+        Assert.Equal("Fiend", vm.FilteredRows[0].Get("Name"));
     }
 
     [Fact]
     public async Task MissingColumn_RendersAsNull()
     {
-        SeedMonsters("v1.11p", "[{\"Name\":\"Goblin\"}]"); // no HP / EXP
+        SeedMonsters("v1.11p", "[{\"Name\":\"Goblin\"}]"); // no HP / MR
         _cache.SwitchSet("v1.11p");
         MonstersSectionViewModel vm = new(_cache);
         await vm.LoadAsync();
 
+        // Pass-through columns absent from the source render null (EXP is now
+        // always synthesised, so it's no longer a null-render probe).
         Assert.Null(vm.AllRows[0].Get("HP"));
-        Assert.Null(vm.AllRows[0].Get("EXP"));
+        Assert.Null(vm.AllRows[0].Get("MagicRes"));
         Assert.Equal("Goblin", vm.AllRows[0].Get("Name"));
     }
 

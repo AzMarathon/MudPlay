@@ -127,6 +127,28 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // ObservableCollection once for the bulk-replace.
     protected abstract void PopulateRows(IList<GameDataRow> rows);
 
+    // Extra columns to carry in each row's value/display maps but NOT render as grid
+    // columns — used for filter-only fields (e.g. Monsters' Alignment dropdown reads
+    // "Align" without the table showing an Alignment column, for MegaMUD parity). The
+    // grid still builds its columns from Columns alone; these are appended after them
+    // so the visible columns keep their cell indices (the sort comparer is index-based).
+    protected virtual IReadOnlyList<string> FilterOnlyColumns => System.Array.Empty<string>();
+
+    // Columns whose values are materialised on each row = visible columns plus any
+    // filter-only ones. Cached; visible columns come first so their indices are stable.
+    private IReadOnlyList<string>? _valueColumns;
+    protected IReadOnlyList<string> ValueColumns => _valueColumns ??=
+        FilterOnlyColumns.Count == 0
+            ? Columns
+            : System.Linq.Enumerable.ToList(System.Linq.Enumerable.Concat(Columns, FilterOnlyColumns));
+
+    // Called on the UI thread once AllRows is materialised (both Reload and the async
+    // LoadAsync path). Subclasses rebuild data-derived UI state here — e.g. category-filter
+    // option lists computed from the loaded rows. PopulateRows itself runs on a worker thread
+    // under LoadAsync, so it must never touch observable collections; this hook is where that
+    // work belongs.
+    protected virtual void OnRowsLoaded() { }
+
     // Called by GameDataBrowserViewModel whenever this section becomes the selected one. Lets
     // expensive sections (10k+ rows of MDB-derived JSON) defer their parse + row-build work
     // until the user actually opens the tab. Base implementation is a no-op;
@@ -149,6 +171,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         List<GameDataRow> rows = new();
         PopulateRows(rows);
         AllRows = new ObservableCollection<GameDataRow>(rows);
+        OnRowsLoaded();
         ApplyFilter();
         IsLoaded = true;
         OnPropertyChanged(nameof(StatusText));
@@ -173,6 +196,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         // single thread per call).
         SelectedRow = null;
         AllRows = new ObservableCollection<GameDataRow>(rows);
+        OnRowsLoaded();
         ApplyFilter();
         IsLoaded = true;
         OnPropertyChanged(nameof(StatusText));
@@ -276,19 +300,22 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // richer notion of a match (e.g. Rooms' "map,room" coordinate query) can intercept
     // before falling back to this substring pass.
     // ----- Multi-field filter panel (subclasses populate; empty = no panel) -----
-    // An always-visible sidebar beside the grid with per-column min–max range
-    // filters and categorical dropdowns, on top of the always-present text box.
-    // Empty by default, so tables that declare none render no sidebar.
-    public ObservableCollection<NumericRangeFilter> RangeFilters { get; } = new();
+    // An always-visible sidebar beside the grid: MegaMUD-style single-threshold
+    // numeric filters, boolean checkboxes, and categorical dropdowns, on top of
+    // the always-present text box. All empty by default, so tables that declare
+    // none render no sidebar.
+    public ObservableCollection<ThresholdFilter> ThresholdFilters { get; } = new();
+    public ObservableCollection<BoolFilter> BoolFilters { get; } = new();
     public ObservableCollection<CategoryFilter> CategoryFilters { get; } = new();
-    public bool HasFilterPanel => RangeFilters.Count > 0 || CategoryFilters.Count > 0;
+    public bool HasFilterPanel => ThresholdFilters.Count > 0 || BoolFilters.Count > 0 || CategoryFilters.Count > 0;
 
     // Drives ApplyFilter's "run even with an empty text box" path (see ApplyFilter).
     protected bool HasExtraFilter
     {
         get
         {
-            foreach (NumericRangeFilter r in RangeFilters) if (r.IsActive) return true;
+            foreach (ThresholdFilter t in ThresholdFilters) if (t.IsActive) return true;
+            foreach (BoolFilter b in BoolFilters) if (b.IsActive) return true;
             foreach (CategoryFilter c in CategoryFilters) if (c.IsActive) return true;
             return false;
         }
@@ -297,18 +324,24 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     [RelayCommand]
     private void ClearFilters()
     {
-        foreach (NumericRangeFilter r in RangeFilters) r.Clear();
+        foreach (ThresholdFilter t in ThresholdFilters) t.Clear();
+        foreach (BoolFilter b in BoolFilters) b.Clear();
         foreach (CategoryFilter c in CategoryFilters) c.Clear();
         SearchText = string.Empty;   // OnSearchTextChanged re-applies
         ApplyFilter();
     }
 
-    // Panel filters (range + category), all AND'd together. Empty collections pass
-    // everything, so non-panel tables are unaffected.
+    // Panel filters (threshold + bool + category), all AND'd together. Empty
+    // collections pass everything, so non-panel tables are unaffected. Threshold
+    // filters test the leading integer of the raw cell; bool filters test the raw
+    // value via their predicate; category filters match the rendered display value.
     private bool PassesPanelFilters(GameDataRow row)
     {
-        foreach (NumericRangeFilter r in RangeFilters)
-            if (r.IsActive && (!TryLeadingInt(row.Get(r.Column), out int v) || !r.Passes(v)))
+        foreach (ThresholdFilter t in ThresholdFilters)
+            if (t.IsActive && (!TryLeadingInt(row.Get(t.Column), out int v) || !t.Passes(v)))
+                return false;
+        foreach (BoolFilter b in BoolFilters)
+            if (b.IsActive && !b.Passes(row.Get(b.Column)))
                 return false;
         foreach (CategoryFilter c in CategoryFilters)
             if (c.IsActive && !c.Passes(row.GetDisplay(c.Column)))
@@ -426,7 +459,7 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
             // by a real MDB field (e.g. Races / Classes synthesise an
             // "Abilities" column from Abil-N / AbilVal-N pairs).
             IReadOnlyDictionary<string, string?>? computed = ComputeRowCells(el);
-            GameDataRow row = GameDataRow.FromJson(el, Columns, formatters, computed);
+            GameDataRow row = GameDataRow.FromJson(el, ValueColumns, formatters, computed);
             // Per-row tier resolution: look up the record by its primary
             // key column value (typically Number) and ask the resolver
             // which tier owns the highest-priority override, if any.
