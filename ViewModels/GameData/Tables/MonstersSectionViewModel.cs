@@ -152,7 +152,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ("DR",       "DamageResist", ThresholdDirection.AtMost),
             ("Dodge",    "Dodge",        ThresholdDirection.AtMost),
             ("MR",       "MagicRes",     ThresholdDirection.AtMost),
-            ("Acc",      "Accuracy",     ThresholdDirection.AtMost),
+            ("Acc",      "Accuracy",     ThresholdDirection.AtLeast),
             ("Damage",   "Damage",       ThresholdDirection.AtMost),
             ("Mag",      "Mag",          ThresholdDirection.AtMost),
             ("Lair Exp", "AvgLairExp",   ThresholdDirection.AtLeast),
@@ -165,11 +165,25 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             static raw => !(raw is null or "" or "0")));
     }
 
-    // Monster Number → aggregated lair stats across every lair group whose MobList
-    // includes it: Σ TotalLairs (# Lairs), the lair-count-weighted mob total (for the
-    // average lair size), and the largest single group's mob count (biggest lair).
-    // Rebuilt each load by the PopulateRows override below, before ComputeRowCells.
-    private Dictionary<int, (int TotalLairs, long MobsWeighted, int MaxMobs)> _lairIndex = new();
+    // Programmatically apply "Acc ≥ minAcc" and show the result — the Hit
+    // Calculator's "Show me the Monsters" action opens this tab and calls here
+    // with the accuracy that hits the player at the picked hit-%.
+    public void FilterByAccuracyAtLeast(int minAcc)
+    {
+        ThresholdFilter? acc = ThresholdFilters.FirstOrDefault(t => t.Column == "Accuracy");
+        if (acc is null) return;
+        acc.Value = minAcc;
+        ApplyFiltersCommand.Execute(null);   // commit the pending value + re-filter
+    }
+
+    // Monster Number → lair stats from the room graph: Count (# rooms whose lair tag
+    // names it = # Lairs), SumMax + MaxMax of those rooms' per-room "(Max N)" caps
+    // (for the average / biggest lair size). Sourced from the immutable
+    // RoomGraphManager.LairSizeByMonster snapshot so the per-room lair size matches
+    // the monster record's Spawns-In list — the Lairs table's group-level "Mobs" field
+    // is a different quantity and gave wrong "Biggest Lair" values. Captured each load.
+    private System.Collections.Generic.IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax)> _lairIndex
+        = new Dictionary<int, (int, long, int)>();
 
     protected override void PopulateRows(System.Collections.Generic.IList<GameDataRow> rows)
     {
@@ -203,31 +217,12 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         return new CategoryFilter(label, column, options);
     }
 
-    // Join the Lairs table onto monsters via MobList (comma-separated monster Numbers).
-    // A monster commonly sits in several lair groups (~63% of v1.11p monsters), so
-    // "# Lairs" sums their TotalLairs.
+    // Capture the room graph's immutable per-monster lair-size snapshot (built from
+    // each room's lair tag). Empty when no graph is wired (e.g. tests) — the lair
+    // columns then render blank.
     private void BuildLairIndex()
-    {
-        var index = new Dictionary<int, (int TotalLairs, long MobsWeighted, int MaxMobs)>();
-        if (_cache.GetRawTable("Lairs") is { } doc)
-        {
-            foreach (JsonElement el in doc.RootElement.EnumerateArray())
-            {
-                string mobList = ReadString(el, "MobList");
-                if (string.IsNullOrEmpty(mobList)) continue;
-                int mobs = ReadInt(el, "Mobs");
-                int totalLairs = ReadInt(el, "TotalLairs");
-                foreach (string tok in mobList.Split(','))
-                {
-                    if (!int.TryParse(tok.Trim(), out int id) || id <= 0) continue;
-                    index[id] = index.TryGetValue(id, out (int TotalLairs, long MobsWeighted, int MaxMobs) a)
-                        ? (a.TotalLairs + totalLairs, a.MobsWeighted + (long)mobs * totalLairs, Math.Max(a.MaxMobs, mobs))
-                        : (totalLairs, (long)mobs * totalLairs, mobs);
-                }
-            }
-        }
-        _lairIndex = index;
-    }
+        => _lairIndex = _roomGraph?.LairSizeByMonster
+            ?? new Dictionary<int, (int, long, int)>();
 
     private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
 
@@ -257,12 +252,12 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["Accuracy"]   = ComputeAttackAccuracy(element),
             ["Efficiency"] = ComputeEfficiency(effExp, damage, hp),
         };
-        if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int TotalLairs, long MobsWeighted, int MaxMobs) lair)
-            && lair.TotalLairs > 0)
+        if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int Count, long SumMax, int MaxMax) lair)
+            && lair.Count > 0)
         {
-            cells["Lairs"]       = lair.TotalLairs.ToString(Inv);
-            cells["AvgLairSize"] = ((double)lair.MobsWeighted / lair.TotalLairs).ToString("0.#", Inv);
-            cells["BiggestLair"] = lair.MaxMobs.ToString(Inv);
+            cells["Lairs"]       = lair.Count.ToString(Inv);
+            cells["AvgLairSize"] = ((double)lair.SumMax / lair.Count).ToString("0.#", Inv);
+            cells["BiggestLair"] = lair.MaxMax.ToString(Inv);
         }
         return cells;
     }
@@ -291,7 +286,9 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // "Acc (Maj/Mx)" — the accuracy of the monster's majority (most-frequent) physical
     // attack, then its highest accuracy across all physical attacks. Collapses to one
     // number when they match. Only physical attacks count (AttType 1/3 with a non-zero
-    // chance); spell-attack slots stash a spell id in AttAcc. Falls back to slot 0.
+    // chance). A spell-only monster has no physical accuracy, so it renders blank — the
+    // AttAcc-0 slot of a spell attack holds a spell id, not an accuracy, so it must not
+    // be shown here.
     internal static string? ComputeAttackAccuracy(JsonElement el)
     {
         int majAcc = 0, maxAcc = 0;
@@ -306,11 +303,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             if (chance > bestChance) { bestChance = chance; majAcc = acc; }
             if (acc > maxAcc) maxAcc = acc;
         }
-        if (bestChance < 0)
-        {
-            int slot0 = ReadInt(el, "AttAcc-0");
-            return slot0 != 0 ? slot0.ToString(Inv) : null;
-        }
+        if (bestChance < 0) return null;   // no physical attack → blank
         return majAcc == maxAcc ? majAcc.ToString(Inv) : $"{majAcc}/{maxAcc}";
     }
 

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Tables;
 using Xunit;
@@ -63,50 +64,38 @@ public sealed class GameDataTableSectionTests : IDisposable
         Assert.Equal("Orc",    vm.AllRows[1].Get("Name"));
     }
 
-    [Fact]
-    public async Task LairColumns_AggregateAcrossGroups()
-    {
-        // Monster #1 sits in two lair groups: (Mobs 1, TotalLairs 5) and
-        // (Mobs 11, TotalLairs 9). "# Lairs" sums TotalLairs (14); "Mobs/Lair"
-        // spans the range (1–11). Lair Exp + Script come straight off the row.
-        SeedMonsters("v1.11p",
-            "[{\"Number\":1,\"Name\":\"Sewer Rat\",\"AvgLairExp\":20,\"ScriptValue\":7}]");
-        SeedTable("v1.11p", "Lairs",
-            "[{\"GroupIndex\":\"a\",\"MobList\":\"1\",\"Mobs\":1,\"TotalLairs\":5}," +
-             "{\"GroupIndex\":\"b\",\"MobList\":\"1,2,3\",\"Mobs\":11,\"TotalLairs\":9}]");
-        _cache.SwitchSet("v1.11p");
-        MonstersSectionViewModel vm = new(_cache);
-        await vm.LoadAsync();
-
-        GameDataRow row = vm.AllRows.Single(r => r.Get("Name") == "Sewer Rat");
-        Assert.Equal("20", row.Get("AvgLairExp"));
-        Assert.Equal("14", row.Get("Lairs"));                 // 5 + 9
-        // Avg lair size weighted by lair count: (1×5 + 11×9) / 14 = 7.43 → "7.4".
-        Assert.Equal("7.4", row.Get("AvgLairSize"));
-        Assert.Equal("11", row.Get("BiggestLair"));           // max mob count
-    }
+    // Minimal Rooms.json row with a lair tag naming one monster at a given (Max N).
+    private static string LairRoom(int map, int room, int max, int monsterId)
+        => $"{{\"Map Number\":{map},\"Room Number\":{room},\"Name\":\"R{room}\",\"Light\":0," +
+           $"\"Shop\":0,\"Lair\":\"(Max {max}): {monsterId},[a]\",\"Delay\":0," +
+           "\"N\":\"0\",\"S\":\"0\",\"E\":\"0\",\"W\":\"0\",\"NE\":\"0\",\"NW\":\"0\"," +
+           "\"SE\":\"0\",\"SW\":\"0\",\"U\":\"0\",\"D\":\"0\"}";
 
     [Fact]
-    public async Task LairColumns_SumTotalLairs_AndAbsentWhenNoLair()
+    public async Task LairColumns_ComeFromRoomTagMaxRegen()
     {
+        // Monster #830 spawns in three lair rooms with per-room (Max N) of 2, 6, 3.
+        // # Lairs = 3 rooms; Biggest Lair = max cap (6); Avg Lair Size = (2+6+3)/3 → 3.7.
+        // A monster in no lair room has blank lair cells.
         SeedMonsters("v1.11p",
-            "[{\"Number\":1,\"Name\":\"Orc\"},{\"Number\":9,\"Name\":\"Loner\"}]");
-        SeedTable("v1.11p", "Lairs",
-            "[{\"GroupIndex\":\"a\",\"MobList\":\"1\",\"Mobs\":2,\"TotalLairs\":3}," +
-             "{\"GroupIndex\":\"b\",\"MobList\":\"1\",\"Mobs\":2,\"TotalLairs\":4}]");
+            "[{\"Number\":830,\"Name\":\"spectre\"},{\"Number\":9,\"Name\":\"Loner\"}]");
+        SeedTable("v1.11p", "Rooms",
+            "[" + LairRoom(17, 61, 2, 830) + "," + LairRoom(17, 62, 6, 830) + ","
+                + LairRoom(17, 63, 3, 830) + "]");
         _cache.SwitchSet("v1.11p");
-        MonstersSectionViewModel vm = new(_cache);
+
+        RoomGraphManager graph = new(_cache);
+        graph.OnActiveSetChanged("v1.11p");
+        MonstersSectionViewModel vm = new(_cache, roomGraph: graph);
         await vm.LoadAsync();
 
-        GameDataRow orc = vm.AllRows.Single(r => r.Get("Name") == "Orc");
-        Assert.Equal("7", orc.Get("Lairs"));       // 3 + 4
-        Assert.Equal("2", orc.Get("AvgLairSize")); // uniform size 2 → "2"
-        Assert.Equal("2", orc.Get("BiggestLair"));
+        GameDataRow spectre = vm.AllRows.Single(r => r.Get("Name") == "spectre");
+        Assert.Equal("3", spectre.Get("Lairs"));
+        Assert.Equal("6", spectre.Get("BiggestLair"));
+        Assert.Equal("3.7", spectre.Get("AvgLairSize"));
 
-        // A monster in no lair group has blank lair cells (not "0").
         GameDataRow loner = vm.AllRows.Single(r => r.Get("Name") == "Loner");
         Assert.True(string.IsNullOrEmpty(loner.Get("Lairs")));
-        Assert.True(string.IsNullOrEmpty(loner.Get("AvgLairSize")));
         Assert.True(string.IsNullOrEmpty(loner.Get("BiggestLair")));
     }
 

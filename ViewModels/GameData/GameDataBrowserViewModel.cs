@@ -248,6 +248,22 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
     public void NavigateToRecord(string targetSectionId, Func<Tables.GameDataRow, bool> rowSelector)
         => OnNavigationRequested(new NavigationRequest(targetSectionId, rowSelector));
 
+    // Activate the Monsters tab and apply an "Acc ≥ minAcc" filter — the Hit
+    // Calculator's "Show me the Monsters" entry point. Deferred a dispatcher tick
+    // past the tab-swap; FilterByAccuracyAtLeast commits the value so a cold-load
+    // LoadAsync re-applies it once the rows land.
+    public void NavigateToMonstersAccuracy(int minAcc)
+    {
+        GameDataSectionViewModel? target =
+            Sections.FirstOrDefault(s => string.Equals(s.Id, "monsters", System.StringComparison.OrdinalIgnoreCase));
+        if (target is null) return;
+        SelectedSection = target;
+        if (target is Tables.MonstersSectionViewModel monsters)
+            Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => monsters.FilterByAccuracyAtLeast(minAcc),
+                Avalonia.Threading.DispatcherPriority.Background);
+    }
+
     // Route a section's NavigationRequested event to the named target: activate the
     // target tab, then defer the row-selection one dispatcher tick so the DataGrid has a
     // chance to swap views before we touch SelectedItem. The target's SelectRowMatching

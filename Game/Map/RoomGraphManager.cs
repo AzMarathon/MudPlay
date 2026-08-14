@@ -275,6 +275,16 @@ public sealed class RoomGraphManager
     // active.
     public IEnumerable<Room> Rooms => _rooms.Values;
 
+    // Per-monster lair-size aggregate: for each monster named in a room's lair
+    // tag, how many such rooms name it (Count) and the sum / biggest of those
+    // rooms' per-room "(Max N)" caps. Built once in BuildSecondaryIndexes (all
+    // rooms are present up front and lair tags are static), so it's an immutable
+    // snapshot the Monsters game-data table can read from its worker-thread build
+    // without racing the live, UI-thread-only room dictionary. Key = monster number.
+    private IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax)> _lairSizeByMonster
+        = new Dictionary<int, (int, long, int)>();
+    public IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax)> LairSizeByMonster => _lairSizeByMonster;
+
     // Every room in the active set that carries at least one trapped exit (per
     // the imported (Trap) hint). MapControl iterates this to overlay red
     // half-connector glyphs without rescanning every room.
@@ -997,6 +1007,7 @@ public sealed class RoomGraphManager
 
     private void BuildSecondaryIndexes()
     {
+        var lairSize = new Dictionary<int, (int Count, long SumMax, int MaxMax)>();
         foreach (Room room in _rooms.Values)
         {
             if (!_byName.TryGetValue(room.Name, out List<Room>? nameBucket))
@@ -1013,7 +1024,20 @@ public sealed class RoomGraphManager
                 _byNameAndExits[tuple] = exitBucket;
             }
             exitBucket.Add(room.Key);
+
+            // Accumulate lair sizes per monster named in this room's tag. The
+            // per-room cap is the "(Max N)"; a lair room with no cap counts as 0
+            // (matching the record's Spawns-In "(lair: 0)").
+            if (room.HasLair)
+            {
+                int lairMax = RoomTooltipBuilder.TryParseLairMax(room.RawLairTag, out int m) ? m : 0;
+                foreach (int id in LairMonsterIds(room.RawLairTag))
+                    lairSize[id] = lairSize.TryGetValue(id, out (int Count, long SumMax, int MaxMax) a)
+                        ? (a.Count + 1, a.SumMax + lairMax, Math.Max(a.MaxMax, lairMax))
+                        : (1, lairMax, lairMax);
+            }
         }
+        _lairSizeByMonster = lairSize;
     }
 
     private static bool TryReadRoom(JsonElement row, out Room room)
