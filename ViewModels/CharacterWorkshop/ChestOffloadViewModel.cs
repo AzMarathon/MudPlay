@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
+using MudPlay.Game.Cash;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
@@ -35,22 +36,31 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private readonly RoomTracker _tracker;
     private readonly BfsMapper _bfs;
     private readonly MovementFilter _movement;
+    private readonly CurrencyNaming _naming;
     private readonly Action<string> _send;
     private readonly Action<RoomKey> _queueWalk;
     private readonly DispatcherTimer _reparse;
 
     private IReadOnlyList<string> _baselineCarried = Array.Empty<string>();
-    private long _baselineCopper;
+    // Coins are attributed per-open, not against a fixed baseline: only the
+    // before→after delta of a single open is that chest's coin (selling loot also
+    // adds coin, so a window-wide baseline would fold sale proceeds in). Items DO
+    // diff against the open-time baseline so starting inventory never shows.
+    private CurrencyHoldings _chestCoin = CurrencyHoldings.Empty;   // accumulated across opens
+    private CurrencyHoldings? _preOpenCurrency;                     // coin held just before the in-flight open
+    private bool _settlePending;                                    // set once the forced 'i' is sent, awaiting the re-parse
     private bool _simulating;
 
     [ObservableProperty] private int _charm;
-    [ObservableProperty] private string _currencyGained = "—";
     [ObservableProperty] private string _sellTotal = "—";
+    // Coin the chest gave, one denomination per line, most-expensive first.
+    public ObservableCollection<string> CoinGains { get; } = new();
     public ObservableCollection<ChestContainerRow> Containers { get; } = new();
     public ObservableCollection<ChestOffloadShopGroup> ShopGroups { get; } = new();
     public ObservableCollection<ChestOffloadItemRow> Unsellable { get; } = new();
 
     public bool HasContainers => Containers.Count > 0;
+    public bool HasCoinGain => CoinGains.Count > 0;
     public bool HasLoot => ShopGroups.Count > 0 || Unsellable.Count > 0;
     public bool HasUnsellable => Unsellable.Count > 0;
 
@@ -58,13 +68,14 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         AppServices.Current.Inventory, AppServices.Current.ShopStock, AppServices.Current.RoomGraph,
         AppServices.Current.ItemNames, AppServices.Current.PlayerStats, AppServices.Current.GameData,
         AppServices.Current.RoomTracker, AppServices.Current.Bfs, AppServices.Current.Movement,
+        AppServices.Current.Currency,
         cmd => AppServices.Current.SendGameCommand(cmd), AppServices.Current.QueueWalkTo)
     { }
 
     public ChestOffloadViewModel(
         InventoryManager inventory, ShopStockIndex shops, RoomGraphManager rooms,
         ItemNameStore itemNames, PlayerStats stats, GameDataCache gameData,
-        RoomTracker tracker, BfsMapper bfs, MovementFilter movement,
+        RoomTracker tracker, BfsMapper bfs, MovementFilter movement, CurrencyNaming naming,
         Action<string> send, Action<RoomKey> queueWalk)
     {
         _inventory = inventory;
@@ -76,6 +87,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _tracker = tracker;
         _bfs = bfs;
         _movement = movement;
+        _naming = naming;
         _send = send;
         _queueWalk = queueWalk;
 
@@ -83,12 +95,13 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
         InventorySnapshot snap = _inventory.Snapshot;
         _baselineCarried = snap.CarriedItems;
-        _baselineCopper = snap.Currency.TotalCopperValue;
         RebuildContainers(snap);
 
-        // Force an inventory re-read a beat after the loot spills, then diff.
+        // Force an inventory re-read a beat after the loot spills, then diff. The
+        // 'i' is what makes the chest's coin visible (chest give-lines carry no
+        // coin), so the re-parse it triggers is the "after" snapshot for the open.
         _reparse = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
-        _reparse.Tick += (_, _) => { _reparse.Stop(); _send("i"); };
+        _reparse.Tick += (_, _) => { _reparse.Stop(); _settlePending = true; _send("i"); };
         _inventory.Changed += OnInventoryChanged;
     }
 
@@ -107,6 +120,8 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private void OpenContainer(string name)
     {
         _simulating = false;   // a real open returns to the live-inventory diff
+        _preOpenCurrency = _inventory.Snapshot.Currency;   // "before" — the delta after the 'i' is this chest's coin
+        _settlePending = false;                            // don't attribute until the forced 'i' lands
         _send($"open {name}");
         _reparse.Stop();
         _reparse.Start();
@@ -124,15 +139,39 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     {
         InventorySnapshot snap = _inventory.Snapshot;
         RebuildContainers(snap);
-        long gained = snap.Currency.TotalCopperValue - _baselineCopper;
-        RenderLoot(ChestOffloadPlanner.CarriedGains(_baselineCarried, snap.CarriedItems), gained);
+
+        // Attribute coin only on the forced 'i' after an open — the before→after
+        // delta of THAT open. Stray refreshes (selling, a hand-off) leave the
+        // accumulator alone, so sale proceeds never masquerade as chest coin.
+        if (_settlePending && _preOpenCurrency is { } pre)
+        {
+            _chestCoin = AddCoins(_chestCoin, CoinGain(pre, snap.Currency));
+            _preOpenCurrency = null;
+            _settlePending = false;
+        }
+        RebuildCoinGains(_chestCoin);
+
+        RenderLoot(ChestOffloadPlanner.CarriedGains(_baselineCarried, snap.CarriedItems));
     }
+
+    // Positive per-denomination coin an open added (before → after). Clamped at
+    // zero per denomination — an open only adds coin, never removes it.
+    private static CurrencyHoldings CoinGain(CurrencyHoldings before, CurrencyHoldings now) => new(
+        Math.Max(0, now.Copper - before.Copper),
+        Math.Max(0, now.Silver - before.Silver),
+        Math.Max(0, now.Gold - before.Gold),
+        Math.Max(0, now.Platinum - before.Platinum),
+        Math.Max(0, now.Runic - before.Runic),
+        Math.Max(0, now.TotalCopperValue - before.TotalCopperValue));
+
+    private static CurrencyHoldings AddCoins(CurrencyHoldings a, CurrencyHoldings b) => new(
+        a.Copper + b.Copper, a.Silver + b.Silver, a.Gold + b.Gold,
+        a.Platinum + b.Platinum, a.Runic + b.Runic, a.TotalCopperValue + b.TotalCopperValue);
 
     // Turn a set of (item name, count) gains into the priced, shop-grouped view.
     // Shared by the real inventory diff and the "Simulate Chest" test button.
-    private void RenderLoot(IReadOnlyList<(string Name, int Count)> gains, long gainedCopper)
+    private void RenderLoot(IReadOnlyList<(string Name, int Count)> gains)
     {
-        CurrencyGained = gainedCopper > 0 ? ShopPriceCalculator.FormatCopper(gainedCopper) : "—";
 
         // A shop can serve several rooms; v1 takes the first (nearest-shop routing
         // is a later refinement). Built once here on the UI thread.
@@ -176,6 +215,20 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         UpdateGrandTotal();
         OnPropertyChanged(nameof(HasLoot));
         OnPropertyChanged(nameof(HasUnsellable));
+    }
+
+    // Coin the chest gave as a vertical list, most-expensive denomination first,
+    // skipping any that came up empty. Shorthand names; the runic tier uses the
+    // active board's word (some realms rename it).
+    private void RebuildCoinGains(CurrencyHoldings g)
+    {
+        CoinGains.Clear();
+        if (g.Runic > 0)    CoinGains.Add($"{g.Runic:N0} {_naming.RunicName}");
+        if (g.Platinum > 0) CoinGains.Add($"{g.Platinum:N0} plat");
+        if (g.Gold > 0)     CoinGains.Add($"{g.Gold:N0} gold");
+        if (g.Silver > 0)   CoinGains.Add($"{g.Silver:N0} silver");
+        if (g.Copper > 0)   CoinGains.Add($"{g.Copper:N0} copper");
+        OnPropertyChanged(nameof(HasCoinGain));
     }
 
     // Grand total: everything selected across every shop at the current charm.
@@ -248,6 +301,9 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private void SimulateChest()
     {
         _simulating = true;   // hold the simulated view against real inventory refreshes
+        _preOpenCurrency = null; _settlePending = false;   // drop any in-flight real open
+        _chestCoin = CurrencyHoldings.Empty;               // fresh test run
+        RebuildCoinGains(_chestCoin);
         _chestTables ??= ChestContentsReader.ReadAll(_gameData);
         for (int i = Containers.Count - 1; i >= 0; i--)
             if (Containers[i].Simulated) Containers.RemoveAt(i);
@@ -269,10 +325,15 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     {
         _simulating = true;
         _send($"open {name}");
+
+        // No real currency change to diff in simulation, so add a believable spill.
+        _chestCoin = AddCoins(_chestCoin, RandomCoinGain());
+        RebuildCoinGains(_chestCoin);
+
         if (_chestTables is null || !_chestTables.TryGetValue(number, out ChestContents? contents)
             || contents.Drops.Count == 0)
         {
-            RenderLoot(Array.Empty<(string, int)>(), 0);
+            RenderLoot(Array.Empty<(string, int)>());
             return;
         }
 
@@ -288,7 +349,19 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
                 if (r <= 0) { rolled[drop.ItemName] = rolled.GetValueOrDefault(drop.ItemName) + 1; break; }
             }
         }
-        RenderLoot(rolled.Select(kv => (kv.Key, kv.Value)).ToList(), Random.Shared.Next(5_000, 120_000));
+        RenderLoot(rolled.Select(kv => (kv.Key, kv.Value)).ToList());
+    }
+
+    // A believable per-denomination coin spill for the Simulate Chest test path.
+    private static CurrencyHoldings RandomCoinGain()
+    {
+        int copper = Random.Shared.Next(0, 200);
+        int silver = Random.Shared.Next(0, 80);
+        int gold = Random.Shared.Next(0, 40);
+        int plat = Random.Shared.Next(0, 12);
+        int runic = Random.Shared.Next(0, 2);
+        long total = copper + silver * 10L + gold * 100L + plat * 10_000L + runic * 1_000_000L;
+        return new CurrencyHoldings(copper, silver, gold, plat, runic, total);
     }
 
     [CommunityToolkit.Mvvm.Input.RelayCommand]

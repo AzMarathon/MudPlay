@@ -76,17 +76,35 @@
                     </StackPanel>
                 </Border>
 
-                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
-                    <TextBlock Grid.Column="0" Text="Charm" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <NumericUpDown Grid.Column="1" Width="120" Minimum="0" Maximum="255" Increment="1" FormatString="0"
-                                   Value="{Binding Charm, Mode=TwoWay}"/>
-                    <TextBlock Grid.Column="3" Text="Total to sell:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock Grid.Column="4" Text="{Binding SellTotal}" VerticalAlignment="Center"
-                               Foreground="{StaticResource AccentGreenBrush}" FontWeight="SemiBold"
-                               ToolTip.Tip="What you'll earn selling everything below at the quantities set"/>
-                    <TextBlock Grid.Column="5" Text="Coin gained:" VerticalAlignment="Center" Margin="18,0,6,0"/>
-                    <TextBlock Grid.Column="6" Text="{Binding CurrencyGained}" VerticalAlignment="Center"
-                               Foreground="{StaticResource AccentAmberBrush}" FontWeight="SemiBold"/>
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+                        <TextBlock Text="Charm" VerticalAlignment="Center"/>
+                        <NumericUpDown Width="120" Minimum="0" Maximum="255" Increment="1" FormatString="0"
+                                       Value="{Binding Charm, Mode=TwoWay}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                VerticalAlignment="Top" Margin="0,4,28,0">
+                        <TextBlock Text="Total to sell:"/>
+                        <TextBlock Text="{Binding SellTotal}"
+                                   Foreground="{StaticResource AccentGreenBrush}" FontWeight="SemiBold"
+                                   ToolTip.Tip="What you'll earn selling everything below at the quantities set"/>
+                    </StackPanel>
+
+                    <!-- Coin the chest gave, one denomination per line, most-expensive first. -->
+                    <StackPanel Grid.Column="3" Spacing="1" VerticalAlignment="Top" MinWidth="120">
+                        <TextBlock Text="Coin gained:"/>
+                        <TextBlock Text="—" Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   IsVisible="{Binding !HasCoinGain}"/>
+                        <ItemsControl ItemsSource="{Binding CoinGains}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}"
+                                               Foreground="{StaticResource AccentAmberBrush}" FontWeight="SemiBold"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </Grid>
             </StackPanel>
 
