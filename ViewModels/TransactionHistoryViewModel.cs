@@ -19,8 +19,13 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
     private readonly TransactionHistoryTracker _tracker;
     private bool _disposed;
 
+    // Entries the user has marked "keep" — held across rebuilds so a transaction
+    // arriving mid-review doesn't clear the marks. Kept keyed on the entry value;
+    // pruned to the live ledger on every rebuild.
+    private readonly HashSet<TransactionEntry> _kept = new();
+
     // The session's recorded transactions, newest first.
-    public ObservableCollection<TransactionEntry> Rows { get; } = new();
+    public ObservableCollection<TransactionRowViewModel> Rows { get; } = new();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
@@ -28,6 +33,9 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
 
     // Drives the "no transactions yet" placeholder.
     public bool IsEmpty => Count == 0;
+
+    // Drives the "Clear unkept" button — only meaningful once something's marked.
+    public bool HasKept => _kept.Count > 0;
 
     public TransactionHistoryViewModel(TransactionHistoryTracker tracker)
     {
@@ -50,26 +58,52 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
     [RelayCommand]
     private void Clear()
     {
+        _kept.Clear();
         _tracker.Reset();
         AppServices.Current.SessionLog.TruncateTransactions();
+        OnPropertyChanged(nameof(HasKept));
+    }
+
+    // Selective clear: drop every entry NOT marked "keep", in memory and on disk,
+    // leaving the kept rows behind. The kept rows keep their marks. No-op when
+    // nothing would be dropped (everything is kept, or nothing is).
+    [RelayCommand]
+    private void ClearUnkept()
+    {
+        IReadOnlyList<TransactionEntry> snap = _tracker.Snapshot();
+        List<TransactionEntry> keep = snap.Where(_kept.Contains).ToList();   // chronological
+        if (keep.Count == 0 || keep.Count == snap.Count) return;
+        // Hydrate replaces the in-memory ledger and fires Changed → Rebuild; it
+        // skips the persistence append hook, so rewrite the on-disk log to match.
+        _tracker.Hydrate(keep);
+        AppServices.Current.SessionLog.RewriteTransactions(keep);
+    }
+
+    private void OnRowKeepChanged(TransactionRowViewModel row)
+    {
+        if (row.Keep) _kept.Add(row.Entry);
+        else _kept.Remove(row.Entry);
+        OnPropertyChanged(nameof(HasKept));
     }
 
     private void Rebuild()
     {
         Rows.Clear();
         IReadOnlyList<TransactionEntry> snap = _tracker.Snapshot();
+        _kept.IntersectWith(snap);   // forget marks for entries the ledger has since dropped
         for (int i = snap.Count - 1; i >= 0; i--) // newest first
-            Rows.Add(snap[i]);
+            Rows.Add(new TransactionRowViewModel(snap[i], _kept.Contains(snap[i]), OnRowKeepChanged));
         Count = Rows.Count;
+        OnPropertyChanged(nameof(HasKept));
     }
 
     // Double-click a row → open the Navigation window and centre the map on the
     // transaction's room. The room lives in the Location label's "(map/room)" tail
     // (AppServices.CurrentRoomLabel stamps it); parse it back to a RoomKey. No-op
     // for an entry whose location doesn't carry a parseable room.
-    public void ShowOnMap(TransactionEntry entry)
+    public void ShowOnMap(TransactionRowViewModel row)
     {
-        if (TryParseRoom(entry.Location) is { } key)
+        if (TryParseRoom(row.Entry.Location) is { } key)
             AppServices.Current.NavigateToRoom(key);
     }
 
