@@ -32,6 +32,8 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private readonly ItemNameStore _itemNames;
     private readonly PlayerStats _stats;
     private readonly GameDataCache _gameData;
+    private readonly RoomTracker _tracker;
+    private readonly BfsMapper _bfs;
     private readonly Action<string> _send;
     private readonly Action<RoomKey> _queueWalk;
     private readonly DispatcherTimer _reparse;
@@ -54,12 +56,14 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     public ChestOffloadViewModel() : this(
         AppServices.Current.Inventory, AppServices.Current.ShopStock, AppServices.Current.RoomGraph,
         AppServices.Current.ItemNames, AppServices.Current.PlayerStats, AppServices.Current.GameData,
+        AppServices.Current.RoomTracker, AppServices.Current.Bfs,
         cmd => AppServices.Current.SendGameCommand(cmd), AppServices.Current.QueueWalkTo)
     { }
 
     public ChestOffloadViewModel(
         InventoryManager inventory, ShopStockIndex shops, RoomGraphManager rooms,
         ItemNameStore itemNames, PlayerStats stats, GameDataCache gameData,
+        RoomTracker tracker, BfsMapper bfs,
         Action<string> send, Action<RoomKey> queueWalk)
     {
         _inventory = inventory;
@@ -68,6 +72,8 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _itemNames = itemNames;
         _stats = stats;
         _gameData = gameData;
+        _tracker = tracker;
+        _bfs = bfs;
         _send = send;
         _queueWalk = queueWalk;
 
@@ -145,7 +151,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
             ChestOffloadPlanner.GroupByFewestShops(loot, li => li.Shops, out IReadOnlyList<LootItem> noShop);
 
         ShopGroups.Clear();
-        foreach ((int shopNum, IReadOnlyList<LootItem> items) in groups)
+        foreach ((int shopNum, IReadOnlyList<LootItem> items) in OrderByRoute(groups, shopRoom))
         {
             shopRoom.TryGetValue(shopNum, out Room? room);
             var group = new ChestOffloadShopGroup(
@@ -175,6 +181,37 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
             foreach (ChestOffloadItemRow item in group.Items)
                 total += item.LineCopper;
         SellTotal = total > 0 ? ShopPriceCalculator.FormatCopper(total) : "—";
+    }
+
+    // Order the shop groups into a short trip: the shop nearest the player's current
+    // room first, then the nearest not-yet-visited shop from there (a nearest-
+    // neighbour route). One BFS per shop; a room-less or unreachable shop sorts last.
+    // No known current room (offline / unknown position) leaves the grouping order.
+    private IReadOnlyList<(int Shop, IReadOnlyList<LootItem> Items)> OrderByRoute(
+        IReadOnlyList<(int Shop, IReadOnlyList<LootItem> Items)> groups, Dictionary<int, Room> shopRoom)
+    {
+        RoomKey? here = _tracker.State.CurrentRoom?.Key;
+        if (here is null || groups.Count <= 1) return groups;
+
+        var remaining = groups.ToList();
+        var ordered = new List<(int, IReadOnlyList<LootItem>)>(remaining.Count);
+        RoomKey pos = here.Value;
+        while (remaining.Count > 0)
+        {
+            IReadOnlyDictionary<RoomKey, int> dist = _bfs.ComputeDistancesFrom(pos);
+            int bestIdx = 0, bestDist = int.MaxValue;
+            for (int i = 0; i < remaining.Count; i++)
+            {
+                int d = shopRoom.TryGetValue(remaining[i].Shop, out Room? r) && dist.TryGetValue(r.Key, out int dd)
+                    ? dd : int.MaxValue;
+                if (d < bestDist) { bestDist = d; bestIdx = i; }
+            }
+            (int Shop, IReadOnlyList<LootItem> Items) chosen = remaining[bestIdx];
+            ordered.Add(chosen);
+            remaining.RemoveAt(bestIdx);
+            if (shopRoom.TryGetValue(chosen.Shop, out Room? cr)) pos = cr.Key;
+        }
+        return ordered;
     }
 
     partial void OnCharmChanged(int value)
