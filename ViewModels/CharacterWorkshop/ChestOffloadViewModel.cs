@@ -156,8 +156,10 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         foreach ((int shopNum, IReadOnlyList<LootItem> items) in OrderByRoute(groups, shopRoom))
         {
             shopRoom.TryGetValue(shopNum, out Room? room);
+            string location = room is { } lr ? $"{lr.Key.Map}/{lr.Key.Room}" : "";
             var group = new ChestOffloadShopGroup(
-                room?.Name ?? $"Shop #{shopNum}", room?.Key, _queueWalk, SellGroup, DropAllGroup);
+                room?.Name ?? $"Shop #{shopNum}", location, StepsLabel(room), room?.Key,
+                _queueWalk, SellGroup, DropAllGroup);
             ChestOffloadShopGroup g = group;   // fresh capture for the item callbacks
             foreach (LootItem li in items)
                 group.Items.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper,
@@ -218,6 +220,16 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
             if (shopRoom.TryGetValue(chosen.Shop, out Room? cr)) pos = cr.Key;
         }
         return ordered;
+    }
+
+    // Steps from the player's current room to a shop, under the walker's routing
+    // (same filter as OrderByRoute). Empty when we don't know where we are or the
+    // shop has no room; "unreachable" when no route survives the filter.
+    private string StepsLabel(Room? room)
+    {
+        if (room is null || _tracker.State.CurrentRoom?.Key is not { } here) return "";
+        if (_bfs.DistanceBetween(here, room.Key, _movement) is not { } d) return "unreachable";
+        return d switch { 0 => "you're here", 1 => "1 step", _ => $"{d} steps" };
     }
 
     partial void OnCharmChanged(int value)

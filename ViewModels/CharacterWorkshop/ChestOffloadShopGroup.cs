@@ -15,6 +15,10 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 public sealed partial class ChestOffloadShopGroup : ObservableObject
 {
     public string ShopName { get; }
+    public string Location { get; }   // "map/room", or empty when the shop's room is unknown
+    public string Steps { get; }      // "N steps" from the player's current room (empty if unknown)
+    public bool HasLocation => Location.Length > 0;
+    public string LocationLine => Steps.Length > 0 ? $"{Location} · {Steps}" : Location;
     public bool CanWalk { get; }
     public ObservableCollection<ChestOffloadItemRow> Items { get; } = new();
 
@@ -24,10 +28,12 @@ public sealed partial class ChestOffloadShopGroup : ObservableObject
     public IRelayCommand SellCommand { get; }
     public IRelayCommand DropAllCommand { get; }
 
-    public ChestOffloadShopGroup(string shopName, RoomKey? room,
+    public ChestOffloadShopGroup(string shopName, string location, string steps, RoomKey? room,
         Action<RoomKey> queueWalk, Action<ChestOffloadShopGroup> sell, Action<ChestOffloadShopGroup> dropAll)
     {
         ShopName = shopName;
+        Location = location;
+        Steps = steps;
         CanWalk = room is not null;
         WalkCommand = new RelayCommand(() => { if (room is { } key) queueWalk(key); }, () => room is not null);
         SellCommand = new RelayCommand(() => sell(this));

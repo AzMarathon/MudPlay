@@ -103,11 +103,17 @@
                                 <Border Classes="Box" Margin="0,0,0,2">
                                     <StackPanel Spacing="6">
                                         <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-                                            <Button Grid.Column="0" Classes="Link" Content="{Binding ShopName}"
-                                                    Command="{Binding WalkCommand}"
-                                                    IsEnabled="{Binding CanWalk}"
-                                                    HorizontalAlignment="Left"
-                                                    ToolTip.Tip="Walk to this shop"/>
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                <Button Classes="Link" Content="{Binding ShopName}"
+                                                        Command="{Binding WalkCommand}"
+                                                        IsEnabled="{Binding CanWalk}"
+                                                        HorizontalAlignment="Left"
+                                                        ToolTip.Tip="Walk to this shop"/>
+                                                <TextBlock Text="{Binding LocationLine}" VerticalAlignment="Center"
+                                                           IsVisible="{Binding HasLocation}"
+                                                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                           ToolTip.Tip="Map/room and the steps to walk there from your current room"/>
+                                            </StackPanel>
                                             <TextBlock Grid.Column="1" Text="{Binding Total}" VerticalAlignment="Center"
                                                        Margin="8,0,10,0"
                                                        Foreground="{StaticResource AccentAmberBrush}"/>
