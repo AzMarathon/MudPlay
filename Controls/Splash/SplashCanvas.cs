@@ -356,6 +356,23 @@ public sealed class SplashCanvas
         }
     }
 
+    // Clear a caked lens from the EDGES IN: the surviving mud is a shrinking central
+    // island, the outer ring clearing first, until p=1 clears everything. The mirror
+    // of ClearFromCenter, for scenes that read better closing in than opening up.
+    public void ClearFromEdges(double p)
+    {
+        int cx = Cols / 2, cy = (Rows + TitleRows) / 2;
+        double r = (1.0 - Smooth(p)) * MaxRadius() * 1.45;
+        for (int y = TitleRows; y < Rows; y++)
+        for (int x = 0; x < Cols; x++)
+        {
+            double dx = x - cx, dy = (y - cy) * 2.0;
+            double edge = r * (0.85 + 0.3 * Noise(x, y));
+            if (Math.Sqrt(dx * dx + dy * dy) > edge) continue;   // cleared (outer ring)
+            PutSheet(x, y, x, y);
+        }
+    }
+
     // Mud colour for a cell — foreground on a glyph, or (via PutMud) the background of
     // a flattened bg-fill. Colour varies by intensity + a stable per-cell noise so the
     // mud reads shaded rather than a flat slab.

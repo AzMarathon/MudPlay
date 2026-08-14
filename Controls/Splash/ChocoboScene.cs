@@ -46,14 +46,40 @@ public sealed class ChocoboScene : SplashScene
     private static readonly CellAttributes Rim     = SplashCanvas.Rgb(150, 116, 72);
     private static readonly CellAttributes Wipe    = SplashCanvas.Rgb(214, 224, 236);
 
-    // ----- the chocobo -------------------------------------------------------
-    private static readonly CellAttributes Yellow = SplashCanvas.Rgb(252, 216, 76);
-    private static readonly CellAttributes YHi    = SplashCanvas.Rgb(255, 240, 158);
-    private static readonly CellAttributes Gold   = SplashCanvas.Rgb(214, 166, 44);
-    private static readonly CellAttributes Beak   = SplashCanvas.Rgb(246, 152, 42);
-    private static readonly CellAttributes Leg    = SplashCanvas.Rgb(218, 128, 34);
-    private static readonly CellAttributes Eye    = SplashCanvas.Rgb(40, 34, 44);
-    private static readonly CellAttributes TailY  = SplashCanvas.Rgb(244, 202, 72);
+    // ----- the chocobo (palette keyed off the reference sprite) --------------
+    private static readonly CellAttributes Yellow = SplashCanvas.Rgb(248, 204, 64);   // body
+    private static readonly CellAttributes YHi    = SplashCanvas.Rgb(255, 234, 132);  // lit back / crest
+    private static readonly CellAttributes Gold   = SplashCanvas.Rgb(212, 152, 40);   // belly / wing shade
+    private static readonly CellAttributes Amber  = SplashCanvas.Rgb(168, 108, 30);   // deep feather shade
+    private static readonly CellAttributes Beak   = SplashCanvas.Rgb(240, 146, 36);   // hooked beak
+    private static readonly CellAttributes Leg    = SplashCanvas.Rgb(176, 100, 36);   // legs
+    private static readonly CellAttributes LegDk  = SplashCanvas.Rgb(120, 66, 28);    // claws / shade
+    private static readonly CellAttributes Eye    = SplashCanvas.Rgb(56, 108, 200);   // blue eye
+    private static readonly CellAttributes TailY  = SplashCanvas.Rgb(244, 198, 66);   // tail plume
+
+    // Side sprite facing RIGHT (mirror of the reference art), coloured per region by
+    // DrawBody: right-side cells are the head + hooked beak, the upper-left mass is
+    // the big flowing tail plume, the centre is the body with a folded wing, and the
+    // roots at the bottom feed the animated running legs (drawn separately).
+    private static readonly string[] Body =
+    {
+        "╲ ╲      ╱▟█▙╲",   // 0: tail tips + crest tuft + head crown
+        " ╲██▖    ▟███▙",   // 1: tail + head
+        "╲████▙   ▐███►",   // 2: tail plume + head/eye + beak
+        " ▜████▖  ▜██▛ ",   // 3: tail base + neck
+        "  ▜██████████▖",   // 4: back (widest top)
+        "  ▐██████████▌",   // 5: body + wing
+        "   ▜████████▛ ",   // 6: belly (shaded)
+        "    ██▘  ▝██  ",   // 7: body-bottom / leg roots
+    };
+    private static readonly string[] Fallen =
+    {
+        "  ╲▖ ▗╱ ",   // 0: tail feather + legs kicking up
+        " ╲███▙╱ ",   // 1: tail plume standing up
+        "  ▜███▙ ",   // 2: rump
+        "  ▟███▖ ",   // 3: body pitching down
+        " ▟███►  ",   // 4: head + beak diving into the mud
+    };
 
     private static CellAttributes Bg(byte r, byte g, byte b) =>
         CellAttributes.Default.WithBackground(TerminalColor.Rgb(r, g, b));
@@ -134,11 +160,10 @@ public sealed class ChocoboScene : SplashScene
         // holds screen-centre-left while the puddle slides in from the right; after
         // the hit the bird is pinned to the puddle's world-point, so both scroll off
         // together as the camera keeps rolling.
-        int chocoHome = (int)Math.Round(c.Cols * 0.40);
-        int puddleX = chocoHome + (int)Math.Round((HitFrame - f) * CamSpeed);
-        int chocoX = f <= HitFrame
-            ? (int)Math.Round(SplashCanvas.Lerp(-12, chocoHome, SplashCanvas.EaseOut(Math.Min(1.0, f / (double)RunInEnd))))
-            : puddleX;
+        int chocoHome = (int)Math.Round(c.Cols * 0.38);
+        const int BeakLead = 12;   // the beak sits this far right of the sprite anchor
+        int puddleX = chocoHome + BeakLead + (int)Math.Round((HitFrame - f) * CamSpeed);
+        int chocoX = (int)Math.Round(SplashCanvas.Lerp(-16, chocoHome, SplashCanvas.EaseOut(Math.Min(1.0, f / (double)RunInEnd))));
 
         // The puddle (drawn under the bird).
         DrawPuddle(puddleX, feetY);
@@ -147,18 +172,18 @@ public sealed class ChocoboScene : SplashScene
         {
             int gait = (f / 2) % 2;
             int bob = f >= RunInEnd && gait == 1 ? -1 : 0;
-            // soft ground shadow
-            for (int dx = 0; dx <= 6; dx++) PB(chocoX + dx, feetY + 1, Shadow);
+            // soft ground shadow under the body
+            for (int dx = 2; dx <= 12; dx++) PB(chocoX + dx, feetY + 1, Shadow);
             DrawRun(chocoX, feetY - 9 + bob, gait);
         }
         else
         {
-            DrawFallen(chocoX, feetY - 4);
+            DrawFallen(puddleX - 4, feetY - 4);
             if (f <= FallEnd)   // splash erupts out of the puddle on impact
             {
                 double p = (f - HitFrame) / (double)(FallEnd - HitFrame);
-                c.Blob(puddleX + 6, feetY, 1 + (int)Math.Round(p * 3));
-                c.Flecks(puddleX + 6, feetY - 1, 3 + p * 5, 10);
+                c.Blob(puddleX, feetY, 1 + (int)Math.Round(p * 3));
+                c.Flecks(puddleX, feetY - 1, 3 + p * 5, 10);
             }
         }
 
@@ -178,54 +203,58 @@ public sealed class ChocoboScene : SplashScene
             P(px - 5, gy, '▁', Rim); P(px + 5, gy, '▁', Rim);
         }
 
+        // Paint a body template, colouring each cell by region: the beak glyph is
+        // orange, the upper-left mass is the tail plume (alternating highlight/shade
+        // feathers), the crown row is lit, the lower rows are the shaded belly, and
+        // the rest is body yellow.
+        void DrawBody(int bx, int by, string[] rows)
+        {
+            for (int r = 0; r < rows.Length; r++)
+            {
+                string row = rows[r];
+                for (int i = 0; i < row.Length; i++)
+                {
+                    char ch = row[i];
+                    if (ch == ' ') continue;
+                    CellAttributes a =
+                        ch == '►'            ? Beak
+                        : i <= 5 && r <= 3   ? (((i + r) & 1) == 0 ? TailY : Amber)   // tail feathers
+                        : r == 0             ? YHi                                     // lit crown
+                        : r >= 6             ? Gold                                    // shaded belly
+                        : Yellow;
+                    P(bx + i, by + r, ch, a);
+                }
+            }
+        }
+
         void DrawRun(int bx, int by, int gait)
         {
-            // crest
-            P(bx + 4, by, '╲', YHi); P(bx + 5, by, '│', YHi); P(bx + 6, by, '╱', YHi);
-            // head
-            P(bx + 3, by + 1, '▟', YHi); P(bx + 4, by + 1, '█', Yellow); P(bx + 5, by + 1, '█', Yellow); P(bx + 6, by + 1, '▙', Yellow);
-            // face: eye + beak
-            P(bx + 3, by + 2, '█', Yellow); P(bx + 4, by + 2, '█', Yellow); P(bx + 5, by + 2, '█', Eye); P(bx + 6, by + 2, '▜', Yellow); P(bx + 7, by + 2, '►', Beak);
-            // jaw / throat
-            P(bx + 3, by + 3, '▜', Yellow); P(bx + 4, by + 3, '█', Yellow); P(bx + 5, by + 3, '▛', Gold);
-            // neck into body
-            P(bx + 2, by + 4, '▗', Yellow); P(bx + 3, by + 4, '█', Yellow); P(bx + 4, by + 4, '█', Gold);
-            // tail plume sweeping up behind
-            P(bx - 2, by + 4, '╲', TailY); P(bx - 1, by + 5, '╲', TailY); P(bx - 1, by + 6, '≈', Gold);
-            // body — back (highlit top edge)
-            P(bx, by + 5, '▗', Yellow); P(bx + 1, by + 5, '▟', YHi);
-            for (int x = 2; x <= 6; x++) P(bx + x, by + 5, '█', Yellow);
-            P(bx + 7, by + 5, '▙', Yellow);
-            // body — widest, with a folded wing
-            for (int x = 0; x <= 7; x++) P(bx + x, by + 6, '█', x < 2 ? Gold : Yellow);
-            P(bx + 2, by + 6, '╲', Gold); P(bx + 3, by + 6, '╲', Gold); P(bx + 8, by + 6, '▖', Yellow);
-            // belly (shaded)
-            P(bx + 1, by + 7, '▜', Gold); for (int x = 2; x <= 6; x++) P(bx + x, by + 7, '█', Gold); P(bx + 7, by + 7, '▛', Gold);
+            DrawBody(bx, by, Body);
+            // a long tail feather trailing off the plume, and a wisp above it
+            P(bx - 1, by + 3, '╲', TailY); P(bx + 1, by + 0, '╲', Gold);
+            // blue eye set into the head, toward the beak
+            P(bx + 11, by + 2, '●', Eye);
             // legs mid-stride + a puff of dust off the trailing foot
             if (gait == 0)
             {
-                P(bx + 2, by + 8, '▙', Leg); P(bx + 1, by + 9, '◣', Leg);
-                P(bx + 5, by + 8, '▟', Leg); P(bx + 6, by + 9, '◢', Leg);
-                P(bx - 1, by + 9, '·', Dust); P(bx - 3, by + 9, '•', Dust);
+                P(bx + 5, by + 8, '▟', Leg); P(bx + 4, by + 9, '◣', LegDk);
+                P(bx + 9, by + 8, '▙', Leg); P(bx + 10, by + 9, '◢', LegDk);
+                P(bx + 2, by + 9, '·', Dust); P(bx + 0, by + 9, '•', Dust);
             }
             else
             {
-                P(bx + 3, by + 8, '█', Leg); P(bx + 3, by + 9, '▄', Leg);
-                P(bx + 4, by + 8, '█', Leg); P(bx + 4, by + 9, '▄', Leg);
-                P(bx - 2, by + 9, '·', Dust);
+                P(bx + 6, by + 8, '▐', Leg); P(bx + 6, by + 9, '▄', LegDk);
+                P(bx + 8, by + 8, '▌', Leg); P(bx + 8, by + 9, '▄', LegDk);
+                P(bx + 1, by + 9, '·', Dust);
             }
         }
 
         void DrawFallen(int bx, int by)
         {
-            // legs kicking skyward
-            P(bx + 2, by, '╲', Leg); P(bx + 4, by, '│', Leg); P(bx + 6, by, '╱', Leg);
-            // rump + tail up, left
-            P(bx + 1, by + 1, '╲', TailY); P(bx + 2, by + 1, '▟', Yellow); P(bx + 3, by + 1, '█', Yellow); P(bx + 4, by + 1, '█', Yellow); P(bx + 5, by + 1, '▙', Gold);
-            // body pitched forward into the mud
-            P(bx + 2, by + 2, '▜', Gold); P(bx + 3, by + 2, '█', Yellow); P(bx + 4, by + 2, '█', Gold); P(bx + 5, by + 2, '█', Gold); P(bx + 6, by + 2, '▖', Yellow);
-            // neck + head diving under, only the beak still clear
-            P(bx + 5, by + 3, '▜', Yellow); P(bx + 6, by + 3, '█', Yellow); P(bx + 7, by + 3, '►', Beak);
+            DrawBody(bx, by, Fallen);
+            P(bx + 5, by + 0, '╲', TailY);   // a tail feather flicking over
+            // legs kicking, drawn in leg colour over the template's kick glyphs
+            P(bx + 2, by + 0, '╲', Leg); P(bx + 5, by + 0, '╱', Leg);
         }
     }
 }
