@@ -18,8 +18,10 @@
                     ToolTip.Tip="Add, edit, or remove bosses in this realm's list."/>
             <Button Content="Import…" Margin="0,0,6,6" Command="{Binding ImportCommand}"
                     ToolTip.Tip="Load a shared boss table (JSON). Imported entries overlay yours; anything not in the file is kept."/>
-            <Button Content="Export…" Margin="0,0,18,6" Command="{Binding ExportCommand}"
+            <Button Content="Export…" Margin="0,0,6,6" Command="{Binding ExportCommand}"
                     ToolTip.Tip="Save this realm's boss table to a JSON file to share."/>
+            <Button Content="Chest Offload…" Margin="0,0,18,6" Command="{Binding OpenChestOffloadCommand}"
+                    ToolTip.Tip="Open the boss chests you're carrying and vendor the loot shop-by-shop."/>
             <TextBox Classes="clearable" Width="200" Margin="0,0,18,6" PlaceholderText="Filter by boss or room…"
                      Text="{Binding FilterText, Mode=TwoWay}"/>
             <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="0,0,0,6"

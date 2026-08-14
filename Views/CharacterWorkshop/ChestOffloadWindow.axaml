@@ -1,0 +1,129 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="720"
+        x:Class="MudPlay.Views.CharacterWorkshop.ChestOffloadWindow"
+        x:DataType="vm:ChestOffloadViewModel"
+        Title="Chest Offload"
+        Width="620" Height="720"
+        MinWidth="460" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.Section">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style Selector="Border.Box">
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="10"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
+        <DockPanel LastChildFill="True">
+
+            <!-- Top: containers to open + charm + coin gained -->
+            <StackPanel DockPanel.Dock="Top" Spacing="10">
+                <Border Classes="Box">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="Section" Text="Containers you're holding"/>
+                        <TextBlock Text="No containers in your inventory."
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   IsVisible="{Binding !HasContainers}"/>
+                        <ItemsControl ItemsSource="{Binding Containers}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ChestContainerRow">
+                                    <Button Content="{Binding Display}" Command="{Binding OpenCommand}"
+                                            Margin="0,0,6,6"
+                                            ToolTip.Tip="Send &quot;open&quot; for this container"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="Charm" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <NumericUpDown Grid.Column="1" Width="120" Minimum="0" Maximum="255" Increment="1" FormatString="0"
+                                   Value="{Binding Charm, Mode=TwoWay}"/>
+                    <TextBlock Grid.Column="3" Text="Coin gained:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Grid.Column="4" Text="{Binding CurrencyGained}" VerticalAlignment="Center"
+                               Foreground="{StaticResource AccentAmberBrush}" FontWeight="SemiBold"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Scrollable shop groups -->
+            <ScrollViewer Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Open a container above to see what's sellable."
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               IsVisible="{Binding !HasLoot}"/>
+
+                    <ItemsControl ItemsSource="{Binding ShopGroups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ChestOffloadShopGroup">
+                                <Border Classes="Box" Margin="0,0,0,2">
+                                    <StackPanel Spacing="6">
+                                        <Grid ColumnDefinitions="*,Auto,Auto">
+                                            <Button Grid.Column="0" Content="{Binding ShopName}"
+                                                    Command="{Binding WalkCommand}"
+                                                    IsEnabled="{Binding CanWalk}"
+                                                    HorizontalAlignment="Left"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    FontWeight="SemiBold"
+                                                    ToolTip.Tip="Walk to this shop"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Total}" VerticalAlignment="Center"
+                                                       Margin="8,0,10,0"
+                                                       Foreground="{StaticResource AccentAmberBrush}"/>
+                                            <Button Grid.Column="2" Content="Sell" Command="{Binding SellCommand}"
+                                                    ToolTip.Tip="Send the sell commands for the quantities below (do this while standing in the shop)"/>
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding Items}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ChestOffloadItemRow">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,2">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Gained, StringFormat='of {0}'}"
+                                                                   VerticalAlignment="Center" Margin="0,0,8,0"
+                                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                        <NumericUpDown Grid.Column="2" Width="104"
+                                                                       Minimum="0" Maximum="{Binding Gained}" Increment="1" FormatString="0"
+                                                                       Value="{Binding SellQty, Mode=TwoWay}"/>
+                                                        <TextBlock Grid.Column="3" Text="{Binding LineValue}" VerticalAlignment="Center"
+                                                                   Margin="10,0,0,0" MinWidth="90"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Classes="Box" IsVisible="{Binding HasUnsellable}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="Section" Text="No shop buys these"/>
+                            <ItemsControl ItemsSource="{Binding Unsellable}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ChestOffloadItemRow">
+                                        <TextBlock Text="{Binding Name}" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</Window>

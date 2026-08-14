@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.10.0
+
+- New **Chest Offload** window (Player Workshop → Bosses → **Chest Offload…**): open the boss chests you're carrying, then vendor the loot shop-by-shop
+- On open it snapshots your carried inventory + coin and lists the containers you hold; opening one shows the coin the chest gave (Wealth delta) and every new item, grouped into the fewest shops with a charm picker
+- Per item: an adjustable sell quantity and its sell value; per shop: a running total, a clickable header that queues a walk there, and a Sell button that fires the (realm-batched) sell commands
+
 ## 3.9.16
 
 - Monster table **Biggest Lair** / **Avg Lair Size** now read each spawn room's lair `(Max N)` cap — matching the record's "Spawns In" list — instead of the Lairs table's group-level `Mobs` count, which overstated the biggest lair
