@@ -55,11 +55,9 @@
                     <StackPanel Spacing="6">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" Classes="Section" Text="Containers you're holding" VerticalAlignment="Center"/>
-                            <!-- Parked test affordance — the SimulateChest command + roller stay in the VM.
-                                 Re-enable this button to seed random containers and exercise the window without real chests.
                             <Button Grid.Column="1" Content="Simulate Chest" Command="{Binding SimulateChestCommand}"
-                                    ToolTip.Tip="Seed a few random containers whose loot is rolled from the chest's own table — test the window without real chests."/>
-                            -->
+                                    IsVisible="{Binding ShowSimulateChest}"
+                                    ToolTip.Tip="Seed a few random containers whose loot is rolled from the chest's own table — test the window without real chests. Shown only while the Log pane's 'Simulate Chest button' toggle is on."/>
                         </Grid>
                         <TextBlock Text="No containers in your inventory."
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
@@ -138,16 +136,16 @@
                                             <TextBlock Grid.Column="1" Text="{Binding Total}" VerticalAlignment="Center"
                                                        Margin="8,0,10,0"
                                                        Foreground="{StaticResource AccentAmberBrush}"/>
-                                            <Button Grid.Column="2" Content="Sell" Command="{Binding SellCommand}"
+                                            <Button Grid.Column="2" Content="Sell All" Command="{Binding SellCommand}"
                                                     Margin="0,0,6,0"
-                                                    ToolTip.Tip="Send the sell commands for the quantities below (do this while standing in the shop)"/>
+                                                    ToolTip.Tip="Send the sell commands for every item's quantity below (do this while standing in the shop)"/>
                                             <Button Grid.Column="3" Content="Drop All" Command="{Binding DropAllCommand}"
                                                     ToolTip.Tip="Drop every item in this shop's listing and remove it from the sell plan"/>
                                         </Grid>
                                         <ItemsControl ItemsSource="{Binding Items}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ChestOffloadItemRow">
-                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,2">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
                                                         <Panel Grid.Column="0" VerticalAlignment="Center">
                                                             <Button x:Name="ShopBtn" Command="{Binding OpenShopMenuCommand}"
                                                                     IsEnabled="{Binding CanChangeShop}"
@@ -200,8 +198,11 @@
                                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
                                                         <TextBlock Grid.Column="4" Text="{Binding LineValue}" VerticalAlignment="Center"
                                                                    Margin="10,0,8,0" MinWidth="90"/>
-                                                        <Button Grid.Column="5" Content="Drop" Command="{Binding DropCommand}"
-                                                                ToolTip.Tip="Drop this whole stack and remove it from the sell plan"/>
+                                                        <Button Grid.Column="5" Content="Sell" Command="{Binding SellCommand}"
+                                                                Margin="0,0,6,0"
+                                                                ToolTip.Tip="Sell the quantity picked above (do this while standing in the shop). The row updates when the game confirms the sale — a refused sale changes nothing."/>
+                                                        <Button Grid.Column="6" Content="Drop" Command="{Binding DropCommand}"
+                                                                ToolTip.Tip="Drop the leftover you're NOT selling (held − picked). The row updates when the game confirms the drop."/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

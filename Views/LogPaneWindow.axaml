@@ -89,6 +89,11 @@
                           Foreground="{StaticResource ChromeFgSecBrush}"
                           FontSize="11"
                           ToolTip.Tip="Reveal the 'Simulate Death' test button on the Character Workshop → Death Recovery tab. Off by default and reset off every launch, so a normal session never shows the test button."/>
+                <CheckBox IsChecked="{Binding ShowSimulateChest}"
+                          Content="Simulate Chest button"
+                          Foreground="{StaticResource ChromeFgSecBrush}"
+                          FontSize="11"
+                          ToolTip.Tip="Reveal the 'Simulate Chest' test button on the Chest Offload window (Bosses tab → Chest Offload). Off by default and reset off every launch, so a normal session never shows the test button."/>
             </StackPanel>
             </StackPanel>
         </Border>

@@ -16,7 +16,9 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 public sealed partial class ChestOffloadItemRow : ObservableObject
 {
     public string Name { get; }
-    public int Gained { get; }
+    // Held count from the chest — reduced as confirmed sales/drops of this item land
+    // (bound as the sell-qty ceiling and the "of N" label, so both track live).
+    [ObservableProperty] private int _gained;
     public double BaseCopper { get; }
     public IReadOnlyCollection<int> CandidateShops { get; }
 
@@ -42,15 +44,17 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
     public bool HasShopChoices => ShopChoices.Count > 0;
 
     public IRelayCommand DropCommand { get; }
+    public IRelayCommand SellCommand { get; }
 
     public ChestOffloadItemRow(string name, int gained, double baseCopper,
         IReadOnlyCollection<int> candidateShops, int currentShop,
         Action<ChestOffloadItemRow>? onQtyChanged, Action<ChestOffloadItemRow>? onDrop = null,
         Func<ChestOffloadItemRow, IReadOnlyList<ShopChoiceRow>>? buildChoices = null,
-        Action<ChestOffloadItemRow, int>? moveToShop = null)
+        Action<ChestOffloadItemRow, int>? moveToShop = null,
+        Action<ChestOffloadItemRow>? onSell = null)
     {
         Name = name;
-        Gained = gained;
+        _gained = gained;
         BaseCopper = baseCopper;
         CandidateShops = candidateShops;
         CurrentShop = currentShop;
@@ -59,6 +63,7 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         _moveToShop = moveToShop;
         _sellQty = gained;   // default: sell all of what the chest gave
         DropCommand = new RelayCommand(() => onDrop?.Invoke(this));
+        SellCommand = new RelayCommand(() => onSell?.Invoke(this));
     }
 
     public void Reprice(int charm, RealmType realm)
@@ -102,5 +107,30 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         double unit = ShopPriceCalculator.SellCopper(BaseCopper, _charm, _realm);
         LineCopper = (long)Math.Round(unit * Math.Max(0, SellQty));
         LineValue = LineCopper > 0 ? ShopPriceCalculator.FormatCopper(LineCopper) : "—";
+    }
+
+    // What the Drop button drops: the leftover you're NOT selling (held − picked).
+    public int DropQty => Math.Max(0, Gained - SellQty);
+
+    // Apply a confirmed SELL of `count` of this item: the sold copies were the
+    // picked-to-sell portion, so shed both the held count and the pick by `count`.
+    // Returns true when nothing's left and the row should be removed.
+    public bool ApplySold(int count)
+    {
+        Gained = Math.Max(0, Gained - count);
+        SellQty = Math.Clamp(SellQty - count, 0, Gained);
+        Recompute();
+        return Gained <= 0;
+    }
+
+    // Apply a confirmed DROP of `count` of this item: the dropped copies were the
+    // leftover you weren't selling, so shed the held count but keep the sell pick
+    // (clamped to what remains). Returns true when nothing's left.
+    public bool ApplyDropped(int count)
+    {
+        Gained = Math.Max(0, Gained - count);
+        if (SellQty > Gained) SellQty = Gained;
+        Recompute();
+        return Gained <= 0;
     }
 }

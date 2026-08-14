@@ -60,6 +60,35 @@ public sealed class InventoryManagerTests
     }
 
     [Fact]
+    public void SoldAndDropped_FireItemEventsWithNameAndCount()
+    {
+        using Harness h = new();
+        (string Name, int Count)? sold = null;
+        (string Name, int Count)? dropped = null;
+        h.Inv.ItemSold += (n, c) => sold = (n, c);
+        h.Inv.ItemDropped += (n, c) => dropped = (n, c);
+
+        // Paradigm's counted forms — SplitLeadingCount strips the leading count.
+        h.Feed("You sold 5 orc-head for 250 copper farthings.");
+        h.Feed("You dropped 3 moonstone.");
+
+        Assert.Equal(("orc-head", 5), sold);
+        Assert.Equal(("moonstone", 3), dropped);
+    }
+
+    [Fact]
+    public void SoldSingular_StockForm_FiresCountOne()
+    {
+        using Harness h = new();
+        (string Name, int Count)? sold = null;
+        h.Inv.ItemSold += (n, c) => sold = (n, c);
+
+        h.Feed("You sold lantern for 101 copper farthings.");
+
+        Assert.Equal(("lantern", 1), sold);
+    }
+
+    [Fact]
     public void FullParse_PopulatesCurrencyAndEncumbrance()
     {
         using Harness h = new();

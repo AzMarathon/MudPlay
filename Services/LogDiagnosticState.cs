@@ -109,6 +109,22 @@ public sealed class LogDiagnosticState
         }
     }
 
+    // Reveals the Chest Offload window's "Simulate Chest" button — a test-only
+    // affordance that seeds random containers so the window can be exercised
+    // without real boss chests. Same contract as ShowSimulateDeath: off by
+    // default, session-only (resets off every launch), never persisted.
+    private bool _showSimulateChest;
+    public bool ShowSimulateChest
+    {
+        get => _showSimulateChest;
+        set
+        {
+            if (_showSimulateChest == value) return;
+            _showSimulateChest = value;
+            Changed?.Invoke();
+        }
+    }
+
     // Fires after any flag change so observers (the LogPane VM mirroring
     // state across windows; AppServices persisting the change to the active
     // character) can refresh.

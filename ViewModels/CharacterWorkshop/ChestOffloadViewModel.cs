@@ -40,6 +40,9 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private readonly Action<string> _send;
     private readonly Action<RoomKey> _queueWalk;
     private readonly DispatcherTimer _reparse;
+    private readonly LogDiagnosticState? _diagnostics;
+    private readonly LogService? _log;
+    private const string LogCategory = "ChestOffload";
 
     private IReadOnlyList<string> _baselineCarried = Array.Empty<string>();
     // Coins are attributed per-open, not against a fixed baseline: only the
@@ -104,7 +107,28 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _reparse = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
         _reparse.Tick += (_, _) => { _reparse.Stop(); _settlePending = true; _send("i"); };
         _inventory.Changed += OnInventoryChanged;
+        // Reconcile the list against the game's OWN confirmed sell/drop lines, so a
+        // refused sale changes nothing and a partial one reduces only that item.
+        _inventory.ItemSold += OnItemSold;
+        _inventory.ItemDropped += OnItemDropped;
+
+        // Test-only "Simulate Chest" button, revealed by the Log pane's "Simulate
+        // Chest button" toggle (session-only, off by default). Mirror its live value.
+        _diagnostics = AppServices.CurrentOrNull?.LogDiagnostics;
+        if (_diagnostics is not null) _diagnostics.Changed += OnDiagnosticsChanged;
+        _log = AppServices.CurrentOrNull?.Log;
+
+        _log?.Info(LogCategory,
+            $"window opened — baseline {_baselineCarried.Count} carried item(s), charm {_charm}, " +
+            $"{Containers.Count} container(s) held");
     }
+
+    // Reveal the test-only "Simulate Chest" button — gated by the Log pane toggle,
+    // so a normal user never sees it. Hidden by default (session-only + off).
+    public bool ShowSimulateChest => _diagnostics?.ShowSimulateChest ?? false;
+
+    private void OnDiagnosticsChanged()
+        => Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(ShowSimulateChest)));
 
     private void RebuildContainers(InventorySnapshot snap)
     {
@@ -123,17 +147,70 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _simulating = false;   // a real open returns to the live-inventory diff
         _preOpenCurrency = _inventory.Snapshot.Currency;   // "before" — the delta after the 'i' is this chest's coin
         _settlePending = false;                            // don't attribute until the forced 'i' lands
+        _log?.Info(LogCategory, $"open {name} — re-reading inventory in {_reparse.Interval.TotalMilliseconds:F0}ms for the loot + coin diff");
         _send($"open {name}");
         _reparse.Stop();
         _reparse.Start();
     }
 
-    // While a simulated chest is showing, real inventory refreshes (prompts, the
-    // open reply, walking around) must not overwrite it with the empty live diff.
+    // Full rebuild fires ONLY on the forced-'i' re-read that follows an open (the
+    // authoritative "after" snapshot that reveals the chest's loot + coin). Sells and
+    // drops during offload reconcile surgically via OnItemSold / OnItemDropped so the
+    // user's per-item sell quantities and ⇄ shop moves survive — a coarse rebuild here
+    // would re-derive the whole list and wipe them. Simulated chests never rebuild
+    // from live inventory at all.
     private void OnInventoryChanged()
     {
         if (_simulating) return;
+        if (!_settlePending) return;
         Dispatcher.UIThread.Post(RebuildLoot);
+    }
+
+    // The game confirmed a sale of `count` of `name` (the player's own "You sold …").
+    // Reduce that row and drop it at zero, leaving every other row's edits intact.
+    private void OnItemSold(string name, int count)
+        => Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, sold: true));
+
+    // The game confirmed a drop of `count` of `name` (the player's own "You dropped …").
+    private void OnItemDropped(string name, int count)
+        => Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, sold: false));
+
+    private void ReconcileConfirmed(string name, int count, bool sold)
+    {
+        if (_simulating || count <= 0) return;
+        if (FindRow(name) is not (ChestOffloadShopGroup group, ChestOffloadItemRow row))
+        {
+            _log?.Debug(LogCategory,
+                $"{(sold ? "sold" : "dropped")} {count} {name} — no matching offload row (already reconciled or not from a chest)");
+            return;
+        }
+
+        int before = row.Gained;
+        bool empty = sold ? row.ApplySold(count) : row.ApplyDropped(count);
+        _log?.Info(LogCategory,
+            $"{(sold ? "sold" : "dropped")} {count} {name} confirmed — held {before}→{row.Gained}" +
+            (empty ? " (row cleared)" : $", sell qty now {row.SellQty}"));
+
+        if (empty)
+        {
+            group.Items.Remove(row);
+            if (group.Items.Count == 0) ShopGroups.Remove(group);
+        }
+        group.Retotal();
+        UpdateGrandTotal();
+        OnPropertyChanged(nameof(HasLoot));
+    }
+
+    // Locate the sellable row for an item by name (chest-loot rows only; the
+    // unsellable list carries no sell/drop buttons). First match wins — an item maps
+    // to a single shop group at a time.
+    private (ChestOffloadShopGroup Group, ChestOffloadItemRow Row)? FindRow(string name)
+    {
+        foreach (ChestOffloadShopGroup g in ShopGroups)
+            foreach (ChestOffloadItemRow r in g.Items)
+                if (string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return (g, r);
+        return null;
     }
 
     private void RebuildLoot()
@@ -146,13 +223,18 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         // accumulator alone, so sale proceeds never masquerade as chest coin.
         if (_settlePending && _preOpenCurrency is { } pre)
         {
-            _chestCoin = AddCoins(_chestCoin, CoinGain(pre, snap.Currency));
+            CurrencyHoldings gain = CoinGain(pre, snap.Currency);
+            _chestCoin = AddCoins(_chestCoin, gain);
             _preOpenCurrency = null;
             _settlePending = false;
+            _log?.Info(LogCategory, $"open settled — coin this open +{gain.TotalCopperValue}c (accumulated {_chestCoin.TotalCopperValue}c)");
         }
         RebuildCoinGains(_chestCoin);
 
-        RenderLoot(ChestOffloadPlanner.CarriedGains(_baselineCarried, snap.CarriedItems));
+        IReadOnlyList<(string Name, int Count)> gains =
+            ChestOffloadPlanner.CarriedGains(_baselineCarried, snap.CarriedItems);
+        _log?.Info(LogCategory, $"loot rebuilt — {gains.Count} new item type(s) since the window opened");
+        RenderLoot(gains);
     }
 
     // Positive per-denomination coin an open added (before → after). Clamped at
@@ -204,7 +286,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
                 group.Items.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper,
                     li.Shops, shopNum,
                     it => { GroupOf(it)?.Retotal(); UpdateGrandTotal(); },
-                    DropItem, BuildShopChoices, MoveItemToShop));
+                    DropItem, BuildShopChoices, MoveItemToShop, SellItem));
             group.Reprice(Charm, _gameData.ActiveRealm);
             ShopGroups.Add(group);
         }
@@ -377,25 +459,33 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
     private void SellGroup(ChestOffloadShopGroup group)
     {
-        bool paradigm = _gameData.ActiveRealm == RealmType.ParaMud;
+        _log?.Info(LogCategory, $"Sell All '{group.ShopName}' — {group.Items.Count} item(s)");
         foreach (ChestOffloadItemRow item in group.Items)
-            CountedCommand.Emit(_send, "sell", item.SellQty, item.Name, paradigm);
+            SellItem(item);
+    }
+
+    // Sell just this one row's picked quantity (do it while standing in the shop). The
+    // list is NOT touched here — it reconciles when the game's "You sold …" lands, so a
+    // refused sale leaves the row untouched.
+    private void SellItem(ChestOffloadItemRow item)
+    {
+        if (item.SellQty <= 0) return;
+        _log?.Info(LogCategory, $"sell {item.SellQty} {item.Name} (of {item.Gained} held)");
+        CountedCommand.Emit(_send, "sell", item.SellQty, item.Name,
+            _gameData.ActiveRealm == RealmType.ParaMud);
     }
 
     private ChestOffloadShopGroup? GroupOf(ChestOffloadItemRow item)
         => ShopGroups.FirstOrDefault(g => g.Items.Contains(item));
 
-    // Drop the whole stack this chest gave and take the item off the sell list.
-    // Looks the group up live — the item may have been moved to a different shop.
+    // Drop the LEFTOVER you're not selling (held − picked). The row is NOT removed
+    // here — it reconciles when the game's "You dropped …" lands (ReconcileConfirmed),
+    // so a blocked drop leaves the plan intact.
     private void DropItem(ChestOffloadItemRow item)
     {
-        CountedCommand.Emit(_send, "drop", item.Gained, item.Name, _gameData.ActiveRealm == RealmType.ParaMud);
-        ChestOffloadShopGroup? group = GroupOf(item);
-        group?.Items.Remove(item);
-        if (group is not null && group.Items.Count == 0) ShopGroups.Remove(group);
-        else group?.Retotal();
-        UpdateGrandTotal();
-        OnPropertyChanged(nameof(HasLoot));
+        if (item.DropQty <= 0) return;
+        _log?.Info(LogCategory, $"drop {item.DropQty} {item.Name} (leftover; {item.SellQty} of {item.Gained} kept to sell)");
+        CountedCommand.Emit(_send, "drop", item.DropQty, item.Name, _gameData.ActiveRealm == RealmType.ParaMud);
     }
 
     // Alternate shops that also buy this item, nearest first, minus the one it's in.
@@ -449,15 +539,18 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         OnPropertyChanged(nameof(HasLoot));
     }
 
-    // Drop everything in this shop's listing and remove the group.
+    // Drop every item in this shop's listing — the whole held stack of each. The rows
+    // are NOT removed here; each clears when its "You dropped …" confirms, so a blocked
+    // drop stays visible.
     private void DropAllGroup(ChestOffloadShopGroup group)
     {
+        _log?.Info(LogCategory, $"Drop All '{group.ShopName}' — {group.Items.Count} item(s)");
         bool paradigm = _gameData.ActiveRealm == RealmType.ParaMud;
         foreach (ChestOffloadItemRow item in group.Items)
+        {
+            _log?.Info(LogCategory, $"drop {item.Gained} {item.Name} (whole stack)");
             CountedCommand.Emit(_send, "drop", item.Gained, item.Name, paradigm);
-        ShopGroups.Remove(group);
-        UpdateGrandTotal();
-        OnPropertyChanged(nameof(HasLoot));
+        }
     }
 
     private double BaseCopperOf(int number)
@@ -472,7 +565,11 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     public void Dispose()
     {
         _inventory.Changed -= OnInventoryChanged;
+        _inventory.ItemSold -= OnItemSold;
+        _inventory.ItemDropped -= OnItemDropped;
+        if (_diagnostics is not null) _diagnostics.Changed -= OnDiagnosticsChanged;
         _reparse.Stop();
+        _log?.Info(LogCategory, "window closed");
     }
 
     private readonly record struct LootItem(string Name, int Count, double BaseCopper, IReadOnlyCollection<int> Shops);
