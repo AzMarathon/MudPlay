@@ -1751,12 +1751,12 @@
                                         <StackPanel Spacing="2">
                                             <TextBlock FontSize="11" TextWrapping="Wrap"
                                                        Foreground="{StaticResource ChromeFgSecBrush}"
-                                                       Text="Move speed (seconds per step)"/>
+                                                       Text="Seconds per room (loop pace)"/>
                                             <NumericUpDown FontSize="11" HorizontalAlignment="Stretch"
                                                            Value="{Binding ExpEstimator.SecondsPerStep, Mode=TwoWay}"
                                                            Minimum="0" Maximum="30" Increment="0.1"
                                                            FormatString="0.0" ShowButtonSpinner="True"
-                                                           ToolTip.Tip="Seconds to move one room (Stock ~0.5–1, Paradigm ~1–3.5 — set your realm's speed). Only costs exp when a lair-to-lair hop is too long to finish inside a 5s combat round; short hops ride the downtime for free."/>
+                                                           ToolTip.Tip="Your EFFECTIVE time per room while looping — NOT your raw walk speed. In a fighting loop each room is a move command + its server round-trip + an attack + the combat tick, so the real pace is ~1.2–1.4s even at 1.0 movespeed (default 1.4). Set it too low and a loop that backtracks past cleared lairs reads too high. Only costs exp when a hop is too long to finish inside a 5s round; short hops ride the downtime free."/>
                                         </StackPanel>
                                         <StackPanel Spacing="2">
                                             <TextBlock FontSize="11" TextWrapping="Wrap"

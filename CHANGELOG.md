@@ -6,7 +6,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Exp/Hr estimator now walks the loop's real room order over a simulated hour with a per-mob respawn clock keyed to each kill, instead of assuming every lair fires once per lap. So a **line (out-and-back) loop** — where you re-cross just-cleared lairs on the return, wasting combat ticks in empty rooms — is estimated correctly lower, matching real yields; a saturated ring still reports its full rate. Fixes loops (e.g. dense diamond-mine lines) reading ~15% high
 - The 720-kills/hr tick cap is now treated as a ceiling a loop only reaches if its geometry keeps a mob engaged every tick, not a figure most loops hit
-- A lair that respawns within one combat tick of your arrival counts as caught (real timing lands it), so the estimate no longer reads a few percent low on loops with barely-early return-leg lairs
+- Clarified the estimator's **Seconds per room** input: it's your effective per-room pace *while looping and fighting* (move + round-trip + attack + tick ≈ 1.2–1.4s even at 1.0 movespeed), not your raw walk speed — setting it to raw movespeed made tight backtracking loops read high
 - bug reports addressed: paradigm-20260814-012556
 
 ## 3.11.1

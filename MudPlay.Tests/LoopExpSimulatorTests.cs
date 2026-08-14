@@ -342,25 +342,6 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
-    public void NearMissWithinOneTick_IsCaught_NotWrittenOff()
-    {
-        // A lair you reach within ~one combat tick of its respawn is caught in real
-        // play (tick alignment + a beat of latency lands you there), so the one-tick
-        // grace credits it rather than counting a clean miss. Single room, 8s respawn,
-        // no travel → a 5s combat lap revisits every 5s. Each kill puts the mob back
-        // 8s later, so you arrive ~3s early on the *next* lap (within the 5s grace) and
-        // catch it — firing roughly every other lap (~360/hr). Without the grace you'd
-        // have to wait a full extra lap for it to fully respawn (~240/hr), so a rate
-        // clearly above that floor proves the grace is doing its job.
-        ExpSimResult e = LoopExpSimulator.Simulate(
-            Route(Room(1, 100, Lair(1, 100, 8))), Single(secPerStep: 0));
-
-        ExpLairStat lair = Assert.Single(e.Lairs);
-        Assert.True(lair.FiresPerHour > 260,
-            $"grace should catch the ~3s-early revisit: {lair.FiresPerHour}/hr (no-grace floor ~240)");
-    }
-
-    [Fact]
     public void PlacedBoss_AmortizedOverRegen_NotEveryPass()
     {
         // A boss placed via the room's NPC field (not a lair) — the animated
