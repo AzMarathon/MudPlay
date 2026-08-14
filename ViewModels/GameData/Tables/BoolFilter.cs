@@ -4,9 +4,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace MudPlay.ViewModels.GameData.Tables;
 
 // A single-checkbox filter in a table's filter panel (MegaMUD's "Is Undead"
-// style). When checked, keeps only rows whose raw cell value "qualifies" per the
-// supplied predicate; unchecked = no filter. Decoupled from how the column
-// renders, so the display glyph can change without touching the filter.
+// style). When applied, keeps only rows whose raw cell value "qualifies" per the
+// supplied predicate. The checkbox is a pending edit until the panel's "Apply
+// filter" button calls Commit(); filtering reads the committed state.
 public sealed partial class BoolFilter : ObservableObject
 {
     public string Label { get; }
@@ -14,22 +14,24 @@ public sealed partial class BoolFilter : ObservableObject
 
     [ObservableProperty] private bool _isChecked;
 
-    private readonly Func<string?, bool> _qualifies;
-    private readonly Action _onChanged;
+    // The applied state; only Commit (Apply filter) copies IsChecked into it.
+    private bool _committed;
 
-    public BoolFilter(string label, string column, Func<string?, bool> qualifies, Action onChanged)
+    private readonly Func<string?, bool> _qualifies;
+
+    public BoolFilter(string label, string column, Func<string?, bool> qualifies)
     {
         Label = label;
         Column = column;
         _qualifies = qualifies;
-        _onChanged = onChanged;
     }
 
-    partial void OnIsCheckedChanged(bool value) => _onChanged();
+    public void Commit() => _committed = IsChecked;
 
-    public bool IsActive => IsChecked;
+    public bool IsActive => _committed;
 
-    public bool Passes(string? rawValue) => !IsChecked || _qualifies(rawValue);
+    public bool Passes(string? rawValue) => !_committed || _qualifies(rawValue);
 
+    // Unticks the box only; the caller commits to make the cleared state take effect.
     public void Clear() => IsChecked = false;
 }

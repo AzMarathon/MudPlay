@@ -294,28 +294,23 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         FilteredRows = new ObservableCollection<GameDataRow>(matched);
     }
 
-    // Coalesce rapid panel-filter changes (holding / spamming a spinner button) into
-    // a single ApplyFilter ~180 ms after the last change, so the table isn't rebuilt
-    // — a full re-scan of every row plus a DataGrid refresh — on every tick.
-    private DispatcherTimer? _filterDebounce;
-    protected void RequestApplyFilter()
+    // Panel filters (thresholds / checkboxes / dropdowns) are pending until applied —
+    // editing a box doesn't re-filter. "Apply filter" commits every box's current value
+    // and runs the filter; "Clear filters" empties the boxes (and the text search) and
+    // applies that. The always-present "Filter…" text box stays live on its own.
+    [RelayCommand]
+    private void ApplyFilters()
     {
-        if (_filterDebounce is null)
-        {
-            _filterDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
-            _filterDebounce.Tick += (_, _) => ApplyFiltersNow();
-        }
-        _filterDebounce.Stop();
-        _filterDebounce.Start();
-    }
-
-    // Apply pending filter changes immediately — the debounce tick, Clear filters, and
-    // tests (which have no dispatcher loop to fire the timer) all route through here.
-    internal void ApplyFiltersNow()
-    {
-        _filterDebounce?.Stop();
+        CommitPanelFilters();
         ApplyFilter();
         OnPropertyChanged(nameof(StatusText));
+    }
+
+    private void CommitPanelFilters()
+    {
+        foreach (ThresholdFilter t in ThresholdFilters) t.Commit();
+        foreach (BoolFilter b in BoolFilters) b.Commit();
+        foreach (CategoryFilter c in CategoryFilters) c.Commit();
     }
 
     // A row matches the filter when any column's raw value contains the filter substring
@@ -352,7 +347,9 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         foreach (BoolFilter b in BoolFilters) b.Clear();
         foreach (CategoryFilter c in CategoryFilters) c.Clear();
         SearchText = string.Empty;   // OnSearchTextChanged re-applies
-        ApplyFiltersNow();           // flush now instead of waiting out the debounce
+        CommitPanelFilters();        // make the cleared boxes take effect
+        ApplyFilter();
+        OnPropertyChanged(nameof(StatusText));
     }
 
     // Panel filters (threshold + bool + category), all AND'd together. Empty

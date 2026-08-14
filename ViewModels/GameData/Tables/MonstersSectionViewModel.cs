@@ -141,7 +141,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
 
         // Filter panel (MegaMUD-style single-threshold): each stat carries one bound
-        // with the direction MME uses — difficulty stats ≤, reward stats ≥. The value
+        // with the direction MegaMUD uses — difficulty stats ≤, reward stats ≥. The value
         // tested is the leading integer of each cell's raw value (so "80/10" AC/DR
         // filters on 80, "65000 (20x)" Exp filters on the base 65000). Undead is a
         // checkbox; Alignment is a dropdown built after load (see OnRowsLoaded).
@@ -160,10 +160,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ("# Lairs",  "Lairs",        ThresholdDirection.AtLeast),
             ("Rgn",      "RegenTime",    ThresholdDirection.AtMost),
         })
-            ThresholdFilters.Add(new ThresholdFilter(label, column, dir, RequestApplyFilter));
+            ThresholdFilters.Add(new ThresholdFilter(label, column, dir));
 
         BoolFilters.Add(new BoolFilter("Undead only", "Undead",
-            static raw => !(raw is null or "" or "0"), RequestApplyFilter));
+            static raw => !(raw is null or "" or "0")));
     }
 
     // Monster Number → aggregated lair stats across every lair group whose MobList
@@ -201,7 +201,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             .Select(v => v!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(v => v, StringComparer.OrdinalIgnoreCase));
-        return new CategoryFilter(label, column, options, RequestApplyFilter);
+        return new CategoryFilter(label, column, options);
     }
 
     // Join the Lairs table onto monsters via MobList (comma-separated monster Numbers).
@@ -269,7 +269,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     }
 
     // MegaMUD's "Exp/(Dmg+HP)" exp-per-effort metric — effective exp per (two rounds of
-    // the monster's damage + its HP), ×100. Reverse-engineered to match MME's figures.
+    // the monster's damage + its HP), ×100. Reverse-engineered to match MegaMUD's figures.
     private static string? ComputeEfficiency(long effExp, int damage, int hp)
     {
         int denom = 2 * damage + hp;

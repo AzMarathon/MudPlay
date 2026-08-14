@@ -141,14 +141,14 @@ public sealed class GameDataTableSectionTests : IDisposable
         // HP ≤ (difficulty stat): HP ≤ 25 keeps Goblin, Orc.
         ThresholdFilter hp = vm.ThresholdFilters.Single(t => t.Column == "HP");
         hp.Value = 25;
-        vm.ApplyFiltersNow();   // filter changes debounce; flush for the assert
+        vm.ApplyFiltersCommand.Execute(null);  // panel filters are pending until applied
         Assert.Equal(2, vm.FilteredRows.Count);
         Assert.DoesNotContain(vm.FilteredRows, r => r.Get("Name") == "Dragon");
 
         // Exp ≥ (reward stat) stacks: EXP ≥ 10 leaves only Orc (Dragon is HP-excluded).
         ThresholdFilter exp = vm.ThresholdFilters.Single(t => t.Column == "EXP");
         exp.Value = 10;
-        vm.ApplyFiltersNow();
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Orc", vm.FilteredRows[0].Get("Name"));
     }
@@ -166,7 +166,7 @@ public sealed class GameDataTableSectionTests : IDisposable
 
         BoolFilter undead = vm.BoolFilters.Single(b => b.Column == "Undead");
         undead.IsChecked = true;
-        vm.ApplyFiltersNow();
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Equal(2, vm.FilteredRows.Count);    // Skeleton, Zombie
         Assert.All(vm.FilteredRows, r => Assert.Equal("✗", r.GetDisplay("Undead")));
     }
@@ -213,7 +213,7 @@ public sealed class GameDataTableSectionTests : IDisposable
         Assert.Contains(fiendAlign, align.Options);
 
         align.Selected = fiendAlign;
-        vm.ApplyFiltersNow();
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Fiend", vm.FilteredRows[0].Get("Name"));
     }
