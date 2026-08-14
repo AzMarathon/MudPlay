@@ -2,13 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.12.4
+## 3.12.5
 
 - Startup splash: settled mud now paints as flat background fills instead of per-cell block glyphs, so the whole-lens mud floods (cover / slide / rain / geyser burial) stop throttling the frame rate — the heaviest scenes render far cheaper
 - Seagulls scene: the perch wires are drawn as a background strip rather than a full-width row of `━` glyphs, cutting the bulk of that scene's per-frame glyph cost
 - New splash scene: a detailed chocobo sprints across a scrolling grassy plain, faceplants into a mud puddle, and gets left behind as the view wipes off
 - Mud-geyser scene: the jet now erupts from the top of the mound (narrow at the peak, fanning wider as it climbs) instead of looking rooted at the ground floor
 - Goblin-sink scene: the pool now wipes away from the edges inward, closing over where he sank, instead of clearing from the centre out
+- Mud-pie scene: the throwing arm now stays in frame and is covered by the growing pie/splat instead of blinking out the instant it releases
 
 ## 3.12.0
 

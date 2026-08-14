@@ -1,11 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.12.4**
+> **Version 3.12.5**
 > - Startup splash: settled mud now paints as flat background fills instead of per-cell block glyphs, so the whole-lens mud floods (cover / slide / rain / geyser burial) stop throttling the frame rate
 > - Seagulls scene: the perch wires are a background strip rather than a full-width row of `━` glyphs, cutting the bulk of that scene's per-frame glyph cost
 > - New splash scene: a detailed chocobo sprints across a scrolling grassy plain, faceplants into a mud puddle, and gets left behind as the view wipes off
-> - Mud-geyser jet now erupts from the top of the mound instead of looking rooted at the ground floor; goblin-sink pool now wipes from the edges inward
+> - Mud-geyser jet now erupts from the top of the mound instead of looking rooted at the ground floor; goblin-sink pool now wipes from the edges inward; mud-pie throwing arm is covered by the splat instead of blinking out on release
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
