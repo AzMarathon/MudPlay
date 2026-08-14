@@ -54,6 +54,7 @@ public sealed class CombatSpellChooser
     private int _multiAttackCasts;
     private int _normalAttackCasts;
     private int _alternateAttackCasts;
+    private int _drainCasts;
     private readonly HashSet<string> _singleDebuffedTargets =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -82,6 +83,7 @@ public sealed class CombatSpellChooser
         _multiAttackCasts = 0;
         _normalAttackCasts = 0;
         _alternateAttackCasts = 0;
+        _drainCasts = 0;
         _singleDebuffedTargets.Clear();
         _attackSpellLatchedOff = false;
         _castSingleTargetAttackThisTarget = false;
@@ -97,6 +99,7 @@ public sealed class CombatSpellChooser
         _singleDebuffCasts = 0;
         _normalAttackCasts = 0;
         _alternateAttackCasts = 0;
+        _drainCasts = 0;
         _attackSpellLatchedOff = false;
         _castSingleTargetAttackThisTarget = false;
     }
@@ -138,6 +141,19 @@ public sealed class CombatSpellChooser
         bool preferSpell =
             (ctx.AlternationPreferSpell ?? (settings.ActionOrder == CombatActionOrder.SpellsFirst))
             || ctx.WeaponIneffective;
+
+        // Drain-life override — an emergency heal that also attacks. When HP has
+        // fallen to the drain trigger and the target can be drained (living + not
+        // undead), the drain spell takes the round in place of whatever the normal
+        // pick would be — the single-target attack cascade AND the physical swing.
+        // It does NOT respect ActionOrder (survival first): a PhysicalFirst build
+        // still drains when hurt. The one thing it yields to is the room AoE — with
+        // enough enemies to be rooming, dropping the AoE to single-target a drain is
+        // usually the more dangerous play — unless DrainsOverrideAoe says otherwise.
+        // The heartbeat re-runs Choose each round, so it reverts to the normal action
+        // the moment HP recovers past the trigger or mana falls below the floor.
+        if (DrainApplies(settings, ctx, settings.SpellManaThresholdMode, preferSpell))
+            return new CombatSpellDecision(CombatSpellAction.DrainSpell, settings.DrainSpell.SpellName!);
 
         // The per-target weapon latch suppresses the single-target attack cascade —
         // but never when the weapon can't hit this target (there we still need the
@@ -222,6 +238,47 @@ public sealed class CombatSpellChooser
         return null;
     }
 
+    // Whether the drain spell should take this round. Fires only when configured,
+    // HP is at/under the trigger, the target is drain-eligible (living + not undead,
+    // and not reactively marked drain-immune off a "no effect" line), mana meets the
+    // slot floor, and the per-target cast cap isn't spent. Yields to the room AoE
+    // (multi-attack) unless DrainsOverrideAoe — see the note in Choose. Unlike the
+    // attack cascade the drain has no per-target latch: it's HP-gated and re-checked
+    // every round, so it re-engages when mana regenerates and you're still hurt.
+    private bool DrainApplies(
+        CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool preferSpell)
+    {
+        CombatSpellSlot drain = settings.DrainSpell;
+        if (!IsConfigured(drain)) return false;
+        if (!ctx.SpellsAvailable) return false;
+        if (!ctx.HpBelowDrainTrigger) return false;
+        if (!ctx.DrainTargetEligible) return false;          // living + not undead (game data)
+        if (IsImmune(ctx, CombatSpellAction.DrainSpell)) return false;   // reactive no-effect backstop
+        if (!CastsOk(drain, _drainCasts)) return false;
+        if (!ManaOk(drain, ctx, mode)) return false;
+        // AoE precedence: by default don't steal the round from a multi-attack that
+        // would fire this round; the checkbox flips it so the drain wins.
+        if (!settings.DrainsOverrideAoe && MultiAttackWouldFire(settings, ctx, mode, preferSpell))
+            return false;
+        return true;
+    }
+
+    // Would the room multi-attack spell fire this round? Mirrors the multi-attack
+    // rung in TryAttackSpell (config + MinEnemies + cast cap + mana + Auto-Nuke),
+    // plus the preferSpell gate — under PhysicalFirst with an effective weapon the
+    // cascade isn't reached, so no AoE fires and the drain has nothing to yield to.
+    private bool MultiAttackWouldFire(
+        CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool preferSpell)
+    {
+        if (!preferSpell) return false;
+        CombatSpellSlot multi = settings.MultiAttackSpell;
+        return ctx.AllowNukes
+            && IsConfigured(multi)
+            && ctx.EnemyCount >= multi.MinEnemies
+            && CastsOk(multi, _multiAttackCasts)
+            && ManaOk(multi, ctx, mode);
+    }
+
     // Attack-spell phase: multi-attack room spell while it qualifies, then
     // normal, then alternate single-target damage spells. Returns null when none
     // can fire this round.
@@ -304,6 +361,11 @@ public sealed class CombatSpellChooser
                 _alternateAttackCasts++;
                 _castSingleTargetAttackThisTarget = true;
                 break;
+            case CombatSpellAction.DrainSpell:
+                // Per-target cap only; the drain does NOT arm the single-target
+                // weapon latch (it's HP-gated, not part of the damage cascade).
+                _drainCasts++;
+                break;
             case CombatSpellAction.WeaponAttack:
             default:
                 break;
@@ -381,6 +443,7 @@ public enum CombatSpellAction
     NormalAttackSpell,
     AlternateAttackSpell,
     Backstab,
+    DrainSpell,
 }
 
 // One round's chosen combat action plus the cast-code to send (null for
@@ -454,4 +517,11 @@ public readonly record struct CombatSpellContext(
     string? OverridePreAttackSpell = null,
     int? OverridePreAttackMaxCasts = null,
     bool WeaponIneffective = false,
-    bool? AlternationPreferSpell = null);
+    bool? AlternationPreferSpell = null,
+    // Drain-life gating (see DrainApplies). HpBelowDrainTrigger is true when live HP
+    // is at/under the DrainSpell trigger %; DrainTargetEligible is true when the
+    // current target is living AND not undead (a drain can't affect NonLiving /
+    // Undead). Both default false so a drain never fires unless BuildContext
+    // populates them — unwired callers / tests behave exactly as before.
+    bool HpBelowDrainTrigger = false,
+    bool DrainTargetEligible = false);

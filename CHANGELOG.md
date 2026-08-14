@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.13.0
+
+- New Combat-tab **Drain spell** slot: a mage life-steal spell (e.g. vamp / dtch / nebo) that casts in place of the round's attack once HP drops to its trigger %, healing you off the damage, then reverts to the normal pick when HP recovers or mana falls below its floor — an emergency heal that also attacks (per-target Max casts + Min mana, like the other single-target slots)
+- Drains only fire on **living, non-undead** targets (a life-drain can't affect NonLiving / Undead); against an ineligible mob the engine falls back to the normal attack cascade, with the game's "no effect" reply as a backstop
+- **"Drains override AOE"** toggle: by default the drain yields to the room AoE (multi-attack) when there are enough enemies to be rooming; check it to let the drain pre-empt the AoE too
+
 ## 3.12.5
 
 - Startup splash: settled mud now paints as flat background fills instead of per-cell block glyphs, so the whole-lens mud floods (cover / slide / rain / geyser burial) stop throttling the frame rate — the heaviest scenes render far cheaper

@@ -1776,6 +1776,26 @@ conflate them. (Worked examples use the 1.11p data set.)
 - The full tag/flag taxonomy (living / nonliving / undead / animal, and the charm family) is in
   **Spell targeting: monster type tags** below.
 
+**2b. Drain / life-steal spells (mage)** *([CONFIRMED] 2026-08-14, user)*
+- Some mage spells are **life-drain** spells — the damage they deal also **heals the caster**
+  for a portion of it. Examples: `vamp`, `dtch`, and (high-level evil mage) `nebo`. Availability
+  is gated by the class's **magery level**, like any spell.
+- They are a **combat action** — they take the place of the round's attack and auto-repeat
+  server-side like any attack spell (see the auto-repeat rule above), NOT a between-round cast.
+  Tactically they're used like a heal: only worth casting when you actually want the HP back, so
+  a drain-capable mage treats them as an emergency heal that also does damage.
+- **They cannot affect NonLiving or Undead targets** — draining one produces the same
+  `Your spell has no effect on <monster>.` line as any living-only spell (there's no life to
+  drain). So a drain's valid target is **living (no NonLiving ability 109) AND not undead
+  (Undead column != 0)** — the union of the living-only gate and an undead exclusion. Against an
+  ineligible target the drain is skipped and the client falls back to the normal attack cascade.
+- **Client model** — the Combat tab's **Drain spell** slot casts as the round's action when HP is
+  at/under its configured %-trigger (and mana ≥ its floor, casts remain, and the target is
+  drain-eligible), reverting to the normal attack pick once HP recovers or mana drops below the
+  floor. By default the drain **yields to the room AoE** (multi-attack) whenever that would fire —
+  rooming enough enemies to trigger the AoE is usually the safer play — and a **"Drains override
+  AoE"** option lets it pre-empt the AoE too when the loop calls for it.
+
 **3. Damage-type resistance** *([CONFIRMED])*
 
 A spell's damage type is its Spells-table `AttType` column (the same values `LookupEnums`

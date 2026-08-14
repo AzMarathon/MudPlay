@@ -1080,6 +1080,15 @@ Each row also has **Min enemies** (don't cast this slot below this many hostiles
 **How the cascade works each round:** A pending backstab always wins first. Then, whichever action type (spell or physical) your Action Order setting prefers gets tried; on the spell side, the order is Multi-attack → Normal attack → Alternate attack, falling through to the weapon if nothing can fire. Debuffing is a separate "extra" action that can land the same round as your main attack. Once you commit to a single-target spell against a specific monster and it later becomes unaffordable, MudPlay sticks with the weapon for the rest of that fight rather than flip-flopping back once mana regenerates.
 **Important notes:** Once a spell is announced, it auto-repeats server-side every round exactly like a weapon swing — MudPlay does **not** re-send the cast command every round, only when the situation actually changes (target dies, cap hit, mana too low, target proves immune).
 
+### Drain (life-steal) spell
+
+**Default:** unset (HP trigger 50%, "Drains override AOE" off)
+**What it does:** Some mage spells (e.g. `vamp`, `dtch`, high-level `nebo`) are **life-drain** spells — the damage they deal also **heals you**. This slot treats one as an *emergency heal that also attacks*: when your HP falls to the **Override at HP ≤** percentage, the drain takes the round in place of your normal attack (whatever it would have been — an attack spell or a weapon swing), then the engine reverts to your normal pick the moment HP recovers past the trigger or mana drops below the drain's **Min mana per cast**. It has the same **Max casts** (per-target) and **Min mana** fields as the other single-target rows; **Min enemies** doesn't apply.
+
+**Targeting:** a drain can only affect a **living, non-undead** target — there's no life to steal from a construct or a skeleton — so against a NonLiving or Undead monster the drain is skipped and MudPlay falls back to your normal attack cascade for that fight. (If game data is thin, the game's own "no effect" reply is caught as a backstop.)
+
+**Drains override AOE:** by default the drain **yields to your room AoE** — if you have enough enemies present to trigger the Multi-attack spell, rooming is usually the safer play, so the AoE keeps firing and the drain only overrides single-target / weapon rounds. Check this box to let the drain pre-empt the AoE too, when your loop calls for it.
+
 A per-monster override configured in Game Data can substitute a different spell or command for a specific monster species, bypassing some of these gates — worth checking if a particular monster seems to ignore your setup here. In the monster editor's **Override Attack** box you can type a `Spell.Number` **or** the spell's cast-code (e.g. "turn") — either way it casts through the mana-gated spell rung (set a Max); only a non-spell verb like "attack"/"bash" is sent verbatim as an ungated raw command. The override applies to the monster record **placed or summoned in your current room**, so a name shared across zones (a "zombie" in the graveyard vs the tunnels) picks the right one — an override you set on the graveyard zombie won't bleed onto the tunnels zombie.
 
 At **0 mana** a mana-costing action can't land (the server silently ignores it), so the engine falls back to your physical weapon and resumes casting once mana recovers.
@@ -1846,6 +1855,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Break combat before running | `true` | bool | `BreakBeforeFleeing` | Models/Profile/CombatSettings.cs |
 | Minimum mana per cast mode | `Percentage` | Percentage / Absolute | `SpellManaThresholdMode` | Models/Profile/CombatSettings.cs |
 | Multi-attack / AOE debuff / single debuff / normal / alternate attack spell | unset | spell code + MinEnemies(0-20) + MaxCastsPerRoom(null/0-100) + MinManaPerCast | `MultiAttackSpell`, `AreaDebuffSpell`, `SingleTargetDebuffSpell`, `NormalAttackSpell`, `AlternateAttackSpell` | Models/Profile/CombatSettings.cs |
+| Drain (life-steal) spell + HP trigger + Drains override AOE | unset / 50% / off | spell code + MaxCastsPerRoom + MinManaPerCast; DrainHpTrigger(0-100); DrainsOverrideAoe(bool) | `DrainSpell`, `DrainHpTrigger`, `DrainsOverrideAoe` | Models/Profile/CombatSettings.cs |
 | Show combat round totals ⚠️ unwired | `false` | bool | `ShowCombatRoundTotals` | Models/Profile/CombatSettings.cs |
 
 ### Spells / Health

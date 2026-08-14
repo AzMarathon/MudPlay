@@ -869,6 +869,10 @@ public sealed class AppServices
     // spell-immunity gating.
     public Game.Combat.MonsterMagicIndex MonsterMagic { get; private set; } = null!;
 
+    // Drain-life target eligibility (living + not undead) by monster number. Feeds
+    // CombatManager's drain-spell gate.
+    public Game.Combat.MonsterLifeIndex MonsterLife { get; private set; } = null!;
+
     // Number → max-HP lookup in the active game-data set. Feeds the look-target
     // HP-range readout (MonsterLookParser turns a wound descriptor into an
     // absolute HP window).
@@ -3212,7 +3216,8 @@ public sealed class AppServices
         // AFTER Cast.OnCombatTick (clears the cooldown) and
         // CastDirector.OnCombatTick (survival heal/cure/buff) so offensive
         // combat casts yield this round when survival already spent it.
-        Combat.SetCombatSpellCaster(Cast, () => (PlayerState.Ma, PlayerState.MaxMa));
+        Combat.SetCombatSpellCaster(Cast, () => (PlayerState.Ma, PlayerState.MaxMa),
+            () => (PlayerState.Hp, PlayerState.MaxHp));
         // Auto-Nuke auto-engine gate — when off, the chooser never offers the
         // multi-target attack spell or either debuff (single-target attack
         // spells are not nukes and stay available).
@@ -3333,6 +3338,12 @@ public sealed class AppServices
         SpellAttackType = new Game.Combat.SpellAttackTypeIndex(GameData);
         Combat.SetMagicEligibility(
             MonsterMagic, ItemMagic, SpellReqLevel, MonsterResist, SpellAttackType);
+
+        // Drain-life eligibility — a drain spell can only affect a living, non-undead
+        // target; the index tells the chooser which mobs to skip (fall back to the
+        // normal attack). Fails open when game data is silent.
+        MonsterLife = new Game.Combat.MonsterLifeIndex(GameData);
+        Combat.SetDrainEligibility(MonsterLife);
 
         // Per-monster spell overrides store a Spell.Number; the engine casts the
         // Short. Wire the resolver so the chooser can substitute a numbered

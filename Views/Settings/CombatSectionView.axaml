@@ -399,6 +399,44 @@
                                Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
                 </Grid>
 
+                <!-- Drain (life-steal) spell — an emergency heal that also attacks. -->
+                <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Drain spell"/>
+                    <AutoCompleteBox Grid.Column="1"
+                                     Text="{Binding DrainSpellName, Mode=TwoWay}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Life-drain spell (e.g. vamp / dtch / nebo) — the damage it deals also heals you, so it's used as an emergency heal that also attacks. Cast in place of the round's attack when HP drops to the trigger below, on living non-undead targets only (a drain can't affect NonLiving / Undead). Suggestions come from this class's known spells."/>
+                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               ToolTip.Tip="Single-target — Min enemies doesn't apply."/>
+                    <NumericUpDown Grid.Column="3"
+                                   Value="{Binding DrainSpellMaxCastsPerRoom, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
+                    <NumericUpDown Grid.Column="4"
+                                   Value="{Binding DrainSpellMinManaPerCast, Mode=TwoWay}"
+                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Minimum mana required to cast — drops back to the normal action below this."/>
+                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding DrainSpellMinManaPerCastConverted}"/>
+                </Grid>
+                <!-- Drain trigger + AoE-override, indented to align under the Spell column. -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="160,2,0,0" VerticalAlignment="Center">
+                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="Override at HP ≤"/>
+                    <NumericUpDown Value="{Binding DrainHpTrigger, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="5" Width="100"
+                                   ToolTip.Tip="Health % at/under which the drain overrides the round's attack. 0 = off. Above this %, the engine reverts to the normal attack pick."/>
+                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="%"/>
+                    <CheckBox Content="Drains override AOE" Margin="20,0,0,0"
+                              IsChecked="{Binding DrainsOverrideAoe, Mode=TwoWay}"
+                              ToolTip.Tip="When checked, the drain overrides the room AoE (multi-attack) too. Off (default): with enough enemies to trigger the AoE, the AoE keeps rooming and the drain only overrides single-target / physical actions."/>
+                </StackPanel>
+
                 <!-- ============ Display ============ -->
                 <TextBlock Classes="SectionHeader" Text="Display"/>
                 <CheckBox Content="Show combat round totals"
