@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.11.5**
-> - Combat: an attack spell set to **Max casts = 1** now fires exactly once per target before cascading — the switch is announced on the round the cap is reached instead of one round late, so the server no longer auto-repeats the capped spell an extra time (VAMP was firing twice)
-> - Monsters game-data table: every stat threshold filter is now **at least (≥)** — filter for HP ≥ N, AC ≥ N, etc., so stacking Exp ≥ with HP ≥ narrows the results as expected
+> **Version 3.11.6**
+> - Navigation: moving and then peeking (`l <dir>`) in quick succession no longer loses your spot — the look's preview no longer eats the move's confirming room display, so the tracker stays synced instead of drifting into Suspect
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

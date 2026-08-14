@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.11.6
+
+- Navigation: moving and then peeking (`l <dir>`) in quick succession no longer loses your spot — the look's preview no longer eats the move's confirming room display, so the tracker stays synced instead of drifting into Suspect
+- bug reports addressed: paradigm-20260813-201720
+
 ## 3.11.5
 
 - Combat: an attack spell set to **Max casts = 1** now fires exactly once per target before cascading to the next slot — the switch is announced on the round the cap is reached instead of one round late, so the server no longer auto-repeats the capped spell one extra time (VAMP was firing twice)
