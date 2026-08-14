@@ -129,9 +129,10 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
 
     // Extra columns to carry in each row's value/display maps but NOT render as grid
     // columns — used for filter-only fields (e.g. Monsters' Alignment dropdown reads
-    // "Align" without the table showing an Alignment column, for MegaMUD parity). The
-    // grid still builds its columns from Columns alone; these are appended after them
-    // so the visible columns keep their cell indices (the sort comparer is index-based).
+    // "Align" without the table showing an Alignment column, and the AC / DR filters
+    // read the raw fields even though the grid shows them combined). The grid still
+    // builds its columns from Columns alone; these are appended after them so the
+    // visible columns keep their cell indices (the sort comparer is index-based).
     protected virtual IReadOnlyList<string> FilterOnlyColumns => System.Array.Empty<string>();
 
     // Columns whose values are materialised on each row = visible columns plus any
@@ -319,10 +320,9 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // richer notion of a match (e.g. Rooms' "map,room" coordinate query) can intercept
     // before falling back to this substring pass.
     // ----- Multi-field filter panel (subclasses populate; empty = no panel) -----
-    // An always-visible sidebar beside the grid: MegaMUD-style single-threshold
-    // numeric filters, boolean checkboxes, and categorical dropdowns, on top of
-    // the always-present text box. All empty by default, so tables that declare
-    // none render no sidebar.
+    // An always-visible sidebar beside the grid: single-threshold numeric filters,
+    // boolean checkboxes, and categorical dropdowns, on top of the always-present
+    // text box. All empty by default, so tables that declare none render no sidebar.
     public ObservableCollection<ThresholdFilter> ThresholdFilters { get; } = new();
     public ObservableCollection<BoolFilter> BoolFilters { get; } = new();
     public ObservableCollection<CategoryFilter> CategoryFilters { get; } = new();

@@ -108,8 +108,8 @@
                       ShowsPreview="False"
                       IsVisible="{Binding HasFilterPanel}"/>
 
-        <!-- Filter sidebar: MegaMUD-style single-threshold filters, an Undead
-             checkbox, and an Alignment dropdown. Scrolls when the list is long. -->
+        <!-- Filter sidebar: single-threshold filters, an Undead checkbox, and an
+             Alignment dropdown. Scrolls when the list is long. -->
         <Border Grid.Column="2"
                 MinWidth="200"
                 Padding="12"

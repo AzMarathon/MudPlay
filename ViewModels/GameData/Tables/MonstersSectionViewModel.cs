@@ -34,7 +34,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     protected override string TableName => "Monsters";
 
-    // Column set + order mirror MegaMUD's Monsters tab. Several are synthesised in
+    // The monster table's columns, in display order. Several are synthesised in
     // ComputeRowCells (AcDr, Dodge, Mag, Damage, Efficiency, Accuracy, EXP, Lairs)
     // rather than being raw MDB fields — see there for how each is derived.
     public override IReadOnlyList<string> Columns { get; } = new[]
@@ -102,7 +102,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["HP"]         = FormatThousands,
             ["AvgLairExp"] = FormatThousands,
             ["Efficiency"] = FormatThousands,
-            // MegaMUD marks undead with an "✗"; living monsters read blank.
+            // Undead monsters render an "✗"; living monsters read blank.
             ["Undead"]     = static raw => raw is null or "" or "0" ? "" : "✗",
             // Filter-only column: format so the Alignment dropdown reads names, not codes.
             ["Align"]      = LookupEnums.FormatMonAlignment,
@@ -140,10 +140,9 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         _roomGraph = roomGraph;
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
 
-        // Filter panel (MegaMUD-style single-threshold): each stat carries one bound
-        // with the direction MegaMUD uses — difficulty stats ≤, reward stats ≥. The value
-        // tested is the leading integer of each cell's raw value (so "80/10" AC/DR
-        // filters on 80, "65000 (20x)" Exp filters on the base 65000). Undead is a
+        // Filter panel: each stat carries one single-threshold bound with the natural
+        // direction — difficulty stats ≤, reward stats ≥. The value tested is the leading
+        // integer of each cell's raw value (so "80/10" AC/DR filters on 80). Undead is a
         // checkbox; Alignment is a dropdown built after load (see OnRowsLoaded).
         foreach ((string label, string column, ThresholdDirection dir) in new (string, string, ThresholdDirection)[]
         {
@@ -268,8 +267,8 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         return cells;
     }
 
-    // MegaMUD's "Exp/(Dmg+HP)" exp-per-effort metric — effective exp per (two rounds of
-    // the monster's damage + its HP), ×100. Reverse-engineered to match MegaMUD's figures.
+    // The "Exp/(Dmg+HP)" exp-per-effort metric — effective exp per (two rounds of the
+    // monster's damage + its HP), ×100. Higher = better exp for the risk.
     private static string? ComputeEfficiency(long effExp, int damage, int hp)
     {
         int denom = 2 * damage + hp;
@@ -328,9 +327,9 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         // BBS → Global → Defaults). The Defaults-tier baseline comes
         // from the realm-flavored MonsterOverlaySeedStore: for stock
         // realms the seed encodes the relationship + priority + flag
-        // values shipped by MegaMUD's Monsters.md (decoded offline);
-        // for Paradigm realms the seed comes from the Paradigm-build
-        // Monsters.md. ResolveGameData then overlays each higher tier's
+        // values from the decoded stock Monsters.md; for Paradigm realms
+        // the seed comes from the Paradigm-build Monsters.md. ResolveGameData
+        // then overlays each higher tier's
         // delta in priority order so the dialog opens showing exactly
         // what the runtime engines will see for this monster.
         MonsterOverlay seedDefaults =

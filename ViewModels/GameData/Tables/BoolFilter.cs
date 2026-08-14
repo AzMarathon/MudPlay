@@ -3,8 +3,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
-// A single-checkbox filter in a table's filter panel (MegaMUD's "Is Undead"
-// style). When applied, keeps only rows whose raw cell value "qualifies" per the
+// A single-checkbox filter in a table's filter panel (e.g. "Undead only"). When
+// applied, keeps only rows whose raw cell value "qualifies" per the
 // supplied predicate. The checkbox is a pending edit until the panel's "Apply
 // filter" button calls Commit(); filtering reads the committed state.
 public sealed partial class BoolFilter : ObservableObject

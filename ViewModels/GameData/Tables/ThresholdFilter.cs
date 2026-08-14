@@ -2,9 +2,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
-// A single-threshold numeric filter in a table's filter panel — MegaMUD-style
-// ("HP ≤ 5000", "EXP ≥ 10000"). Each stat carries one bound with a fixed
-// direction chosen for that stat (defence stats filter ≤, reward stats ≥).
+// A single-threshold numeric filter in a table's filter panel ("HP ≤ 5000",
+// "EXP ≥ 10000"). Each stat carries one bound with a fixed direction chosen for
+// that stat (defence stats filter ≤, reward stats ≥).
 //
 // The box value (Value) is only a *pending* edit; filtering reads the committed
 // value, which the panel's "Apply filter" button copies over via Commit(). So

@@ -4,9 +4,9 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.9.10
 
-- Monsters game-data table reworked to mirror MegaMUD's Monsters tab — columns: Rgn, Exp (actual earned = base × multiplier), HP, AC/DR, Dodge, MR, Acc (Maj/Mx), Damage, Exp/(Dmg+HP), Lair Exp, # Lairs, Avg Lair Size, Biggest Lair, Mag, Undead
-- Dodge and Mag (hitmag level) decoded from monster ability data; Exp/(Dmg+HP) exp-efficiency metric reproduces MegaMUD's figures
-- New MegaMUD-style filter sidebar, resizable via a drag handle: one threshold per stat (HP ≤, Exp ≥, AC ≤, DR ≤, Dodge ≤, MR ≤, Acc ≤, Damage ≤, Mag ≤, Lair Exp ≥, # Lairs ≥, Rgn ≤), an Undead-only checkbox, and an Alignment dropdown — thousands-grouped values, all stacking with the text filter
+- Monsters game-data table: expanded column set for browsing/filtering monster stats — Rgn, Exp (actual earned = base × multiplier), HP, AC/DR, Dodge, MR, Acc (Maj/Mx), Damage, Exp/(Dmg+HP), Lair Exp, # Lairs, Avg Lair Size, Biggest Lair, Mag, Undead
+- Dodge and Mag (hitmag level) decoded from monster ability data; Exp/(Dmg+HP) is an exp-per-effort efficiency score
+- New filter sidebar, resizable via a drag handle: one threshold per stat (HP ≤, Exp ≥, AC ≤, DR ≤, Dodge ≤, MR ≤, Acc ≤, Damage ≤, Mag ≤, Lair Exp ≥, # Lairs ≥, Rgn ≤), an Undead-only checkbox, and an Alignment dropdown — thousands-grouped values, all stacking with the text filter
 - Filters apply on an explicit **Apply filter** button (with **Clear filters** beside it); a ticker's outline shows amber while edited/pending and green once applied
 
 ## 3.9.9
