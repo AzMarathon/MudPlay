@@ -38,9 +38,11 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
     private IReadOnlyList<string> _baselineCarried = Array.Empty<string>();
     private long _baselineCopper;
+    private bool _simulating;
 
     [ObservableProperty] private int _charm;
     [ObservableProperty] private string _currencyGained = "—";
+    [ObservableProperty] private string _sellTotal = "—";
     public ObservableCollection<ChestContainerRow> Containers { get; } = new();
     public ObservableCollection<ChestOffloadShopGroup> ShopGroups { get; } = new();
     public ObservableCollection<ChestOffloadItemRow> Unsellable { get; } = new();
@@ -96,12 +98,19 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
     private void OpenContainer(string name)
     {
+        _simulating = false;   // a real open returns to the live-inventory diff
         _send($"open {name}");
         _reparse.Stop();
         _reparse.Start();
     }
 
-    private void OnInventoryChanged() => Dispatcher.UIThread.Post(RebuildLoot);
+    // While a simulated chest is showing, real inventory refreshes (prompts, the
+    // open reply, walking around) must not overwrite it with the empty live diff.
+    private void OnInventoryChanged()
+    {
+        if (_simulating) return;
+        Dispatcher.UIThread.Post(RebuildLoot);
+    }
 
     private void RebuildLoot()
     {
@@ -141,8 +150,10 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
             shopRoom.TryGetValue(shopNum, out Room? room);
             var group = new ChestOffloadShopGroup(
                 room?.Name ?? $"Shop #{shopNum}", room?.Key, _queueWalk, SellGroup);
+            ChestOffloadShopGroup g = group;   // fresh capture for the item callbacks
             foreach (LootItem li in items)
-                group.Items.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper, group.Retotal));
+                group.Items.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper,
+                    () => { g.Retotal(); UpdateGrandTotal(); }));
             group.Reprice(Charm, _gameData.ActiveRealm);
             ShopGroups.Add(group);
         }
@@ -151,13 +162,25 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         foreach (LootItem li in noShop)
             Unsellable.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper, null));
 
+        UpdateGrandTotal();
         OnPropertyChanged(nameof(HasLoot));
         OnPropertyChanged(nameof(HasUnsellable));
+    }
+
+    // Grand total: everything selected across every shop at the current charm.
+    private void UpdateGrandTotal()
+    {
+        long total = 0;
+        foreach (ChestOffloadShopGroup group in ShopGroups)
+            foreach (ChestOffloadItemRow item in group.Items)
+                total += item.LineCopper;
+        SellTotal = total > 0 ? ShopPriceCalculator.FormatCopper(total) : "—";
     }
 
     partial void OnCharmChanged(int value)
     {
         foreach (ChestOffloadShopGroup group in ShopGroups) group.Reprice(value, _gameData.ActiveRealm);
+        UpdateGrandTotal();
     }
 
     // Test aid: seed the container list with a handful of random real containers.
@@ -169,6 +192,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void SimulateChest()
     {
+        _simulating = true;   // hold the simulated view against real inventory refreshes
         _chestTables ??= ChestContentsReader.ReadAll(_gameData);
         for (int i = Containers.Count - 1; i >= 0; i--)
             if (Containers[i].Simulated) Containers.RemoveAt(i);
@@ -188,6 +212,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     // the rolled loot through the same shop-grouping pipeline as a real open.
     private void SimulateOpen(string name, int number)
     {
+        _simulating = true;
         _send($"open {name}");
         if (_chestTables is null || !_chestTables.TryGetValue(number, out ChestContents? contents)
             || contents.Drops.Count == 0)

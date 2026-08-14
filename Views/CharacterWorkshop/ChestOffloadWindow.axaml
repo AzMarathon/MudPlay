@@ -23,6 +23,27 @@
             <Setter Property="CornerRadius" Value="3"/>
             <Setter Property="Padding" Value="10"/>
         </Style>
+        <!-- Clickable text link — matches the item-record/room links (cyan-blue). -->
+        <Style Selector="Button.Link">
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.Link:disabled">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+            <Setter Property="Cursor" Value="Arrow"/>
+        </Style>
+        <Style Selector="Button.Link:disabled /template/ ContentPresenter">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+        </Style>
+        <Style Selector="Button.Link:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
@@ -55,12 +76,16 @@
                     </StackPanel>
                 </Border>
 
-                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Column="0" Text="Charm" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <NumericUpDown Grid.Column="1" Width="120" Minimum="0" Maximum="255" Increment="1" FormatString="0"
                                    Value="{Binding Charm, Mode=TwoWay}"/>
-                    <TextBlock Grid.Column="3" Text="Coin gained:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock Grid.Column="4" Text="{Binding CurrencyGained}" VerticalAlignment="Center"
+                    <TextBlock Grid.Column="3" Text="Total to sell:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Grid.Column="4" Text="{Binding SellTotal}" VerticalAlignment="Center"
+                               Foreground="{StaticResource AccentGreenBrush}" FontWeight="SemiBold"
+                               ToolTip.Tip="What you'll earn selling everything below at the quantities set"/>
+                    <TextBlock Grid.Column="5" Text="Coin gained:" VerticalAlignment="Center" Margin="18,0,6,0"/>
+                    <TextBlock Grid.Column="6" Text="{Binding CurrencyGained}" VerticalAlignment="Center"
                                Foreground="{StaticResource AccentAmberBrush}" FontWeight="SemiBold"/>
                 </Grid>
             </StackPanel>
@@ -78,12 +103,10 @@
                                 <Border Classes="Box" Margin="0,0,0,2">
                                     <StackPanel Spacing="6">
                                         <Grid ColumnDefinitions="*,Auto,Auto">
-                                            <Button Grid.Column="0" Content="{Binding ShopName}"
+                                            <Button Grid.Column="0" Classes="Link" Content="{Binding ShopName}"
                                                     Command="{Binding WalkCommand}"
                                                     IsEnabled="{Binding CanWalk}"
                                                     HorizontalAlignment="Left"
-                                                    Background="Transparent" BorderThickness="0"
-                                                    FontWeight="SemiBold"
                                                     ToolTip.Tip="Walk to this shop"/>
                                             <TextBlock Grid.Column="1" Text="{Binding Total}" VerticalAlignment="Center"
                                                        Margin="8,0,10,0"
