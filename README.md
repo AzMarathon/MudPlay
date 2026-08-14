@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.11.3**
-> - Help Topics readability: recurring field labels (**Default:**, **What it does:**, **Important notes:**) render in an accent colour so they're scannable, and "⚠️ not currently functional" notes render in a tinted callout box
-> - Split the longest guide paragraphs into shorter blocks (Chest Offload, Monsters filter sidebar, navigation obstacles, remote-command permissions, the spell cascade) — same content, easier to scan
-> - Thanks to @AzMarathon for the contribution
+> **Version 3.11.5**
+> - Combat: an attack spell set to **Max casts = 1** now fires exactly once per target before cascading — the switch is announced on the round the cap is reached instead of one round late, so the server no longer auto-repeats the capped spell an extra time (VAMP was firing twice)
+> - Monsters game-data table: every stat threshold filter is now **at least (≥)** — filter for HP ≥ N, AC ≥ N, etc., so stacking Exp ≥ with HP ≥ narrows the results as expected
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

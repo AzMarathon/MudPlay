@@ -534,7 +534,24 @@ public sealed partial class CombatManager
             && string.Equals(announced, decision.Spell, StringComparison.OrdinalIgnoreCase);
         if (sameSpell)
         {
-            _spellChooser.MarkCast(decision, target);   // tally the round against MaxCasts
+            _spellChooser.MarkCast(decision, target);   // tally this round's fired cast
+
+            // Pre-empt the extra auto-repeat. The server will fire this same spell
+            // AGAIN next round unless we announce the switch now — and announcing it
+            // on the NEXT tick (the old behaviour) is one round too late, so a capped
+            // spell fires one time past its MaxCasts (MaxCasts=1 → two casts; report
+            // paradigm-20260814-061340). Re-decide with the freshly-tallied count: if
+            // that round just exhausted the cap (or otherwise changed the decision),
+            // announce the switch THIS tick so the server swaps next round instead of
+            // repeating the capped spell once more. The target is still present
+            // (checked above) and the switch routes through the same DispatchRoundAction
+            // the old tick-later switch used, so a kill on the capping cast is caught by
+            // the identical death-clears-target guard — no corpse-cast of the next rung.
+            CombatSpellDecision afterTally = _spellChooser.Choose(settings, ctx);
+            bool decisionChanged = afterTally.Action != decision.Action
+                || !string.Equals(afterTally.Spell, decision.Spell, StringComparison.OrdinalIgnoreCase);
+            if (decisionChanged && TryBuildCandidate(obs, target) is { } capCand)
+                DispatchRoundAction(settings, capCand, CountEngageable(obs), obs);
             return;
         }
 

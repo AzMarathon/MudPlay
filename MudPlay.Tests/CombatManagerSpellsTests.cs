@@ -710,7 +710,8 @@ public sealed class CombatManagerSpellsTests
         // does the client re-announce the next cascade action (here the weapon, no
         // attack spells configured). Announcing is round 0 — the spell fires on the
         // NEXT tick — so the announce does NOT count toward the cap; each heartbeat
-        // that keeps the same decision counts one fired round.
+        // that keeps the same decision counts one fired round. The switch is announced
+        // ON the cap-reaching tick, pre-empting the server's extra auto-repeat.
         using Harness h = new();
         h.Settings.MultiAttackSpell =
             new CombatSpellSlot { SpellName = "blast", MinEnemies = 1, MaxCastsPerRoom = 2 };
@@ -718,8 +719,8 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: giant rat.");      // announce — round 0 (fires next tick), not counted
         h.Tick();                             // fired round 1 of 2 — still repeating, no send
-        h.Tick();                             // fired round 2 of 2 — cap now reached, still no send
-        h.Tick();                             // cap reached → switch to weapon
+        Assert.Equal("blast", h.LastSent);
+        h.Tick();                             // fired round 2 of 2 → cap reached → switch to weapon NOW
 
         Assert.Equal(1, h.AllSent.Count(s => s == "blast"));   // announced once
         Assert.Equal("a giant rat", h.LastSent);                          // switched to weapon
@@ -821,7 +822,8 @@ public sealed class CombatManagerSpellsTests
     {
         // Screenshot 3: lbol (MaxCasts=1) must get its own fired round — it must NOT
         // flip to the alternate the same round it's announced. MaxCasts counts fired
-        // rounds, not the announce.
+        // rounds, not the announce. The switch then lands on the cap-reaching tick, not
+        // one tick later — see NormalSpell_MaxCasts1_SwitchesOnTheCapTick.
         using Harness h = new();
         h.Settings.NormalAttackSpell =
             new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
@@ -830,13 +832,32 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: giant rat.");        // announce lbol — round 0, not counted
         Assert.Equal("lbol giant rat", h.LastSent);
+        Assert.DoesNotContain("mmis giant rat", h.AllSent);   // not flipped the round it's announced
 
-        h.Tick();                               // fired round 1 — lbol still the decision, no re-send
-        Assert.Equal("lbol giant rat", h.LastSent);
-        Assert.DoesNotContain("mmis giant rat", h.AllSent);
-
-        h.Tick();                               // round 1 spent → cascade to alt (mob still alive)
+        h.Tick();                               // lbol's one fired round → cap → cascade to alt
         Assert.Equal("mmis giant rat", h.LastSent);
+    }
+
+    [Fact]
+    public void NormalSpell_MaxCasts1_SwitchesOnTheCapTick()
+    {
+        // report paradigm-20260814-061340: MaxCasts=1 fired the spell TWICE server-side.
+        // The server auto-repeats the announced spell every round; the client announced
+        // the switch to the alternate one tick AFTER the cap was reached, so the server
+        // repeated the capped spell one extra round before the switch landed. The switch
+        // must be announced on the SAME tick the cap is reached, pre-empting that repeat.
+        using Harness h = new();
+        h.Settings.NormalAttackSpell =
+            new CombatSpellSlot { SpellName = "vamp", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");        // announce vamp — round 0 (fires next tick)
+        Assert.Equal("vamp giant rat", h.LastSent);
+
+        h.Tick();                               // vamp's one fired round → cap → switch NOW
+        Assert.Equal("mmis giant rat", h.LastSent);
+        Assert.Equal(1, h.AllSent.Count(s => s == "vamp giant rat"));   // vamp announced exactly once
     }
 
     [Fact]
@@ -853,15 +874,18 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(2, "orc");
 
         h.Feed("Also here: giant rat.");        // lbol at the rat
-        h.Tick();                               // fired round 1
-        h.Tick();                               // cascade to mmis (rat survived)
+        h.Tick();                               // lbol's fired round → cap → cascade to mmis
         Assert.Equal("mmis giant rat", h.LastSent);
 
         h.Feed("The giant rat dies.");          // kill → cascade reset
-        h.Feed("Also here: orc.");              // next monster
+        h.Feed("Also here: orc.");              // next monster — re-opens with the normal
         h.Tick();
 
-        Assert.Equal("lbol orc", h.LastSent);   // re-opened with the NORMAL, not the alternate
+        // The orc's FIRST cast is the normal (lbol), proving the cascade reset — it did
+        // not inherit the rat's spent cascade. Its own cap-tick then advances to the
+        // alternate, but the re-open is what this guards.
+        string firstOrcCast = h.AllSent.First(s => s.EndsWith(" orc", StringComparison.Ordinal));
+        Assert.Equal("lbol orc", firstOrcCast);
     }
 
     [Fact]
