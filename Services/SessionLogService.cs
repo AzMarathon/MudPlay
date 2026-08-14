@@ -83,6 +83,17 @@ public sealed class SessionLogService : IDisposable
     // Wipe the persisted transaction log — the Transaction-history Clear button.
     public void TruncateTransactions() => _txns.Truncate();
 
+    // Rewrite the persisted transaction log to exactly the given entries (oldest
+    // first) — the "Clear unkept" selective wipe, so the on-disk copy matches the
+    // kept-only ledger and a reconnect doesn't resurrect the dropped rows.
+    public void RewriteTransactions(IReadOnlyList<TransactionEntry> keep)
+    {
+        ArgumentNullException.ThrowIfNull(keep);
+        _txns.Truncate();
+        if (!_txns.IsOpen) return;
+        foreach (TransactionEntry entry in keep) _txns.Append(FormatTxnLine(entry));
+    }
+
     private void OnProfileChanged(CharacterProfile _) => ReopenFiles();
     private void OnProfileClosed() => CloseFiles();
 

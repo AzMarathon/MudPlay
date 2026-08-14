@@ -1,7 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
-using MudPlay.Game.Cash;
 using MudPlay.ViewModels;
 
 namespace MudPlay.Views;
@@ -25,9 +24,9 @@ public partial class TransactionHistoryWindow : Window
     // Double-click a transaction → open the Navigation window centred on its room.
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is Control { DataContext: TransactionEntry entry }
+        if (sender is Control { DataContext: TransactionRowViewModel row }
             && DataContext is TransactionHistoryViewModel vm)
-            vm.ShowOnMap(entry);
+            vm.ShowOnMap(row);
     }
 
     private void OnClosed(object? sender, EventArgs e)

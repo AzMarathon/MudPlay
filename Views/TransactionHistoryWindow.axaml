@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels"
-        xmlns:cash="using:MudPlay.Game.Cash"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="440"
@@ -21,12 +20,14 @@
                 BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                 BorderThickness="0,0,0,1"
                 Padding="10,6">
-            <Grid ColumnDefinitions="120,56,*">
+            <Grid ColumnDefinitions="120,56,*,48">
                 <TextBlock Grid.Column="0" Text="Timestamp"
                            Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
                 <TextBlock Grid.Column="1" Text="Type"
                            Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
                 <TextBlock Grid.Column="2" Text="Action"
+                           Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
+                <TextBlock Grid.Column="3" Text="Keep" HorizontalAlignment="Center"
                            Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
             </Grid>
         </Border>
@@ -40,7 +41,8 @@
             <Button Content="Clear history"
                     HorizontalAlignment="Right"
                     Command="{Binding ClearCommand}"
-                    IsEnabled="{Binding !IsEmpty}"/>
+                    IsEnabled="{Binding !IsEmpty}"
+                    ToolTip.Tip="Clear the ledger — any entries you've checked to keep are left behind"/>
         </Border>
 
         <!-- ============ Entries list (+ empty placeholder) ============ -->
@@ -60,7 +62,7 @@
                     </Style>
                 </ListBox.Styles>
                 <ListBox.ItemTemplate>
-                    <DataTemplate DataType="cash:TransactionEntry">
+                    <DataTemplate DataType="vm:TransactionRowViewModel">
                         <!-- Stash rows wash faint gold (the map's stash-marker
                              colour), filling the whole entry; other kinds stay
                              transparent but still hit-testable for the
@@ -69,7 +71,7 @@
                                 Padding="10,5" Cursor="Hand"
                                 ToolTip.Tip="Double-click to show this room on the map"
                                 DoubleTapped="OnRowDoubleTapped">
-                            <Grid ColumnDefinitions="120,56,*">
+                            <Grid ColumnDefinitions="120,56,*,48">
                                 <TextBlock Grid.Column="0"
                                            Text="{Binding Time, StringFormat='{}{0:ddMMMyy HH:mm:ss}'}"
                                            Foreground="{StaticResource ChromeFgSecBrush}"
@@ -95,6 +97,11 @@
                                                          FontSize="10"
                                                          TextWrapping="Wrap"/>
                                 </StackPanel>
+                                <!-- Keep this entry when Clear history runs. -->
+                                <CheckBox Grid.Column="3"
+                                          IsChecked="{Binding Keep, Mode=TwoWay}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          ToolTip.Tip="Keep this entry — Clear history won't remove it"/>
                             </Grid>
                         </Border>
                     </DataTemplate>
