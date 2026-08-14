@@ -34,6 +34,7 @@ public abstract class SplashScene
         () => new SwampMonsterScene(),
         () => new GoblinSinkScene(),
         () => new SeagullsScene(),
+        () => new ChocoboScene(),
     };
 
     public static int Count => Factory.Length;

@@ -20,7 +20,11 @@ public sealed class SeagullsScene : SplashScene
     private static readonly CellAttributes Wing     = SplashCanvas.Rgb(150, 158, 168);
     private static readonly CellAttributes Beak      = SplashCanvas.Rgb(236, 150, 40);
     private static readonly CellAttributes Eye       = SplashCanvas.Rgb(28, 28, 34);
-    private static readonly CellAttributes Wire      = SplashCanvas.Rgb(90, 84, 74);
+    // The wire is a flat background strip, not a row of '━' glyphs: a full-width
+    // glyph line was ~Cols FormattedText per wire per frame (two wires = the bulk of
+    // this scene's per-frame glyph cost), whereas a same-colour bg span batches into
+    // one rectangle with no glyphs. Reads as a perch just the same.
+    private static readonly CellAttributes WireBg = CellAttributes.Default.WithBackground(TerminalColor.Rgb(96, 90, 80));
     private static readonly CellAttributes Bubble    = SplashCanvas.Rgb(240, 240, 236);
 
     public override void Render(SplashCanvas c, int f)
@@ -44,7 +48,7 @@ public sealed class SeagullsScene : SplashScene
         for (int r = 0; r < wires.Length; r++)
         {
             int wireY = wires[r] + 3;                       // feet rest here
-            c.Str(0, wireY, new string('━', c.Cols), Wire);
+            c.FillBg(0, wireY, c.Cols - 1, wireY, WireBg);
             for (int gx = startX, i = 0; gx < c.Cols - 4; gx += spacing, i++)
             {
                 DrawGull(c, gx, wires[r]);
