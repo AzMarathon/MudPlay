@@ -15,6 +15,7 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 public sealed partial class ChestOffloadShopGroup : ObservableObject
 {
     public string ShopName { get; }
+    public int Shop { get; }          // shop id, so items can be moved to/from this group
     public string Location { get; }   // "map/room", or empty when the shop's room is unknown
     public string Steps { get; }      // "N steps" from the player's current room (empty if unknown)
     public bool HasLocation => Location.Length > 0;
@@ -28,10 +29,11 @@ public sealed partial class ChestOffloadShopGroup : ObservableObject
     public IRelayCommand SellCommand { get; }
     public IRelayCommand DropAllCommand { get; }
 
-    public ChestOffloadShopGroup(string shopName, string location, string steps, RoomKey? room,
+    public ChestOffloadShopGroup(string shopName, int shop, string location, string steps, RoomKey? room,
         Action<RoomKey> queueWalk, Action<ChestOffloadShopGroup> sell, Action<ChestOffloadShopGroup> dropAll)
     {
         ShopName = shopName;
+        Shop = shop;
         Location = location;
         Steps = steps;
         CanWalk = room is not null;

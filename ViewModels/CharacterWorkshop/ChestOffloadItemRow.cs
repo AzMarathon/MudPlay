@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
@@ -9,31 +11,52 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // One looted item in the Chest Offload window: how many the chest gave, an
 // editable sell quantity (keep some, sell the rest), and what the selected
 // quantity fetches at the current charm. Vendor sell-back is shop-independent
-// (charm-only), so the per-item value is the same wherever it's sold.
+// (charm-only), so the per-item value is the same wherever it's sold — which is
+// why an item several shops buy can be freely moved between them via the popup.
 public sealed partial class ChestOffloadItemRow : ObservableObject
 {
     public string Name { get; }
     public int Gained { get; }
     public double BaseCopper { get; }
+    public IReadOnlyCollection<int> CandidateShops { get; }
 
-    private readonly Action? _onQtyChanged;
+    private readonly Action<ChestOffloadItemRow>? _onQtyChanged;
+    private readonly Func<ChestOffloadItemRow, IReadOnlyList<ShopChoiceRow>>? _buildChoices;
+    private readonly Action<ChestOffloadItemRow, int>? _moveToShop;
     private int _charm;
     private RealmType _realm;
+
+    // The shop group this row currently sits in (updated when the user moves it).
+    public int CurrentShop { get; set; }
+    // Only offer the "sell elsewhere" affordance when there's somewhere else to go.
+    public bool CanChangeShop => CandidateShops.Count > 1;
 
     [ObservableProperty] private int _sellQty;
     [ObservableProperty] private string _lineValue = "—";
     public long LineCopper { get; private set; }
 
-    // Drop the whole stack and take it off the sell list (wired by the window VM).
+    // "Sell at a different shop" popup state.
+    [ObservableProperty] private bool _shopMenuOpen;
+    [ObservableProperty] private ShopChoiceRow? _selectedShopChoice;
+    public ObservableCollection<ShopChoiceRow> ShopChoices { get; } = new();
+    public bool HasShopChoices => ShopChoices.Count > 0;
+
     public IRelayCommand DropCommand { get; }
 
     public ChestOffloadItemRow(string name, int gained, double baseCopper,
-        Action? onQtyChanged, Action<ChestOffloadItemRow>? onDrop = null)
+        IReadOnlyCollection<int> candidateShops, int currentShop,
+        Action<ChestOffloadItemRow>? onQtyChanged, Action<ChestOffloadItemRow>? onDrop = null,
+        Func<ChestOffloadItemRow, IReadOnlyList<ShopChoiceRow>>? buildChoices = null,
+        Action<ChestOffloadItemRow, int>? moveToShop = null)
     {
         Name = name;
         Gained = gained;
         BaseCopper = baseCopper;
+        CandidateShops = candidateShops;
+        CurrentShop = currentShop;
         _onQtyChanged = onQtyChanged;
+        _buildChoices = buildChoices;
+        _moveToShop = moveToShop;
         _sellQty = gained;   // default: sell all of what the chest gave
         DropCommand = new RelayCommand(() => onDrop?.Invoke(this));
     }
@@ -45,10 +68,33 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         Recompute();
     }
 
+    [RelayCommand]
+    private void OpenShopMenu()
+    {
+        ShopChoices.Clear();
+        if (_buildChoices is not null)
+            foreach (ShopChoiceRow choice in _buildChoices(this)) ShopChoices.Add(choice);
+        OnPropertyChanged(nameof(HasShopChoices));
+        SelectedShopChoice = null;
+        ShopMenuOpen = true;
+    }
+
+    [RelayCommand]
+    private void ConfirmShopChange()
+    {
+        // Close first, then re-parent — the row moves between ItemsControls.
+        ShopChoiceRow? choice = SelectedShopChoice;
+        ShopMenuOpen = false;
+        if (choice is not null) _moveToShop?.Invoke(this, choice.Shop);
+    }
+
+    [RelayCommand]
+    private void CancelShopChange() => ShopMenuOpen = false;
+
     partial void OnSellQtyChanged(int value)
     {
         Recompute();
-        _onQtyChanged?.Invoke();
+        _onQtyChanged?.Invoke(this);
     }
 
     private void Recompute()

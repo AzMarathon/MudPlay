@@ -8,6 +8,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - On open it snapshots your carried inventory and lists the containers you hold; opening one shows every new item, grouped into the fewest shops with a charm picker
 - **Coin gained** is measured per open (coins before vs after that chest, so selling loot never inflates it) and listed by denomination, most-valuable first (runic/plat/gold/silver/copper)
 - Per item: an adjustable sell quantity, its sell value, and a **Drop** button; per shop: a running total, a clickable header (with the shop's map/room and the steps to walk there from where you are) that queues a walk there, a **Sell** and a **Drop All** button (sell/drop fire realm-batched commands)
+- Per item, a **⇄** button opens a popup to move that item to another shop that buys it — each alternate lists its name, map/room, and current walking distance (nearest first), with **Change** / **Cancel** — for when the assigned shop is an expensive trip
 - A **Total to sell** figure sums everything selected across all shops at the current charm
 - Shops are ordered into a short nearest-first trip using the real walker routing (avoid rooms, usable teleport gates, item/hazard/boat gates)
 

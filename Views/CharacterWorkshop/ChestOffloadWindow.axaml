@@ -147,17 +147,60 @@
                                         <ItemsControl ItemsSource="{Binding Items}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ChestOffloadItemRow">
-                                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,2">
-                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
-                                                        <NumericUpDown Grid.Column="1" Width="104"
+                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,2">
+                                                        <Panel Grid.Column="0" VerticalAlignment="Center">
+                                                            <Button x:Name="ShopBtn" Command="{Binding OpenShopMenuCommand}"
+                                                                    IsEnabled="{Binding CanChangeShop}"
+                                                                    Background="Transparent" BorderThickness="0" Padding="4,0"
+                                                                    Cursor="Hand" Margin="0,0,6,0"
+                                                                    ToolTip.Tip="Sell this item at a different shop">
+                                                                <TextBlock Text="⇄" FontSize="14"
+                                                                           Foreground="{StaticResource AccentCyanBrush}"/>
+                                                            </Button>
+                                                            <Popup PlacementTarget="{Binding #ShopBtn}"
+                                                                   Placement="BottomEdgeAlignedLeft"
+                                                                   IsLightDismissEnabled="True"
+                                                                   IsOpen="{Binding ShopMenuOpen, Mode=TwoWay}">
+                                                                <Border Background="{StaticResource ChromeBgBrush}"
+                                                                        BorderBrush="{StaticResource ChromeBorderBrush}"
+                                                                        BorderThickness="1" CornerRadius="3" Padding="10">
+                                                                    <StackPanel Spacing="8" Width="320">
+                                                                        <TextBlock Classes="Section" Text="Sell at a different shop"/>
+                                                                        <TextBlock Text="No other shop buys this."
+                                                                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                                                   IsVisible="{Binding !HasShopChoices}"/>
+                                                                        <ListBox ItemsSource="{Binding ShopChoices}"
+                                                                                 SelectedItem="{Binding SelectedShopChoice, Mode=TwoWay}"
+                                                                                 MaxHeight="220" IsVisible="{Binding HasShopChoices}">
+                                                                            <ListBox.ItemTemplate>
+                                                                                <DataTemplate x:DataType="vm:ShopChoiceRow">
+                                                                                    <StackPanel Spacing="1" Margin="0,2">
+                                                                                        <TextBlock Text="{Binding ShopName}" FontWeight="SemiBold"/>
+                                                                                        <TextBlock Text="{Binding Detail}"
+                                                                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                                                    </StackPanel>
+                                                                                </DataTemplate>
+                                                                            </ListBox.ItemTemplate>
+                                                                        </ListBox>
+                                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
+                                                                            <Button Content="Change" Command="{Binding ConfirmShopChangeCommand}"
+                                                                                    IsEnabled="{Binding HasShopChoices}"/>
+                                                                            <Button Content="Cancel" Command="{Binding CancelShopChangeCommand}"/>
+                                                                        </StackPanel>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </Popup>
+                                                        </Panel>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                                        <NumericUpDown Grid.Column="2" Width="104"
                                                                        Minimum="0" Maximum="{Binding Gained}" Increment="1" FormatString="0"
                                                                        Value="{Binding SellQty, Mode=TwoWay}"/>
-                                                        <TextBlock Grid.Column="2" Text="{Binding Gained, StringFormat='of {0}'}"
+                                                        <TextBlock Grid.Column="3" Text="{Binding Gained, StringFormat='of {0}'}"
                                                                    VerticalAlignment="Center" Margin="8,0,0,0"
                                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                                        <TextBlock Grid.Column="3" Text="{Binding LineValue}" VerticalAlignment="Center"
+                                                        <TextBlock Grid.Column="4" Text="{Binding LineValue}" VerticalAlignment="Center"
                                                                    Margin="10,0,8,0" MinWidth="90"/>
-                                                        <Button Grid.Column="4" Content="Drop" Command="{Binding DropCommand}"
+                                                        <Button Grid.Column="5" Content="Drop" Command="{Binding DropCommand}"
                                                                 ToolTip.Tip="Drop this whole stack and remove it from the sell plan"/>
                                                     </Grid>
                                                 </DataTemplate>

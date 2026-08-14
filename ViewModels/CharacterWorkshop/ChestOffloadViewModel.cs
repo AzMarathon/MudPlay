@@ -50,6 +50,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private CurrencyHoldings? _preOpenCurrency;                     // coin held just before the in-flight open
     private bool _settlePending;                                    // set once the forced 'i' is sent, awaiting the re-parse
     private bool _simulating;
+    private Dictionary<int, Room> _shopRoom = new();               // shop id → serving room (first found), rebuilt each render
 
     [ObservableProperty] private int _charm;
     [ObservableProperty] private string _sellTotal = "—";
@@ -173,12 +174,12 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private void RenderLoot(IReadOnlyList<(string Name, int Count)> gains)
     {
 
-        // A shop can serve several rooms; v1 takes the first (nearest-shop routing
-        // is a later refinement). Built once here on the UI thread.
-        Dictionary<int, Room> shopRoom = new();
+        // A shop can serve several rooms; take the first (kept as a field so the
+        // "sell elsewhere" popup and item moves can look shops up later). UI thread.
+        _shopRoom = new Dictionary<int, Room>();
         foreach (Room room in _rooms.Rooms)
-            if (room.Shop > 0 && !shopRoom.ContainsKey(room.Shop))
-                shopRoom[room.Shop] = room;
+            if (room.Shop > 0 && !_shopRoom.ContainsKey(room.Shop))
+                _shopRoom[room.Shop] = room;
 
         var loot = new List<LootItem>();
         foreach ((string name, int count) in gains)
@@ -192,25 +193,25 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
             ChestOffloadPlanner.GroupByFewestShops(loot, li => li.Shops, out IReadOnlyList<LootItem> noShop);
 
         ShopGroups.Clear();
-        foreach ((int shopNum, IReadOnlyList<LootItem> items) in OrderByRoute(groups, shopRoom))
+        foreach ((int shopNum, IReadOnlyList<LootItem> items) in OrderByRoute(groups, _shopRoom))
         {
-            shopRoom.TryGetValue(shopNum, out Room? room);
+            _shopRoom.TryGetValue(shopNum, out Room? room);
             string location = room is { } lr ? $"{lr.Key.Map}/{lr.Key.Room}" : "";
             var group = new ChestOffloadShopGroup(
-                room?.Name ?? $"Shop #{shopNum}", location, StepsLabel(room), room?.Key,
+                room?.Name ?? $"Shop #{shopNum}", shopNum, location, StepsLabel(room), room?.Key,
                 _queueWalk, SellGroup, DropAllGroup);
-            ChestOffloadShopGroup g = group;   // fresh capture for the item callbacks
             foreach (LootItem li in items)
                 group.Items.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper,
-                    () => { g.Retotal(); UpdateGrandTotal(); },
-                    it => DropItem(g, it)));
+                    li.Shops, shopNum,
+                    it => { GroupOf(it)?.Retotal(); UpdateGrandTotal(); },
+                    DropItem, BuildShopChoices, MoveItemToShop));
             group.Reprice(Charm, _gameData.ActiveRealm);
             ShopGroups.Add(group);
         }
 
         Unsellable.Clear();
         foreach (LootItem li in noShop)
-            Unsellable.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper, null));
+            Unsellable.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper, li.Shops, 0, null));
 
         UpdateGrandTotal();
         OnPropertyChanged(nameof(HasLoot));
@@ -280,9 +281,16 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     // shop has no room; "unreachable" when no route survives the filter.
     private string StepsLabel(Room? room)
     {
-        if (room is null || _tracker.State.CurrentRoom?.Key is not { } here) return "";
-        if (_bfs.DistanceBetween(here, room.Key, _movement) is not { } d) return "unreachable";
-        return d switch { 0 => "you're here", 1 => "1 step", _ => $"{d} steps" };
+        RoomKey? here = _tracker.State.CurrentRoom?.Key;
+        int? dist = room is { } r && here is { } h ? _bfs.DistanceBetween(h, r.Key, _movement) : null;
+        return StepsText(room, here, dist);
+    }
+
+    private static string StepsText(Room? room, RoomKey? here, int? dist)
+    {
+        if (room is null || here is null) return "";
+        if (dist is null) return "unreachable";
+        return dist switch { 0 => "you're here", 1 => "1 step", _ => $"{dist} steps" };
     }
 
     partial void OnCharmChanged(int value)
@@ -374,13 +382,69 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
             CountedCommand.Emit(_send, "sell", item.SellQty, item.Name, paradigm);
     }
 
+    private ChestOffloadShopGroup? GroupOf(ChestOffloadItemRow item)
+        => ShopGroups.FirstOrDefault(g => g.Items.Contains(item));
+
     // Drop the whole stack this chest gave and take the item off the sell list.
-    private void DropItem(ChestOffloadShopGroup group, ChestOffloadItemRow item)
+    // Looks the group up live — the item may have been moved to a different shop.
+    private void DropItem(ChestOffloadItemRow item)
     {
         CountedCommand.Emit(_send, "drop", item.Gained, item.Name, _gameData.ActiveRealm == RealmType.ParaMud);
-        group.Items.Remove(item);
-        if (group.Items.Count == 0) ShopGroups.Remove(group);
-        else group.Retotal();
+        ChestOffloadShopGroup? group = GroupOf(item);
+        group?.Items.Remove(item);
+        if (group is not null && group.Items.Count == 0) ShopGroups.Remove(group);
+        else group?.Retotal();
+        UpdateGrandTotal();
+        OnPropertyChanged(nameof(HasLoot));
+    }
+
+    // Alternate shops that also buy this item, nearest first, minus the one it's in.
+    private IReadOnlyList<ShopChoiceRow> BuildShopChoices(ChestOffloadItemRow item)
+    {
+        RoomKey? here = _tracker.State.CurrentRoom?.Key;
+        var scored = new List<(int? Dist, ShopChoiceRow Row)>();
+        foreach (int shop in item.CandidateShops)
+        {
+            if (shop == item.CurrentShop) continue;
+            _shopRoom.TryGetValue(shop, out Room? room);
+            int? dist = room is { } r && here is { } h ? _bfs.DistanceBetween(h, r.Key, _movement) : null;
+            string location = room is { } lr ? $"{lr.Key.Map}/{lr.Key.Room}" : "";
+            scored.Add((dist, new ShopChoiceRow(shop, room?.Name ?? $"Shop #{shop}", location,
+                StepsText(room, here, dist))));
+        }
+        return scored
+            .OrderBy(t => t.Dist is null)          // reachable first
+            .ThenBy(t => t.Dist ?? int.MaxValue)   // then nearest
+            .Select(t => t.Row)
+            .ToList();
+    }
+
+    // Move an item to another shop it can be sold at: pull it from its current group
+    // (dropping the group if that empties it), and drop it into the target group,
+    // creating that group if this is the first item headed there.
+    private void MoveItemToShop(ChestOffloadItemRow item, int targetShop)
+    {
+        if (targetShop == item.CurrentShop) return;
+
+        ChestOffloadShopGroup? source = GroupOf(item);
+        source?.Items.Remove(item);
+
+        ChestOffloadShopGroup? target = ShopGroups.FirstOrDefault(g => g.Shop == targetShop);
+        if (target is null)
+        {
+            _shopRoom.TryGetValue(targetShop, out Room? room);
+            string location = room is { } lr ? $"{lr.Key.Map}/{lr.Key.Room}" : "";
+            target = new ChestOffloadShopGroup(room?.Name ?? $"Shop #{targetShop}", targetShop, location,
+                StepsLabel(room), room?.Key, _queueWalk, SellGroup, DropAllGroup);
+            ShopGroups.Add(target);
+        }
+
+        item.CurrentShop = targetShop;
+        target.Items.Add(item);
+
+        if (source is not null && source.Items.Count == 0) ShopGroups.Remove(source);
+        else source?.Retotal();
+        target.Retotal();
         UpdateGrandTotal();
         OnPropertyChanged(nameof(HasLoot));
     }
