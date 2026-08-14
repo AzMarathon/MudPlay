@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
+using MudPlay.Game.GameData;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
 using MudPlay.Services;
@@ -105,9 +106,16 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private void RebuildLoot()
     {
         InventorySnapshot snap = _inventory.Snapshot;
-        long gained = snap.Currency.TotalCopperValue - _baselineCopper;
-        CurrencyGained = gained > 0 ? ShopPriceCalculator.FormatCopper(gained) : "—";
         RebuildContainers(snap);
+        long gained = snap.Currency.TotalCopperValue - _baselineCopper;
+        RenderLoot(ChestOffloadPlanner.CarriedGains(_baselineCarried, snap.CarriedItems), gained);
+    }
+
+    // Turn a set of (item name, count) gains into the priced, shop-grouped view.
+    // Shared by the real inventory diff and the "Simulate Chest" test button.
+    private void RenderLoot(IReadOnlyList<(string Name, int Count)> gains, long gainedCopper)
+    {
+        CurrencyGained = gainedCopper > 0 ? ShopPriceCalculator.FormatCopper(gainedCopper) : "—";
 
         // A shop can serve several rooms; v1 takes the first (nearest-shop routing
         // is a later refinement). Built once here on the UI thread.
@@ -117,7 +125,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
                 shopRoom[room.Shop] = room;
 
         var loot = new List<LootItem>();
-        foreach ((string name, int count) in ChestOffloadPlanner.CarriedGains(_baselineCarried, snap.CarriedItems))
+        foreach ((string name, int count) in gains)
         {
             if (_itemNames.FindByName(name) is not int number) continue;
             if (_itemNames.ItemTypeOf(number) == ContainerItemType) continue;   // don't sell chests
@@ -150,6 +158,57 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     partial void OnCharmChanged(int value)
     {
         foreach (ChestOffloadShopGroup group in ShopGroups) group.Reprice(value, _gameData.ActiveRealm);
+    }
+
+    // Test aid: seed the container list with a handful of random real containers.
+    // Clicking one still sends the real "open" (below), but its loot is rolled from
+    // the chest's own table rather than waiting on a live drop, so the window can be
+    // exercised without hunting chests. Re-clicking re-randomises the simulated set.
+    private System.Collections.Generic.IReadOnlyDictionary<int, ChestContents>? _chestTables;
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void SimulateChest()
+    {
+        _chestTables ??= ChestContentsReader.ReadAll(_gameData);
+        for (int i = Containers.Count - 1; i >= 0; i--)
+            if (Containers[i].Simulated) Containers.RemoveAt(i);
+
+        foreach (int id in _chestTables.Keys.OrderBy(_ => Random.Shared.Next()).Take(4))
+        {
+            if (_itemNames.GetName(id) is not { } name) continue;
+            int number = id;
+            Containers.Add(new ChestContainerRow(name, 1, () => SimulateOpen(name, number), simulated: true));
+        }
+        OnPropertyChanged(nameof(HasContainers));
+    }
+
+    // Send the real "open", then roll this chest's loot table: pick an item count in
+    // its [MinItems, MaxItems] range, then draw that many items weighted by each
+    // drop's chance (with replacement, so a chest can hand out multiples). Renders
+    // the rolled loot through the same shop-grouping pipeline as a real open.
+    private void SimulateOpen(string name, int number)
+    {
+        _send($"open {name}");
+        if (_chestTables is null || !_chestTables.TryGetValue(number, out ChestContents? contents)
+            || contents.Drops.Count == 0)
+        {
+            RenderLoot(Array.Empty<(string, int)>(), 0);
+            return;
+        }
+
+        int count = Random.Shared.Next(contents.MinItems, contents.MaxItems + 1);
+        double totalWeight = contents.Drops.Sum(d => d.Probability);
+        var rolled = new Dictionary<string, int>();
+        for (int i = 0; i < count && totalWeight > 0; i++)
+        {
+            double r = Random.Shared.NextDouble() * totalWeight;
+            foreach (ChestDrop drop in contents.Drops)
+            {
+                r -= drop.Probability;
+                if (r <= 0) { rolled[drop.ItemName] = rolled.GetValueOrDefault(drop.ItemName) + 1; break; }
+            }
+        }
+        RenderLoot(rolled.Select(kv => (kv.Key, kv.Value)).ToList(), Random.Shared.Next(5_000, 120_000));
     }
 
     [CommunityToolkit.Mvvm.Input.RelayCommand]
