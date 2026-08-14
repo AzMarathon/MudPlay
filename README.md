@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.11.1**
-> - Transaction history: a Keep checkbox on each row — Clear history now leaves the checked entries behind (in memory and on disk), so you can prune a full ledger without losing the rows that matter
+> **Version 3.11.2**
+> - Exp/Hr estimator now simulates the loop's real room order with a per-mob respawn clock, so an out-and-back line loop (which re-crosses just-cleared lairs on the return, wasting ticks) is estimated correctly lower instead of ~15% high; a saturated ring still reports its full rate, and the 720-kills/hr tick cap is treated as a ceiling loops rarely reach
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
