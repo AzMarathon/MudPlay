@@ -2136,6 +2136,15 @@ public sealed partial class CombatManager : IDisposable
     // the tick resume in the same round.
     private bool TryResumeEngage(RoomEntitiesObservation live, bool bypassAttackGuard = false)
     {
+        // The user hand-typed this round's attack (a combat spell or a swing) — don't
+        // re-send our auto attack over the top of it. The override clears at the next
+        // combat tick, so the engine resumes on the following round (report
+        // paradigm-20260814-135715).
+        if (_userAttackOverride)
+        {
+            _log?.Combat(LogCategory, "resume suppressed — user attack override holds this round");
+            return false;
+        }
         DateTimeOffset now = DateTimeOffset.Now;
         // A fresh swing already went out a beat ago — this resume is redundant
         // and would double on top of it. Happens on a kill: the death→re-observe
@@ -2166,6 +2175,66 @@ public sealed partial class CombatManager : IDisposable
     // Flagged so the spell-mode resume can rate-limit a mashed burst (see
     // ManualResumePacing) without ever throttling the engine's per-round resumes.
     public void NoteManualBetweenRoundCast() => NoteBetweenRoundCast(manual: true);
+
+    // ----- Manual user-attack override -------------------------------------
+    // When the user hand-types an attack this round — a combat spell (round energy
+    // 1–1000, see CombatSpellIndex / GAME_MECHANICS) or a physical attack verb — they
+    // took the round's action, so the engine must NOT re-send its own auto attack until
+    // the next round. Set here, checked by the between-round resume (TryResumeEngage),
+    // and cleared at the top of the next combat tick so control returns next round. A
+    // hand-cast IN-BETWEEN spell (heal / buff / cure, energy 0) is NOT an override — it
+    // keeps the resume-after-cast behaviour (NoteManualBetweenRoundCast).
+    private bool _userAttackOverride;
+    // One-shot echo claim: SendAttack stamps the verb it just sent so the attack
+    // observer — which sees the engine's OWN swings too — drops that echo instead of
+    // reading it as a manual override. Consumed synchronously as the send flows back
+    // through SendUserInput's observer fan-out.
+    private string? _pendingAttackEchoVerb;
+    // cast-code → is it a combat spell (round energy 1–1000)? Wired from AppServices.
+    private Func<string, bool>? _isCombatSpell;
+
+    public void SetCombatSpellPredicate(Func<string, bool> isCombatSpell)
+        => _isCombatSpell = isCombatSpell ?? throw new ArgumentNullException(nameof(isCombatSpell));
+
+    // A manually-typed cast-code (routed by OutboundCastObserver). A combat spell is the
+    // user taking the round's attack (override); an in-between spell keeps the resume.
+    public void OnManualCastObserved(string castCode)
+    {
+        if (_isCombatSpell?.Invoke(castCode) == true)
+            NoteUserAttackOverride($"manual combat spell '{castCode}'");
+        else
+            NoteManualBetweenRoundCast();
+    }
+
+    // A manually-typed physical attack verb (routed by OutboundAttackObserver). The
+    // observer sees the engine's own swings too, so drop the one we just sent (echo
+    // claim) and treat anything else as the user taking the round's attack.
+    public void NoteAttackCommandObserved(string verb)
+    {
+        if (_pendingAttackEchoVerb is { } pending
+            && string.Equals(pending, verb, StringComparison.OrdinalIgnoreCase))
+        {
+            _pendingAttackEchoVerb = null;   // our own send — consume the echo
+            return;
+        }
+        NoteUserAttackOverride($"manual physical attack '{verb}'");
+    }
+
+    private void NoteUserAttackOverride(string reason)
+    {
+        _userAttackOverride = true;
+        _log?.Combat(LogCategory,
+            $"user attack override armed ({reason}) — holding the engine's auto attack until next round");
+    }
+
+    // Cleared at the top of each combat tick (the round boundary) so the engine resumes
+    // its auto attack next round. Called from the Spells partial's OnCombatTick.
+    private void ClearUserAttackOverrideForNewRound()
+    {
+        if (!_userAttackOverride) return;
+        _userAttackOverride = false;
+        _log?.Combat(LogCategory, "user attack override cleared — new combat round, engine resumes");
+    }
 
     private void NoteBetweenRoundCast(bool manual)
     {
@@ -2330,6 +2399,7 @@ public sealed partial class CombatManager : IDisposable
             if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _betweenRoundCastAt != _lastSpellResumeForBetweenRoundCastAt
                 && !manualPaced
+                && !_userAttackOverride   // user hand-typed this round's attack — hold our own until next round
                 && _castingSpellTarget is { } spellTarget
                 && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
                 && _classifier.Current is { } liveSpell
@@ -2511,6 +2581,7 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory, $"attack target={target} cmd={verb}");
         _lastAttackCommand = line;
         if (_wireSender is null) return;
+        _pendingAttackEchoVerb = verb;   // claim our own swing so the attack observer doesn't read it as manual
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         NoteAttackSent();
     }
@@ -2526,6 +2597,7 @@ public sealed partial class CombatManager : IDisposable
             $"re-fire target={target} cmd={verb} timing={refireReason}");
         _lastAttackCommand = line;
         if (_wireSender is null) return;
+        _pendingAttackEchoVerb = verb;   // claim our own swing so the attack observer doesn't read it as manual
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         NoteAttackSent();
     }

@@ -1020,6 +1020,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Same goto-blue the terminal Favorites flyout uses for room names, so the two
     // menus read identically (numbered "N)" prefix in the default colour + blue name).
     private static readonly IBrush GotoWalkBrush = new SolidColorBrush(Color.Parse("#5FB3D9"));
+    // Loop (green) / auto-lair (amber) accents — matched to the terminal right-click
+    // Favorites menu and the per-engine nav colours, so the two flyouts read the same.
+    private static readonly IBrush LoopFavBrush = new SolidColorBrush(Color.Parse("#7AB870"));
+    private static readonly IBrush LairFavBrush = new SolidColorBrush(Color.Parse("#D4A24C"));
 
     private void RebuildContextFavorites()
     {
@@ -1041,6 +1045,35 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             ContextFavorites.Add(new MudPlay.ViewModels.FavoriteMenuItem(
                 $"{++number})", label, GotoWalkBrush, new AsyncRelayCommand(() => WalkToRoom(target))));
         }
+
+        // Favourited loops (start on click, green) then favourited auto-lair setups
+        // (load + start, amber) — parity with the terminal right-click Favorites menu,
+        // which showed all three while this map flyout listed rooms only (report
+        // paradigm-20260814-135601).
+        foreach (Game.Map.Loop loop in _services.Loops.Loops
+                     .Where(l => l.Favorite)
+                     .OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            Game.Map.Loop target = loop;
+            ContextFavorites.Add(new MudPlay.ViewModels.FavoriteMenuItem(
+                $"{++number})", loop.Name, LoopFavBrush,
+                new RelayCommand(() =>
+                {
+                    if (_services.AutoLair.IsActive) _services.AutoLair.Stop("loop favorite started");
+                    _services.LoopRunner.Start(target);
+                })));
+        }
+
+        foreach (Models.Profile.LairSetup setup in _services.Lairs.Setups
+                     .Where(x => x.Favorite)
+                     .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            Models.Profile.LairSetup target = setup;
+            ContextFavorites.Add(new MudPlay.ViewModels.FavoriteMenuItem(
+                $"{++number})", setup.Name, LairFavBrush,
+                new RelayCommand(() => { LoadSetupInternal(target); _services.AutoLair.Start(); })));
+        }
+
         OnPropertyChanged(nameof(HasContextFavorites));
         OnPropertyChanged(nameof(HasContextWalkLists));
     }
@@ -1234,9 +1267,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // "no matches" empty state (distinct from "nothing saved").
     public bool HasNoLoopMatches => HasAnyLoopsOrSetups && NavTree.Count == 0;
 
-    private void OnLoopsChanged() => RefreshLoopsAndLairs();
+    private void OnLoopsChanged()
+    {
+        RefreshLoopsAndLairs();
+        RebuildContextFavorites();   // a loop's favourite flag may have flipped — refresh the map flyout
+    }
 
-    private void OnSetupsChanged() => RefreshLoopsAndLairs();
+    private void OnSetupsChanged()
+    {
+        RefreshLoopsAndLairs();
+        RebuildContextFavorites();   // an auto-lair setup's favourite flag may have flipped — refresh the map flyout
+    }
 
     private void RefreshLoopsAndLairs()
     {

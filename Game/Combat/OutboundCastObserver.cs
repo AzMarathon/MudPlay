@@ -36,9 +36,9 @@ public sealed class OutboundCastObserver
     private const int MaxBytes = 64;
 
     private readonly Func<string, bool> _isCastCode;
-    private readonly Action _onManualCast;
+    private readonly Action<string> _onManualCast;
 
-    public OutboundCastObserver(Func<string, bool> isCastCode, Action onManualCast)
+    public OutboundCastObserver(Func<string, bool> isCastCode, Action<string> onManualCast)
     {
         ArgumentNullException.ThrowIfNull(isCastCode);
         ArgumentNullException.ThrowIfNull(onManualCast);
@@ -58,6 +58,6 @@ public sealed class OutboundCastObserver
         // any) is the target ("swan rat"). A bare code ("swan") self-targets.
         int space = cmd.IndexOf(' ');
         string first = space >= 0 ? cmd[..space] : cmd;
-        if (_isCastCode(first)) _onManualCast();
+        if (_isCastCode(first)) _onManualCast(first);
     }
 }

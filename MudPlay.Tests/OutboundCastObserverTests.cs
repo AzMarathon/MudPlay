@@ -19,13 +19,14 @@ public sealed class OutboundCastObserverTests
     private static readonly HashSet<string> CastCodes =
         new(StringComparer.OrdinalIgnoreCase) { "swan", "heal", "cure" };
 
-    private static (OutboundCastObserver obs, Func<int> fires) New()
+    private static (OutboundCastObserver obs, Func<int> fires, Func<string?> last) New()
     {
         int fires = 0;
+        string? last = null;
         OutboundCastObserver obs = new(
             isCastCode: c => CastCodes.Contains(c),
-            onManualCast: () => fires++);
-        return (obs, () => fires);
+            onManualCast: code => { fires++; last = code; });
+        return (obs, () => fires, () => last);
     }
 
     private static void Send(OutboundCastObserver obs, string command)
@@ -34,15 +35,16 @@ public sealed class OutboundCastObserverTests
     [Fact]
     public void BareCastCode_ArmsResume()
     {
-        (OutboundCastObserver obs, Func<int> fires) = New();
+        (OutboundCastObserver obs, Func<int> fires, Func<string?> last) = New();
         Send(obs, "swan");
         Assert.Equal(1, fires());
+        Assert.Equal("swan", last());   // the cast-code is forwarded so combat can classify it
     }
 
     [Fact]
     public void CastCodeWithTarget_ArmsResume()
     {
-        (OutboundCastObserver obs, Func<int> fires) = New();
+        (OutboundCastObserver obs, Func<int> fires, Func<string?> last) = New();
         Send(obs, "swan rat"); // first token is the cast-code, rest is the target
         Assert.Equal(1, fires());
     }
@@ -50,7 +52,7 @@ public sealed class OutboundCastObserverTests
     [Fact]
     public void CastCode_IsCaseInsensitive()
     {
-        (OutboundCastObserver obs, Func<int> fires) = New();
+        (OutboundCastObserver obs, Func<int> fires, Func<string?> last) = New();
         Send(obs, "  SWAN  ");
         Assert.Equal(1, fires());
     }
@@ -58,7 +60,7 @@ public sealed class OutboundCastObserverTests
     [Fact]
     public void NonCastCommand_StaysSilent()
     {
-        (OutboundCastObserver obs, Func<int> fires) = New();
+        (OutboundCastObserver obs, Func<int> fires, Func<string?> last) = New();
         Send(obs, "a rat");   // attack verb, not a cast-code
         Send(obs, "n");       // cardinal move
         Send(obs, "look n");  // peek
@@ -69,7 +71,7 @@ public sealed class OutboundCastObserverTests
     [Fact]
     public void EmptyOrOversized_Ignored()
     {
-        (OutboundCastObserver obs, Func<int> fires) = New();
+        (OutboundCastObserver obs, Func<int> fires, Func<string?> last) = New();
         obs.ObserveOutbound(ReadOnlySpan<byte>.Empty);
         obs.ObserveOutbound(Encoding.Latin1.GetBytes("\r\n"));
         obs.ObserveOutbound(Encoding.Latin1.GetBytes(new string('x', 200)));

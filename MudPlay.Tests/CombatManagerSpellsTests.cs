@@ -513,6 +513,86 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(afterFirst, h.Sent.Count);   // no second re-announce within the window
     }
 
+    // ----- manual user-attack override (report paradigm-20260814-135715) ------
+
+    [Fact]
+    public void ManualPhysicalAttack_SuppressesResume_ThenNextTickResumes()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");        // engage → "harm giant rat"
+        int afterEngage = h.Sent.Count;
+
+        // The user takes this round: a hand-typed physical attack (no engine echo claim
+        // to match, so it's read as manual).
+        h.Combat.NoteAttackCommandObserved("a");
+
+        // An interrupt's *Combat Off* would normally resume our attack — the override
+        // must hold it this round.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.Equal(afterEngage, h.Sent.Count);      // suppressed — engine sent nothing over the user
+
+        // Next round (tick) clears the override; a fresh interrupt resumes.
+        h.Tick();
+        int afterTick = h.Sent.Count;
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.True(h.Sent.Count > afterTick);        // resumes — override cleared at the tick
+    }
+
+    [Fact]
+    public void EngineOwnAttackEcho_IsNotTreatedAsManualOverride()
+    {
+        using Harness h = new();
+        h.Settings.NormalWeapon = "sword";              // weapon build — engine swings, no spell
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");                // engine sends "a giant rat"
+        Assert.Equal("a giant rat", h.LastSent);
+
+        // The engine's own swing flows back through the observer as "a"; that echo must
+        // be consumed, NOT armed as a user override — otherwise the resume below stalls.
+        h.Combat.NoteAttackCommandObserved("a");
+
+        int afterEngage = h.Sent.Count;
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.True(h.Sent.Count > afterEngage);        // resume still fires — no false override
+    }
+
+    [Fact]
+    public void ManualCombatCast_Overrides_ButUtilityCastResumes()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0 };
+        h.Combat.SetCombatSpellPredicate(code => string.Equals(code, "nuke", StringComparison.OrdinalIgnoreCase));
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        int afterEngage = h.Sent.Count;
+
+        // A hand-cast COMBAT spell (energy 1–1000) is the user's attack — override holds.
+        h.Combat.OnManualCastObserved("nuke");
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.Equal(afterEngage, h.Sent.Count);        // suppressed
+
+        h.Tick();
+
+        // A hand-cast IN-BETWEEN spell (heal/buff) is NOT an override — it keeps the
+        // resume so the engine re-attacks after the heal.
+        int afterTick = h.Sent.Count;
+        h.Combat.OnManualCastObserved("heal");          // not the combat cast-code
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.True(h.Sent.Count > afterTick);          // resumed after the utility cast
+    }
+
     // ----- Auto-Nuke auto-engine gate ----------------------------------
 
     [Fact]

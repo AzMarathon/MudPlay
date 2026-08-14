@@ -2,11 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.11.11
+## 3.12.0
 
-- Typing a movement command yourself (a direction, or a `go path`-style text exit) while a walk / loop / auto-lair is running now **pauses navigation** — a user pause you resume with Start, so the automation never fights a hand-driven step (`l <dir>` peeks don't count); the pause now applies cleanly instead of racing the move it rode in on
+- Typing a movement command yourself (a direction, or a `go path`-style text exit) while a walk / loop / auto-lair is running now **pauses navigation** — a user pause you resume with Start, so the automation never fights a hand-driven step (`l <dir>` peeks don't count)
+- Hand-typing an attack mid-fight — a **combat spell** (any energy-costing attack, vs a 0-energy heal/buff) or a **physical attack** (`a`/`aa`/`bash`/`smash`/`bs`/…) — now counts as a **user override**: the engine holds its own auto-attack for that round instead of re-sending it over yours, and resumes on the next round. A hand-cast heal/buff still lets it resume attacking right away
+- Map right-click **Favorites** flyout now lists favourited loops (green, start on click) and auto-lairs (amber), matching the terminal menu — a favourited loop was only showing in the terminal one before
 - Fixed a wedge where combat force-clearing via the idle-stall watchdog (a mob wandered off mid-fight with cash/loot on the ground) left the deferred pickup stranded on the Acquisition gate — the walker sat "looting" forever; the force-clear now flushes the deferred cash/item collect
-- bug reports addressed: paradigm-20260814-131551
+- bug reports addressed: paradigm-20260814-131551, paradigm-20260814-135601, paradigm-20260814-135715
 
 ## 3.11.9
 

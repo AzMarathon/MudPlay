@@ -1414,6 +1414,14 @@ public sealed class AppServices
     // idling until the next round. Hooked from MainWindowViewModel.SendUserInput.
     public Game.Combat.OutboundCastObserver OutboundCast { get; private set; } = null!;
 
+    // Sniffs a hand-typed PHYSICAL attack verb so Combat treats it as a user override
+    // (holds the auto attack until next round). Hooked from SendUserInput.
+    public Game.Combat.OutboundAttackObserver OutboundAttack { get; private set; } = null!;
+
+    // Classifies a cast-code as a combat spell (round energy 1–1000) vs an in-between
+    // spell — drives whether a hand-typed cast is a user override or keeps the resume.
+    public Game.Combat.CombatSpellIndex CombatSpells { get; private set; } = null!;
+
     // Death-message detector — watches lines for either post-death lives
     // readout (You now have N lives remaining. / You have N lives left.,
     // the latter the miracle-save death) and fires
@@ -3237,7 +3245,16 @@ public sealed class AppServices
         // class's available list.
         OutboundCast = new Game.Combat.OutboundCastObserver(
             isCastCode: c => Spellbook.FindByCastCode(c) is not null,
-            onManualCast: Combat.NoteManualBetweenRoundCast);
+            onManualCast: Combat.OnManualCastObserved);
+        // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
+        // taking the round's attack — a user override — while an in-between spell (heal
+        // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
+        CombatSpells = new Game.Combat.CombatSpellIndex(GameData);
+        Combat.SetCombatSpellPredicate(CombatSpells.IsCombatSpell);
+        // A hand-typed PHYSICAL attack (a / at / att / aa / bash / smash / sm / sma / bs)
+        // is likewise a user override — the observer forwards every recognised verb and
+        // Combat drops its own swing's echo via a one-shot claim.
+        OutboundAttack = new Game.Combat.OutboundAttackObserver(Combat.NoteAttackCommandObserved);
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a
