@@ -1274,10 +1274,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         else
         {
+            bool favQuery = FavoriteFilter.IsFavoriteQuery(filter);
             foreach (LairSetupRowViewModel s in Setups)
-                if (s.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(s);
+                if (s.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || (favQuery && s.Source.Favorite)) rows.Add(s);
             foreach (LoopRowViewModel l in Loops)
-                if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(l);
+                if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || (favQuery && l.Source.Favorite)) rows.Add(l);
         }
 
         // While filtering, build a FLAT list — no folder grouping. An expanded
@@ -1609,8 +1610,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         string filter = (GotoFilter ?? string.Empty).Trim();
         bool filtering = filter.Length > 0;
+        bool favQuery = FavoriteFilter.IsFavoriteQuery(filter);
         IEnumerable<FavoriteRowViewModel> rows = filtering
-            ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                                   || (favQuery && f.IsStarred))
             : Favorites;
         // While filtering, build a FLAT list — no folder grouping — so the tree's
         // VirtualizingStackPanel realises only visible rows (an expanded folder
@@ -1646,6 +1649,19 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (row is null) return;
         _services.Favorites.Remove(row.Key);
+    }
+
+    // Toggle a GOTO's quick-access star — its membership in the terminal's
+    // right-click Favorites flyout — without deleting the bookmark. The star is
+    // capped (MaxStarred); a rejected add is logged rather than failing silently.
+    [RelayCommand]
+    private void ToggleFavoriteStar(FavoriteRowViewModel? row)
+    {
+        if (row is null) return;
+        bool star = !_services.Favorites.IsStarred(row.Key);
+        if (!_services.Favorites.SetStarred(row.Key, star) && star)
+            _services.Log?.Info("Favorites",
+                $"Couldn't add another favourite — the quick-access Favorites list is capped at {FavoritesStore.MaxStarred}. Remove one first.");
     }
 
     // Open the full favourite editor (name + map + room). Editing the map/room

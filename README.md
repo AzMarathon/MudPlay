@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.9.10**
-> - Monsters game-data table: expanded column set for browsing/filtering monster stats — Rgn, Exp (actual earned = base × multiplier), HP, AC/DR, Dodge, MR, Acc (Maj/Mx), Damage, Exp/(Dmg+HP), Lair Exp, # Lairs, Avg Lair Size, Biggest Lair, Mag, Undead
-> - Dodge and Mag (hitmag level) decoded from monster ability data; Exp/(Dmg+HP) is an exp-per-effort efficiency score
-> - New filter sidebar, resizable via a drag handle: one threshold per stat plus an Undead-only checkbox and an Alignment dropdown, all stacking with the text filter; filters apply on an explicit Apply / Clear button, with pending (amber) / applied (green) ticker outlines
+> **Version 3.9.12**
+> - Navigation GOTO right-click menu: the destructive "Remove from favourites" is now "Delete this Go To", and a new "Add to / Remove from favourites" toggle stars a Go To for the terminal Favorites flyout without deleting it
+> - Filtering the GOTO or loop lists by "favourite" / "favorite" (or any 3+ character part) now also surfaces your favourited Go Tos and loops
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.9.12
+
+- Navigation GOTO right-click menu: the destructive "Remove from favourites" is now labelled "Delete this Go To", and a new "Add to / Remove from favourites" toggle stars a Go To for the terminal Favorites flyout without deleting it
+- Filtering the GOTO or loop lists by "favourite" / "favorite" (or any 3+ character part of the word) now also surfaces your favourited Go Tos and loops
+
 ## 3.9.10
 
 - Monsters game-data table: expanded column set for browsing/filtering monster stats — Rgn, Exp (actual earned = base × multiplier), HP, AC/DR, Dodge, MR, Acc (Maj/Mx), Damage, Exp/(Dmg+HP), Lair Exp, # Lairs, Avg Lair Size, Biggest Lair, Mag, Undead

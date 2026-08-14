@@ -224,10 +224,11 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         }
         else
         {
+            bool favQuery = FavoriteFilter.IsFavoriteQuery(filter);
             foreach (ManagerLairSetupRow s in LairSetups)
-                if (s.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(s);
+                if (s.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || (favQuery && s.Source.Favorite)) rows.Add(s);
             foreach (ManagerLoopRow l in Loops)
-                if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) rows.Add(l);
+                if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || (favQuery && l.Source.Favorite)) rows.Add(l);
         }
 
         // Collapsed at rest (fast tab-swap); while filtering, build flat so the
@@ -330,8 +331,10 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     {
         string filter = (GotoFilter ?? string.Empty).Trim();
         bool filtering = filter.Length > 0;
+        bool favQuery = FavoriteFilter.IsFavoriteQuery(filter);
         IEnumerable<FavoriteRowViewModel> rows = filtering
-            ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                                   || (favQuery && f.IsStarred))
             : Favorites;
         // Collapsed at rest; flat while filtering so the tree virtualizes (see
         // RebuildWalkTree).
