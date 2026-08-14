@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.11.9**
-> - Chest Offload: per-shop **Sell** → **Sell All**; each item row gets its own **Sell** (sells the picked quantity) and **Drop** now drops the *leftover* you're not selling (held − picked)
-> - Chest Offload: the list reconciles against the game's own `You sold …` / `You dropped …` confirmations — rows shrink (and clear at zero) only when the action actually lands, leaving your other pickings and ⇄ shop moves untouched
-> - Chest Offload: full program-log trail for diagnosis, plus a session-only **Simulate Chest button** toggle in the Program Log window
+> **Version 3.12.0**
+> - Typing a movement command yourself while a walk / loop / auto-lair runs now **pauses navigation** (a user pause you resume with Start), so the automation never fights a hand-driven step
+> - Hand-typing an attack mid-fight — a combat spell or a physical attack (`a`/`aa`/`bash`/`bs`/…) — now counts as a **user override**: the engine holds its own auto-attack for that round instead of fighting yours, and resumes next round (a hand-cast heal/buff still resumes attacking right away)
+> - Map right-click **Favorites** flyout now lists favourited loops and auto-lairs, matching the terminal menu
+> - Fixed a wedge where combat force-clearing via the idle-stall watchdog left a deferred cash/loot pickup stranded on the Acquisition gate (the walker sat "looting" forever)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -174,6 +174,15 @@ public sealed class CombatStateTracker : IDisposable
     // re-establish stealth for the step out (report stock-20260730-163044).
     public event Action? CombatSpentStealth;
 
+    // Fires when combat is FORCE-cleared (the idle-stall watchdog, or manual Reset
+    // States) rather than via a normal room-clear. The normal end-of-fight flushes
+    // any pickup deferred "until combat clears" off the ensuing clean room re-look;
+    // a force-clear produces no such observation, so a deferred ground-cash / item
+    // collect would otherwise strand the Acquisition gate and wedge the walker
+    // (report paradigm-20260814-131551). Consumers re-run their post-combat flush
+    // against the now-cleared gate (HasEngageableHostiles is already false here).
+    public event Action? CombatForceCleared;
+
     public CombatStateTracker(
         MessageRouter router,
         MovementCoordinator coordinator,
@@ -646,6 +655,7 @@ public sealed class CombatStateTracker : IDisposable
         _seeHiddenClearLatch = false;
         if (_state.InCombat) _state.InCombat = false;
         _log?.Info(LogCategory, $"combat state force-cleared — {reason}");
+        CombatForceCleared?.Invoke();   // fired last: the gate is now down, so a deferred collect can flush
     }
 
     // ----- InCombat plumbing ----------------------------------------

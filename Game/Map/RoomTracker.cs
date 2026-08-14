@@ -136,6 +136,12 @@ public sealed class RoomTracker
     // room confirms, so a loop-stop lands ahead of the graveyard's recovery-reroute.
     public event Action? PlayerDeathObserved;
 
+    // Fires when a MANUAL movement step is observed — a cardinal or text-exit command
+    // the user typed that did NOT match a walker/loop echo claim (so the engine didn't
+    // send it). Consumers pause navigation so the automation never fights a hand-driven
+    // step. The engines' own moves are echo-claimed and never fire this.
+    public event Action? ManualMoveObserved;
+
     public RoomTracker(RoomGraphManager graph) : this(graph, log: null) { }
 
     public RoomTracker(RoomGraphManager graph, LogService? log)
@@ -335,6 +341,7 @@ public sealed class RoomTracker
             return;
         }
         NoteMoveSentCore(direction, isEngineAnnouncement: false, isFollowDrag: false, when);
+        ManualMoveObserved?.Invoke();
     }
 
     // Echo-aware overload for OutboundMovementObserver's text-exit path. Mirrors
@@ -361,6 +368,7 @@ public sealed class RoomTracker
             return;
         }
         NoteMoveSentCore(command, cardinal: null, isEngineAnnouncement: false, when);
+        ManualMoveObserved?.Invoke();
     }
 
     private (Direction Dir, DateTimeOffset ExpiresAt)? _cardinalEchoClaim;

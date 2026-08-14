@@ -2555,3 +2555,21 @@ glass jug               5               2 gold crowns
 | Train success — stock (carries the attained level) | `You hand over <cost> and you receive training to attain level N.` |
 | Train success — Paradigm/ParaMud (**level-less**) | `You hand over <cost> to train to the next level!` — a successful train with **no level number**; mutually exclusive with the stock line above, so auto-train infers the new level as current+1 |
 | Server PvP announcement (**Paradigm-only**) | `Server PvP Message: <body>` — realm-wide server broadcast for PvP events; the kill form is `Server PvP Message: <killer> just killed <victim>!`, but other PvP bodies share the same `Server PvP Message: ` prefix. Not emitted on stock realms |
+
+## Combat vs in-between spells (round energy cost)
+
+- **[CONFIRMED]** *(2026-08-14, user)* A spell's **round energy cost** (`Spells.EnergyCost`)
+  is the clean divider between a **combat/attack spell** and an **in-between/utility
+  spell**:
+  - **Combat spell** — `EnergyCost` between **1 and 1000**. It IS the round's combat
+    action (spends the round's energy), so it competes with the weapon swing. Examples
+    in Paradigm 1.9.1: `mmis` 500, `lbol` 500, `vamp` 1000, `fbal` 1000.
+  - **In-between spell** — `EnergyCost` **0**. A heal / buff / cure that rides the shared
+    in-between window and does NOT spend the round's combat action. Examples: `mend`,
+    `armr`, `mshi`, `bles`, `cure` — all 0.
+  - `AttType` does NOT distinguish them (both attack and utility spells carry an AttType,
+    e.g. mmis and mend are both AttType 4). Energy cost is the reliable signal.
+  - Used to classify a **manually-typed cast** during combat: a hand-cast combat spell is
+    the user taking the round's attack (a user override — the engine must not re-send its
+    auto attack that round), while a hand-cast in-between spell keeps the engine's
+    resume-after-cast behaviour (it heals/buffs, then the engine resumes attacking).

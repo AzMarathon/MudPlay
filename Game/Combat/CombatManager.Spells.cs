@@ -355,6 +355,11 @@ public sealed partial class CombatManager
     {
         if (_disposed) return;
 
+        // New round (the round boundary) — release any user-attack override so the
+        // engine resumes its auto attack this round. A hand-typed attack suppresses the
+        // engine's re-send only for the round it landed in.
+        ClearUserAttackOverrideForNewRound();
+
         // New round — re-arm the once-per-round attack-immunity handler so the next
         // round's "no effect" burst can drive the next cascade step.
         _immunityHandledThisRound = false;
