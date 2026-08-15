@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.14.5**
-> - Auto-engine **base modes** (Settings → General) now actually take effect on **profile load** — the live toolbar settles to your base-mode checkboxes each time you load a character, instead of coming up in whatever transient state the last session ended in
-> - Legacy characters (from before the base/live split) adopt their current live modes as their base on first load, so nothing changes for them until they edit the checkboxes
+> **Version 3.15.0**
+> - Combat engine now recognizes monster hits / misses / dodges / armor-blocks **generically from line colour + wording** (no per-monster data), for you and party members — surfaced live in the Wire Inspector's new **Classified** view
+> - Wire Inspector gains **Raw / Stripped / Classified** toggle panes (Raw + Classified on by default); the Classified pane also marks recognized monster deaths `[Monster Death: <name>]`; bug reports attach the last 750 lines of the Raw / Classified wire by default
+> - Neutral monsters get a **Kill on sight** checkbox: engage a chosen neutral while leaving other passive neutrals safe to rest among — the engine rests/meditates between kills instead of clearing the whole room
+> - Rest is no longer sent mid-fight when the idle-stall watchdog optimistically clears combat — it waits for a room re-display to re-confirm first
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

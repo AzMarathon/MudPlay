@@ -134,6 +134,10 @@
                                     <StackPanel>
                                         <TextBlock Classes="SectionHeader" Text="Options"/>
                                         <CheckBox Content="Don't backstab" IsChecked="{Binding DontBackstab, Mode=TwoWay}"/>
+                                        <CheckBox Content="Kill on sight"
+                                                  IsChecked="{Binding KillOnSight, Mode=TwoWay}"
+                                                  IsVisible="{Binding ShowKillOnSight}"
+                                                  ToolTip.Tip="Engage this neutral monster like an enemy. Neutrals never attack first, so other passive neutrals stay safe to rest among between kills."/>
                                     </StackPanel>
                                 </Border>
                             </Grid>

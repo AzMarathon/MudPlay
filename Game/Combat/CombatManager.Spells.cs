@@ -741,7 +741,7 @@ public sealed partial class CombatManager
                 continue;
             }
             MonsterOverlay overlay = ResolveOverlay(n);
-            if ((overlay.Relationship ?? MonsterRelationship.Enemy) == MonsterRelationship.Enemy)
+            if (MonsterEngagement.IsEngageable(overlay))
                 count++;
         }
         return count;

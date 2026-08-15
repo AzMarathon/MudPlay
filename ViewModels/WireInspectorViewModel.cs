@@ -1,6 +1,7 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game.Combat;
 using MudPlay.Services;
 
 namespace MudPlay.ViewModels;
@@ -20,6 +21,8 @@ namespace MudPlay.ViewModels;
 public sealed partial class WireInspectorViewModel : ObservableObject, IDisposable
 {
     private readonly WireBuffer _buffer;
+    private readonly CombatLineClassifier? _classifier;
+    private readonly WireInspectorVisibility? _visibility;
     private readonly DispatcherTimer _timer;
 
     [ObservableProperty]
@@ -27,6 +30,26 @@ public sealed partial class WireInspectorViewModel : ObservableObject, IDisposab
 
     [ObservableProperty]
     private string _strippedText = string.Empty;
+
+    // Full-ANSI stream of combat-window lines with a [Combat: <kind>] tag appended
+    // to each classified line — how the recognizer read each line.
+    [ObservableProperty]
+    private string _classifiedText = string.Empty;
+
+    // The three panes' visibility toggles (checkboxes in the control strip).
+    // **Raw + Classified default on, Stripped off** — Raw/Classified are the
+    // troubleshooting pair and are what the bug report attaches, so they're on out of
+    // the box. Raw/Classified are seeded from (and pushed back to) the shared
+    // visibility holder so the choice sticks across opens; Stripped is view-only.
+    // Unchecking a pane collapses its column so the others fill.
+    [ObservableProperty]
+    private bool _showRaw = true;
+
+    [ObservableProperty]
+    private bool _showStripped;
+
+    [ObservableProperty]
+    private bool _showClassified = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PauseLabel))]
@@ -52,9 +75,22 @@ public sealed partial class WireInspectorViewModel : ObservableObject, IDisposab
 
     public string PauseLabel => IsPaused ? "Resume" : "Pause";
 
-    public WireInspectorViewModel(WireBuffer buffer)
+    // Parameterless ctor for the XAML design-time DataContext only.
+    public WireInspectorViewModel() : this(new WireBuffer(), null, null) { }
+
+    public WireInspectorViewModel(WireBuffer buffer, CombatLineClassifier? classifier,
+                                  WireInspectorVisibility? visibility)
     {
         _buffer = buffer;
+        _classifier = classifier;
+        _visibility = visibility;
+        // Seed the pane toggles from the sticky preference (the holder is the source
+        // of truth; Stripped is view-only and stays off).
+        if (visibility is not null)
+        {
+            ShowRaw = visibility.RawVisible;
+            ShowClassified = visibility.ClassifiedVisible;
+        }
         _timer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(200),
@@ -72,6 +108,7 @@ public sealed partial class WireInspectorViewModel : ObservableObject, IDisposab
         byte[] snapshot = _buffer.Snapshot();
         RawText = WireFormatter.RenderRaw(snapshot);
         StrippedText = WireFormatter.RenderStripped(snapshot);
+        ClassifiedText = _classifier?.RenderLog() ?? string.Empty;
         StatusText = $"{snapshot.Length:N0} / {_buffer.Capacity:N0} bytes  •  {_buffer.TotalBytes:N0} total";
 
         RefreshCompleted?.Invoke();
@@ -90,9 +127,24 @@ public sealed partial class WireInspectorViewModel : ObservableObject, IDisposab
     private void Clear()
     {
         _buffer.Clear();
+        _classifier?.Clear();
         RawText = string.Empty;
         StrippedText = string.Empty;
+        ClassifiedText = string.Empty;
     }
 
+    // Mirror the current pane visibility into the shared holder the bug report reads.
+    private void PushVisibility()
+    {
+        if (_visibility is null) return;
+        _visibility.RawVisible = ShowRaw;
+        _visibility.ClassifiedVisible = ShowClassified;
+    }
+
+    partial void OnShowRawChanged(bool value) => PushVisibility();
+    partial void OnShowClassifiedChanged(bool value) => PushVisibility();
+
+    // Closing the window does NOT clear the preference — Raw/Classified stay on (or
+    // whatever the user last chose) so future bug reports keep attaching them.
     public void Dispose() => _timer.Stop();
 }

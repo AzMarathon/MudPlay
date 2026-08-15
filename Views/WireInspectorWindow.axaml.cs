@@ -7,15 +7,16 @@ using MudPlay.ViewModels;
 
 namespace MudPlay.Views;
 
-// Two-pane modeless debug window: Raw (with non-printables shown) on the
-// left, Stripped (CSI sequences removed) on the right. Bound to
-// WireInspectorViewModel. Code-behind handles ScrollViewer sync (XAML can't
-// easily express two-way scroll-offset binding) and Find-next (a one-shot
-// scroll-to-match — no live highlight in v1).
+// Modeless debug window with three toggleable panes: Raw (non-printables shown),
+// Stripped (CSI sequences removed), and Classified (combat-window lines tagged with
+// the recognizer's read of each). Bound to WireInspectorViewModel. Code-behind
+// handles ScrollViewer sync (XAML can't easily express two-way scroll-offset
+// binding) and Find-next (a one-shot scroll-to-match — no live highlight in v1).
 public partial class WireInspectorWindow : Window
 {
     private ScrollViewer? _rawScroll;
     private ScrollViewer? _strippedScroll;
+    private ScrollViewer? _classifiedScroll;
     private bool _syncingScroll;
 
     public WireInspectorWindow()
@@ -31,8 +32,9 @@ public partial class WireInspectorWindow : Window
 
     private void OnOpened(object? sender, EventArgs e)
     {
-        _rawScroll      = this.FindControl<ScrollViewer>("RawScroll");
-        _strippedScroll = this.FindControl<ScrollViewer>("StrippedScroll");
+        _rawScroll       = this.FindControl<ScrollViewer>("RawScroll");
+        _strippedScroll  = this.FindControl<ScrollViewer>("StrippedScroll");
+        _classifiedScroll = this.FindControl<ScrollViewer>("ClassifiedScroll");
 
         if (_rawScroll is not null)      _rawScroll.ScrollChanged      += OnRawScrolled;
         if (_strippedScroll is not null) _strippedScroll.ScrollChanged += OnStrippedScrolled;
@@ -63,6 +65,7 @@ public partial class WireInspectorWindow : Window
         {
             _rawScroll?.ScrollToEnd();
             _strippedScroll?.ScrollToEnd();
+            _classifiedScroll?.ScrollToEnd();
         }
         finally
         {
@@ -95,6 +98,9 @@ public partial class WireInspectorWindow : Window
 
     private async void OnExportStripped(object? sender, RoutedEventArgs e)
         => await ExportPaneAsync("stripped", () => (DataContext as WireInspectorViewModel)?.StrippedText);
+
+    private async void OnExportClassified(object? sender, RoutedEventArgs e)
+        => await ExportPaneAsync("classified", () => (DataContext as WireInspectorViewModel)?.ClassifiedText);
 
     private async System.Threading.Tasks.Task ExportPaneAsync(string kind, Func<string?> body)
     {

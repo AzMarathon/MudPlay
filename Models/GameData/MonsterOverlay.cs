@@ -71,6 +71,14 @@ public sealed record MonsterOverlay
 
     // Suppress auto-BS attempts on this target.
     public bool? DontBackstab { get; init; }
+
+    // Kill a NEUTRAL monster on sight. Neutrals never attack first (they only
+    // retaliate once attacked), so they're normally left alone and a room of them
+    // is safe to rest in. Checking this makes auto-combat engage THIS neutral like
+    // an enemy — while other passive neutrals stay non-engageable, so once it's dead
+    // you can rest among the rest. Only meaningful when Relationship is Neutral;
+    // ignored otherwise (Enemy already engages, Friend/Flee/Hangup never do).
+    public bool? KillOnSight { get; init; }
 }
 
 // How the automation engines treat a monster on sight.

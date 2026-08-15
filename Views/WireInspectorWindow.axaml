@@ -3,11 +3,11 @@
         xmlns:vm="using:MudPlay.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="520"
+        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="520"
         x:Class="MudPlay.Views.WireInspectorWindow"
         x:DataType="vm:WireInspectorViewModel"
         Title="Wire Inspector"
-        Width="900" Height="520"
+        Width="1000" Height="520"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="#101010">
@@ -20,36 +20,32 @@
 
         <!-- Control strip -->
         <Border DockPanel.Dock="Top" Padding="8,6" Background="#202020">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto"
-                  RowDefinitions="Auto">
-                <Button Grid.Column="0"
-                        Content="{Binding PauseLabel}"
-                        Command="{Binding TogglePauseCommand}"
-                        MinWidth="80"/>
-                <Button Grid.Column="1" Margin="6,0,0,0"
-                        Content="Clear"
-                        Command="{Binding ClearCommand}"/>
-                <Button Grid.Column="2" Margin="12,0,0,0"
-                        Content="Export raw…"
-                        Click="OnExportRaw"/>
-                <Button Grid.Column="3" Margin="6,0,0,0"
-                        Content="Export stripped…"
-                        Click="OnExportStripped"/>
-                <CheckBox Grid.Column="4" Margin="12,0,0,0"
-                          IsChecked="{Binding AutoScroll}"
-                          Content="Auto-scroll"
-                          Foreground="#CCCCCC"/>
-                <CheckBox Grid.Column="5" Margin="8,0,0,0"
-                          IsChecked="{Binding SyncScroll}"
-                          Content="Sync scroll"
-                          Foreground="#CCCCCC"/>
-                <TextBox Grid.Column="7" Classes="clearable" MinWidth="220"
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right" Margin="6,0,0,0"
+                        Content="Find next" Click="OnFindNext"/>
+                <TextBox DockPanel.Dock="Right" Classes="clearable" MinWidth="200"
                          PlaceholderText="Search…"
                          Text="{Binding SearchText, Mode=TwoWay}"/>
-                <Button Grid.Column="8" Margin="6,0,0,0"
-                        Content="Find next"
-                        Click="OnFindNext"/>
-            </Grid>
+                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="{Binding PauseLabel}"
+                            Command="{Binding TogglePauseCommand}" MinWidth="80"/>
+                    <Button Margin="6,0,0,0" Content="Clear" Command="{Binding ClearCommand}"/>
+                    <Button Margin="12,0,0,0" Content="Export raw…" Click="OnExportRaw"/>
+                    <Button Margin="6,0,0,0" Content="Export stripped…" Click="OnExportStripped"/>
+                    <Button Margin="6,0,0,0" Content="Export classified…" Click="OnExportClassified"/>
+                    <TextBlock Margin="14,0,6,0" VerticalAlignment="Center"
+                               Foreground="#888888" Text="View:"/>
+                    <CheckBox IsChecked="{Binding ShowRaw}" Content="Raw" Foreground="#CCCCCC"/>
+                    <CheckBox Margin="8,0,0,0" IsChecked="{Binding ShowStripped}"
+                              Content="Stripped" Foreground="#CCCCCC"/>
+                    <CheckBox Margin="8,0,0,0" IsChecked="{Binding ShowClassified}"
+                              Content="Classified" Foreground="#CCCCCC"/>
+                    <CheckBox Margin="14,0,0,0" IsChecked="{Binding AutoScroll}"
+                              Content="Auto-scroll" Foreground="#CCCCCC"/>
+                    <CheckBox Margin="8,0,0,0" IsChecked="{Binding SyncScroll}"
+                              Content="Sync scroll" Foreground="#CCCCCC"/>
+                </WrapPanel>
+            </DockPanel>
         </Border>
 
         <!-- Status bar -->
@@ -58,10 +54,15 @@
                        Text="{Binding StatusText}"/>
         </Border>
 
-        <!-- Two-pane split -->
-        <Grid ColumnDefinitions="*,1,*">
+        <!-- Three toggleable panes; an unchecked pane collapses its column. -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="{Binding ShowRaw, Converter={x:Static vm:BoolToStarConverter.Instance}}"/>
+                <ColumnDefinition Width="{Binding ShowStripped, Converter={x:Static vm:BoolToStarConverter.Instance}}"/>
+                <ColumnDefinition Width="{Binding ShowClassified, Converter={x:Static vm:BoolToStarConverter.Instance}}"/>
+            </Grid.ColumnDefinitions>
 
-            <DockPanel Grid.Column="0" LastChildFill="True">
+            <DockPanel Grid.Column="0" IsVisible="{Binding ShowRaw}" LastChildFill="True">
                 <Border DockPanel.Dock="Top" Padding="8,4" Background="#1A1A1A">
                     <TextBlock Foreground="#A0A0A0" FontSize="11" Text="Raw"/>
                 </Border>
@@ -71,33 +72,46 @@
                               Background="#0D0D0D">
                     <SelectableTextBlock x:Name="RawBody"
                                          FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
-                                         FontSize="12"
-                                         Foreground="#E8E8E8"
-                                         Padding="8"
-                                         TextWrapping="Wrap"
-                                         Text="{Binding RawText}"/>
+                                         FontSize="12" Foreground="#E8E8E8" Padding="8"
+                                         TextWrapping="Wrap" Text="{Binding RawText}"/>
                 </ScrollViewer>
             </DockPanel>
 
-            <Border Grid.Column="1" Background="#2E2E2E"/>
+            <Border Grid.Column="1" IsVisible="{Binding ShowStripped}"
+                    BorderBrush="#2E2E2E" BorderThickness="1,0,0,0">
+                <DockPanel LastChildFill="True">
+                    <Border DockPanel.Dock="Top" Padding="8,4" Background="#1A1A1A">
+                        <TextBlock Foreground="#A0A0A0" FontSize="11" Text="Stripped"/>
+                    </Border>
+                    <ScrollViewer x:Name="StrippedScroll"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Background="#0D0D0D">
+                        <SelectableTextBlock x:Name="StrippedBody"
+                                             FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                                             FontSize="12" Foreground="#E8E8E8" Padding="8"
+                                             TextWrapping="Wrap" Text="{Binding StrippedText}"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
 
-            <DockPanel Grid.Column="2" LastChildFill="True">
-                <Border DockPanel.Dock="Top" Padding="8,4" Background="#1A1A1A">
-                    <TextBlock Foreground="#A0A0A0" FontSize="11" Text="Stripped"/>
-                </Border>
-                <ScrollViewer x:Name="StrippedScroll"
-                              HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Auto"
-                              Background="#0D0D0D">
-                    <SelectableTextBlock x:Name="StrippedBody"
-                                         FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
-                                         FontSize="12"
-                                         Foreground="#E8E8E8"
-                                         Padding="8"
-                                         TextWrapping="Wrap"
-                                         Text="{Binding StrippedText}"/>
-                </ScrollViewer>
-            </DockPanel>
+            <Border Grid.Column="2" IsVisible="{Binding ShowClassified}"
+                    BorderBrush="#2E2E2E" BorderThickness="1,0,0,0">
+                <DockPanel LastChildFill="True">
+                    <Border DockPanel.Dock="Top" Padding="8,4" Background="#1A1A1A">
+                        <TextBlock Foreground="#A0A0A0" FontSize="11" Text="Classified"/>
+                    </Border>
+                    <ScrollViewer x:Name="ClassifiedScroll"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Background="#0D0D0D">
+                        <SelectableTextBlock x:Name="ClassifiedBody"
+                                             FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                                             FontSize="12" Foreground="#E8E8E8" Padding="8"
+                                             TextWrapping="Wrap" Text="{Binding ClassifiedText}"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
 
         </Grid>
 

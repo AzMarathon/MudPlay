@@ -169,6 +169,10 @@ public sealed class AppServices
     // "what did the server just say" diagnostic.
     public WireBuffer Wire { get; }
 
+    // Which Wire Inspector panes are currently visible — read by BugReportBuilder to
+    // decide whether to attach the raw / classified wire. Updated by the inspector VM.
+    public WireInspectorVisibility WireInspectorVisibility { get; } = new();
+
     // Central pattern bus. Every line-aware subsystem (ChatRouter,
     // Triggers, automation engines) registers patterns + handlers here;
     // LineExtractor.LineEmitted is forwarded into
@@ -813,6 +817,12 @@ public sealed class AppServices
     // Stats panel displays. Pure downstream subscriber; reset on the session
     // boundary alongside RoundDamage.
     public Game.Combat.CombatSessionTracker CombatSession { get; private set; } = null!;
+
+    // Generic color+wording combat-line recognizer (monster-agnostic, no per-monster
+    // data). Classifies each in-combat-window line into a Game.Combat.CombatLineKind
+    // for the Wire Inspector's classified view + bug-report capture. The per-monster
+    // MonsterMessages remain the engine's authoritative fallback for now.
+    public Game.Combat.CombatLineClassifier CombatClassifier { get; private set; } = null!;
 
     // Divides the session's wall-clock time across the player's
     // activities (waiting / moving / attacking / resting HP / resting MA) plus
@@ -2653,6 +2663,11 @@ public sealed class AppServices
                 MonsterOverlaySeed.GetOverlay(n)),
             log: Log);
 
+        // Generic color+wording combat-line recognizer — subscribes to the router's
+        // per-line dispatch (color-carrying EmittedLine) and classifies each
+        // in-combat-window line. Surfaced in the Wire Inspector + bug report.
+        CombatClassifier = new Game.Combat.CombatLineClassifier(Router);
+
         // RoundDamageTracker. shouldWriteTrace reads the Log pane's
         // auto-collect-logs toggle: the on-disk per-round trace is one of the
         // three diagnostic files that switch gates, so it follows AutoCollectLogs
@@ -2762,6 +2777,13 @@ public sealed class AppServices
         // through the engaged name, so they're covered too.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key, Combat.CurrentTarget);
+        // Surface recognized deaths in the Wire Inspector's Classified view — a
+        // matched message names the monster; an exp-inferred death flags the message
+        // as unrecognized (a passive display side-effect; order-independent).
+        MonsterDeath.MonsterDied += evt =>
+            CombatClassifier.NoteMonsterDeath(
+                evt.Candidates.Count > 0 ? evt.Candidates[0].Name : null,
+                inferred: evt.IsFallback);
         // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
         // resync handler below: on a kill whose DeathSpell summons, it asserts a
         // hold + sends a CR to re-scan the room, and that hold has to be in place
@@ -2957,12 +2979,13 @@ public sealed class AppServices
                 ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat"),
             readGeneralSettings: () =>
                 ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General"),
-            // Don't try to rest while engageable hostiles are in the
-            // room — every combat round would otherwise break rest.
-            // CombatStateTracker owns the same boolean it uses to
-            // assert the CombatGate, so we stay in sync with the
-            // movement gate logic.
-            hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
+            // Don't try to rest while an ON-SIGHT ATTACKER (Enemy) is in the
+            // room — it hits us every round and would break the rest. Passive
+            // KillOnSight neutrals are deliberately NOT counted here: they never
+            // attack until we engage them, so we can rest among the un-engaged ones
+            // between kills. The neutral we're actively fighting still blocks rest
+            // via InCombat (it's hitting back). HasHostileMonster is Enemy-only.
+            hasEngageableHostiles: () => CombatTracker.HasHostileMonster,
             // Per-realm negative-HP death floor: keeps the emergency
             // hangup firing through the bleeding-out window down to the
             // point the character actually dies.
@@ -3004,6 +3027,13 @@ public sealed class AppServices
         // Subscribed after CombatTracker (which updates HasHostileMonster in its
         // own EntitiesObserved handler) so this reads the current hostile flag.
         RoomClassifier.EntitiesObserved += _ => Health.ReevaluateEmergencyHangup();
+
+        // Release the post-force-clear rest hold once a room observation re-confirms
+        // presence. Subscribed after CombatTracker's own EntitiesObserved handler so
+        // HasEngageableHostiles is current when Health re-evaluates: a monster the
+        // watchdog's resync CR re-displayed now blocks the rest, an empty room lets
+        // it through. Pairs with CombatForceCleared → NoteCombatForceCleared below.
+        RoomClassifier.EntitiesObserved += _ => Health.NoteRoomEntitiesReconfirmed();
 
         // Leader-rest nudge: a standing-idle follower's own PlayerState may
         // not change between the 5s par polls that flip the leader's
@@ -3328,6 +3358,15 @@ public sealed class AppServices
             isSolo:          () => !PartyState.IsInParty,
             onRecovered:     Combat.ResumeAfterShadowRest);
         Combat.SetShadowRestSuppression(() => Health.ShadowRestHolding);
+
+        // Passive-neutral recovery hold: engage a KillOnSight neutral only once we're
+        // at/above the rest trigger, so we can rest between kills (a neutral won't
+        // attack until we hit it). Never holds when an on-sight attacker is present.
+        Combat.SetNeutralRecoveryHold(
+            recoveryPending:     () => Health.IsRecoveringRest,
+            hasAttackingHostile: () => CombatTracker.HasHostileMonster,
+            clearInCombat:       CombatTracker.ClearInCombatForRecoveryHold);
+        Health.SetRecoveryCompleteCallback(Combat.ResumeAfterRecovery);
 
         // Deterministic magic eligibility — weapon HitMagic ≥ monster Magical
         // picks normal-vs-alternate, spell ReqLevel ≥ monster SpellImmu gates
@@ -3822,6 +3861,11 @@ public sealed class AppServices
             Cash.OnRoomObserved();
             AutoGetItems.OnRoomObserved();
         };
+
+        // The force-clear is optimistic (a resync CR re-display re-confirms a beat
+        // later). Hold resting until that re-confirm so a monster still in the room
+        // doesn't get a `rest` sent at it (paradigm-20260814-225055).
+        CombatTracker.CombatForceCleared += Health.NoteCombatForceCleared;
 
         // A disconnect can strand the Acquisition gate's deferred-collect hold
         // (cash/items queued mid-fight), pausing the loop until a manual `rm`. On the

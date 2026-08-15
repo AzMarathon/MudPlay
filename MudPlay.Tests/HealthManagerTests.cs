@@ -362,6 +362,70 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void ForceClear_ThenHostileReconfirmed_DoesNotRest()
+    {
+        // The idle-stall watchdog force-cleared combat while a monster was still in
+        // the room (its attacks weren't recognized for a beat). InCombat + the room
+        // model read "empty" in the flicker, so a plain rest-out would fire. The hold
+        // must block it until the resync re-display re-confirms — then the still-here
+        // monster blocks the rest (paradigm-20260814-225055).
+        using Harness h = new();
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.Health.NoteCombatForceCleared();   // watchdog optimistic clear → hold armed
+        h.State.Hp = 50;                      // breach → gate held, but rest is HELD
+
+        Assert.True(h.HealthGateHeld);
+        Assert.DoesNotContain("rest", h.SentLines);
+        Assert.False(h.Health.RestInFlight);
+
+        h.HostilesPresent = true;                 // resync re-display: monster still here
+        h.Health.NoteRoomEntitiesReconfirmed();   // release hold + re-evaluate
+
+        Assert.DoesNotContain("rest", h.SentLines);   // hostiles present → still no rest
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    [Fact]
+    public void ForceClear_ThenEmptyReconfirmed_Rests()
+    {
+        // Same force-clear, but the resync re-display confirms the room is genuinely
+        // empty (a real stale-roster clear) — the held rest is released and fires.
+        using Harness h = new();
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.Health.NoteCombatForceCleared();
+        h.State.Hp = 50;                      // held, not rested
+
+        Assert.False(h.Health.RestInFlight);
+        Assert.DoesNotContain("rest", h.SentLines);
+
+        h.Health.NoteRoomEntitiesReconfirmed();   // room empty (HostilesPresent stays false)
+
+        Assert.True(h.Health.RestInFlight);
+        Assert.Contains("rest", h.SentLines);
+    }
+
+    [Fact]
+    public void ForceClear_ThenRoomChange_ReleasesHoldAndRests()
+    {
+        // Dark-room force-clear sends no resync CR, so no EntitiesObserved arrives;
+        // a move re-observes the room and releases the hold instead.
+        using Harness h = new();
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.Health.NoteCombatForceCleared();
+        h.State.Hp = 50;                      // held
+        Assert.False(h.Health.RestInFlight);
+
+        h.Health.NoteRoomChanged();           // a move re-observes
+        h.Health.Evaluate();
+
+        Assert.True(h.Health.RestInFlight);
+        Assert.Contains("rest", h.SentLines);
+    }
+
+    [Fact]
     public void RestingAndHostileArrives_DoesNotReSpamRest()
     {
         // While resting, a new hostile walks in. The rest gets broken
