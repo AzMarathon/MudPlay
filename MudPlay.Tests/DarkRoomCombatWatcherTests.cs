@@ -61,8 +61,6 @@ public sealed class DarkRoomCombatWatcherTests
             Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}",
                 Name: name,
-                FlavorPrefixes: Array.Empty<string>(),
-                AllowNoPrefix: true,
                 Links: new[] { new GameDataLink("Monsters", number) }));
         }
 

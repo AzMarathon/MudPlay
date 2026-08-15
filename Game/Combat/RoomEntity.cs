@@ -11,10 +11,9 @@ public enum EntityKind
     // (case-insensitive on PlayerRecord.GivenName).
     Player,
 
-    // Name matched a MonsterMessageRecord.Name in the active game-data set's
-    // MonsterMessageStore, either directly (when
-    // MonsterMessageRecord.AllowNoPrefix is set) or after stripping a known
-    // flavor prefix.
+    // Name matched a monster — a MonsterMessageRecord.Name or a Monsters-table
+    // row — either directly or after stripping a leading word in the per-set
+    // flavor vocabulary (Services.FlavorPrefixStore).
     Monster,
 
     // Name matched neither — RoomEntityClassifier emits a Warn-level LogPane row

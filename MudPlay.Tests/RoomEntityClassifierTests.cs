@@ -24,6 +24,7 @@ public sealed class RoomEntityClassifierTests
         public MonsterMessageStore Monsters { get; } = new();
         public PlayerDatabase Players { get; } = new();
         public LogService Log { get; } = new();
+        public FlavorPrefixStore Prefixes { get; } = new();
         public RoomEntityClassifier Classifier { get; }
         public List<LogEntry> LogEntries { get; } = new();
         public List<RoomEntitiesObservation> Observations { get; } = new();
@@ -33,21 +34,20 @@ public sealed class RoomEntityClassifierTests
             Router = new MessageRouter();
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(
-                Router, Monsters, Players, roomTracker: null, Log, gameData);
+                Router, Monsters, Players, roomTracker: null, Log, gameData, Prefixes);
             Log.EntryAdded += LogEntries.Add;
             Classifier.EntitiesObserved += Observations.Add;
         }
 
-        public void AddMonster(int number, string name, bool allowNoPrefix, params string[] flavorPrefixes)
+        // Register a monster by canonical name. Flavor adjectives aren't per-monster
+        // anymore — a prefixed display name resolves via the shared FlavorPrefixStore
+        // (Prefixes), which starts from the built-in vocabulary; a test adds a custom
+        // word with Prefixes.Add.
+        public void AddMonster(int number, string name)
         {
-            // Minimal MonsterMessageRecord for classifier purposes — the
-            // line patterns (HitYou, MissYou, etc.) aren't read by the
-            // classifier; empty lists keep the fixture small.
             Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}",
                 Name: name,
-                FlavorPrefixes: flavorPrefixes,
-                AllowNoPrefix: allowNoPrefix,
                 Links: new[] { new GameDataLink("Monsters", number) }));
         }
 
@@ -91,7 +91,7 @@ public sealed class RoomEntityClassifierTests
     public void ResolveBaseName_StripsFlavorPrefixToBaseName()
     {
         using Harness h = new();
-        h.AddMonster(101, "orc lieutenant", allowNoPrefix: true, "short", "fierce");
+        h.AddMonster(101, "orc lieutenant");
         Assert.Equal("orc lieutenant", h.Classifier.ResolveBaseName("short orc lieutenant"));
         Assert.Equal("orc lieutenant", h.Classifier.ResolveBaseName("fierce orc lieutenant"));
         Assert.Equal("orc lieutenant", h.Classifier.ResolveBaseName("orc lieutenant"));
@@ -101,7 +101,7 @@ public sealed class RoomEntityClassifierTests
     public void ResolveBaseName_UnknownMonster_ReturnsNull()
     {
         using Harness h = new();
-        h.AddMonster(101, "orc lieutenant", allowNoPrefix: true, "short");
+        h.AddMonster(101, "orc lieutenant");
         Assert.Null(h.Classifier.ResolveBaseName("giant spider"));
     }
 
@@ -114,13 +114,13 @@ public sealed class RoomEntityClassifierTests
         Assert.Null(h.Classifier.Current);
     }
 
-    // ----- direct monster match (AllowNoPrefix) ----------------------
+    // ----- direct monster match (bare name) --------------------------
 
     [Fact]
-    public void DirectMonsterMatch_AllowNoPrefix()
+    public void DirectMonsterMatch_BareName()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -133,32 +133,15 @@ public sealed class RoomEntityClassifierTests
     }
 
     [Fact]
-    public void DirectMonsterMatch_RequiresAllowNoPrefix()
+    public void DirectMonsterMatch_AnyCatalogName_MatchesBare()
     {
-        // Same name but AllowNoPrefix=false — direct shouldn't match.
+        // There's no AllowNoPrefix gate anymore: every catalog record matches its
+        // bare name directly. A flavor adjective (if present) is stripped generically
+        // one level up via the shared FlavorPrefixStore, so no per-monster prefix data
+        // is involved. cave bear (one of 535 stock records that only ever appear bare)
+        // resolves the same as any other.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: false, "nasty");
-
-        h.Feed("Also here: giant rat.");
-
-        Assert.Single(h.Observations);
-        Assert.Equal(EntityKind.Unknown, h.Observations[0].Entities[0].Kind);
-    }
-
-    [Fact]
-    public void DirectMonsterMatch_EmptyFlavorPrefixes_ImpliesNoPrefix()
-    {
-        // Live repro: 535 of 1100 v1.11p seed records (cave bear,
-        // shade, Colin, Lady Sentara, …) carry AllowNoPrefix=false
-        // AND FlavorPrefixes=[]. Without the empty-prefix fallback
-        // they're unreachable: direct match rejects (AllowNoPrefix
-        // false) and prefix-stripped match skips empty lists. So the
-        // entire record sits in the catalogue and the classifier still
-        // emits "unknown entity 'cave bear'". The fallback treats
-        // "no prefixes defined" as "bare name is the only form" and
-        // matches directly.
-        using Harness h = new();
-        h.AddMonster(80, "cave bear", allowNoPrefix: false);   // no flavor prefixes
+        h.AddMonster(80, "cave bear");
 
         h.Feed("Also here: cave bear.");
 
@@ -178,7 +161,7 @@ public sealed class RoomEntityClassifierTests
         // from the shared vocabulary still resolves it — so a custom game needs no
         // per-monster prefix data for the common adjectives.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);   // no flavor prefixes
+        h.AddMonster(1, "giant rat");   // no flavor prefixes
 
         h.Feed("Also here: large giant rat.");
 
@@ -195,8 +178,8 @@ public sealed class RoomEntityClassifierTests
         // to ITSELF, not be reduced to "basilisk" by the global strip. The full-name
         // match runs first, so the strip never sees it.
         using Harness h = new();
-        h.AddMonster(5, "huge basilisk", allowNoPrefix: true);
-        h.AddMonster(6, "basilisk", allowNoPrefix: true);   // the tail — must NOT win
+        h.AddMonster(5, "huge basilisk");
+        h.AddMonster(6, "basilisk");   // the tail — must NOT win
 
         h.Feed("Also here: huge basilisk.");
 
@@ -211,8 +194,7 @@ public sealed class RoomEntityClassifierTests
     public void PrefixStrippedMonsterMatch()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true,
-            "nasty", "angry", "fat");
+        h.AddMonster(1, "giant rat");   // "nasty" comes from the shared vocabulary
 
         h.Feed("Also here: nasty giant rat.");
 
@@ -228,7 +210,7 @@ public sealed class RoomEntityClassifierTests
     public void PrefixMatch_CaseInsensitive()
     {
         using Harness h = new();
-        h.AddMonster(1, "Giant Rat", allowNoPrefix: false, "Nasty");
+        h.AddMonster(1, "Giant Rat");
 
         h.Feed("Also here: NASTY giant rat.");
 
@@ -240,11 +222,42 @@ public sealed class RoomEntityClassifierTests
     public void UnknownPrefix_FallsToUnknown()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true, "nasty");
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: stinking giant rat.");
 
         Assert.Single(h.Observations);
+        Assert.Equal(EntityKind.Unknown, h.Observations[0].Entities[0].Kind);
+    }
+
+    [Fact]
+    public void CustomVocab_AddedWord_ResolvesPrefix()
+    {
+        // A custom realm's adjective the built-in list doesn't have: once added to
+        // the per-set FlavorPrefixStore, the prefixed name resolves generically.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        h.Prefixes.Add("stinking");
+
+        h.Feed("Also here: stinking giant rat.");
+
+        RoomEntity ent = h.Observations[0].Entities[0];
+        Assert.Equal(EntityKind.Monster, ent.Kind);
+        Assert.Equal("giant rat", ent.ResolvedName);
+        Assert.Equal(1, ent.MonsterNumber);
+    }
+
+    [Fact]
+    public void CustomVocab_RemovedWord_NoLongerStrips()
+    {
+        // Removing a default adjective takes it out of the vocabulary — the prefixed
+        // name no longer resolves (no GameData here, so Pass 4 can't rescue it).
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        h.Prefixes.Remove("large");
+
+        h.Feed("Also here: large giant rat.");
+
         Assert.Equal(EntityKind.Unknown, h.Observations[0].Entities[0].Kind);
     }
 
@@ -254,7 +267,7 @@ public sealed class RoomEntityClassifierTests
     public void ReemitCurrent_ReplaysTheCurrentObservation()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Observations);
 
@@ -410,13 +423,13 @@ public sealed class RoomEntityClassifierTests
             Assert.Equal("vicious kobold", ent.RawName);
             Assert.Equal("kobold", ent.ResolvedName);
 
-            // The full name is flagged for a flavor-prefix edit, with the
-            // matched monster Number carried in Context for the double-click.
+            // The row is flagged for a vocabulary add, with the leading word carried
+            // in Context so the double-click adds it to the FlavorPrefixStore.
             LogEntry warn = h.LogEntries.Find(e =>
                 e.Source == RoomEntityClassifier.MissingFlavorCategory);
             Assert.NotEqual(default, warn);
             Assert.Contains("vicious kobold", warn.Message);
-            Assert.Equal("82", warn.Context);
+            Assert.Equal("vicious", warn.Context);
         }
         finally { try { Directory.Delete(dir, true); } catch { /* best-effort */ } }
     }
@@ -511,7 +524,7 @@ public sealed class RoomEntityClassifierTests
     public void TwoEntries_Comma()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
         h.AddPlayer("Bob");
 
         h.Feed("Also here: giant rat, Bob.");
@@ -526,8 +539,8 @@ public sealed class RoomEntityClassifierTests
     public void ThreeEntries_OxfordAnd()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
-        h.AddMonster(2, "goblin",    allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
         h.AddPlayer("Bob");
 
         h.Feed("Also here: giant rat, goblin and Bob.");
@@ -543,7 +556,7 @@ public sealed class RoomEntityClassifierTests
     public void MixedKnownAndUnknown_ProducesPartialResults()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat, foozle.");
 
@@ -569,7 +582,7 @@ public sealed class RoomEntityClassifierTests
         // shopkeepers / quest-givers can collide with real names, and
         // the Phase 9 plan resolves monster first).
         using Harness h = new();
-        h.AddMonster(99, "Bob", allowNoPrefix: true);
+        h.AddMonster(99, "Bob");
         h.AddPlayer("Bob");
 
         h.Feed("Also here: Bob.");
@@ -584,7 +597,7 @@ public sealed class RoomEntityClassifierTests
     public void RawAlsoHereLine_PreservedInObservation()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -601,8 +614,8 @@ public sealed class RoomEntityClassifierTests
         // CombatManager doesn't sit thinking it's still alive when an
         // arrival event appends a new entity.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
-        h.AddMonster(2, "kobold thief", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "kobold thief");
 
         h.Feed("Also here: giant rat, kobold thief.");
         Assert.Equal(2, h.Observations[0].Entities.Count);
@@ -621,7 +634,7 @@ public sealed class RoomEntityClassifierTests
         // Three giant rats — one dies. We remove ONE entry; the next
         // room re-display corrects if our local count diverges.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat, giant rat, giant rat.");
         Assert.Equal(3, h.Observations[0].Entities.Count);
@@ -636,7 +649,7 @@ public sealed class RoomEntityClassifierTests
     public void RemoveDeadEntity_NoMatch_ReturnsFalse_NoEmit()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         int observationsBefore = h.Observations.Count;
 
@@ -664,8 +677,8 @@ public sealed class RoomEntityClassifierTests
         // gate the mob held stays asserted forever unless we drop it here and re-fire
         // the observation (tagged Departure) to re-evaluate the gate.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
-        h.AddMonster(2, "orc rogue", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "orc rogue");
 
         h.Feed("Also here: giant rat, orc rogue.");
         Assert.Equal(2, h.Observations[0].Entities.Count);
@@ -686,7 +699,7 @@ public sealed class RoomEntityClassifierTests
         // re-fired observation carries an empty list — the combat gate re-evaluates
         // to zero actionable hostiles and drops.
         using Harness h = new();
-        h.AddMonster(2, "orc rogue", allowNoPrefix: true);
+        h.AddMonster(2, "orc rogue");
 
         h.Feed("Also here: orc rogue.");
         Assert.Single(h.Observations[0].Entities);
@@ -702,7 +715,7 @@ public sealed class RoomEntityClassifierTests
     public void RemoveDepartedEntity_NoMatch_ReturnsFalse_NoEmit()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         int observationsBefore = h.Observations.Count;
 
@@ -745,7 +758,7 @@ public sealed class RoomEntityClassifierTests
         // classifier wipes its observation so CombatManager clears
         // its target before the next round fires.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Observations[0].Entities);
@@ -770,8 +783,8 @@ public sealed class RoomEntityClassifierTests
         // After a wipe, the new room's Also-Here parse drives a fresh
         // emit with the new entities.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
-        h.AddMonster(2, "goblin",    allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
 
         h.Feed("Also here: giant rat.");
         h.Classifier.NoteRoomChanged();
@@ -787,7 +800,7 @@ public sealed class RoomEntityClassifierTests
     public void Current_TracksLatestObservation()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
         h.AddPlayer("Bob");
 
         h.Feed("Also here: giant rat.");
@@ -810,11 +823,11 @@ public sealed class RoomEntityClassifierTests
     public void Wrap_AcrossTwoLines_ParsesAllOccupants()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat",     allowNoPrefix: true, "angry");
-        h.AddMonster(2, "carrion beast", allowNoPrefix: true, "nasty");
-        h.AddMonster(3, "giant rat",     allowNoPrefix: true);
-        h.AddMonster(4, "acid slime",    allowNoPrefix: true);
-        h.AddMonster(5, "kobold thief",  allowNoPrefix: true, "short");
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "carrion beast");
+        h.AddMonster(3, "giant rat");
+        h.AddMonster(4, "acid slime");
+        h.AddMonster(5, "kobold thief");
 
         // Attach the extractor so the wrap-buffer path is live.
         Terminal.LineExtractor lines = new(new MudPlay.Terminal.TerminalEmulator(80, 24));
@@ -838,9 +851,9 @@ public sealed class RoomEntityClassifierTests
     public void Wrap_AcrossThreeLines_ParsesAllOccupants()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat",    allowNoPrefix: true);
-        h.AddMonster(2, "acid slime",   allowNoPrefix: true);
-        h.AddMonster(3, "kobold thief", allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "acid slime");
+        h.AddMonster(3, "kobold thief");
 
         Terminal.LineExtractor lines = new(new MudPlay.Terminal.TerminalEmulator(80, 24));
         h.Classifier.AttachLineExtractor(lines);
@@ -898,7 +911,6 @@ public sealed class RoomEntityClassifierTests
         public void AddMonster(int number, string name)
             => Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}", Name: name,
-                FlavorPrefixes: Array.Empty<string>(), AllowNoPrefix: true,
                 Links: new[] { new GameDataLink("Monsters", number) }));
 
         public void FeedAlsoHere(string line)

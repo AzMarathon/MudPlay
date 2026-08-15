@@ -18,24 +18,24 @@ namespace MudPlay.Game.Combat;
 // Algorithm:
 // 1. Split the comma-separated occupant capture, normalising the Oxford " and "
 //    form into a comma the same way AutoPartyManager does.
-// 2. For each entry: try direct match against every MonsterMessageRecord.Name
-//    where AllowNoPrefix is true; else try the prefix-stripped form against
-//    every monster's FlavorPrefixes.
+// 2. For each entry: try a bare-name match against every MonsterMessageRecord.Name.
+//    A flavor adjective ("large giant rat") is stripped generically later (Pass 3.5)
+//    using the shared per-set FlavorPrefixStore vocabulary, then the base name is
+//    re-fed here — so no per-monster prefix data is involved.
 // 3. If no monster match, fall through to player lookup: the entry's first
 //    whitespace token compared against every PlayerRecord.GivenName in the
 //    active per-BBS database (case-insensitive).
 // 4. If still unmatched, match the WHOLE entry against the Monsters table by
 //    name — this catches a monster whose Monsters-table row exists under its
 //    full (possibly multi-word) name but which carries no MonsterMessageRecord
-//    and no flavor prefix ("brigand chief"). The full name is canonical, so no
-//    missing-flavor warning is logged.
+//    ("brigand chief"). The full name is canonical, so no missing-flavor warning
+//    is logged.
 // 5. If still unmatched and the entry is multi-word, strip the FIRST word and
 //    match the remainder against the Monsters table by name — this catches a
 //    monster whose Monsters-table row exists but whose leading flavor word
-//    isn't recorded in any MonsterMessageRecord ("vicious kobold" → "kobold").
-//    On a hit, classify as that monster AND log the full name under
-//    MissingFlavorCategory so its LogPane double-click opens the monster record
-//    for a flavor-prefix edit.
+//    isn't in the FlavorPrefixStore vocabulary ("vicious kobold" → "kobold").
+//    On a hit, classify as that monster AND log the leading word under
+//    MissingFlavorCategory so its LogPane double-click adds it to the vocabulary.
 // 6. Else Unknown — emit a Warn-severity log row with the raw "Also here:" line
 //    carried as LogEntry.Context. The LogPane double-click handler opens the
 //    UnknownEntityFixDialogViewModel from this row.
@@ -50,12 +50,11 @@ public sealed class RoomEntityClassifier : IDisposable
     // LogService category for all rows this classifier emits.
     public const string LogCategory = "RoomClassifier";
 
-    // LogService category for a room monster recognized only by stripping an
-    // unrecognized leading flavor word (e.g. "vicious kobold" resolved to the
-    // Monsters-table "kobold"). Distinct from LogCategory so its LogPane
-    // double-click opens the monster's Game Data record (to record the flavor
-    // prefix) rather than the unknown-entity fix dialog. The matched monster's
-    // Number rides in LogEntry.Context.
+    // LogService category for a room monster recognized only by stripping a leading
+    // word that isn't in the flavor vocabulary (e.g. "vicious kobold" resolved to the
+    // Monsters-table "kobold"). Distinct from LogCategory so its LogPane double-click
+    // adds that leading word to the per-set FlavorPrefixStore vocabulary rather than
+    // opening the unknown-entity fix dialog. The leading word rides in LogEntry.Context.
     public const string MissingFlavorCategory = "RoomFlavorMissing";
 
     private static readonly Regex AndNormaliser = new(@"\s+and\s+", RegexOptions.Compiled);
@@ -66,6 +65,7 @@ public sealed class RoomEntityClassifier : IDisposable
     private readonly RoomTracker? _roomTracker;
     private readonly LogService? _log;
     private readonly GameDataCache? _gameData;
+    private readonly FlavorPrefixStore _flavorPrefixes;
     private readonly IDisposable _alsoHereSub;
     private Terminal.LineExtractor? _lines;
     private string? _alsoHereBuffer;     // multi-line continuation
@@ -109,14 +109,17 @@ public sealed class RoomEntityClassifier : IDisposable
     // from the previous room would keep CombatManager swinging at a target that
     // didn't follow us in — the "wasted combat round on move" scenario. The
     // optional GameDataCache backs the first-word-strip Monsters-table fallback
-    // (Pass 3); tests that don't exercise it pass null.
+    // (Pass 3); tests that don't exercise it pass null. flavorPrefixes supplies
+    // the per-set adjective vocabulary for the Pass-3.5 prefix strip; null → a
+    // default store carrying the built-in stock list.
     public RoomEntityClassifier(
         MessageRouter router,
         MonsterMessageStore monsters,
         PlayerDatabase players,
         RoomTracker? roomTracker,
         LogService? log = null,
-        GameDataCache? gameData = null)
+        GameDataCache? gameData = null,
+        FlavorPrefixStore? flavorPrefixes = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(monsters);
@@ -127,6 +130,7 @@ public sealed class RoomEntityClassifier : IDisposable
         _roomTracker = roomTracker;
         _log      = log;
         _gameData = gameData;
+        _flavorPrefixes = flavorPrefixes ?? new FlavorPrefixStore();
         _alsoHereSub = _router.Subscribe(KnownPatterns.RoomAlsoHere, OnRoomAlsoHere);
         if (_roomTracker is not null)
             _roomTracker.StateChanged += OnRoomTrackerStateChanged;
@@ -336,15 +340,15 @@ public sealed class RoomEntityClassifier : IDisposable
             return new RoomEntity(entry, entry, EntityKind.Monster, fullMatchNumber);
 
         // Pass 3.5 — shared flavor-prefix vocabulary. Strip a leading adjective from
-        // the global set (MonsterFlavorPrefixes: large / nasty / huge / …) and match
-        // the remainder against a known monster, so "large giant rat" resolves without
-        // the giant-rat record listing "large" itself — a custom game needs no
-        // per-monster FlavorPrefixes for the standard adjectives. Runs AFTER the
-        // full-name pass above so a canonical name that starts with an adjective
-        // ("huge basilisk", "adult red dragon") has already matched itself and isn't
-        // reduced to its tail. No missing-flavor warning — this prefix is expected.
+        // the per-set vocabulary (FlavorPrefixStore: large / nasty / huge / … by
+        // default, plus any custom words a modified realm adds) and match the remainder
+        // against a known monster, so "large giant rat" resolves without any per-monster
+        // prefix data. Runs AFTER the full-name pass above so a canonical name that
+        // starts with an adjective ("huge basilisk", "adult red dragon") has already
+        // matched itself and isn't reduced to its tail. No missing-flavor warning — this
+        // prefix is expected.
         int gsp = entry.IndexOf(' ');
-        if (gsp > 0 && MonsterFlavorPrefixes.IsPrefix(entry[..gsp]))
+        if (gsp > 0 && _flavorPrefixes.IsPrefix(entry[..gsp]))
         {
             string baseName = entry[(gsp + 1)..];
             if (TryMatchMonster(baseName, out MonsterMessageRecord? gm) && gm is not null)
@@ -353,23 +357,24 @@ public sealed class RoomEntityClassifier : IDisposable
                 return new RoomEntity(entry, baseName, EntityKind.Monster, gnum);
         }
 
-        // Pass 4 — unrecognized leading flavor word. A monster whose
-        // Monsters-table row exists but whose flavor prefix isn't recorded in
-        // any MonsterMessageRecord shows up as "<unknown-word> <base name>"
-        // ("vicious kobold"). Strip only the first word and match the remainder
-        // against the Monsters table; on a hit, treat the entry as that monster
-        // so combat engages it, and flag the FULL name in the log as needing its
-        // flavor prefix recorded — its double-click opens the monster record.
+        // Pass 4 — leading word not in the flavor vocabulary. A monster whose
+        // Monsters-table row exists but whose leading adjective isn't in the per-set
+        // FlavorPrefixStore shows up as "<unknown-word> <base name>" ("vicious kobold").
+        // Strip only the first word and match the remainder against the Monsters table;
+        // on a hit, treat the entry as that monster so combat engages it, and flag the
+        // leading word in the log — its double-click adds that word to the vocabulary so
+        // the prefix resolves cleanly next time (the word rides in LogEntry.Context).
         int sp = entry.IndexOf(' ');
         if (sp > 0 && sp + 1 < entry.Length
             && TryMatchMonstersTable(entry[(sp + 1)..], out int monsterNumber))
         {
             if (_log is not null && rawAlsoHereLine.Length > 0)
             {
+                string leadingWord = entry[..sp];
                 _log.Warn(MissingFlavorCategory,
-                    $"'{entry}' — flavor prefix not recorded for monster #{monsterNumber}; " +
-                    "double-click to open its record",
-                    context: monsterNumber.ToString(CultureInfo.InvariantCulture));
+                    $"'{entry}' — leading word '{leadingWord}' isn't in the flavor vocabulary; " +
+                    "double-click to add it",
+                    context: leadingWord);
             }
             return new RoomEntity(entry, entry[(sp + 1)..], EntityKind.Monster, monsterNumber);
         }
@@ -400,10 +405,10 @@ public sealed class RoomEntityClassifier : IDisposable
     }
 
     // Strip a monster display name's flavor prefix down to its canonical base name
-    // ("short orc lieutenant" → "orc lieutenant") using the same message-catalog /
-    // Monsters-table matching Classify does — so a room-aware resolver can compare
-    // a looked-at name against room monsters' base names without re-implementing the
-    // prefix rules. Returns null when the name resolves to no known monster.
+    // ("short orc lieutenant" → "orc lieutenant") using the same matching Classify does
+    // — so a room-aware resolver can compare a looked-at name against room monsters' base
+    // names without re-implementing the prefix rules. Returns null when the name resolves
+    // to no known monster.
     public string? ResolveBaseName(string display)
     {
         if (string.IsNullOrWhiteSpace(display)) return null;
@@ -412,51 +417,32 @@ public sealed class RoomEntityClassifier : IDisposable
             return m.Name;
         // Exact Monsters-table hit: the name is already its own base (no prefix).
         if (TryMatchMonstersTable(trimmed, out _)) return trimmed;
+        // Strip a leading flavor adjective from the per-set vocabulary and retry the base
+        // name — mirrors Classify's Pass 3.5 so "short orc lieutenant" → "orc lieutenant".
+        int sp = trimmed.IndexOf(' ');
+        if (sp > 0 && _flavorPrefixes.IsPrefix(trimmed[..sp]))
+        {
+            string baseName = trimmed[(sp + 1)..];
+            if (TryMatchMonster(baseName, out MonsterMessageRecord? bm) && bm is not null)
+                return bm.Name;
+            if (TryMatchMonstersTable(baseName, out _)) return baseName;
+        }
         return null;
     }
 
     private bool TryMatchMonster(string entry, out MonsterMessageRecord? hit)
     {
-        // Direct match: AllowNoPrefix records whose Name == entry.
-        // Records with no flavor prefixes are implicitly bare-name-only
-        // — without this fallback, a record carrying AllowNoPrefix=false
-        // AND FlavorPrefixes=[] is unreachable: the prefix-stripped
-        // path below skips empty-list records, and the direct path
-        // here would reject it. 535 of 1100 v1.11p seed entries
-        // (cave bear, shade, Colin, Lady Sentara, …) were silently
-        // unmatchable before this guard.
+        // Direct bare-name match against the message-catalog Names. A prefixed
+        // display name ("large giant rat") never lands here — the flavor adjective
+        // is stripped one level up in Pass 3.5 (shared FlavorPrefixStore vocabulary)
+        // and the base name re-fed through this method. So no per-monster prefix data
+        // is needed: every record is matchable by its bare Name.
         foreach (MonsterMessageRecord m in _monsters.Messages)
         {
-            if ((m.AllowNoPrefix || m.FlavorPrefixes.Count == 0) &&
-                string.Equals(m.Name, entry, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(m.Name, entry, StringComparison.OrdinalIgnoreCase))
             {
                 hit = m;
                 return true;
-            }
-        }
-
-        // Prefix-stripped match: "{prefix} {Name}" forms across every
-        // monster's FlavorPrefixes list.
-        foreach (MonsterMessageRecord m in _monsters.Messages)
-        {
-            if (m.FlavorPrefixes.Count == 0) continue;
-            foreach (string prefix in m.FlavorPrefixes)
-            {
-                if (prefix.Length == 0) continue;
-                // Length check before substring extraction so prefix > entry
-                // doesn't ToString-allocate.
-                int composed = prefix.Length + 1 + m.Name.Length;
-                if (entry.Length != composed) continue;
-                if (entry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-                    entry[prefix.Length] == ' ' &&
-                    MemoryExtensions.Equals(
-                        entry.AsSpan(prefix.Length + 1),
-                        m.Name.AsSpan(),
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    hit = m;
-                    return true;
-                }
             }
         }
 

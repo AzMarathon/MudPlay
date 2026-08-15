@@ -3649,7 +3649,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Players,
             AppServices.Current.Macros,
             AppServices.Current.Messages,
-            AppServices.Current.MonsterMessages,
+            AppServices.Current.FlavorPrefixes,
             AppServices.Current.MonsterOverlaySeed,
             AppServices.Current.ItemOverlaySeed,
             AppServices.Current.Resolver,

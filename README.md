@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.16.0**
-> - Per-monster combat message data retired — hits / misses / dodges / armor-blocks are recognized generically from line colour + wording, and deaths from the experience line, so the Monster editor no longer has a Combat Messages section and no one hand-enters a monster's messages (crucial for custom games with tens of thousands of monsters)
-> - Combat no longer casts the round's alternate at a just-killed monster (kill recognized on the exp line, before `*Combat Off*`); prefixed monster names resolve their flavor adjective from one shared vocabulary
+> **Version 3.17.0**
+> - Monster flavor adjectives (large / nasty / huge / …) are now one **editable per-set vocabulary** instead of per-monster data — a new **Flavor Prefixes** section in the Game Data Browser lets a custom realm add or remove the words it uses; the room classifier strips a leading word in that list to resolve "large giant rat" → "giant rat"
+> - Per-monster `FlavorPrefixes` retired — removed from every monster record and the Monster editor's Flavor Prefixes box; the shared vocabulary fully replaces it
+> - "Add as flavor prefix" (unknown-entity fix) and the missing-flavor log-row double-click now add the word to the active set's vocabulary
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

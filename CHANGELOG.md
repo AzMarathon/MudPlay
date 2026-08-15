@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.17.0
+
+- Monster flavor adjectives (large / nasty / huge / …) are now one **editable per-set vocabulary** instead of per-monster data — new **Flavor Prefixes** section in the Game Data Browser lets a custom realm add or remove the words it uses; the room classifier strips a leading word in that list to resolve "large giant rat" → "giant rat"
+- Per-monster `FlavorPrefixes` retired — removed from every monster record + the Monster editor's Flavor Prefixes box; the shared vocabulary fully replaces it (`MonsterMessageRecord` is now just name + link)
+- The unknown-entity "add as flavor prefix" action and the missing-flavor log-row double-click now add the word to the active set's vocabulary (both were previously stubs / opened the record)
+
 ## 3.16.0
 
 - Per-monster combat message data retired — hit / miss / dodge / armor-block are recognized generically from line colour + wording, and a death from the experience line, so the Monster editor no longer has a Combat Messages section and no one has to hand-enter a monster's messages (crucial for custom games with tens of thousands of monsters)

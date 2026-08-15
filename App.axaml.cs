@@ -352,32 +352,23 @@ public partial class App : Application
                             break;
 
                         case MudPlay.ViewModels.UnknownEntityFixAction.AddFlavorPrefix:
-                            // Not yet wired: open a monster picker, then attach
-                            // the prefix to the selected MonsterMessageRecord.
-                            AppServices.Current.Log.Info("RoomClassifier",
-                                $"Flavor-prefix add for '{result.EntityName}' " +
-                                "queued — monster-picker UI ships in a follow-up PR.");
+                            // Add the leading word to the active set's shared flavor
+                            // vocabulary — every monster then resolves that adjective.
+                            AddFlavorPrefixWord(result.EntityName);
                             break;
                     }
                 });
 
-            // A monster the classifier recognized only by stripping an
-            // unrecognized leading flavor word (Monsters-table hit, no
-            // MonsterMessageRecord). Its LogEntry.Context carries the matched
-            // monster Number; double-click opens that Game Data record so the
-            // user can record the missing flavor prefix.
+            // A monster the classifier recognized only by stripping a leading word
+            // that isn't in the flavor vocabulary. Its LogEntry.Context carries that
+            // leading word; double-click adds it to the active set's flavor-prefix
+            // vocabulary so the adjective resolves cleanly from then on.
             AppServices.Current.Log.RegisterDetailHandler(
                 MudPlay.Game.Combat.RoomEntityClassifier.MissingFlavorCategory,
                 (entry) =>
                 {
-                    if (entry.Context is not { Length: > 0 } numText) return;
-                    if (int.TryParse(numText,
-                            System.Globalization.NumberStyles.Integer,
-                            System.Globalization.CultureInfo.InvariantCulture,
-                            out int monsterNumber))
-                    {
-                        AppServices.Current.OpenMonsterGameData(monsterNumber);
-                    }
+                    if (entry.Context is { Length: > 0 } word)
+                        AddFlavorPrefixWord(word);
                 });
         }
 
@@ -398,12 +389,10 @@ public partial class App : Application
         return message.Substring(open + 1, close - open - 1);
     }
 
-    // Insert a placeholder MonsterMessageRecord for an unknown name into the
-    // active MonsterMessageStore. AllowNoPrefix is true (the name alone is
-    // the matchable form); every line list is empty (the user fills them in
-    // later via the Monsters tab editor); Links is null (no MDB row to bind
-    // yet). Skips when a record with the same case-insensitive name already
-    // exists.
+    // Insert a placeholder MonsterMessageRecord for an unknown name into the active
+    // MonsterMessageStore so the room classifier recognizes the bare name from then on.
+    // Links is null (no MDB row to bind yet). Skips when a record with the same
+    // case-insensitive name already exists.
     private static void AddPlaceholderMonster(string name)
     {
         string trimmed = (name ?? string.Empty).Trim();
@@ -420,37 +409,50 @@ public partial class App : Application
             }
         }
 
-        // Id derivation matches the Monsters-tab editor's ComputeId
-        // scheme (SHA1 of name + canonical content blob, first 8 bytes
-        // hex). Empty list-content + AllowNoPrefix=true still produces
-        // a stable id so the record round-trips through Save / Load
-        // without churning the on-disk file.
+        // Stable SHA1-derived id (first 8 bytes hex) keyed off the name, so the
+        // record round-trips through Save / Load without churning the on-disk file.
         string id = ComputeMonsterMessageId(trimmed);
         MudPlay.Models.GameData.MonsterMessageRecord placeholder = new(
-            Id:               id,
-            Name:             trimmed,
-            FlavorPrefixes:   Array.Empty<string>(),
-            AllowNoPrefix:    true,
-            Links:            null);
+            Id:   id,
+            Name: trimmed,
+            Links: null);
 
         store.Upsert(placeholder);
         AppServices.Current.Log.Info("RoomClassifier",
-            $"Added placeholder monster record: '{trimmed}'. " +
-            "Open Game Data → Monsters to fill in hit / death / dodge lines.");
+            $"Added placeholder monster record: '{trimmed}' — the room classifier now " +
+            "recognizes this name.");
     }
 
-    // Mirror of MonsterEditDialogViewModel.ComputeId for the minimum case
-    // (empty content + AllowNoPrefix=true). Kept inline rather than calling
-    // the VM method to avoid coupling App startup to the Game Data editor
-    // namespace.
+    // Stable id for a placeholder record — SHA1 of the name, first 8 bytes as hex.
     private static string ComputeMonsterMessageId(string name)
     {
-        string blob = name + "||1";
+        string blob = name;
         byte[] hash = System.Security.Cryptography.SHA1.HashData(
             System.Text.Encoding.UTF8.GetBytes(blob));
         System.Text.StringBuilder sb = new(16);
         for (int i = 0; i < 8; i++)
             sb.Append(hash[i].ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
         return sb.ToString();
+    }
+
+    // Add the leading whitespace token of entry to the active game-data set's
+    // flavor-prefix vocabulary (Services.FlavorPrefixStore). Called from the
+    // unknown-entity fix dialog's "flavor prefix" action (entry may be a full
+    // multi-word occupant name) and the missing-flavor log-row double-click
+    // (entry is already the single leading word). Both want just the first word.
+    private static void AddFlavorPrefixWord(string entry)
+    {
+        string word = (entry ?? string.Empty).Trim();
+        int sp = word.IndexOf(' ');
+        if (sp > 0) word = word[..sp];
+        if (word.Length == 0) return;
+
+        if (AppServices.Current.FlavorPrefixes.Add(word))
+            AppServices.Current.Log.Info("RoomClassifier",
+                $"Added '{word}' to the flavor-prefix vocabulary for set " +
+                $"'{AppServices.Current.FlavorPrefixes.ActiveSet ?? "(none)"}'.");
+        else
+            AppServices.Current.Log.Info("RoomClassifier",
+                $"'{word}' is already in the flavor-prefix vocabulary.");
     }
 }

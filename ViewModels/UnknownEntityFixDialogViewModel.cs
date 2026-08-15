@@ -10,18 +10,18 @@ namespace MudPlay.ViewModels;
 // list and lets the user pick a fix action.
 //
 // Game.Combat.RoomEntityClassifier opens the dialog when it emits the
-// underlying Warn row, and wires the chosen action to either
-// Game.GameData.MonsterMessageStore (for flavor prefixes) or
-// Game.GameData.PlayerDatabase (for player observations) at the active
-// 4-tier scope. The dialog itself doesn't touch the data layer — it only
+// underlying Warn row, and the caller (App startup) wires the chosen action to
+// the MonsterMessageStore (add-as-monster placeholder), the per-set
+// FlavorPrefixStore (add-flavor-prefix), or the PlayerDatabase (player
+// observation). The dialog itself doesn't touch the data layer — it only
 // collects the user's intent, returns it via CloseRequested, and lets the
 // caller commit.
 //
 // Result semantics: UnknownEntityFixAction.AddFlavorPrefix returns the
-// dialog's UnknownEntity as the prefix candidate; the caller chooses the
-// target monster (via the typed MonsterMessageStore lookup the classifier
-// already has). UnknownEntityFixAction.AddPlayerObservation returns the same
-// string as the player name. Cancel returns null.
+// dialog's UnknownEntity; the caller adds its leading word to the active set's
+// shared flavor vocabulary, so every monster resolves that adjective.
+// UnknownEntityFixAction.AddPlayerObservation returns the same string as the
+// player name. Cancel returns null.
 public sealed partial class UnknownEntityFixDialogViewModel : ObservableObject,
     IDialogViewModel<UnknownEntityFixResult?>
 {
@@ -47,11 +47,11 @@ public sealed partial class UnknownEntityFixDialogViewModel : ObservableObject,
     public string GuidanceText =>
         "If this is a new monster species the database doesn't have yet, add it as a " +
         "monster — a placeholder record lands in the catalogue immediately so the " +
-        "classifier recognises it next time, and the Monsters tab editor can fill in the " +
-        "hit / death lines later. If it's a flavor variant of an existing species (e.g. " +
-        "\"stinking\" → giant rat), attach it as a flavor prefix. If it's a player the " +
-        "database hasn't observed via `who`, add a placeholder observation now and let " +
-        "the next `who` enrich it. Cancel leaves nothing changed.";
+        "classifier recognises it next time. If it's a flavor variant of an existing " +
+        "species (e.g. \"stinking\" → giant rat), add it as a flavor prefix: the leading " +
+        "word joins this realm's shared adjective vocabulary, so every monster resolves " +
+        "it. If it's a player the database hasn't observed via `who`, add a placeholder " +
+        "observation now and let the next `who` enrich it. Cancel leaves nothing changed.";
 
     [RelayCommand]
     private void AddAsMonster() =>
@@ -75,15 +75,12 @@ public sealed partial class UnknownEntityFixDialogViewModel : ObservableObject,
 // Outcome of the user's pick in UnknownEntityFixDialogViewModel.
 public enum UnknownEntityFixAction
 {
-    // Add the unknown name as a new bare-name
-    // Models.GameData.MonsterMessageRecord (AllowNoPrefix true, all line
-    // lists empty). Classifier recognises the name on the next observation;
-    // the user can fill in death / hit / etc. lines later through the
-    // Monsters tab editor.
+    // Add the unknown name as a new bare-name Models.GameData.MonsterMessageRecord.
+    // The classifier recognises the name on the next observation.
     AddAsMonster,
 
-    // Treat the unknown name as a flavor prefix to attach to an existing
-    // monster. The caller picks which monster.
+    // Treat the unknown name's leading word as a flavor adjective and add it to
+    // the active set's shared flavor vocabulary (Services.FlavorPrefixStore).
     AddFlavorPrefix,
 
     // Treat the unknown name as a player and add a placeholder observation to

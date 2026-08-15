@@ -141,16 +141,6 @@
                                     </StackPanel>
                                 </Border>
                             </Grid>
-
-                            <!-- Flavor prefixes — comma-separated, with the literal
-                                 token "(no prefix)" representing the AllowNoPrefix flag. -->
-                            <TextBlock Classes="SectionHeader" Text="Flavor Prefixes"
-                                       Margin="0,12,0,4"/>
-                            <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}"
-                                       FontSize="11" FontStyle="Italic" TextWrapping="Wrap"
-                                       Text="Comma-separated adjectives the game may insert before the monster's name. Include the literal token (no prefix) to allow the bare name with no adjective."/>
-                            <TextBox Text="{Binding FlavorPrefixesCsv, Mode=TwoWay}"
-                                     TextWrapping="Wrap" Margin="0,4,0,0"/>
                         </StackPanel>
                     </ScrollViewer>
                 </Border>

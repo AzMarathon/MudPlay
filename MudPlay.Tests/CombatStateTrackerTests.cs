@@ -132,8 +132,6 @@ public sealed class CombatStateTrackerTests
             Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}",
                 Name: name,
-                FlavorPrefixes: flavorPrefixes,
-                AllowNoPrefix: allowNoPrefix,
                 Links: new[] { new GameDataLink("Monsters", number) }));
         }
 

@@ -774,6 +774,11 @@ public sealed class AppServices
     // Data/game data/{set}/monster-messages.json.
     public MonsterMessageStore MonsterMessages { get; private set; } = null!;
 
+    // Per-set editable vocabulary of monster flavor adjectives the room classifier
+    // strips to resolve a prefixed display name. Defaults to the built-in stock list;
+    // edited in the Game Data Browser's Flavor Prefixes section.
+    public FlavorPrefixStore FlavorPrefixes { get; private set; } = null!;
+
     // Turns the wire's Also here: line into
     // a classified Player / Monster / Unknown list. Feeds
     // CombatTracker's gate decisions and the LogPane's
@@ -2289,6 +2294,11 @@ public sealed class AppServices
         // same per-set storage + universal seed fallback pattern.
         MonsterMessages = new MonsterMessageStore(Log);
         GameData.ActiveSetChanged += MonsterMessages.Load;
+        // Per-set flavor-adjective vocabulary the room classifier strips ("large
+        // giant rat" → "giant rat"). Defaults to the built-in stock list; a
+        // custom realm's edits persist per set. Reloads on every set switch.
+        FlavorPrefixes = new FlavorPrefixStore(Log);
+        GameData.ActiveSetChanged += FlavorPrefixes.Load;
         // Realm-flavored seed for the per-monster overlay (Defaults
         // tier). Switching sets reads the new Info.Legit and reloads
         // the matching realm's seed; runtime consumers retrieve
@@ -2649,7 +2659,7 @@ public sealed class AppServices
         // write the same flag; the delegate is queried on every
         // Also-Here line so toggling takes effect immediately.
         RoomClassifier = new Game.Combat.RoomEntityClassifier(
-            Router, MonsterMessages, Players, RoomTracker, Log, GameData);
+            Router, MonsterMessages, Players, RoomTracker, Log, GameData, FlavorPrefixes);
         CombatTracker = new Game.Combat.CombatStateTracker(
             Router, MovementCoordinator, RoomClassifier, MonsterMessages,
             PlayerState,

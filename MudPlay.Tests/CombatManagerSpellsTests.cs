@@ -116,8 +116,6 @@ public sealed class CombatManagerSpellsTests
             => Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}",
                 Name: name,
-                FlavorPrefixes: Array.Empty<string>(),
-                AllowNoPrefix: true,
                 Links: new[] { new GameDataLink("Monsters", number) }));
 
         // A monster the classifier recognises by name (so it's EntityKind.Monster)
@@ -129,8 +127,6 @@ public sealed class CombatManagerSpellsTests
             => Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"U-{name}",
                 Name: name,
-                FlavorPrefixes: Array.Empty<string>(),
-                AllowNoPrefix: true,
                 Links: Array.Empty<GameDataLink>()));
 
         public void Feed(string line)
