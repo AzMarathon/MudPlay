@@ -62,6 +62,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         "Failure tracking", "No effect threshold",
         "Multi-attack", "Debuff single target", "Debuff AOE",
         "Normal attack spell", "Alternate attack spell",
+        "Drain spell", "Life drain", "Drain HP trigger", "Drains override AOE",
         "Min enemies", "Max casts per room", "Minimum mana per cast",
         "Show combat round totals", "Display",
     };
@@ -223,6 +224,15 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int? _alternateAttackSpellMaxCastsPerRoom;
     [ObservableProperty] private int _alternateAttackSpellMinManaPerCast;
 
+    // Drain (life-steal) spell — an emergency heal that also attacks. DrainHpTrigger
+    // is the HP% at/under which it overrides the round's action; DrainsOverrideAoe
+    // lets it pre-empt the room AoE too (off = the AoE wins when rooming).
+    [ObservableProperty] private string? _drainSpellName;
+    [ObservableProperty] private int? _drainSpellMaxCastsPerRoom;
+    [ObservableProperty] private int _drainSpellMinManaPerCast;
+    [ObservableProperty] private int _drainHpTrigger = 50;
+    [ObservableProperty] private bool _drainsOverrideAoe;
+
     // ----- Min-mana-per-cast conversion (mirrors the Health tab) -----
 
     // Live MaxMa for the % ↔ value conversion labels; 0 until a prompt gives us one.
@@ -237,6 +247,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     public string SingleTargetDebuffMinManaPerCastConverted  => FormatMana(SingleTargetDebuffMinManaPerCast);
     public string NormalAttackSpellMinManaPerCastConverted   => FormatMana(NormalAttackSpellMinManaPerCast);
     public string AlternateAttackSpellMinManaPerCastConverted => FormatMana(AlternateAttackSpellMinManaPerCast);
+    public string DrainSpellMinManaPerCastConverted          => FormatMana(DrainSpellMinManaPerCast);
 
     // Percentage mode shows the absolute mana equivalent ("54/66"); Value mode shows
     // the percentage ("82%"). Empty until a prompt gives us a live MaxMa.
@@ -256,6 +267,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(SingleTargetDebuffMinManaPerCastConverted));
         OnPropertyChanged(nameof(NormalAttackSpellMinManaPerCastConverted));
         OnPropertyChanged(nameof(AlternateAttackSpellMinManaPerCastConverted));
+        OnPropertyChanged(nameof(DrainSpellMinManaPerCastConverted));
     }
 
     // In Percentage mode a Min-mana-per-cast can't exceed 100% — snap any Value-mode
@@ -267,6 +279,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         if (SingleTargetDebuffMinManaPerCast > 100) SingleTargetDebuffMinManaPerCast = 100;
         if (NormalAttackSpellMinManaPerCast > 100) NormalAttackSpellMinManaPerCast = 100;
         if (AlternateAttackSpellMinManaPerCast > 100) AlternateAttackSpellMinManaPerCast = 100;
+        if (DrainSpellMinManaPerCast > 100) DrainSpellMinManaPerCast = 100;
     }
 
     private static Game.PlayerState? TryGetPlayerState()
@@ -392,6 +405,15 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
                 MaxCastsPerRoom = ClampCasts(AlternateAttackSpellMaxCastsPerRoom),
                 MinManaPerCast  = ClampSpell(AlternateAttackSpellMinManaPerCast),
             },
+            DrainSpell = new CombatSpellSlot
+            {
+                SpellName       = NullIfBlank(DrainSpellName),
+                MinEnemies      = 0,
+                MaxCastsPerRoom = ClampCasts(DrainSpellMaxCastsPerRoom),
+                MinManaPerCast  = ClampSpell(DrainSpellMinManaPerCast),
+            },
+            DrainHpTrigger    = Math.Clamp(DrainHpTrigger, 0, 100),
+            DrainsOverrideAoe = DrainsOverrideAoe,
 
             ShowCombatRoundTotals = ShowCombatRoundTotals,
         };
@@ -497,6 +519,12 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         AlternateAttackSpellName            = dto.AlternateAttackSpell.SpellName;
         AlternateAttackSpellMaxCastsPerRoom = dto.AlternateAttackSpell.MaxCastsPerRoom;
         AlternateAttackSpellMinManaPerCast  = dto.AlternateAttackSpell.MinManaPerCast;
+
+        DrainSpellName            = dto.DrainSpell.SpellName;
+        DrainSpellMaxCastsPerRoom = dto.DrainSpell.MaxCastsPerRoom;
+        DrainSpellMinManaPerCast  = dto.DrainSpell.MinManaPerCast;
+        DrainHpTrigger            = dto.DrainHpTrigger;
+        DrainsOverrideAoe         = dto.DrainsOverrideAoe;
 
         ShowCombatRoundTotals = dto.ShowCombatRoundTotals;
     }
@@ -630,6 +658,13 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnAlternateAttackSpellNameChanged(string? value)          => MarkDirty();
     partial void OnAlternateAttackSpellMaxCastsPerRoomChanged(int? value)  => MarkDirty();
     partial void OnAlternateAttackSpellMinManaPerCastChanged(int value)    { OnPropertyChanged(nameof(AlternateAttackSpellMinManaPerCastConverted)); MarkDirty(); }
+
+    // Spell slot — drain (life-steal)
+    partial void OnDrainSpellNameChanged(string? value)          => MarkDirty();
+    partial void OnDrainSpellMaxCastsPerRoomChanged(int? value)  => MarkDirty();
+    partial void OnDrainSpellMinManaPerCastChanged(int value)    { OnPropertyChanged(nameof(DrainSpellMinManaPerCastConverted)); MarkDirty(); }
+    partial void OnDrainHpTriggerChanged(int value)              => MarkDirty();
+    partial void OnDrainsOverrideAoeChanged(bool value)          => MarkDirty();
 
     // Display
     partial void OnShowCombatRoundTotalsChanged(bool value)      => MarkDirty();

@@ -34,6 +34,13 @@ public sealed partial class CombatManager
     private readonly CombatSpellChooser _spellChooser = new();
     private CastCoordinator? _cast;
     private Func<(int Ma, int MaxMa)>? _readMana;
+    // Live HP / max-HP for the drain spell's %-trigger. Optional — until wired the
+    // drain gate reads HP as "not below trigger" so a drain never fires.
+    private Func<(int Hp, int MaxHp)>? _readHp;
+    // Drain-eligibility (living + not undead) by monster number. Optional — until
+    // wired the drain treats every target as eligible (fail-open; the reactive "no
+    // effect" line still catches a genuine NonLiving / Undead miss).
+    private MonsterLifeIndex? _monsterLife;
     private Func<bool>? _autoNukeGate;
 
     // Resolves a Spell.Number to its Short cast-code (the per-monster override
@@ -141,12 +148,24 @@ public sealed partial class CombatManager
     // per-round cooldown is shared with every other caster); readMana reports live
     // MA / max-MA for the chooser's per-cast mana gate. Until called the engine is
     // weapon-only and the chooser never runs.
-    public void SetCombatSpellCaster(CastCoordinator cast, Func<(int Ma, int MaxMa)> readMana)
+    public void SetCombatSpellCaster(
+        CastCoordinator cast, Func<(int Ma, int MaxMa)> readMana,
+        Func<(int Hp, int MaxHp)>? readHp = null)
     {
         ArgumentNullException.ThrowIfNull(cast);
         ArgumentNullException.ThrowIfNull(readMana);
         _cast = cast;
         _readMana = readMana;
+        _readHp = readHp;
+    }
+
+    // Opt into drain-life target eligibility. monsterLife reports whether each
+    // monster is drain-eligible (living AND not undead). Until called, the drain
+    // treats every target as eligible and leans on the reactive "no effect" line.
+    public void SetDrainEligibility(MonsterLifeIndex monsterLife)
+    {
+        ArgumentNullException.ThrowIfNull(monsterLife);
+        _monsterLife = monsterLife;
     }
 
     // Wire the Auto-Nuke auto-engine gate. When the predicate returns false, the
@@ -328,6 +347,9 @@ public sealed partial class CombatManager
                     _lastCastAction = decision.Action;
                     _announcedSpellCode = decision.Spell;
                     _combatOff = false;
+                    if (decision.Action == CombatSpellAction.DrainSpell)
+                        _log?.Info(LogCategory,
+                            $"drain-life {decision.Spell} vs {picked.RawName} — HP under trigger, overriding the round's attack");
                     // A cast is an attack for engage-verify purposes — if the
                     // server never confirms *Combat Engaged*, the spell hit a
                     // stale room view and the CR-reverify net must recover.
@@ -737,6 +759,7 @@ public sealed partial class CombatManager
         (int ma, int maxMa) = _readMana!();
         (string? attackOverride, int? attackCap) = AttackOverrideFor(monsterNumber);
         (string? preAttackOverride, int? preAttackCap) = PreAttackOverrideFor(monsterNumber);
+        (bool hpBelowDrain, bool drainEligible) = DrainGates(settings, monsterNumber);
         return new CombatSpellContext(
             EnemyCount:          enemyCount,
             TargetRawName:       target,
@@ -760,7 +783,31 @@ public sealed partial class CombatManager
             OverridePreAttackMaxCasts: preAttackCap,
             WeaponIneffective:   WeaponPathExhausted(
                 settings, ResolveSpeciesByName(target), monsterNumber),
-            AlternationPreferSpell: AlternationPreferSpell(settings));
+            AlternationPreferSpell: AlternationPreferSpell(settings),
+            HpBelowDrainTrigger: hpBelowDrain,
+            DrainTargetEligible: drainEligible);
+    }
+
+    // Resolve the drain spell's two live gates for a target: whether HP has fallen
+    // to the configured %-trigger, and whether the target is drain-eligible (living
+    // AND not undead). Both are false when no drain spell is configured, so the
+    // chooser's drain rung stays inert. Eligibility fails OPEN when the index is
+    // unwired or the number is unknown (the reactive "no effect" line is the
+    // backstop); the HP gate fails CLOSED when the HP reader is unwired.
+    private (bool HpBelowTrigger, bool Eligible) DrainGates(CombatSettings settings, int monsterNumber)
+    {
+        if (string.IsNullOrWhiteSpace(settings.DrainSpell.SpellName)) return (false, false);
+
+        bool hpBelow = false;
+        if (_readHp is not null && settings.DrainHpTrigger > 0)
+        {
+            (int hp, int maxHp) = _readHp();
+            if (maxHp > 0)
+                hpBelow = hp <= (int)Math.Round(maxHp * settings.DrainHpTrigger / 100.0);
+        }
+
+        bool eligible = _monsterLife?.CanDrain(monsterNumber) ?? true;
+        return (hpBelow, eligible);
     }
 
     // This round's forced spell-vs-physical preference for the alternating /
@@ -1223,12 +1270,17 @@ public sealed partial class CombatManager
         }
 
         // Spell mode: attribute the immunity to the attack spell we last cast, then
-        // re-decide the cascade instantly (below). Only the two single-target attack
+        // re-decide the cascade instantly (below). Only the single-target attack
         // spells gate down — a debuff / multi-attack no-effect isn't ours to act on
-        // (one immune mob doesn't mean a room spell isn't hitting the rest).
+        // (one immune mob doesn't mean a room spell isn't hitting the rest). The
+        // DRAIN spell is included: a "no effect" here means the target was NonLiving /
+        // Undead (a drain can't affect it) that the game-data eligibility index
+        // missed — marking it drain-immune makes the chooser fall back to the normal
+        // attack for this species, the reactive backstop to the proactive gate.
         if (!CombatSpellsWired) return;
         if (_lastCastAction is not (CombatSpellAction.NormalAttackSpell
-                                  or CombatSpellAction.AlternateAttackSpell))
+                                  or CombatSpellAction.AlternateAttackSpell
+                                  or CombatSpellAction.DrainSpell))
             return;
 
         string species = match.Groups.Count > 0

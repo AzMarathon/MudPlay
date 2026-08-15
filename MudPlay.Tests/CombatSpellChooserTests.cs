@@ -1256,4 +1256,186 @@ public sealed class CombatSpellChooserTests
         Assert.Equal(CombatSpellAction.Backstab,
             sut.Choose(settings, AltCtx(preferSpell: true, backstabPending: true)).Action);
     }
+
+    // ----- Drain (life-steal) override ----------------------------------
+
+    private static CombatSpellContext DrainCtx(
+        int enemies = 1, int mana = 100, int maxMana = 100,
+        bool hpBelow = true, bool eligible = true,
+        IReadOnlySet<CombatSpellAction>? immune = null) =>
+        new(enemies, "a rat", mana, maxMana, BackstabPending: false,
+            ImmuneAttackSpells: immune,
+            HpBelowDrainTrigger: hpBelow, DrainTargetEligible: eligible);
+
+    [Fact]
+    public void Drain_FiresWhenHurtAndEligible_OverridesAttackSpell()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("mmis"),
+            DrainSpell = Slot("vamp"),
+        };
+
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
+
+        Assert.Equal(CombatSpellAction.DrainSpell, d.Action);
+        Assert.Equal("vamp", d.Spell);
+    }
+
+    [Fact]
+    public void Drain_SkippedWhenHpAboveTrigger_FallsToNormalAttack()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("mmis"),
+            DrainSpell = Slot("vamp"),
+        };
+
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(hpBelow: false));
+
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
+        Assert.Equal("mmis", d.Spell);
+    }
+
+    [Fact]
+    public void Drain_SkippedWhenTargetIneligible_FallsToNormalAttack()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("mmis"),
+            DrainSpell = Slot("vamp"),
+        };
+
+        // Hurt, but the target is NonLiving / Undead — a drain can't affect it.
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: false));
+
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
+        Assert.Equal("mmis", d.Spell);
+    }
+
+    [Fact]
+    public void Drain_SkippedWhenReactivelyImmune()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("mmis"),
+            DrainSpell = Slot("vamp"),
+        };
+
+        // A prior "no effect" line marked this species drain-immune (backstop for
+        // thin game data) — the proactive index said eligible but the drain still skips.
+        var immune = new HashSet<CombatSpellAction> { CombatSpellAction.DrainSpell };
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true, immune: immune));
+
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
+    }
+
+    [Fact]
+    public void Drain_SkippedBelowManaFloor_FallsToWeapon()
+    {
+        CombatSpellChooser sut = new();
+        // Drain needs 50% mana; only 10% available; no attack spell configured.
+        CombatSettings settings = new() { DrainSpell = Slot("vamp", minMana: 50) };
+
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(hpBelow: true, mana: 10, maxMana: 100));
+
+        Assert.Equal(CombatSpellAction.WeaponAttack, d.Action);
+    }
+
+    [Fact]
+    public void Drain_OverridesPhysicalFirstWeaponWhenHurt()
+    {
+        CombatSpellChooser sut = new();
+        // Physical-first build with no attack spell — the drain still pre-empts the swing.
+        CombatSettings settings = new()
+        {
+            ActionOrder = CombatActionOrder.PhysicalFirst,
+            DrainSpell = Slot("vamp"),
+        };
+
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
+
+        Assert.Equal(CombatSpellAction.DrainSpell, d.Action);
+    }
+
+    [Fact]
+    public void Drain_YieldsToAoeByDefault()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("blad", minEnemies: 3),
+            DrainSpell = Slot("vamp"),
+            // DrainsOverrideAoe = false (default)
+        };
+
+        // Hurt + eligible, but 4 enemies means the AoE would fire — it wins.
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(enemies: 4, hpBelow: true, eligible: true));
+
+        Assert.Equal(CombatSpellAction.MultiAttack, d.Action);
+        Assert.Equal("blad", d.Spell);
+    }
+
+    [Fact]
+    public void Drain_OverridesAoeWhenOptedIn()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("blad", minEnemies: 3),
+            DrainSpell = Slot("vamp"),
+            DrainsOverrideAoe = true,
+        };
+
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(enemies: 4, hpBelow: true, eligible: true));
+
+        Assert.Equal(CombatSpellAction.DrainSpell, d.Action);
+    }
+
+    [Fact]
+    public void Drain_StillOverridesSingleTarget_WhenAoeBelowMinEnemies()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("blad", minEnemies: 3),
+            NormalAttackSpell = Slot("mmis"),
+            DrainSpell = Slot("vamp"),
+        };
+
+        // Only 1 enemy — the AoE can't fire, so there's nothing for the drain to
+        // yield to; it overrides the single-target attack.
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(enemies: 1, hpBelow: true, eligible: true));
+
+        Assert.Equal(CombatSpellAction.DrainSpell, d.Action);
+    }
+
+    [Fact]
+    public void Drain_RespectsPerTargetMaxCasts()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("mmis"),
+            DrainSpell = Slot("vamp", maxCasts: 1),
+        };
+
+        // First round: drain fires; tally it.
+        CombatSpellDecision first = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
+        Assert.Equal(CombatSpellAction.DrainSpell, first.Action);
+        sut.MarkCast(first, "a rat");
+
+        // Second round: cap of 1 spent — drop to the normal attack even while still hurt.
+        CombatSpellDecision second = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, second.Action);
+
+        // A fresh target resets the per-target cap — the drain can fire again.
+        sut.ResetForNewTarget();
+        CombatSpellDecision fresh = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
+        Assert.Equal(CombatSpellAction.DrainSpell, fresh.Action);
+    }
 }

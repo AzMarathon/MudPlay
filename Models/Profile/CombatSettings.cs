@@ -186,6 +186,29 @@ public sealed class CombatSettings
     // fire. Ignores MinEnemies.
     public CombatSpellSlot AlternateAttackSpell { get; set; } = new();
 
+    // ----- Drain (life-steal) spell ---------------------------------
+
+    // Single-target life-drain spell (e.g. vamp / dtch / nebo) — the damage it
+    // deals also heals the caster, so it's used like an emergency heal that also
+    // attacks. It takes the place of the round's attack (auto-repeats like any
+    // attack spell), gated by CombatSpellSlot.MaxCastsPerRoom (per target) +
+    // MinManaPerCast, and only fires when HP is at/under DrainHpTrigger and the
+    // target is drain-eligible (living AND not undead — a drain can't affect
+    // NonLiving / Undead). Ignores MinEnemies.
+    public CombatSpellSlot DrainSpell { get; set; } = new();
+
+    // HP percentage at/under which DrainSpell overrides the round's normal action
+    // (0–100). At or below this %, the drain is cast instead of the attack;
+    // above it, the engine reverts to the normal pick. 0 = never (drain off even
+    // when a spell is configured).
+    public int DrainHpTrigger { get; set; } = 50;
+
+    // When true, the drain overrides the room AoE (multi-attack) too. Default
+    // false — with enough enemies to trigger the AoE it's usually more dangerous
+    // to drop rooming for a single-target drain, so by default the AoE wins and
+    // the drain still overrides only the single-target / physical action.
+    public bool DrainsOverrideAoe { get; set; }
+
     // ----- Display --------------------------------------------------
 
     // Append the per-round damage roll-up to the terminal canvas after each

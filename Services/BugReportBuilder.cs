@@ -324,6 +324,10 @@ public static class BugReportBuilder
         Kv(sb, "Worn weapon", WornSlot(inv, "Weapon Hand") ?? "(none)");
         Kv(sb, "Worn off-hand", WornSlot(inv, "Off-Hand") ?? "(none)");
         Kv(sb, "Using alternate weapon", combat.UsingAlternateWeapon.ToString());
+        // The round's committed spell action + the cast-code the server is repeating —
+        // "DrainSpell" here means the drain override is currently taking the round.
+        Kv(sb, "Round spell action", combat.LastCastAction ?? "(weapon / idle)");
+        Kv(sb, "Announced spell", combat.AnnouncedSpell ?? "(none)");
         // Alternating action-order phase — pairs with the resolved Combat "ActionOrder"
         // setting below to explain why an alternate-order character is casting or
         // swinging this round (even rounds open on the mode's first phase).

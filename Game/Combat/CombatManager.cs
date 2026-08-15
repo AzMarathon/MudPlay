@@ -621,13 +621,20 @@ public sealed partial class CombatManager : IDisposable
         bool AwaitingBackstabResolution,
         string? PendingBackstabSpecies,
         string? GuardBlockedTarget,
-        int AlternationRound);
+        int AlternationRound,
+        // The round's committed combat-spell action + the cast-code the server is
+        // auto-repeating (null in weapon / idle mode). "DrainSpell" here shows the
+        // drain override is the active action — the key runtime tell a drain report
+        // needs alongside the resolved Combat settings + live HP.
+        string? LastCastAction,
+        string? AnnouncedSpell);
 
     // UI-thread only (router handlers + the capture both run there), so no lock.
     public DebugState Snapshot() => new(
         _currentTarget, _usingAlternateWeapon,
         _awaitingBackstabResolution, _pendingBackstabSpecies,
-        _guardBlockedTarget, _alternationRound);
+        _guardBlockedTarget, _alternationRound,
+        _lastCastAction?.ToString(), _announcedSpellCode);
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
     // holds any stealth that opens a backstab — sneaking OR (optimistically) hidden
