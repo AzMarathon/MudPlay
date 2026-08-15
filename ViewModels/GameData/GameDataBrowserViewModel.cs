@@ -52,7 +52,7 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
     private readonly PlayerDatabase? _players;
     private readonly MacroStore? _macros;
     private readonly MessageStore? _messages;
-    private readonly MonsterMessageStore? _monsterMessages;
+    private readonly FlavorPrefixStore? _flavorPrefixes;
     private readonly MonsterOverlaySeedStore? _monsterOverlaySeed;
     private readonly ItemOverlaySeedStore? _itemOverlaySeed;
     private readonly SettingsResolver? _resolver;
@@ -68,7 +68,7 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
     private readonly QuestFlagIndex _questFlags;
 
     public GameDataBrowserViewModel(GameDataCache gameData, string? initialSectionId = null)
-        : this(gameData, triggers: null, aliases: null, players: null, macros: null, messages: null, monsterMessages: null, monsterOverlaySeed: null, itemOverlaySeed: null, resolver: null, dialogs: null, keybindings: null, profile: null, roomGraph: null, playerStats: null, itemSources: null, initialSectionId: initialSectionId) { }
+        : this(gameData, triggers: null, aliases: null, players: null, macros: null, messages: null, flavorPrefixes: null, monsterOverlaySeed: null, itemOverlaySeed: null, resolver: null, dialogs: null, keybindings: null, profile: null, roomGraph: null, playerStats: null, itemSources: null, initialSectionId: initialSectionId) { }
 
     public GameDataBrowserViewModel(
         GameDataCache gameData,
@@ -77,7 +77,7 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         PlayerDatabase? players = null,
         MacroStore? macros = null,
         MessageStore? messages = null,
-        MonsterMessageStore? monsterMessages = null,
+        FlavorPrefixStore? flavorPrefixes = null,
         MonsterOverlaySeedStore? monsterOverlaySeed = null,
         ItemOverlaySeedStore? itemOverlaySeed = null,
         SettingsResolver? resolver = null,
@@ -96,7 +96,7 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         _players = players;
         _macros = macros;
         _messages = messages;
-        _monsterMessages = monsterMessages;
+        _flavorPrefixes = flavorPrefixes;
         _monsterOverlaySeed = monsterOverlaySeed;
         _itemOverlaySeed = itemOverlaySeed;
         _resolver = resolver;
@@ -214,9 +214,17 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
                 "Data/Global/Messages.seed.json; per-set edits persist at " +
                 "Data/game data/{set}/messages.json.");
 
+        if (_flavorPrefixes is not null)
+            Sections.Add(new FlavorPrefixesSectionViewModel(_flavorPrefixes));
+        else
+            AddPlaceholder("flavor-prefixes", "Flavor Prefixes", "Combat",
+                "Per-set vocabulary of monster flavor adjectives (large / nasty / …) the room " +
+                "classifier strips to resolve a prefixed name. Edit for a custom realm; persists " +
+                "at game data/{set}/flavor-prefixes.json.");
+
         // ----- MDB-derived (bottom group) ---------------------------------
 
-        Sections.Add(new MonstersSectionViewModel(_gameData, _resolver, _dialogs, _monsterMessages, _monsterOverlaySeed, _roomGraph));
+        Sections.Add(new MonstersSectionViewModel(_gameData, _resolver, _dialogs, _monsterOverlaySeed, _roomGraph));
         Sections.Add(new ItemsSectionViewModel(_gameData, _resolver, _dialogs, _itemOverlaySeed, _playerStats, _itemSources));
         Sections.Add(new SpellsSectionViewModel(_gameData, _resolver, _messages, _dialogs));
         Sections.Add(new RoomsSectionViewModel(_gameData, _resolver, _dialogs));

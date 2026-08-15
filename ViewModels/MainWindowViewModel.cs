@@ -798,11 +798,6 @@ public partial class MainWindowViewModel : ObservableObject
         // CharacterProfile.DeathHistory and transitions to
         // PendingRespawn ahead of the respawn-room display.
         AppServices.Current.Death.AttachLineExtractor(Lines);
-        // MonsterDeathWatcher needs the raw line stream to match
-        // per-monster DeathLine patterns. Specific-match path removes
-        // the dead entity from RoomEntityClassifier so CombatManager
-        // re-picks correctly on the next arrival / re-display.
-        AppServices.Current.MonsterDeath.AttachLineExtractor(Lines);
         // ConditionTracker scans inbound lines against every game-data
         // Messages record's AppliedMessage / AppliedEndsWith pair to
         // surface live ActiveFlags.
@@ -3654,7 +3649,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Players,
             AppServices.Current.Macros,
             AppServices.Current.Messages,
-            AppServices.Current.MonsterMessages,
+            AppServices.Current.FlavorPrefixes,
             AppServices.Current.MonsterOverlaySeed,
             AppServices.Current.ItemOverlaySeed,
             AppServices.Current.Resolver,

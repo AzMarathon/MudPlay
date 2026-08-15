@@ -25,7 +25,6 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     private readonly GameDataCache _cache;
     private readonly DialogService? _dialogs;
     private readonly SettingsResolver? _resolverRef;
-    private readonly MonsterMessageStore? _monsterMessages;
     private readonly MonsterOverlaySeedStore? _overlaySeed;
     private readonly RoomGraphManager? _roomGraph;
 
@@ -127,7 +126,6 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         GameDataCache cache,
         SettingsResolver? resolver = null,
         DialogService? dialogs = null,
-        MonsterMessageStore? monsterMessages = null,
         MonsterOverlaySeedStore? overlaySeed = null,
         RoomGraphManager? roomGraph = null)
         : base(cache, resolver)
@@ -135,7 +133,6 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         _cache = cache;
         _dialogs = dialogs;
         _resolverRef = resolver;
-        _monsterMessages = monsterMessages;
         _overlaySeed = overlaySeed;
         _roomGraph = roomGraph;
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
@@ -335,20 +332,12 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             "Monsters", wcc, seedDefaults)
             ?? seedDefaults;
 
-        // Look up the existing monster-message record by Number so the
-        // Messages section in the dialog opens hydrated. Null when the
-        // store isn't wired or no record exists for this monster.
-        MonsterMessageRecord? existingMessages = null;
-        if (_monsterMessages is not null && int.TryParse(wcc, out int wccNum))
-            existingMessages = _monsterMessages.FindByMonsterNumber(wccNum);
-
         MonsterEditDialogViewModel vm = new(
             wccNoStr:         wcc,
             mdbName:          row.Get("Name") ?? string.Empty,
             existing:         existing,
             currentTier:      row.SourceTier,
             mdbInfo:          mdbInfo,
-            messages:         existingMessages,
             writableTiers:    _resolverRef?.WritableTiers(),
             // Lets "Override Attack" auto-resolve a typed cast-code (e.g.
             // "turn") onto the mana-gated spell rung instead of silently
@@ -379,18 +368,6 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
                 tier = fallback;
             }
             resolver.WriteGameDataAt(tier, "Monsters", result.WccNoStr, result.Overlay);
-        }
-
-        // Apply the messages edit when present. Id-keyed replace using
-        // the original record's Id (so content edits that flip the
-        // projected Id still target the right slot); Upsert when no
-        // original existed (first-time authoring).
-        if (_monsterMessages is not null && result.UpdatedMessages is not null)
-        {
-            if (result.OriginalMessages is not null)
-                _monsterMessages.Replace(result.OriginalMessages.Id, result.UpdatedMessages);
-            else
-                _monsterMessages.Upsert(result.UpdatedMessages);
         }
 
         Reload();

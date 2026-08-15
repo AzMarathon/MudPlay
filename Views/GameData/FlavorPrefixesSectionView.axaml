@@ -1,0 +1,84 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MudPlay.ViewModels.GameData"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="460"
+             x:Class="MudPlay.Views.GameData.FlavorPrefixesSectionView"
+             x:DataType="vm:FlavorPrefixesSectionViewModel">
+
+    <Border Padding="22" Background="{StaticResource ChromeBgSunkenBrush}">
+        <DockPanel MaxWidth="560" HorizontalAlignment="Left" LastChildFill="True">
+
+            <!-- Header -->
+            <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,14">
+                <TextBlock Text="Flavor Prefixes"
+                           Foreground="{StaticResource ChromeFgBrush}"
+                           FontSize="{StaticResource FontSizeLg}"
+                           FontWeight="SemiBold"/>
+                <TextBlock TextWrapping="Wrap"
+                           Foreground="{StaticResource ChromeFgSecBrush}"
+                           FontSize="{StaticResource FontSizeMd}"
+                           Text="The adjectives the game prepends to a monster's name. The room classifier strips a leading word in this list so a prefixed name resolves to its monster — &quot;large giant rat&quot; → &quot;giant rat&quot; — with no per-monster data. Add words a custom realm uses; the list applies to the active game-data set only."/>
+            </StackPanel>
+
+            <!-- Footer: which set + reset -->
+            <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding SetNote}"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1"
+                        Content="Reset to defaults"
+                        Command="{Binding ResetToDefaultsCommand}"/>
+            </Grid>
+
+            <!-- Add row -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+                <TextBox Grid.Column="0"
+                         Classes="clearable"
+                         PlaceholderText="Add an adjective…"
+                         Text="{Binding NewPrefix, Mode=TwoWay}">
+                    <TextBox.KeyBindings>
+                        <KeyBinding Gesture="Enter" Command="{Binding AddPrefixCommand}"/>
+                    </TextBox.KeyBindings>
+                </TextBox>
+                <Button Grid.Column="1"
+                        Content="Add"
+                        Margin="8,0,0,0"
+                        Command="{Binding AddPrefixCommand}"/>
+            </Grid>
+
+            <!-- The vocabulary list -->
+            <Border Background="{StaticResource ChromeBgElevBrush}"
+                    BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource CornerSm}"
+                    Padding="6">
+                <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding Prefixes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Grid ColumnDefinitions="*,Auto" Margin="2,1">
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding}"
+                                               Foreground="{StaticResource ChromeFgBrush}"
+                                               FontFamily="{StaticResource FontMono}"
+                                               FontSize="{StaticResource FontSizeMd}"
+                                               VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1"
+                                            Content="✕"
+                                            Padding="8,2"
+                                            Command="{Binding $parent[ItemsControl].((vm:FlavorPrefixesSectionViewModel)DataContext).RemovePrefixCommand}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+        </DockPanel>
+    </Border>
+</UserControl>

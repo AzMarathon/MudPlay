@@ -97,7 +97,17 @@ public sealed class CombatLineClassifier : IDisposable
         bool vsYou = You.IsMatch(text);
 
         if (hit)
-            return vsYou ? CombatLineKind.MonsterHitYou : CombatLineKind.MonsterHitOther;
+        {
+            if (vsYou) return CombatLineKind.MonsterHitYou;
+            // Not our own swing and not addressed to us. A monster's weapon hit on a
+            // party member renders in the attack colour (red, indexed 1). A damage line
+            // in the DEFAULT / white colour is instead a thorns/ShockShield reflect —
+            // a worn item striking the attacker back ("The armour spikes stab <monster>
+            // for N damage!"; the item wording varies: "collar spikes", …). There the
+            // monster is the VICTIM, so it's retaliation, not a monster hit. Split by
+            // colour: the reflect is white and follows the red hit that triggered it.
+            return IsAttackRed(fg) ? CombatLineKind.MonsterHitOther : CombatLineKind.Reflect;
+        }
 
         if (IsCyan(fg))
         {
@@ -127,6 +137,13 @@ public sealed class CombatLineClassifier : IDisposable
     // player's own hit colour, NOT an armor block — so bold disqualifies.
     private static bool IsDarkRed(TerminalColor fg, bool bold) =>
         fg.Kind == ColorKind.Indexed && fg.Value == 1 && !bold;
+
+    // The weapon-attack colour, bold-agnostic: any indexed-1 red. A monster's hit
+    // (dark or bright red) uses it; a thorns/ShockShield reflect is white/default, so
+    // this tells a real incoming hit apart from our retaliation among "for N damage"
+    // lines that don't address "you".
+    private static bool IsAttackRed(TerminalColor fg) =>
+        fg.Kind == ColorKind.Indexed && fg.Value == 1;
 
     // The line's colour: the foreground of its first visible (non-space) glyph.
     // Combat lines are emitted in a single colour, so the first glyph is
@@ -179,17 +196,14 @@ public sealed class CombatLineClassifier : IDisposable
         return sb.ToString();
     }
 
-    // Note a monster death the engine recognized, for the Wire Inspector's Classified
-    // view. A matched death MESSAGE tags [Monster Death: <name>]; an exp-inferred
-    // death (the specific per-monster message did NOT match — e.g. the "rot worm"
-    // death line vs the "rotworm" monster) tags it as inferred, so an unrecognized
-    // death line stands out in the trace. Recorded regardless of the combat window —
-    // the fallback fires on the *Combat Off* that closes it.
-    public void NoteMonsterDeath(string? name, bool inferred)
+    // Note a monster death for the Wire Inspector's Classified view. Deaths are
+    // recognized generically from the exp signal (a kill's "You gain N experience."
+    // before its *Combat Off*), so this marks the kill with the exp gained. Recorded
+    // regardless of the combat window — the death fires on the *Combat Off* that
+    // closes it.
+    public void NoteMonsterDeath(int? exp)
     {
-        string tag = inferred
-            ? "[Monster Death: inferred from exp — message not recognized]"
-            : $"[Monster Death: {name}]";
+        string tag = exp is { } e ? $"[Monster Death: +{e} exp]" : "[Monster Death]";
         Record(tag, CombatLineKind.None);
     }
 
@@ -212,6 +226,7 @@ public sealed class CombatLineClassifier : IDisposable
         CombatLineKind.DodgeOther       => "Other Dodge",
         CombatLineKind.MonsterMissYou   => "Monster Miss (you)",
         CombatLineKind.MonsterMissOther => "Monster Miss (other)",
+        CombatLineKind.Reflect          => "Reflect",
         _ => "",
     };
 

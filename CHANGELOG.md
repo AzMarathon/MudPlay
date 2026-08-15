@@ -2,6 +2,33 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.17.2
+
+- Wire Inspector: thorns/ShockShield reflect lines ("The armour spikes stab <monster> for N damage!") are now labelled **Reflect** instead of "Monster Hit (other)" — recognized generically by colour (a reflect is white, a real incoming hit is red) so it works for any item wording (armour spikes, collar spikes, …)
+
+## 3.17.1
+
+- Fixed: in a room with more than one monster, the engine no longer pauses and fires an attack at the just-killed monster ("Your command had no effect.") before switching to the survivor — the exp-inferred kill now drops the dead mob from the room roster immediately, so the next attack targets a living monster
+- bug reports addressed: paradigm-20260815-081045, paradigm-20260815-081201
+
+## 3.17.0
+
+- Monster flavor adjectives (large / nasty / huge / …) are now one **editable per-set vocabulary** instead of per-monster data — new **Flavor Prefixes** section in the Game Data Browser lets a custom realm add or remove the words it uses; the room classifier strips a leading word in that list to resolve "large giant rat" → "giant rat"
+- Per-monster `FlavorPrefixes` retired — removed from every monster record + the Monster editor's Flavor Prefixes box; the shared vocabulary fully replaces it (`MonsterMessageRecord` is now just name + link)
+- The unknown-entity "add as flavor prefix" action and the missing-flavor log-row double-click now add the word to the active set's vocabulary (both were previously stubs / opened the record)
+
+## 3.16.0
+
+- Per-monster combat message data retired — hit / miss / dodge / armor-block are recognized generically from line colour + wording, and a death from the experience line, so the Monster editor no longer has a Combat Messages section and no one has to hand-enter a monster's messages (crucial for custom games with tens of thousands of monsters)
+- Monster deaths are now recognized purely from `You gain N experience.` + `*Combat Off*` (our own targeting names the mob); the per-monster death-line matcher was removed
+- `MonsterMessageRecord` shrank to name + flavor-prefix data (the 8 unused hit/miss/dodge/block fields and the death-line field are gone)
+
+## 3.15.2
+
+- Combat engine no longer casts the round's alternate attack spell at a just-killed monster — a kill is now recognized on the `You gain N experience.` line (which arrives before the kill's `*Combat Off*`) instead of waiting for the `*Combat Off*`, so `lbol`→`mmis` no longer fires `mmis` at the corpse ("You don't see X here!"). Generic — works for any monster, no per-monster death message needed
+- Room monster names resolve their flavor adjectives (large / nasty / huge / …) from one shared vocabulary, so "large giant rat" is recognized even when the giant-rat record doesn't list "large" — a custom game needs no per-monster prefix data for the standard adjectives (canonical names like "huge basilisk" still match themselves)
+- bug reports addressed: paradigm-20260814-230258
+
 ## 3.15.0
 
 - Combat engine now recognizes monster hits / misses / dodges / armor-blocks **generically from line colour + wording** (no per-monster data), for both you and party members — surfaced live in the Wire Inspector's new **Classified** view

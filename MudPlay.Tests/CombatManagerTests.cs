@@ -95,17 +95,6 @@ public sealed class CombatManagerTests
             Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}",
                 Name: name,
-                HitYou: Array.Empty<string>(),
-                HitOther: Array.Empty<string>(),
-                DeathLine: deathLines,
-                ArmorBlockYou: Array.Empty<string>(),
-                ArmorBlockOther: Array.Empty<string>(),
-                DodgeYou: Array.Empty<string>(),
-                DodgeOther: Array.Empty<string>(),
-                MissYou: Array.Empty<string>(),
-                MissOther: Array.Empty<string>(),
-                FlavorPrefixes: flavorPrefixes,
-                AllowNoPrefix: allowNoPrefix,
                 Links: new[] { new GameDataLink("Monsters", number) }));
         }
 
@@ -176,6 +165,40 @@ public sealed class CombatManagerTests
 
         Assert.Single(h.Sent);
         Assert.Equal("a giant rat", h.LastSent);
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void ExpGain_MidFight_DropsTargetPromptly()
+    {
+        // The exp line lands on the wire BEFORE the kill's *Combat Off* (death flavour
+        // → exp → Off). Recognizing the kill here — not on the later Off — drops the
+        // target so the round's alternate attack can't fire at the corpse (report
+        // paradigm-20260814-230258: lbol kills → `mmis` at the dead mob). Generic:
+        // needs no per-monster death message.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");                 // engage + swing (attack committed)
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.Feed("You gain 100 experience.");              // the kill — before any *Combat Off*
+
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void CombatOff_WithoutExp_KeepsTarget()
+    {
+        // Breaking combat to cast a between-round (0-energy) spell emits a *Combat Off*
+        // with NO exp line — that's our own attack being interrupted, NOT a kill. The
+        // exp line is the discriminator, so with no exp the target must survive.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.Feed("*Combat Off*");                          // no exp preceded it
+
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
     }
 
@@ -527,6 +550,40 @@ public sealed class CombatManagerTests
             "expected a fresh swing at the survivor after the fallback kill");
         Assert.Equal("a small margoyle", h.LastSent);
         Assert.Equal("small margoyle", h.Combat.CurrentTarget);
+    }
+
+    [Fact]
+    public void ExpInferredKill_ThenUnattributedDeath_StillDropsCorpse_ReSwingsAtSurvivor()
+    {
+        // Multi-mob regression (paradigm-20260815-081045): the exp line lands BEFORE the
+        // kill's *Combat Off* and nulls _currentTarget so the round's alternate can't
+        // corpse-cast. NoteUnattributedDeath then fires on that Off with _currentTarget
+        // already null — before the fix it bailed, leaving the dead mob in the roster, so
+        // the re-pick re-swung at the corpse ("aa <dead>" → "no effect") after a pause
+        // until the fallback re-display. The stashed inferred-kill identity now lets the
+        // Off-path drop the corpse and re-pick the survivor immediately.
+        using Harness h = new();
+        h.AddMonster(1, "nasty orc lieutenant", killable: false);
+        h.AddMonster(2, "angry orc lieutenant", killable: false);
+
+        h.Feed("Also here: nasty orc lieutenant, angry orc lieutenant.");
+        Assert.Equal("a nasty orc lieutenant", h.LastSent);
+        Assert.Equal("nasty orc lieutenant", h.Combat.CurrentTarget);
+
+        // Exp line = prompt kill signal, before *Combat Off*. Drops the target (and now
+        // stashes its identity for the Off-path roster removal).
+        h.Feed("You gain 950 experience.");
+        Assert.Null(h.Combat.CurrentTarget);
+        int afterExp = h.Sent.Count;
+
+        // The kill's *Combat Off* routes to NoteUnattributedDeath — _currentTarget is
+        // already null, so the stashed identity drives the roster removal + re-pick.
+        h.Combat.NoteUnattributedDeath();
+
+        Assert.True(h.Sent.Count > afterExp,
+            "expected a fresh swing at the survivor after the exp-inferred kill's Off");
+        Assert.Equal("a angry orc lieutenant", h.LastSent);
+        Assert.Equal("angry orc lieutenant", h.Combat.CurrentTarget);
     }
 
     [Fact]

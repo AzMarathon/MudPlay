@@ -279,6 +279,14 @@ public static class AppPaths
     public static string MonsterMessagesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "monster-messages.json");
 
+    // Per-set editable flavor-prefix vocabulary — the adjectives the game prepends
+    // to a monster's base name ("large", "nasty", …). Sits beside the other per-set
+    // parser data so the realm's vocabulary travels with it. No seed file: absent
+    // this file the built-in MonsterFlavorPrefixes.DefaultPrefixes apply, and the
+    // Game Data Browser writes the whole current list here once the user customizes.
+    public static string FlavorPrefixesFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), "flavor-prefixes.json");
+
     // User-writable MonsterMessages seed JSON, hosted in the XDG-resolved
     // Global/ folder. Acts as the fallback when the per-set
     // MonsterMessagesFile doesn't exist yet for a set. Bootstrapped from

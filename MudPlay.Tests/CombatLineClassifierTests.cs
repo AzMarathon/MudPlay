@@ -68,6 +68,27 @@ public sealed class CombatLineClassifierTests
         => Assert.Equal(CombatLineKind.MonsterHitOther,
             Classify("The dark monk punches Fujin in the head for 7 damage!", Red, bold: false));
 
+    // A thorns/ShockShield reflect: a worn item strikes the attacker back. It's white
+    // (default colour) and its victim is the MONSTER, so it must NOT read as a monster
+    // hitting someone. The item wording varies ("armour spikes", "collar spikes", …),
+    // so recognition is by colour + "for N damage" + a non-"you" target, not wording.
+    [Fact]
+    public void ShockShieldReflect_White_IsReflect()
+        => Assert.Equal(CombatLineKind.Reflect,
+            Classify("The armour spikes stab fierce orc captain for 5 damage!", White));
+
+    [Fact]
+    public void ShockShieldReflect_DefaultColour_IsReflect()
+        => Assert.Equal(CombatLineKind.Reflect,
+            Classify("The collar spikes stab tentacled mass for 6 damage!", TerminalColor.Default));
+
+    // The reflect fix must not steal genuine incoming hits: a red "for N damage" line
+    // targeting a party member is still a monster hit, not a reflect.
+    [Fact]
+    public void MonsterHitOther_Red_NotMisreadAsReflect()
+        => Assert.Equal(CombatLineKind.MonsterHitOther,
+            Classify("The armour spikes stab fierce orc captain for 5 damage!", Red, bold: false));
+
     [Fact]
     public void OutsideCombatWindow_IsNone()
         => Assert.Equal(CombatLineKind.None,
@@ -79,18 +100,10 @@ public sealed class CombatLineClassifierTests
             Classify("Obvious exits: north, south, west", White));
 
     [Fact]
-    public void NoteMonsterDeath_Matched_TagsWithName()
+    public void NoteMonsterDeath_MarksKillWithExp()
     {
         using var c = new CombatLineClassifier(new MudPlay.Services.MessageRouter());
-        c.NoteMonsterDeath("rotworm", inferred: false);
-        Assert.Contains("[Monster Death: rotworm]", c.RenderLog());
-    }
-
-    [Fact]
-    public void NoteMonsterDeath_Inferred_FlagsUnrecognized()
-    {
-        using var c = new CombatLineClassifier(new MudPlay.Services.MessageRouter());
-        c.NoteMonsterDeath(null, inferred: true);
-        Assert.Contains("message not recognized", c.RenderLog());
+        c.NoteMonsterDeath(950);
+        Assert.Contains("[Monster Death: +950 exp]", c.RenderLog());
     }
 }

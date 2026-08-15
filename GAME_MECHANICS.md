@@ -631,6 +631,24 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   fallback — otherwise, with identical-exp mobs dying every few seconds (a swarm), the prior kill's
   exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback
   death on it, a beat before the current mob actually dies.
+- **The exp line is the earliest reliable per-kill signal during combat** *([CONFIRMED] 2026-08-15,
+  user)*. Every kill grants exp, and the exp line lands **before** the kill's `*Combat Off*` (order
+  above). So while engaged with a target we've attacked, a `You gain N experience.` line means that
+  target just died — recognize the kill on the **exp line**, not the later `*Combat Off*`. Waiting for
+  the Off let the round's **alternate** attack corpse-cast: `lbol` kills → `mmis <corpse>` → "You don't
+  see X here!" (report paradigm-20260814-230258). This is generic — the exp line is identical for
+  every monster.
+- **AoE clears the whole room as a burst of exp lines** *([CONFIRMED] 2026-08-15, user — "20 targets
+  dead in 1 spell")*. One room spell prints a `<flavor>` + `You gain N experience.` **pair per monster
+  it kills**, then a **single** `*Combat Off*` at the end. So exp-line count = kill count.
+- **Death messages are arbitrary per-monster flavor** — no shared keyword (a scan of 1035 seed death
+  lines: `…a tortured squeak`, `…to the ground`, `…without a sound`, `…a thousand pieces`, `…an
+  agonized bellow`, `…in a heap`, most with no death word) and no distinctive colour (they render
+  default/white). So a monster death **cannot be recognized by wording or colour generically** — the
+  exp line is the generic signal, and our own targeting (`CombatManager.CurrentTarget`) names the mob.
+  The per-monster `DeathLine` data was therefore **retired** (v3.16.0): every kill is recognized from
+  exp + `*Combat Off*`, and the dead slot is refreshed by the forced room re-display. No per-monster
+  death message is maintained anywhere.
 
 **Attributing a kill to a specific monster** *([CONFIRMED] 2026-08-04, user)*
 - **Monster numbers are never observable in-game** — the client only ever sees monster *names* on
@@ -2618,6 +2636,7 @@ glass jug               5               2 gold crowns
 | Guard interposes for a guarded monster (no trailing period, no prefix) | `<guard> moves to protect <protected>` |
 | Incoming mob attack — miss (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> at you` |
 | Incoming mob attack — hit (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> you for N damage!` |
+| Thorns / ShockShield reflect (**white** line, follows the **red** hit that triggered it, inside a *Combat Engaged*…*Combat Off* window) | `The <item-wording> stab <attacker> for N damage!` — **[CONFIRMED 2026-08-15, user]** a worn item with the **ShockShield** property (value = max reflect damage, e.g. 5) strikes the attacker BACK for up to that much when the wearer is hit **physically**; fires after an **armor-block glance** (0 damage to us) OR a real hit. The item wording varies (`armour spikes`, `collar spikes`, …), so it's recognized by COLOUR (white/default, vs the red of a real incoming hit) + `for N damage` + a non-`you` target — NOT by wording. The **monster is the victim**, so it's OUR (or a party member's) damage, classified `Reflect`, not a monster hit |
 | Monster leaves the room (e.g. dragged out by a fleeing player) | `<name> walks out of the room to <dir>.` **or** `<name> exits the room to <dir>.` — both confirmed; the "exits" form (no leading article) was the paradigm drag-out capture |
 | Attacked a target not in the room | `Your command had no effect.` |
 | Toll exit unaffordable | `You do not have enough to cover the toll of N gold crowns.` |
