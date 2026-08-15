@@ -407,6 +407,7 @@ public static class KnownPatterns
     public const string SuicidePasswordNotChanged = "suicide.not-changed"; // "Password NOT changed"         (empty-CR into new-password prompt)
     public const string Reroll                   = "reroll";               // "After a LONG thought, you take your own life" (successful suicide → character rerolled)
     public const string LearnSpell               = "spell.learn";          // "You read <scroll> and learn the spell <name>." (group 1 = spell Name)
+    public const string LearnSpellFromItem       = "spell.learn.item";     // ParaMud: "You add <name> to your spellbook!" — learning from a teaching item via `read <code>` (group 1 = spell Name)
 
     // ----- Trap-disarm flow ----------------------------------------------
     // Drives TrapDisarmManager's search → disarm state machine. Failure

@@ -166,6 +166,22 @@ public sealed class DefaultPatternsTests
         Assert.Equal("minor heal", r2.Groups[0]);
     }
 
+    [Fact]
+    public void LearnSpellFromItemRegex_CapturesSpellName()
+    {
+        IMessagePattern p = PatternById(KnownPatterns.LearnSpellFromItem);
+
+        // ParaMud teaching-item wording ("read <code>" → "You add <name> to your spellbook!").
+        Assert.True(p.TryMatch(Line("You add agony to your spellbook!"), out MatchResult r));
+        Assert.Equal("agony", r.Groups[0]);
+
+        Assert.True(p.TryMatch(Line("You add greater curse to your spellbook!"), out MatchResult r2));
+        Assert.Equal("greater curse", r2.Groups[0]);
+
+        // Unrelated "You add … to your pack." lines must NOT match.
+        Assert.False(p.TryMatch(Line("You add a torch to your pack."), out _));
+    }
+
     // A third party grabbing ground cash — count-less, "some", NO trailing period.
     // The coin plural is captured whole (CashManager keys off the leading word).
     [Fact]

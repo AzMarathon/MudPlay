@@ -202,35 +202,57 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // Five slots × 4 fields each — flat to keep the AXAML grid binding straightforward.
 
     // MaxCastsPerRoom is nullable: blank = no limit, 0 = never cast, N = cap.
-    [ObservableProperty] private string? _multiAttackSpellName;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MultiAttackSpellUnlearned))]
+    private string? _multiAttackSpellName;
     [ObservableProperty] private int _multiAttackMinEnemies;
     [ObservableProperty] private int? _multiAttackMaxCastsPerRoom;
     [ObservableProperty] private int _multiAttackMinManaPerCast;
 
-    [ObservableProperty] private string? _areaDebuffSpellName;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AreaDebuffSpellUnlearned))]
+    private string? _areaDebuffSpellName;
     [ObservableProperty] private int _areaDebuffMinEnemies;
     [ObservableProperty] private int? _areaDebuffMaxCastsPerRoom;
     [ObservableProperty] private int _areaDebuffMinManaPerCast;
 
-    [ObservableProperty] private string? _singleTargetDebuffSpellName;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SingleTargetDebuffSpellUnlearned))]
+    private string? _singleTargetDebuffSpellName;
     [ObservableProperty] private int? _singleTargetDebuffMaxCastsPerRoom;
     [ObservableProperty] private int _singleTargetDebuffMinManaPerCast;
 
-    [ObservableProperty] private string? _normalAttackSpellName;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NormalAttackSpellUnlearned))]
+    private string? _normalAttackSpellName;
     [ObservableProperty] private int? _normalAttackSpellMaxCastsPerRoom;
     [ObservableProperty] private int _normalAttackSpellMinManaPerCast;
 
-    [ObservableProperty] private string? _alternateAttackSpellName;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AlternateAttackSpellUnlearned))]
+    private string? _alternateAttackSpellName;
     [ObservableProperty] private int? _alternateAttackSpellMaxCastsPerRoom;
     [ObservableProperty] private int _alternateAttackSpellMinManaPerCast;
 
     // Drain (life-steal) spell — an emergency heal that also attacks. DrainHpTrigger
     // is the HP% at/under which it overrides the round's action; DrainsOverrideAoe
     // lets it pre-empt the room AoE too (off = the AoE wins when rooming).
-    [ObservableProperty] private string? _drainSpellName;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DrainSpellUnlearned))]
+    private string? _drainSpellName;
     [ObservableProperty] private int? _drainSpellMaxCastsPerRoom;
     [ObservableProperty] private int _drainSpellMinManaPerCast;
     [ObservableProperty] private int _drainHpTrigger = 50;
+
+    // Red-outline flags: the slot points at a spell this class can learn but the
+    // character hasn't (re-raised on the name change above via NotifyPropertyChangedFor,
+    // and on a spellbook change via OnSpellbookChanged).
+    public bool MultiAttackSpellUnlearned        => IsSpellUnlearned(SpellSuggestions, MultiAttackSpellName);
+    public bool AreaDebuffSpellUnlearned         => IsSpellUnlearned(SpellSuggestions, AreaDebuffSpellName);
+    public bool SingleTargetDebuffSpellUnlearned => IsSpellUnlearned(SpellSuggestions, SingleTargetDebuffSpellName);
+    public bool NormalAttackSpellUnlearned       => IsSpellUnlearned(SpellSuggestions, NormalAttackSpellName);
+    public bool AlternateAttackSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, AlternateAttackSpellName);
+    public bool DrainSpellUnlearned              => IsSpellUnlearned(SpellSuggestions, DrainSpellName);
     [ObservableProperty] private bool _drainsOverrideAoe;
 
     // ----- Min-mana-per-cast conversion (mirrors the Health tab) -----
@@ -451,7 +473,17 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     private void OnProfileChanged(CharacterProfile _) => ReloadAfterProfileSwap();
     private void OnProfileClosedExternally() => ReloadAfterProfileSwap();
 
-    private void OnSpellbookChanged() => OnPropertyChanged(nameof(SpellSuggestions));
+    private void OnSpellbookChanged()
+    {
+        OnPropertyChanged(nameof(SpellSuggestions));
+        // The learned set (hence each slot's red-outline flag) just changed.
+        OnPropertyChanged(nameof(MultiAttackSpellUnlearned));
+        OnPropertyChanged(nameof(AreaDebuffSpellUnlearned));
+        OnPropertyChanged(nameof(SingleTargetDebuffSpellUnlearned));
+        OnPropertyChanged(nameof(NormalAttackSpellUnlearned));
+        OnPropertyChanged(nameof(AlternateAttackSpellUnlearned));
+        OnPropertyChanged(nameof(DrainSpellUnlearned));
+    }
 
     private void ReloadAfterProfileSwap()
     {

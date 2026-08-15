@@ -12,6 +12,10 @@ namespace MudPlay.ViewModels.Settings;
 public sealed partial class SelfBlessSlotViewModel : ObservableObject
 {
     private readonly Action _onChanged;
+    // Returns true when the given cast-code names a spell this class can learn but
+    // the character hasn't (cast-on-use item codes never count). Supplied by the
+    // parent, which owns the bless suggestion list. Null → never flagged.
+    private readonly Func<string?, bool>? _isUnlearned;
     private bool _suppress;
 
     // 1-based row number, surfaced as the "Bless N" label and used as the
@@ -23,16 +27,28 @@ public sealed partial class SelfBlessSlotViewModel : ObservableObject
 
     // Committed 4-letter spell short-code, or blank for an unused slot. Bound
     // to the row's AutoCompleteBox.
-    [ObservableProperty] private string? _spell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Unlearned))]
+    private string? _spell;
 
     // Recast lead in seconds: how far before the buff's tracked expiry the engine
     // recasts it. 0 = wait for actual expiry. Bound to the row's NumericUpDown.
     [ObservableProperty] private int _recastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
 
-    public SelfBlessSlotViewModel(int index, string? spell, int recastMarginSec, Action onChanged)
+    // Red-outline flag: the slot names a spell the character hasn't learned. Bound
+    // to the row's AutoCompleteBox (Classes.unlearnedSpell). Re-raised on the Spell
+    // change above and via RefreshUnlearned when the parent's spellbook changes.
+    public bool Unlearned => _isUnlearned?.Invoke(Spell) ?? false;
+
+    public void RefreshUnlearned() => OnPropertyChanged(nameof(Unlearned));
+
+    public SelfBlessSlotViewModel(
+        int index, string? spell, int recastMarginSec, Action onChanged,
+        Func<string?, bool>? isUnlearned = null)
     {
         Index = index;
         _onChanged = onChanged ?? throw new ArgumentNullException(nameof(onChanged));
+        _isUnlearned = isUnlearned;
 
         _suppress = true;
         Spell = spell;

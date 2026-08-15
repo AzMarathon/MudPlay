@@ -130,15 +130,29 @@ public sealed class SpellbookState
         {
             _available = new List<KnownSpell>(_catalog.Query(classNumber, level: 0, charAlign));
             _obtained.RemoveWhere(n => !_available.Exists(s => s.Number == n));
-            _availablePicks = _available
-                .Where(s => !string.IsNullOrWhiteSpace(s.Short))
-                .GroupBy(s => s.Short.Trim(), StringComparer.OrdinalIgnoreCase)
-                .Select(g => new SpellPick(g.Key, g.First().Name.Trim()))
-                .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+            RebuildAvailablePicks();
         }
 
         if (classChanged || levelChanged) Changed?.Invoke();
+    }
+
+    // Rebuild the distinct-by-cast-code pick list, stamping each with whether the
+    // character has obtained it. Runs on a class change (new _available) AND on
+    // every obtained-set change (learn line / spells poll / reroll), so the
+    // picker's learned flag tracks live. When nothing is obtained yet (unknown —
+    // the spell list hasn't been parsed) every pick is Learned so the guard stays
+    // silent rather than striking through the whole class.
+    private void RebuildAvailablePicks()
+    {
+        bool obtainedKnown = _obtained.Count > 0;
+        _availablePicks = _available
+            .Where(s => !string.IsNullOrWhiteSpace(s.Short))
+            .GroupBy(s => s.Short.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => new SpellPick(
+                g.Key, g.First().Name.Trim(),
+                Learned: !obtainedKnown || g.Any(s => _obtained.Contains(s.Number))))
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     // Replace the obtained set with exactly the spells named in names (the
@@ -155,6 +169,7 @@ public sealed class SpellbookState
         if (next.SetEquals(_obtained)) return;
         _obtained.Clear();
         _obtained.UnionWith(next);
+        RebuildAvailablePicks();
         Changed?.Invoke();
     }
 
@@ -165,7 +180,11 @@ public sealed class SpellbookState
     public KnownSpell? MarkObtainedByName(string name)
     {
         if (FindAvailableByName(name) is not { } match) return null;
-        if (_obtained.Add(match.Number)) Changed?.Invoke();
+        if (_obtained.Add(match.Number))
+        {
+            RebuildAvailablePicks();
+            Changed?.Invoke();
+        }
         return match;
     }
 
@@ -174,6 +193,7 @@ public sealed class SpellbookState
     {
         if (_obtained.Count == 0) return;
         _obtained.Clear();
+        RebuildAvailablePicks();
         Changed?.Invoke();
     }
 

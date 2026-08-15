@@ -158,12 +158,24 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     // ----- Healing / regen ------------------------------------------
 
-    [ObservableProperty] private string? _minorHealSpell;
-    [ObservableProperty] private string? _majorHealSpell;
-    [ObservableProperty] private string? _hpRegenSpell;
-    [ObservableProperty] private string? _maRegenSpell;
-    [ObservableProperty] private string? _whenHpFullSpell;
-    [ObservableProperty] private string? _whenMaFullSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MinorHealSpellUnlearned))]
+    private string? _minorHealSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MajorHealSpellUnlearned))]
+    private string? _majorHealSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HpRegenSpellUnlearned))]
+    private string? _hpRegenSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MaRegenSpellUnlearned))]
+    private string? _maRegenSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WhenHpFullSpellUnlearned))]
+    private string? _whenHpFullSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WhenMaFullSpellUnlearned))]
+    private string? _whenMaFullSpell;
 
     // ----- Mana-regen reroll (Paradigm roll spells) -----------------
     // Empty threshold = rerolling off (the spell just recasts on expiry).
@@ -180,11 +192,36 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     // ----- Cures + utility ------------------------------------------
 
-    [ObservableProperty] private string? _cureHoldsSpell;
-    [ObservableProperty] private string? _curePoisonSpell;
-    [ObservableProperty] private string? _cureDiseaseSpell;
-    [ObservableProperty] private string? _cureBlindnessSpell;
-    [ObservableProperty] private string? _roomLightSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CureHoldsSpellUnlearned))]
+    private string? _cureHoldsSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CurePoisonSpellUnlearned))]
+    private string? _curePoisonSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CureDiseaseSpellUnlearned))]
+    private string? _cureDiseaseSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CureBlindnessSpellUnlearned))]
+    private string? _cureBlindnessSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RoomLightSpellUnlearned))]
+    private string? _roomLightSpell;
+
+    // Red-outline flags — the slot names a spell the character hasn't learned.
+    // All eleven pick from SpellSuggestions (spell-only). Re-raised on the name
+    // change (attributes above) and on a spellbook change (OnSpellbookChanged).
+    public bool MinorHealSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, MinorHealSpell);
+    public bool MajorHealSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, MajorHealSpell);
+    public bool HpRegenSpellUnlearned       => IsSpellUnlearned(SpellSuggestions, HpRegenSpell);
+    public bool MaRegenSpellUnlearned       => IsSpellUnlearned(SpellSuggestions, MaRegenSpell);
+    public bool WhenHpFullSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, WhenHpFullSpell);
+    public bool WhenMaFullSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, WhenMaFullSpell);
+    public bool CureHoldsSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, CureHoldsSpell);
+    public bool CurePoisonSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, CurePoisonSpell);
+    public bool CureDiseaseSpellUnlearned   => IsSpellUnlearned(SpellSuggestions, CureDiseaseSpell);
+    public bool CureBlindnessSpellUnlearned => IsSpellUnlearned(SpellSuggestions, CureBlindnessSpell);
+    public bool RoomLightSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, RoomLightSpell);
 
     // ----- Bless slots (realm-sized: Stock 10 / ParaMud 15) ---------
 
@@ -247,6 +284,19 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(BlessSpellSuggestions));
         // Class / level swap rescales the roll range shown in the reroll hint.
         OnPropertyChanged(nameof(ManaRegenRerollHint));
+        // The learned set (hence every slot's red-outline flag) just changed.
+        OnPropertyChanged(nameof(MinorHealSpellUnlearned));
+        OnPropertyChanged(nameof(MajorHealSpellUnlearned));
+        OnPropertyChanged(nameof(HpRegenSpellUnlearned));
+        OnPropertyChanged(nameof(MaRegenSpellUnlearned));
+        OnPropertyChanged(nameof(WhenHpFullSpellUnlearned));
+        OnPropertyChanged(nameof(WhenMaFullSpellUnlearned));
+        OnPropertyChanged(nameof(CureHoldsSpellUnlearned));
+        OnPropertyChanged(nameof(CurePoisonSpellUnlearned));
+        OnPropertyChanged(nameof(CureDiseaseSpellUnlearned));
+        OnPropertyChanged(nameof(CureBlindnessSpellUnlearned));
+        OnPropertyChanged(nameof(RoomLightSpellUnlearned));
+        foreach (SelfBlessSlotViewModel slot in BlessSlots) slot.RefreshUnlearned();
     }
 
     // Resolves the current MaRegenSpell pick to its roll range (nature tap /
@@ -455,7 +505,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
                 i,
                 full.TryGetValue(i, out string? code) ? code : null,
                 margins.TryGetValue(i, out int m) ? m : SpellsSettings.DefaultBlessRecastMarginSec,
-                MarkDirty));
+                MarkDirty,
+                // Bless slots pick from spells + cast-on-use items; only real spells
+                // the character hasn't learned flag red (item codes report Learned).
+                c => IsSpellUnlearned(BlessSpellSuggestions, c)));
     }
 
     // Merge the visible rows with the preserved out-of-range slots into the

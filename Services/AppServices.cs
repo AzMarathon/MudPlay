@@ -1856,6 +1856,13 @@ public sealed class AppServices
         {
             if (m.Groups.Count > 0) Spellbook.MarkObtainedByName(m.Groups[0]);
         });
+        // ParaMud teaching-item wording ("You add <name> to your spellbook!") —
+        // same effect as the learn-scroll line, so the picker's unlearned guard
+        // clears the moment the spell is learned mid-session.
+        Router.Subscribe(Services.Patterns.KnownPatterns.LearnSpellFromItem, m =>
+        {
+            if (m.Groups.Count > 0) Spellbook.MarkObtainedByName(m.Groups[0]);
+        });
         // Alignment staleness — "A dark cloud passes over you" flags the
         // Character Workshop's displayed alignment stale until the next `who`
         // re-observes our own row. Long-lived so the line is caught even when

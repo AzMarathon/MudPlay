@@ -10,13 +10,31 @@
 
     <UserControl.Resources>
         <!-- Dropdown row: "code — name". The box commits the Short cast-code
-             (ValueMemberBinding); this template only shapes the list display. -->
+             (ValueMemberBinding); this template only shapes the list display.
+             Spells this character hasn't learned are struck through + dimmed so a
+             slot isn't pointed at a spell the class can learn but this character
+             hasn't (the "agon that was never learned" misconfiguration). -->
         <DataTemplate x:Key="SpellPickItem" x:DataType="spells:SpellPick">
-            <TextBlock Text="{Binding Display}"/>
+            <TextBlock Text="{Binding Display}" Classes.unlearnedPick="{Binding !Learned}"/>
         </DataTemplate>
     </UserControl.Resources>
 
     <UserControl.Styles>
+        <!-- Unlearned dropdown row: struck through + dimmed. -->
+        <Style Selector="TextBlock.unlearnedPick">
+            <Setter Property="TextDecorations" Value="Strikethrough"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <!-- A slot pointed at an unlearned spell: red outline as a warning (still
+             saved — the guard only warns; picking is not blocked). Set on both the
+             box and its inner TextBox so the red shows whichever the theme draws. -->
+        <Style Selector="AutoCompleteBox.unlearnedSpell">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="AutoCompleteBox.unlearnedSpell /template/ TextBox">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
         <Style Selector="TextBlock.SectionHeader">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
@@ -267,6 +285,7 @@
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Multi-attack"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding MultiAttackSpellName, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding MultiAttackSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -295,6 +314,7 @@
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (AOE)"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding AreaDebuffSpellName, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding AreaDebuffSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -323,6 +343,7 @@
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (single target)"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding SingleTargetDebuffSpellName, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding SingleTargetDebuffSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -350,6 +371,7 @@
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Normal attack spell"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding NormalAttackSpellName, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding NormalAttackSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -377,6 +399,7 @@
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Alternate attack spell"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding AlternateAttackSpellName, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding AlternateAttackSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -406,6 +429,7 @@
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Drain spell"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding DrainSpellName, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding DrainSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"

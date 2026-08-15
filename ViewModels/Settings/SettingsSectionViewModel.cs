@@ -57,6 +57,21 @@ public abstract partial class SettingsSectionViewModel : ObservableObject, IDisp
              || pick.Short.Contains(search, StringComparison.OrdinalIgnoreCase)
              || pick.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
 
+    // True when code names a spell this class CAN learn but the character hasn't —
+    // the picker outlines the box red as a "you haven't learned this" warning.
+    // A code that matches no suggestion (a freeform / other-class value) is NOT
+    // flagged, and when the obtained set is unknown every pick reports Learned =
+    // true, so the whole class never lights up red before the spell list is parsed.
+    protected static bool IsSpellUnlearned(IReadOnlyList<SpellPick> picks, string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return false;
+        string c = code.Trim();
+        foreach (SpellPick p in picks)
+            if (string.Equals(p.Short, c, StringComparison.OrdinalIgnoreCase))
+                return !p.Learned;
+        return false;
+    }
+
     // Register a cleanup callback (typically an event -=) to run when the
     // Settings window closes. Sections that subscribe to a singleton outliving
     // the window MUST unhook here, or the publisher pins the whole VM graph

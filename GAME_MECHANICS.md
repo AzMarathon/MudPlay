@@ -2086,6 +2086,24 @@ slot and displaces only what was there, so restore is **slot-specific**:
   the off-hand) → `eq <off-hand>`.
 Whatever slot was empty simply isn't restored (nothing to put back).
 
+### Learning a spell from a teaching item *([CONFIRMED] 2026-08-15, user + wire capture)*
+
+A teaching item (a spellbook / tome carrying the `LearnSp` ability, code **42**, whose value is
+the `Spells.Number` it teaches) is used with **`read <code>`** — the SAME 4-letter cast-code the
+spell is otherwise cast by. On success the game confirms with:
+
+```
+:read agon
+You add agony to your spellbook!
+```
+
+Note the command speaks the short code (`agon`) but the confirmation names the **full spell name**
+(`agony`). This is a distinct wording from the classic learn-scroll line ("You read <scroll> and
+learn the spell <name>.") — the client recognises both (`KnownPatterns.LearnSpell` +
+`LearnSpellFromItem`) and marks the spell obtained (`SpellbookState.MarkObtainedByName`, keyed on
+the name), so the learned-spell set updates the instant a spell is learned mid-session rather than
+waiting for the next `spells` poll.
+
 ### Armour Class contributions — shadow, Prot-Evil, VileWard *([CONFIRMED] 2026-07-18, user)*
 
 Sources that feed a character's effective AC beyond the item/race/class/quest `+AC` (ability code

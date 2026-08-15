@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.5**
-> - Caster combat: the per-round attack-spell cascade switch is deferred past the killing blow's server line burst, so the alternate spell (e.g. `lbol`→`mmis`) or weapon fallback no longer fires at the just-killed mob ("You don't see X here!") and the surviving mob engages cleanly
-> - Caster combat: MaxCasts now counts real rounds, not damage-line ticks — a multi-hit attack spell + the mob's counter-swing no longer trip the cascade a round early (e.g. `hamm` set to 2 swapping after 1 cast)
+> **Version 3.18.6**
+> - Spell pickers (Combat tab + Spells tab) now strike through and dim spells your character hasn't learned, and outline a slot red when it points at an unlearned spell — a guard against configuring a spell you can't actually cast (the value is still saved; the red outline is just a warning)
+> - Recognize ParaMud's "You add <spell> to your spellbook!" so the learned-spell guard updates the instant you learn a spell from a teaching item
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

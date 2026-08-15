@@ -11,13 +11,29 @@
 
     <UserControl.Resources>
         <!-- Dropdown row: "code — name". The box commits the Short cast-code
-             (ValueMemberBinding); this template only shapes the list display. -->
+             (ValueMemberBinding); this template only shapes the list display.
+             Spells this character hasn't learned are struck through + dimmed.
+             (Cast-on-use ITEMS in the bless picker report Learned = true, so
+             they're never struck — you possess them, you don't learn them.) -->
         <DataTemplate x:Key="SpellPickItem" x:DataType="spells:SpellPick">
-            <TextBlock Text="{Binding Display}"/>
+            <TextBlock Text="{Binding Display}" Classes.unlearnedPick="{Binding !Learned}"/>
         </DataTemplate>
     </UserControl.Resources>
 
     <UserControl.Styles>
+        <!-- Unlearned dropdown row: struck through + dimmed. -->
+        <Style Selector="TextBlock.unlearnedPick">
+            <Setter Property="TextDecorations" Value="Strikethrough"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <!-- A slot pointed at an unlearned spell: red outline warning (still saved). -->
+        <Style Selector="AutoCompleteBox.unlearnedSpell">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="AutoCompleteBox.unlearnedSpell /template/ TextBox">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
         <Style Selector="TextBlock.SectionHeader">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
@@ -72,6 +88,7 @@
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Minor heal"/>
                     <AutoCompleteBox Grid.Row="0" Grid.Column="1"
                                      Text="{Binding MinorHealSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding MinorHealSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -83,6 +100,7 @@
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Major heal"/>
                     <AutoCompleteBox Grid.Row="1" Grid.Column="1"
                                      Text="{Binding MajorHealSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding MajorHealSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -94,6 +112,7 @@
                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="HP Regen"/>
                     <AutoCompleteBox Grid.Row="2" Grid.Column="1"
                                      Text="{Binding HpRegenSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding HpRegenSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -105,6 +124,7 @@
                     <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Mana Regen"/>
                     <AutoCompleteBox Grid.Row="3" Grid.Column="1"
                                      Text="{Binding MaRegenSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding MaRegenSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -116,6 +136,7 @@
                     <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="When HP full"/>
                     <AutoCompleteBox Grid.Row="4" Grid.Column="1"
                                      Text="{Binding WhenHpFullSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding WhenHpFullSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -127,6 +148,7 @@
                     <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="When Mana full"/>
                     <AutoCompleteBox Grid.Row="5" Grid.Column="1"
                                      Text="{Binding WhenMaFullSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding WhenMaFullSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -174,6 +196,7 @@
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Cure Holds"/>
                     <AutoCompleteBox Grid.Row="0" Grid.Column="1"
                                      Text="{Binding CureHoldsSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding CureHoldsSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -185,6 +208,7 @@
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Cure poison"/>
                     <AutoCompleteBox Grid.Row="1" Grid.Column="1"
                                      Text="{Binding CurePoisonSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding CurePoisonSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -196,6 +220,7 @@
                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Cure disease"/>
                     <AutoCompleteBox Grid.Row="2" Grid.Column="1"
                                      Text="{Binding CureDiseaseSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding CureDiseaseSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -207,6 +232,7 @@
                     <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Cure blindness"/>
                     <AutoCompleteBox Grid.Row="3" Grid.Column="1"
                                      Text="{Binding CureBlindnessSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding CureBlindnessSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -218,6 +244,7 @@
                     <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Room light"/>
                     <AutoCompleteBox Grid.Row="4" Grid.Column="1"
                                      Text="{Binding RoomLightSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding RoomLightSpellUnlearned}"
                                      ItemsSource="{Binding SpellSuggestions}"
                                      ValueMemberBinding="{ReflectionBinding Short}"
                                      ItemFilter="{Binding SpellSuggestionFilter}"
@@ -246,6 +273,7 @@
                                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"/>
                                 <AutoCompleteBox Grid.Column="1"
                                                  Text="{Binding Spell, Mode=TwoWay}"
+                                                 Classes.unlearnedSpell="{Binding Unlearned}"
                                                  ItemsSource="{Binding $parent[ItemsControl].((vm:SpellsSectionViewModel)DataContext).BlessSpellSuggestions}"
                                                  ValueMemberBinding="{ReflectionBinding Short}"
                                                  ItemFilter="{Binding $parent[ItemsControl].((vm:SpellsSectionViewModel)DataContext).SpellSuggestionFilter}"
