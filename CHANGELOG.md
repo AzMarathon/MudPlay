@@ -5,7 +5,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 ## 3.17.1
 
 - Fixed: in a room with more than one monster, the engine no longer pauses and fires an attack at the just-killed monster ("Your command had no effect.") before switching to the survivor — the exp-inferred kill now drops the dead mob from the room roster immediately, so the next attack targets a living monster
-- bug reports addressed: paradigm-20260815-081045
+- bug reports addressed: paradigm-20260815-081045, paradigm-20260815-081201
 
 ## 3.17.0
 
