@@ -427,6 +427,7 @@ public sealed class CombatStateTracker : IDisposable
         _anyNpcPresent = false;
         int targetable = 0;
         int actionable = 0;
+        int attacking = 0;
         string? first = null;
         bool roomHasSeeHidden = false;
         foreach (RoomEntity e in obs.Entities)
@@ -442,6 +443,9 @@ public sealed class CombatStateTracker : IDisposable
                     first ??= e.ResolvedName;
                 }
             }
+            // On-sight attackers only (Enemy relationship) — a passive KOS-neutral is
+            // engageable but never attacks until we hit it, so it doesn't count here.
+            if (IsAttackingHostile(e)) attacking++;
             if (!roomHasSeeHidden && e.MonsterNumber is int n
                 && _hasSeeHidden?.Invoke(n) == true)
             {
@@ -452,8 +456,10 @@ public sealed class CombatStateTracker : IDisposable
         // Raw hostile presence, updated on every observation ahead of the
         // auto-attack branches below so it stays accurate even when the gate
         // itself is short-circuited off (manual player). Read by the
-        // emergency-hangup gate.
-        _hostilePresent = targetable > 0;
+        // emergency-hangup gate + the health rest-block. Enemy-relationship
+        // (on-sight attackers) only — a passive KOS-neutral is engageable but not a
+        // threat until we hit it, so it must not read as "a hostile is here."
+        _hostilePresent = attacking > 0;
 
         if (!_isAutoAttackEnabled())
         {
@@ -596,16 +602,31 @@ public sealed class CombatStateTracker : IDisposable
         return targetable >= min && targetable <= max;
     }
 
-    // Engageable = MonsterOverlay.Relationship is Enemy (or null, which defaults
-    // to Enemy). Shopkeepers / quest-givers / friendly NPCs are marked Friend /
-    // Neutral / Hangup explicitly in the overlay seed; un-tagged monsters are
-    // treated as fightable so the engine doesn't sit through a respawn just
-    // because the data table is missing a DeathLine (152 of 1100 monsters in
-    // stock data ship with empty DeathLine — acid slime, etc.).
+    // Engageable = Enemy (the default for un-tagged monsters) OR a Neutral flagged
+    // KillOnSight — see MonsterEngagement. Shopkeepers / quest-givers / friendly NPCs
+    // are marked Friend / Neutral / Hangup in the overlay seed; un-tagged monsters
+    // are treated as fightable so the engine doesn't sit through a respawn just
+    // because the data table is missing a DeathLine (152 of 1100 monsters in stock
+    // data ship with empty DeathLine — acid slime, etc.).
     private bool IsEngageable(RoomEntity e)
     {
         if (e.MonsterNumber is not int n) return true;
         if (_resolveOverlay is null) return true;        // legacy ctor — engage everything
+        MonsterOverlay overlay;
+        try { overlay = _resolveOverlay(n) ?? new MonsterOverlay(); }
+        catch { return true; }
+        return MonsterEngagement.IsEngageable(overlay);
+    }
+
+    // On-sight attacker: an Enemy-relationship monster (the default for un-tagged
+    // mobs). These hit us every round we share the room, so they block resting. A
+    // Neutral — even a KillOnSight one we intend to fight — never attacks first, so
+    // it is NOT an attacking hostile (it only hits back once we engage it, which the
+    // InCombat flag then reflects). Backs HasAttackingHostile / the rest-block.
+    private bool IsAttackingHostile(RoomEntity e)
+    {
+        if (e.MonsterNumber is not int n) return true;   // unknown → assume enemy (fail-safe)
+        if (_resolveOverlay is null) return true;
         MonsterOverlay overlay;
         try { overlay = _resolveOverlay(n) ?? new MonsterOverlay(); }
         catch { return true; }
@@ -667,6 +688,17 @@ public sealed class CombatStateTracker : IDisposable
         _lastCombatActivityAt = _now();
         _lastCombatActivityDesc = "combat line";
         if (!_state.InCombat) _state.InCombat = true;
+    }
+
+    // The combat manager is holding engagement of a passive KillOnSight neutral so
+    // the health engine can rest first — a neutral never attacks until we hit it, so
+    // sitting in the room with un-engaged neutrals is safe. Clearing InCombat lets
+    // the rest fire; the Combat gate stays asserted (an engageable target remains) so
+    // the walker keeps holding. Re-engaging re-sets InCombat via the neutral's first
+    // hit back. This tracker owns InCombat, so the write lives here.
+    public void ClearInCombatForRecoveryHold()
+    {
+        if (_state.InCombat) _state.InCombat = false;
     }
 
     private void OnCombatStatus(MatchResult match)

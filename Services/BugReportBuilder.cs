@@ -70,6 +70,17 @@ public static class BugReportBuilder
             new("Scrollback", SafeSection(() => BuildScrollback(emulator))),
         ];
 
+        // Wire Inspector capture — only when the user has those panes up (they're
+        // large; irrelevant to most reports). The raw ANSI + the recognizer's read
+        // of each combat line are exactly what a combat-recognition bug needs.
+        WireInspectorVisibility wire = Guard(() => svc.WireInspectorVisibility, new());
+        if (wire.RawVisible)
+            sections.Add(new("Wire — raw (last 750 lines)",
+                SafeSection(() => BuildRawWire(svc))));
+        if (wire.ClassifiedVisible)
+            sections.Add(new("Wire — classified combat (last 750 lines)",
+                SafeSection(() => BuildClassifiedWire(svc))));
+
         return new BugReportCapture(now, realm, sections);
     }
 
@@ -853,6 +864,35 @@ public static class BugReportBuilder
         }
         sb.Append("```");
         return sb.ToString();
+    }
+
+    // The raw ANSI wire, last ScrollbackLines lines (non-printables shown as the
+    // Wire Inspector renders them). Only emitted when the Raw pane is visible.
+    private static string BuildRawWire(AppServices svc)
+    {
+        string raw = WireFormatter.RenderRaw(svc.Wire.Snapshot());
+        string tail = LastLines(raw, ScrollbackLines);
+        if (tail.Length == 0) return "_(no wire captured)_";
+        return "```\n" + tail + "\n```";
+    }
+
+    // The classified combat trace, last ScrollbackLines combat-window lines each
+    // tagged with how the recognizer read it. Only emitted when the Classified pane
+    // is visible.
+    private static string BuildClassifiedWire(AppServices svc)
+    {
+        string log = svc.CombatClassifier.RenderLog(ScrollbackLines).TrimEnd('\n');
+        if (log.Length == 0) return "_(no combat lines classified yet)_";
+        return "```\n" + log + "\n```";
+    }
+
+    // The last n newline-delimited lines of s (trailing blank line ignored).
+    private static string LastLines(string s, int n)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        string[] lines = s.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
+        int skip = Math.Max(0, lines.Length - n);
+        return string.Join('\n', lines.Skip(skip));
     }
 
     private static string BuildScrollback(TerminalEmulator emulator)

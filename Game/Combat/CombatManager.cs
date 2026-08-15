@@ -131,6 +131,14 @@ public sealed partial class CombatManager : IDisposable
     private Func<bool>? _seeHiddenClearActive;
     private Func<bool>? _shadowRestHolding;
 
+    // Passive-neutral recovery hold: engage a KillOnSight neutral only when we're not
+    // below the rest trigger, so we can rest/meditate between kills (a neutral never
+    // attacks until we hit it). See the hold in the engage flow + ResumeAfterRecovery.
+    private Func<bool>? _recoveryPending;         // HealthManager.IsRecoveringRest
+    private Func<bool>? _hasAttackingHostile;     // CombatStateTracker.HasHostileMonster (Enemy present)
+    private Action? _clearInCombatForHold;        // CombatStateTracker.ClearInCombatForRecoveryHold
+    private bool _holdingForRecovery;
+
     // Reports whether the character is standing in a too-dark room
     // (RoomTracker.IsInDarkRoom). Gates the CR "where am I" room re-displays: a CR
     // in the dark returns only "you can't see anything" — nothing to re-read — and
@@ -689,6 +697,42 @@ public sealed partial class CombatManager : IDisposable
         _shadowRestHolding = shadowRestHolding;
     }
 
+    // Wire the passive-neutral recovery hold: while recoveryPending is true (below
+    // the rest trigger) and no on-sight attacker is in the room, stand down before
+    // engaging a KillOnSight NEUTRAL and clear InCombat so HealthManager rests to
+    // rest-max first — a neutral never attacks until we hit it, so the un-engaged
+    // ones are harmless meanwhile. HealthManager fires ResumeAfterRecovery when the
+    // rest tops off. Enemies (on-sight attackers) are never held — hasAttackingHostile
+    // short-circuits it. Until set, the hold never engages.
+    public void SetNeutralRecoveryHold(
+        Func<bool> recoveryPending, Func<bool> hasAttackingHostile, Action clearInCombat)
+    {
+        ArgumentNullException.ThrowIfNull(recoveryPending);
+        ArgumentNullException.ThrowIfNull(hasAttackingHostile);
+        ArgumentNullException.ThrowIfNull(clearInCombat);
+        _recoveryPending = recoveryPending;
+        _hasAttackingHostile = hasAttackingHostile;
+        _clearInCombatForHold = clearInCombat;
+    }
+
+    // Resume combat after a recovery hold completes — re-run the last observation so
+    // the held KillOnSight neutral re-picks now that we're topped off. Gated on the
+    // hold flag so an ordinary recovery (no held neutral) doesn't churn.
+    public void ResumeAfterRecovery()
+    {
+        if (!_isEnabled()) return;
+        if (!_holdingForRecovery) return;
+        _holdingForRecovery = false;
+        if (_classifier.Current is { } live) OnEntitiesObserved(live);
+    }
+
+    // Whether a picked target is a Neutral-relationship monster — a KillOnSight
+    // neutral (an un-tagged neutral would never have been picked as engageable). Used
+    // by the recovery hold so only neutrals defer for rest; enemies always engage.
+    private bool IsNeutral(EngageableCandidate e)
+        => (ResolveOverlay(e.MonsterNumber).Relationship ?? MonsterRelationship.Enemy)
+           == MonsterRelationship.Neutral;
+
     // Resume normal combat after a ShadowRest recovery completes — re-run the last
     // observation so the target re-picks and the backstab opener fires now that the
     // hold has lifted. No-op when combat is off or no observation is cached.
@@ -912,7 +956,7 @@ public sealed partial class CombatManager : IDisposable
                 _speciesByNumber[n] = e.ResolvedName;
 
                 MonsterOverlay overlay = ResolveOverlay(n);
-                if ((overlay.Relationship ?? MonsterRelationship.Enemy) != MonsterRelationship.Enemy)
+                if (!MonsterEngagement.IsEngageable(overlay))
                     continue;
                 // Engageability is Relationship-based ONLY. Earlier we
                 // also required MonsterMessageRecord.DeathLine non-empty
@@ -975,7 +1019,7 @@ public sealed partial class CombatManager : IDisposable
                     else if (e.MonsterNumber is int mn)
                     {
                         MonsterOverlay ov = ResolveOverlay(mn);
-                        if ((ov.Relationship ?? MonsterRelationship.Enemy) != MonsterRelationship.Enemy)
+                        if (!MonsterEngagement.IsEngageable(ov))
                             friendlyCount++;
                     }
                 }
@@ -1198,6 +1242,23 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory,
                 $"combat held — shadowrest recovering (would engage {picked.RawName})");
             _currentTarget = null;
+            return;
+        }
+
+        // Passive-neutral recovery hold: the picked target is a KillOnSight NEUTRAL,
+        // we're below the rest trigger, and nothing here attacks on sight. A neutral
+        // won't attack until we hit it, so stand down and let HealthManager rest to
+        // rest-max before we engage — clearing InCombat so the rest fires while the
+        // gate keeps the walker put. ResumeAfterRecovery re-picks once recovered.
+        if (_recoveryPending?.Invoke() == true
+            && _hasAttackingHostile?.Invoke() != true
+            && IsNeutral(picked))
+        {
+            _log?.Combat(LogCategory,
+                $"combat held — recovering before engaging neutral {picked.RawName}");
+            _currentTarget = null;
+            _holdingForRecovery = true;
+            _clearInCombatForHold?.Invoke();
             return;
         }
 
@@ -2528,7 +2589,7 @@ public sealed partial class CombatManager : IDisposable
             if (e.Kind != EntityKind.Monster) continue;
             if (e.MonsterNumber is not int n) return true; // unknown → assume engageable
             MonsterOverlay overlay = ResolveOverlay(n);
-            if ((overlay.Relationship ?? MonsterRelationship.Enemy) == MonsterRelationship.Enemy)
+            if (MonsterEngagement.IsEngageable(overlay))
                 return true;
         }
         return false;

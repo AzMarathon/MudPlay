@@ -103,6 +103,8 @@ public sealed class HealthManager : IDisposable
     private Func<bool>? _shadowRestSolo;        // not in a party (ShadowRest is a solo behavior)
     private Action? _onShadowRestRecovered;     // recovery hit rest-max — resume combat
     private bool _shadowRestWasHolding;         // falling-edge latch for the resume callback
+    private Action? _onRecoveryComplete;        // any rest gate topped off — resume a held neutral engage
+    private bool _wasRecovering;                // falling-edge latch for _onRecoveryComplete
     private Func<bool>? _shouldSkipRestHere;    // running loop's current room is a "do not rest" waypoint
     private bool _skipRestDeferredRecovery;     // a do-not-rest room made us skip a needed rest; re-arm on the next room change
     private bool _partyWaitSignaled;            // @wait sent, awaiting @ok
@@ -110,6 +112,14 @@ public sealed class HealthManager : IDisposable
     private bool _maGateAsserted;
     private bool _restInFlight;          // sent rest, awaiting recovery
     private bool _restConfirmedByPrompt; // observed (Resting) since the last rest emit
+    // The idle-stall watchdog force-clears combat OPTIMISTICALLY and sends a resync
+    // CR; the re-display that re-confirms a still-present monster lands a beat later.
+    // Resting the instant InCombat flips false fires in that gap — a blinded / slow
+    // monster still in the room got a `rest` sent at it (paradigm-20260814-225055).
+    // Hold the rest-out branch until the next room observation re-confirms presence:
+    // a lingering hostile re-asserts the hostiles guard, an empty room lets the held
+    // rest through. Set on force-clear, cleared on the next observation / room change.
+    private bool _restHeldPendingReconfirm;
     private bool _fledThisCombat;        // reacted to run-trigger (flee OR @heal), awaiting combat end
     private bool _hangFired;             // emergency-hangup latch; re-arms when danger passes
     private Map.IRecoverableEngine? _fleeEngine;     // engine we paused mid-flee
@@ -359,6 +369,16 @@ public sealed class HealthManager : IDisposable
         _shadowRestStealthed = isStealthed;
         _shadowRestSolo = isSolo;
         _onShadowRestRecovered = onRecovered;
+    }
+
+    // Fires once each time a rest gate tops off to rest-max (falling edge of
+    // IsRecoveringRest). Wired to CombatManager.ResumeAfterRecovery so a combat hold
+    // that deferred a passive-neutral engage for this rest re-engages when we're
+    // topped off. Left unwired, recovery still works — nothing re-engages.
+    public void SetRecoveryCompleteCallback(Action onRecoveryComplete)
+    {
+        ArgumentNullException.ThrowIfNull(onRecoveryComplete);
+        _onRecoveryComplete = onRecoveryComplete;
     }
 
     // True when every ShadowRest precondition holds: the user opted in, the class
@@ -772,7 +792,17 @@ public sealed class HealthManager : IDisposable
         if (shadowRest && hostilesPresent && shouldRest && !_state.InCombat && !_restInFlight)
             _log?.Combat(LogCategory, "shadowrest — resting with hostile in room (staying stealthed)");
 
-        if (shouldRest && !_state.InCombat && !_restInFlight && (!hostilesPresent || shadowRest))
+        if (shouldRest && !_state.InCombat && !_restInFlight && _restHeldPendingReconfirm
+            && (!hostilesPresent || shadowRest))
+        {
+            // A watchdog force-clear dropped InCombat optimistically; wait for the
+            // resync re-display to re-confirm the room is actually empty before
+            // resting, so we don't rest at a monster the re-display re-asserts.
+            _log?.Combat(LogCategory,
+                $"rest held — combat force-cleared, awaiting room re-confirm " +
+                $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
+        }
+        else if (shouldRest && !_state.InCombat && !_restInFlight && (!hostilesPresent || shadowRest))
         {
             // Pick rest vs meditate based on user settings + which
             // pool is the proximate trigger.
@@ -823,6 +853,15 @@ public sealed class HealthManager : IDisposable
             _onShadowRestRecovered?.Invoke();
         }
         _shadowRestWasHolding = shadowRestHolding;
+
+        // General recovery resume: a rest gate topped off to rest-max (falling edge of
+        // IsRecoveringRest). CombatManager may have been holding engagement of a
+        // passive KillOnSight neutral to let this rest happen — poke it to re-engage
+        // now that we're topped off. Gated on its own hold flag, so an ordinary
+        // recovery with nothing held is a no-op.
+        bool recovering = IsRecoveringRest;
+        if (_wasRecovering && !recovering) _onRecoveryComplete?.Invoke();
+        _wasRecovering = recovering;
     }
 
     // Re-check ONLY the emergency-hangup gate — wired to room-entity observations
@@ -1129,6 +1168,24 @@ public sealed class HealthManager : IDisposable
     // move, so our _restInFlight latch must drop too — otherwise the next
     // recovery cycle would skip the rest emit because we'd still think we were
     // sitting.
+    // The idle-stall watchdog force-cleared combat optimistically (it sent a resync
+    // CR and is waiting on the re-display to self-heal). Hold the rest-out branch
+    // until that re-display re-confirms the room, so we don't rest in the flicker
+    // before a still-present monster re-asserts.
+    public void NoteCombatForceCleared() => _restHeldPendingReconfirm = true;
+
+    // A room observation arrived after a force-clear — the room model is now
+    // authoritative. Release the hold and re-evaluate: a hostile that re-appeared
+    // is now reflected in HasEngageableHostiles (this is wired after the combat
+    // tracker's own EntitiesObserved handler), so the hostiles guard blocks the
+    // rest; a genuinely empty room lets the held rest through.
+    public void NoteRoomEntitiesReconfirmed()
+    {
+        if (!_restHeldPendingReconfirm) return;
+        _restHeldPendingReconfirm = false;
+        Evaluate();
+    }
+
     public void NoteRoomChanged() => NoteRoomChanged(newRoom: null);
 
     // Overload that captures the new room key so the flee path can (a) step its
@@ -1157,6 +1214,11 @@ public sealed class HealthManager : IDisposable
             _restConfirmedByPrompt = false;
             _log?.Combat(LogCategory, "rest-in-flight cleared on room change");
         }
+
+        // A move re-observes the room, so any post-force-clear rest hold is resolved
+        // by the new room's observation — drop it here too (covers the dark-room
+        // force-clear that sends no resync CR).
+        _restHeldPendingReconfirm = false;
 
         // Re-arm a rest that a do-not-rest room forced us to skip: the hop out of
         // that room carries no prompt change to re-run Evaluate on its own, so do

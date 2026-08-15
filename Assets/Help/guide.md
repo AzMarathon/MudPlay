@@ -461,7 +461,7 @@ Values group with thousands separators. Unlike the live **Filter…** text box, 
 
 **Double-click a row to open it** — what happens depends on the table:
 
-- **Items** and **Monsters** open a real **override editor**: an editable pane on the left, the read-only **Other Info (from MDB)** on the right. For an item you can flip its automation flags (**Auto-collect, Auto-discard, Auto-buy, Auto-sell, Auto-stash**, and more), set **Min. to keep / Max to get**, and toggle **Auto-obtain for path**. For a monster you can set its **Relationship** and **Priority**, its pre-attack and override-attack spells, and the combat-message wording; the read-only pane's **Spawns In** list shows each room's lair size (e.g. `1/2122 (lair: 2)`). The **Use** dropdown chooses where the override saves — **Character** (this character only), **BBS** (everyone on this BBS), or **Global** (the whole install) — then **OK** writes it and the row's Use column updates to match.
+- **Items** and **Monsters** open a real **override editor**: an editable pane on the left, the read-only **Other Info (from MDB)** on the right. For an item you can flip its automation flags (**Auto-collect, Auto-discard, Auto-buy, Auto-sell, Auto-stash**, and more), set **Min. to keep / Max to get**, and toggle **Auto-obtain for path**. For a monster you can set its **Relationship** and **Priority**, its pre-attack and override-attack spells, and the combat-message wording; the read-only pane's **Spawns In** list shows each room's lair size (e.g. `1/2122 (lair: 2)`). When you set the Relationship to **Neutral**, a **Kill on sight** checkbox appears — a neutral is normally left alone (it never attacks first), but checking this makes auto-combat engage it while leaving other passive neutrals safe to rest among, so the engine can rest/meditate between kills instead of being forced to clear the whole room. The **Use** dropdown chooses where the override saves — **Character** (this character only), **BBS** (everyone on this BBS), or **Global** (the whole install) — then **OK** writes it and the row's Use column updates to match.
 - On an item, the right-hand info pane is also interactive: a **Charm** picker (default 50) re-prices the **Bought / sold** buy/sell figures live so you can compare, say, a higher-charm party member selling; each shop links to its room record and offers **Queue Walking here →** (arms a walk to that shop, like typing it in the nav search box); and **Dropped by** lists the monsters that drop it as links to their records.
 - **Spells** — double-click edits the spell's player-cast **message** wording; the spell's own stats are read-only.
 - **Rooms** — double-click opens a read-only detail popup (exits, lighting, shop, placed monsters, room commands); its "Also here" monsters show their record number and link to their records. For a shop room, a **Charm** picker re-prices the stock table live.
@@ -536,13 +536,13 @@ Open **Session Stats** from the **View** menu or its toolbar button (it has no d
 
 ## Wire Inspector (F5)
 
-Press **F5** to open the **Wire Inspector** — a troubleshooting view of the data the server sends, in two panes: **Raw** (with control codes made visible, e.g. `^[` for escape) and **Stripped** (the same stream with the ANSI escape sequences removed). It shows inbound server output only, and keeps the most recent 64 KB.
+Press **F5** to open the **Wire Inspector** — a troubleshooting view of the data the server sends, in up to three panes you toggle with the **Raw / Stripped / Classified** checkboxes: **Raw** (control codes made visible, e.g. `^[` for escape), **Stripped** (the same stream with the ANSI escape sequences removed), and **Classified** (each combat-window line tagged with how the combat engine read it — e.g. `[Combat: Monster Miss (you)]`, `[Combat: You Hit]`, `[Combat: Armor Block (you)]`). Unchecking a pane collapses it so the others fill. It shows inbound server output only, and keeps the most recent 64 KB.
 
 - **Pause / Resume** freezes the view so you can read it; **Clear** empties the buffer.
-- **Auto-scroll** keeps both panes pinned to the newest bytes, and **Sync scroll** ties the two panes' scrolling together.
-- **Find next** locates a term in the Stripped pane, and **Export raw… / Export stripped…** save either pane to a file.
+- **Auto-scroll** keeps the panes pinned to the newest bytes, and **Sync scroll** ties the Raw and Stripped panes' scrolling together.
+- **Find next** locates a term in the Stripped pane, and **Export raw… / Export stripped… / Export classified…** save any pane to a file.
 
-Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire.
+Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire. If the Raw or Classified pane is **visible** when you file a **Bug Report**, its last 750 lines are attached to the report, so a combat-recognition problem lands with the exact wire and the engine's read of it.
 
 ---
 

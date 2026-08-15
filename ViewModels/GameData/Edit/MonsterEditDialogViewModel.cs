@@ -34,7 +34,9 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty] private SettingsTier _useTier = SettingsTier.Character;
 
-    [ObservableProperty] private MonsterRelationship _relationship = MonsterRelationship.Enemy;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowKillOnSight))]
+    private MonsterRelationship _relationship = MonsterRelationship.Enemy;
     [ObservableProperty] private MonsterAttackPriority _priority = MonsterAttackPriority.Normal;
 
     [ObservableProperty] private string _preAttackSpellId = string.Empty;
@@ -47,6 +49,15 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     [ObservableProperty] private string _attackCount = string.Empty;
 
     [ObservableProperty] private bool _dontBackstab;
+
+    // Kill this NEUTRAL monster on sight. Neutrals never attack first, so they're
+    // normally left alone; checking this makes auto-combat engage it like an enemy
+    // while other passive neutrals stay safe to rest among. Only meaningful for a
+    // Neutral relationship — the checkbox is shown only then (ShowKillOnSight).
+    [ObservableProperty] private bool _killOnSight;
+
+    // The KillOnSight checkbox applies only to Neutral-relationship monsters.
+    public bool ShowKillOnSight => Relationship == MonsterRelationship.Neutral;
 
     // ----- Messages section (9 line slots + flavor) -----
     // Each line field is one variant per line in a multi-line textbox.
@@ -138,6 +149,7 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         AttackCount      = (existing?.OverrideAttackCount      is { } ac) ? ac.ToString() : string.Empty;
 
         DontBackstab = existing?.DontBackstab ?? false;
+        KillOnSight  = existing?.KillOnSight  ?? false;
 
         // Hydrate the Messages section.
         if (messages is not null)
@@ -170,6 +182,7 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
             OverrideAttackCount      = ParseNullableInt(AttackCount),
             OverrideAttackCommand    = attackCommand,
             DontBackstab             = DontBackstab,
+            KillOnSight              = KillOnSight,
         };
 
         // Build the message record. Even when there were no original

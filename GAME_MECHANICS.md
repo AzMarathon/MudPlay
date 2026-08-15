@@ -546,6 +546,23 @@ behaviour — how the client's auto-combat interprets the per-monster overrides)
   distinct alternate it concedes the species and re-picks. (Report `paradigm-20260809-131642` —
   priest `harm` command vs an acid slime never dropped to `attack`.)
 
+## Neutral monsters & kill-on-sight *([CONFIRMED] 2026-08-15, user)*
+
+A **neutral** monster **never attacks you on sight / never attacks first**. It attacks **only if
+you've attacked it** and it's still alive — and once provoked it **keeps attacking every round until
+it dies**, even if you `break` and sit there. So a room of un-engaged neutrals is **safe to rest in**;
+the moment you engage one, *that* one is hitting you back (no resting mid-fight), but the others stay
+passive until you turn on them. (A monster that *does* open on you unprovoked is an **enemy**, not a
+neutral — e.g. storm giants; see the aggression rules below. The client models those as the `Enemy`
+relationship.)
+
+Client mapping: the per-monster overlay `Relationship` (`Enemy` / `Neutral` / `Friend` / `Flee` /
+`Hangup`) drives auto-combat. `Enemy` = engage on sight; `Neutral` = leave alone. The **KillOnSight**
+flag (Monster edit dialog, shown only for `Neutral`) makes auto-combat **engage a neutral like an
+enemy** — but because neutrals never open on you, the *other* un-engaged neutrals still don't block
+resting, so between kills the engine rests/meditates (only when below the rest trigger) before turning
+on the next one. `Enemy` and passive neutrals are unchanged.
+
 ## Monster aggression — who opens on you unprovoked
 
 A monster is **hostile** (attacks without being engaged first) as a function of the **monster's

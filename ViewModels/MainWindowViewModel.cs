@@ -4266,7 +4266,9 @@ public partial class MainWindowViewModel : ObservableObject
 
         WireInspectorWindow window = new()
         {
-            DataContext = new WireInspectorViewModel(AppServices.Current.Wire),
+            DataContext = new WireInspectorViewModel(
+                AppServices.Current.Wire, AppServices.Current.CombatClassifier,
+                AppServices.Current.WireInspectorVisibility),
         };
         window.Closed += (_, _) => _wireInspector = null;
         _wireInspector = window;

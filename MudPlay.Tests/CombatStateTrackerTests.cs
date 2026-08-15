@@ -109,12 +109,14 @@ public sealed class CombatStateTrackerTests
         }
 
         public void SetOverlay(int number, MonsterRelationship? relationship = null,
-                               MonsterAttackPriority? priority = null)
+                               MonsterAttackPriority? priority = null,
+                               bool? killOnSight = null)
         {
             Overlays[number] = new MonsterOverlay
             {
                 Relationship = relationship,
                 Priority     = priority,
+                KillOnSight  = killOnSight,
             };
         }
 
@@ -283,6 +285,36 @@ public sealed class CombatStateTrackerTests
 
         h.Feed("Also here: shopkeeper.");
 
+        Assert.False(h.Tracker.HasHostileMonster);
+    }
+
+    [Fact]
+    public void KillOnSightNeutral_Engageable_ButNotAnAttackingHostile()
+    {
+        // A KillOnSight neutral IS a target (gate asserts so we engage it) but it
+        // never attacks on sight — so it must NOT read as a hostile, which is what
+        // the health rest-block keys on. That's what lets us rest between neutral
+        // kills: the un-engaged ones don't block resting.
+        using Harness h = new();
+        h.AddMonster(9, "storm giant", killable: true);
+        h.SetOverlay(9, relationship: MonsterRelationship.Neutral, killOnSight: true);
+
+        h.Feed("Also here: storm giant.");
+
+        Assert.True(h.Tracker.HasEngageableHostiles);   // we do engage it
+        Assert.False(h.Tracker.HasHostileMonster);      // but it isn't an on-sight attacker
+    }
+
+    [Fact]
+    public void PassiveNeutral_NeitherEngageableNorHostile()
+    {
+        using Harness h = new();
+        h.AddMonster(9, "storm giant", killable: true);
+        h.SetOverlay(9, relationship: MonsterRelationship.Neutral);   // no kill-on-sight
+
+        h.Feed("Also here: storm giant.");
+
+        Assert.False(h.Tracker.HasEngageableHostiles);
         Assert.False(h.Tracker.HasHostileMonster);
     }
 
