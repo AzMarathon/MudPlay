@@ -258,6 +258,22 @@ public sealed partial class CombatManager : IDisposable
     // itself rejected, while safely rejecting the ~1-2s stray re-fire observed.
     private static readonly TimeSpan AlternationAdvanceMinGap = TimeSpan.FromSeconds(4);
 
+    // Real-time stamp of the last attack-spell MaxCasts tally in the spell heartbeat,
+    // gated by AttackTallyMinGap. Reset to MinValue wherever the per-target cascade
+    // resets (alongside _lastAlternationAdvanceAt) so a fresh fight's first cast round
+    // always tallies rather than being blocked by a stale stamp.
+    private DateTimeOffset _lastAttackTallyAt = DateTimeOffset.MinValue;
+
+    // Minimum real time between two MaxCasts tallies — the SAME round-spacing guard
+    // AlternationAdvanceMinGap applies to the phase advance, for the same reason: the
+    // damage-line-driven tick fires 2-3× within one real ~5s round (a multi-hit attack
+    // spell's several damage lines plus the mob's counter-swing), and tallying every
+    // trip counted a MaxCasts=2 spell to its cap in a single round — the engage spell
+    // swapping a round early (report paradigm-20260815-130957). Kept equal to the
+    // alternation gap; both sit below TickEngine.CombatTickInterval (5s) so the genuine
+    // next-round tick is never itself rejected.
+    private static readonly TimeSpan AttackTallyMinGap = AlternationAdvanceMinGap;
+
     // Clock for AlternationAdvanceMinGap, mirroring CastingDirector.SetClock —
     // tests inject a fake clock so a synchronous burst of Tick() calls can
     // exercise multi-round phase timing without real elapsed wall-clock time.
@@ -1359,6 +1375,7 @@ public sealed partial class CombatManager : IDisposable
         _lastCastAction = null;
         _alternationRound = 0;
         _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
+        _lastAttackTallyAt = DateTimeOffset.MinValue;
         _spellAttackOwed = false;
         _attackSpellImmuneSpecies.Clear();
         _spellChooser.ResetForNewRoom();

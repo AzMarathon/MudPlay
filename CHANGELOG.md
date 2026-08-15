@@ -2,10 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.18.4
+## 3.18.5
 
 - Caster combat: the per-round attack-spell cascade switch is deferred past the killing blow's server line burst, so the alternate spell (e.g. `lbol`→`mmis`) or weapon fallback no longer fires at the just-killed mob ("You don't see X here!") and the surviving mob engages cleanly
-- bug reports addressed: paradigm-20260815-120544, paradigm-20260815-120934, paradigm-20260815-135756
+- Caster combat: MaxCasts now counts real rounds, not damage-line ticks — a multi-hit attack spell + the mob's counter-swing no longer trip the cascade a round early (e.g. `hamm` set to 2 swapping after 1 cast)
+- bug reports addressed: paradigm-20260815-120544, paradigm-20260815-120934, paradigm-20260815-135756, paradigm-20260815-130957
 
 ## 3.18.1
 

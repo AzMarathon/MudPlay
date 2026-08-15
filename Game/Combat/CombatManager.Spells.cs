@@ -226,6 +226,7 @@ public sealed partial class CombatManager
             _spellChooser.ResetForNewTarget();
             _alternationRound = 0;
             _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
+            _lastAttackTallyAt = DateTimeOffset.MinValue;
         }
 
         // A per-monster forced attack COMMAND wins over the entire normal flow
@@ -573,6 +574,17 @@ public sealed partial class CombatManager
             && string.Equals(announced, decision.Spell, StringComparison.OrdinalIgnoreCase);
         if (sameSpell)
         {
+            // The tick is damage-line driven, so — exactly as AlternationAdvanceMinGap
+            // documents for the phase advance — a multi-hit attack spell (each cast lands
+            // several damage lines) plus the mob's counter-swing trips this heartbeat 2-3×
+            // within one real ~5s round. Tallying every trip counted a MaxCasts=2 spell to
+            // its cap in a single round, so the engage spell swapped a round early (report
+            // paradigm-20260815-130957: "hamm set to 2, swapped after the first cast").
+            // Gate the tally to once per real round so MaxCasts counts rounds cast, not
+            // tick fires — the cap-preempt still fires on the genuine capping-round tick.
+            if (_now() - _lastAttackTallyAt < AttackTallyMinGap) return;
+            _lastAttackTallyAt = _now();
+
             _spellChooser.MarkCast(decision, target);   // tally this round's fired cast
 
             // Pre-empt the extra auto-repeat. The server will fire this same spell
@@ -717,6 +729,7 @@ public sealed partial class CombatManager
             _spellChooser.ResetForNewTarget();
             _alternationRound = 0;
             _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
+            _lastAttackTallyAt = DateTimeOffset.MinValue;
         }
 
         // Area debuffs blanket the room and MUST be cast bare — `stnk`, never

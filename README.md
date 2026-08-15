@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.4**
+> **Version 3.18.5**
 > - Caster combat: the per-round attack-spell cascade switch is deferred past the killing blow's server line burst, so the alternate spell (e.g. `lbol`→`mmis`) or weapon fallback no longer fires at the just-killed mob ("You don't see X here!") and the surviving mob engages cleanly
+> - Caster combat: MaxCasts now counts real rounds, not damage-line ticks — a multi-hit attack spell + the mob's counter-swing no longer trip the cascade a round early (e.g. `hamm` set to 2 swapping after 1 cast)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -164,6 +164,17 @@ public sealed class CombatManagerSpellsTests
             Combat.OnCombatTick();
         }
 
+        // An extra combat tick landing WITHIN the same ~5s round — the mob's
+        // counter-swing line trips a second CombatTickElapsed a beat after our own
+        // hit. Advances the fake clock only 1s (under AttackTallyMinGap) so the
+        // MaxCasts tally gate should reject it as not a real round boundary.
+        public void TickSameRound()
+        {
+            _clock += TimeSpan.FromSeconds(1);
+            Cast.OnCombatTick();
+            Combat.OnCombatTick();
+        }
+
         public string LastSent => Sent.Count == 0
             ? string.Empty
             : Encoding.Latin1.GetString(Sent[^1]).TrimEnd('\r');
@@ -385,6 +396,37 @@ public sealed class CombatManagerSpellsTests
         h.DrainPosted();                            // no kill → runs → dispatches the alternate
 
         Assert.Equal("mmis giant rat", h.LastSent);
+    }
+
+    // MaxCasts must count real rounds, not damage-line ticks. A multi-hit attack spell
+    // (each cast lands several damage lines) plus the mob's counter-swing trips the tick
+    // 2-3× per ~5s round; without the tally gate a MaxCasts=2 spell hit its cap in a
+    // single round and swapped a round early (report paradigm-20260815-130957: "hamm set
+    // to 2, swapped after the first cast"). The engage spell must cast for two full rounds
+    // before the cascade advances, regardless of the extra intra-round ticks.
+    [Fact]
+    public void MaxCasts_ExtraTicksWithinRound_CountRoundsNotTicks()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "hamm", MinEnemies = 0, MaxCastsPerRoom = 2 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("hamm giant rat", h.LastSent);   // engage → hamm (cast round 1 pending)
+
+        // Round 1: the real round-boundary tick tallies once; the mob's counter-swing
+        // trips a second tick the same round, which the gate must reject. Cap (2) is
+        // NOT reached after one round — still hamm.
+        h.Tick();
+        h.TickSameRound();
+        Assert.Equal("hamm giant rat", h.LastSent);
+
+        // Round 2: the second real round tallies the 2nd cast → cap reached → swap to
+        // harm. (The extra same-round tick again does nothing.)
+        h.Tick();
+        h.TickSameRound();
+        Assert.Equal("harm giant rat", h.LastSent);
     }
 
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even
