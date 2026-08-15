@@ -1,12 +1,13 @@
 namespace MudPlay.Services;
 
-// Tracks which Wire Inspector panes the user currently has up, so a bug report can
-// attach the raw / classified wire buffers only when the user is actively debugging
-// with them visible (they're large, and irrelevant to most reports otherwise). The
-// WireInspectorViewModel pushes its pane state here while open and resets both to
-// false when the window closes.
+// Which Wire Inspector panes are "on" — read by BugReportBuilder to decide whether to
+// attach the raw / classified wire. **Default ON** for both (Stripped isn't captured),
+// so a report carries the raw wire + the engine's read of each combat line out of the
+// box; the WireInspectorViewModel's checkboxes edit this, and the choice STICKS after
+// the window closes (it's a preference, not "is the pane currently on screen"). Resets
+// to the ON default on app restart.
 public sealed class WireInspectorVisibility
 {
-    public bool RawVisible { get; set; }
-    public bool ClassifiedVisible { get; set; }
+    public bool RawVisible { get; set; } = true;
+    public bool ClassifiedVisible { get; set; } = true;
 }

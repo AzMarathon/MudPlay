@@ -77,4 +77,20 @@ public sealed class CombatLineClassifierTests
     public void NonCombatWhiteLine_IsNone()
         => Assert.Equal(CombatLineKind.None,
             Classify("Obvious exits: north, south, west", White));
+
+    [Fact]
+    public void NoteMonsterDeath_Matched_TagsWithName()
+    {
+        using var c = new CombatLineClassifier(new MudPlay.Services.MessageRouter());
+        c.NoteMonsterDeath("rotworm", inferred: false);
+        Assert.Contains("[Monster Death: rotworm]", c.RenderLog());
+    }
+
+    [Fact]
+    public void NoteMonsterDeath_Inferred_FlagsUnrecognized()
+    {
+        using var c = new CombatLineClassifier(new MudPlay.Services.MessageRouter());
+        c.NoteMonsterDeath(null, inferred: true);
+        Assert.Contains("message not recognized", c.RenderLog());
+    }
 }

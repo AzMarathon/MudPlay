@@ -2777,6 +2777,13 @@ public sealed class AppServices
         // through the engaged name, so they're covered too.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key, Combat.CurrentTarget);
+        // Surface recognized deaths in the Wire Inspector's Classified view — a
+        // matched message names the monster; an exp-inferred death flags the message
+        // as unrecognized (a passive display side-effect; order-independent).
+        MonsterDeath.MonsterDied += evt =>
+            CombatClassifier.NoteMonsterDeath(
+                evt.Candidates.Count > 0 ? evt.Candidates[0].Name : null,
+                inferred: evt.IsFallback);
         // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
         // resync handler below: on a kill whose DeathSpell summons, it asserts a
         // hold + sends a CR to re-scan the room, and that hold has to be in place

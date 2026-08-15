@@ -5,8 +5,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 ## 3.15.0
 
 - Combat engine now recognizes monster hits / misses / dodges / armor-blocks **generically from line colour + wording** (no per-monster data), for both you and party members — surfaced live in the Wire Inspector's new **Classified** view
-- Wire Inspector gains **Raw / Stripped / Classified** toggle checkboxes; the Classified pane tags each combat line with how the engine read it (e.g. `[Combat: Monster Miss (you)]`)
-- Bug reports now attach the last 750 lines of the Raw / Classified wire when those panes are visible, so combat-recognition issues arrive with the exact wire
+- Wire Inspector gains **Raw / Stripped / Classified** toggle checkboxes (Raw + Classified on by default); the Classified pane tags each combat line with how the engine read it (e.g. `[Combat: Monster Miss (you)]`) and marks recognized monster deaths with `[Monster Death: <name>]` (an unrecognized death shows as inferred-from-exp)
+- Bug reports attach the last 750 lines of the Raw / Classified wire when those panes are on — on by default, so combat-recognition issues arrive with the exact wire without extra steps
 - Neutral monsters get a **Kill on sight** checkbox (Monster edit dialog): engage a chosen neutral while leaving other passive neutrals safe to rest among — the engine rests/meditates between kills (only when below the rest trigger) instead of being forced to clear the room
 - Rest is no longer sent mid-fight when the idle-stall watchdog optimistically clears combat — it waits for a room re-display to re-confirm the room is empty first
 - bug reports addressed: paradigm-20260814-225055

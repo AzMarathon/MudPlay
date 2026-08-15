@@ -536,13 +536,13 @@ Open **Session Stats** from the **View** menu or its toolbar button (it has no d
 
 ## Wire Inspector (F5)
 
-Press **F5** to open the **Wire Inspector** — a troubleshooting view of the data the server sends, in up to three panes you toggle with the **Raw / Stripped / Classified** checkboxes: **Raw** (control codes made visible, e.g. `^[` for escape), **Stripped** (the same stream with the ANSI escape sequences removed), and **Classified** (each combat-window line tagged with how the combat engine read it — e.g. `[Combat: Monster Miss (you)]`, `[Combat: You Hit]`, `[Combat: Armor Block (you)]`). Unchecking a pane collapses it so the others fill. It shows inbound server output only, and keeps the most recent 64 KB.
+Press **F5** to open the **Wire Inspector** — a troubleshooting view of the data the server sends, in up to three panes you toggle with the **Raw / Stripped / Classified** checkboxes: **Raw** (control codes made visible, e.g. `^[` for escape), **Stripped** (the same stream with the ANSI escape sequences removed), and **Classified** (each combat-window line tagged with how the combat engine read it — e.g. `[Combat: Monster Miss (you)]`, `[Combat: You Hit]`, `[Combat: Armor Block (you)]`). The Classified pane also marks each **recognized monster death** with `[Monster Death: <name>]` — and an exp-inferred death whose message *wasn't* recognized shows as `[Monster Death: inferred from exp — message not recognized]`, so an unrecognized death line stands out. **Raw and Classified are on by default** (Stripped off); unchecking a pane collapses its column so the others fill, and your choice sticks. It shows inbound server output only, and keeps the most recent 64 KB.
 
 - **Pause / Resume** freezes the view so you can read it; **Clear** empties the buffer.
 - **Auto-scroll** keeps the panes pinned to the newest bytes, and **Sync scroll** ties the Raw and Stripped panes' scrolling together.
 - **Find next** locates a term in the Stripped pane, and **Export raw… / Export stripped… / Export classified…** save any pane to a file.
 
-Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire. If the Raw or Classified pane is **visible** when you file a **Bug Report**, its last 750 lines are attached to the report, so a combat-recognition problem lands with the exact wire and the engine's read of it.
+Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire. Because **Raw and Classified are on by default**, a **Bug Report** attaches the last 750 lines of each unless you turn them off — so a combat-recognition problem lands with the exact wire and the engine's read of every combat line and death.
 
 ---
 

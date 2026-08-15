@@ -36,13 +36,17 @@ public sealed partial class WireInspectorViewModel : ObservableObject, IDisposab
     [ObservableProperty]
     private string _classifiedText = string.Empty;
 
-    // The three panes' visibility toggles (checkboxes in the control strip). All on
-    // by default; unchecking a pane collapses its column so the others fill.
+    // The three panes' visibility toggles (checkboxes in the control strip).
+    // **Raw + Classified default on, Stripped off** — Raw/Classified are the
+    // troubleshooting pair and are what the bug report attaches, so they're on out of
+    // the box. Raw/Classified are seeded from (and pushed back to) the shared
+    // visibility holder so the choice sticks across opens; Stripped is view-only.
+    // Unchecking a pane collapses its column so the others fill.
     [ObservableProperty]
     private bool _showRaw = true;
 
     [ObservableProperty]
-    private bool _showStripped = true;
+    private bool _showStripped;
 
     [ObservableProperty]
     private bool _showClassified = true;
@@ -80,7 +84,13 @@ public sealed partial class WireInspectorViewModel : ObservableObject, IDisposab
         _buffer = buffer;
         _classifier = classifier;
         _visibility = visibility;
-        PushVisibility();
+        // Seed the pane toggles from the sticky preference (the holder is the source
+        // of truth; Stripped is view-only and stays off).
+        if (visibility is not null)
+        {
+            ShowRaw = visibility.RawVisible;
+            ShowClassified = visibility.ClassifiedVisible;
+        }
         _timer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(200),
@@ -134,14 +144,7 @@ public sealed partial class WireInspectorViewModel : ObservableObject, IDisposab
     partial void OnShowRawChanged(bool value) => PushVisibility();
     partial void OnShowClassifiedChanged(bool value) => PushVisibility();
 
-    public void Dispose()
-    {
-        _timer.Stop();
-        // The inspector is closing — nothing is visible anymore.
-        if (_visibility is not null)
-        {
-            _visibility.RawVisible = false;
-            _visibility.ClassifiedVisible = false;
-        }
-    }
+    // Closing the window does NOT clear the preference — Raw/Classified stay on (or
+    // whatever the user last chose) so future bug reports keep attaching them.
+    public void Dispose() => _timer.Stop();
 }

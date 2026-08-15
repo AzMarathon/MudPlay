@@ -179,6 +179,20 @@ public sealed class CombatLineClassifier : IDisposable
         return sb.ToString();
     }
 
+    // Note a monster death the engine recognized, for the Wire Inspector's Classified
+    // view. A matched death MESSAGE tags [Monster Death: <name>]; an exp-inferred
+    // death (the specific per-monster message did NOT match — e.g. the "rot worm"
+    // death line vs the "rotworm" monster) tags it as inferred, so an unrecognized
+    // death line stands out in the trace. Recorded regardless of the combat window —
+    // the fallback fires on the *Combat Off* that closes it.
+    public void NoteMonsterDeath(string? name, bool inferred)
+    {
+        string tag = inferred
+            ? "[Monster Death: inferred from exp — message not recognized]"
+            : $"[Monster Death: {name}]";
+        Record(tag, CombatLineKind.None);
+    }
+
     // Drop the classified-line log (Wire Inspector's Clear button).
     public void Clear()
     {
