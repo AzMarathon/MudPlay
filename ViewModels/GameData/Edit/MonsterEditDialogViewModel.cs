@@ -59,18 +59,6 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     // The KillOnSight checkbox applies only to Neutral-relationship monsters.
     public bool ShowKillOnSight => Relationship == MonsterRelationship.Neutral;
 
-    // ----- Messages section (9 line slots + flavor) -----
-    // Each line field is one variant per line in a multi-line textbox.
-    [ObservableProperty] private string _hitYouText           = string.Empty;
-    [ObservableProperty] private string _hitOtherText         = string.Empty;
-    [ObservableProperty] private string _deathLineText        = string.Empty;
-    [ObservableProperty] private string _armorBlockYouText    = string.Empty;
-    [ObservableProperty] private string _armorBlockOtherText  = string.Empty;
-    [ObservableProperty] private string _dodgeYouText         = string.Empty;
-    [ObservableProperty] private string _dodgeOtherText       = string.Empty;
-    [ObservableProperty] private string _missYouText          = string.Empty;
-    [ObservableProperty] private string _missOtherText        = string.Empty;
-
     // Comma-separated flavor list. Literal token (no prefix) (case-insensitive) in the
     // list represents the AllowNoPrefix flag — e.g. giant rat renders as
     // "nasty, angry, large, fat, thin, big, small, (no prefix)".
@@ -151,20 +139,9 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         DontBackstab = existing?.DontBackstab ?? false;
         KillOnSight  = existing?.KillOnSight  ?? false;
 
-        // Hydrate the Messages section.
+        // Hydrate the flavor-prefix list (the only editable message-record field left).
         if (messages is not null)
-        {
-            HitYouText          = JoinLines(messages.HitYou);
-            HitOtherText        = JoinLines(messages.HitOther);
-            DeathLineText       = JoinLines(messages.DeathLine);
-            ArmorBlockYouText   = JoinLines(messages.ArmorBlockYou);
-            ArmorBlockOtherText = JoinLines(messages.ArmorBlockOther);
-            DodgeYouText        = JoinLines(messages.DodgeYou);
-            DodgeOtherText      = JoinLines(messages.DodgeOther);
-            MissYouText         = JoinLines(messages.MissYou);
-            MissOtherText       = JoinLines(messages.MissOther);
-            FlavorPrefixesCsv   = BuildFlavorCsv(messages.FlavorPrefixes, messages.AllowNoPrefix);
-        }
+            FlavorPrefixesCsv = BuildFlavorCsv(messages.FlavorPrefixes, messages.AllowNoPrefix);
     }
 
     [RelayCommand]
@@ -200,84 +177,30 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
 
     private MonsterMessageRecord? BuildUpdatedMessages()
     {
-        IReadOnlyList<string> hitYou        = SplitLines(HitYouText);
-        IReadOnlyList<string> hitOther      = SplitLines(HitOtherText);
-        IReadOnlyList<string> deathLine     = SplitLines(DeathLineText);
-        IReadOnlyList<string> armorYou      = SplitLines(ArmorBlockYouText);
-        IReadOnlyList<string> armorOther    = SplitLines(ArmorBlockOtherText);
-        IReadOnlyList<string> dodgeYou      = SplitLines(DodgeYouText);
-        IReadOnlyList<string> dodgeOther    = SplitLines(DodgeOtherText);
-        IReadOnlyList<string> missYou       = SplitLines(MissYouText);
-        IReadOnlyList<string> missOther     = SplitLines(MissOtherText);
         (IReadOnlyList<string> prefixes, bool allowNoPrefix) = ParseFlavorCsv(FlavorPrefixesCsv);
 
-        // Drop the record entirely when every field is empty AND there
-        // was no original — saves a no-op write to the per-set file.
-        bool anyContent =
-            hitYou.Count + hitOther.Count + deathLine.Count +
-            armorYou.Count + armorOther.Count +
-            dodgeYou.Count + dodgeOther.Count +
-            missYou.Count + missOther.Count +
-            prefixes.Count > 0 || allowNoPrefix;
-
-        if (!anyContent && _originalMessages is null) return null;
+        // Drop the record entirely when there's nothing to store AND there was no
+        // original — saves a no-op write to the per-set file.
+        if (prefixes.Count == 0 && !allowNoPrefix && _originalMessages is null) return null;
 
         return new MonsterMessageRecord(
-            Id:               ComputeId(Name, hitYou, hitOther, deathLine, armorYou, armorOther,
-                                        dodgeYou, dodgeOther, missYou, missOther,
-                                        prefixes, allowNoPrefix),
-            Name:             Name,
-            HitYou:           hitYou,
-            HitOther:         hitOther,
-            DeathLine:        deathLine,
-            ArmorBlockYou:    armorYou,
-            ArmorBlockOther:  armorOther,
-            DodgeYou:         dodgeYou,
-            DodgeOther:       dodgeOther,
-            MissYou:          missYou,
-            MissOther:        missOther,
-            FlavorPrefixes:   prefixes,
-            AllowNoPrefix:    allowNoPrefix,
-            Links:            new[] { new GameDataLink("Monsters", MonsterNumber) });
+            Id:             ComputeId(Name, prefixes, allowNoPrefix),
+            Name:           Name,
+            FlavorPrefixes: prefixes,
+            AllowNoPrefix:  allowNoPrefix,
+            Links:          new[] { new GameDataLink("Monsters", MonsterNumber) });
     }
 
-    // SHA1 of all editable content joined; matches the offline generator's id rule.
-    private static string ComputeId(
-        string name,
-        IReadOnlyList<string> hitYou,    IReadOnlyList<string> hitOther,    IReadOnlyList<string> death,
-        IReadOnlyList<string> armorYou,  IReadOnlyList<string> armorOther,
-        IReadOnlyList<string> dodgeYou,  IReadOnlyList<string> dodgeOther,
-        IReadOnlyList<string> missYou,   IReadOnlyList<string> missOther,
-        IReadOnlyList<string> prefixes,  bool allowNoPrefix)
+    // SHA1 of the editable content (name + flavor list + allow-bare flag) joined.
+    private static string ComputeId(string name, IReadOnlyList<string> prefixes, bool allowNoPrefix)
     {
-        IEnumerable<string> all =
-            hitYou.Concat(hitOther).Concat(death)
-                .Concat(armorYou).Concat(armorOther)
-                .Concat(dodgeYou).Concat(dodgeOther)
-                .Concat(missYou).Concat(missOther)
-                .Concat(prefixes)
-                .Append(allowNoPrefix ? "1" : "0");
-        string blob = name + "|" + string.Join("|", all);
+        string blob = name + "|" + string.Join("|", prefixes.Append(allowNoPrefix ? "1" : "0"));
         byte[] hash = System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(blob));
         System.Text.StringBuilder sb = new(16);
         for (int i = 0; i < 8; i++)
             sb.Append(hash[i].ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
         return sb.ToString();
     }
-
-    // Multi-line text → list of non-empty trimmed lines.
-    public static IReadOnlyList<string> SplitLines(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return Array.Empty<string>();
-        return text.Replace("\r\n", "\n").Split('\n')
-            .Select(l => l.Trim())
-            .Where(l => l.Length > 0)
-            .ToList();
-    }
-
-    // List of lines → newline-joined string for the textbox.
-    public static string JoinLines(IReadOnlyList<string> lines)
-        => lines is { Count: > 0 } ? string.Join("\n", lines) : string.Empty;
 
     // CSV "nasty, angry, (no prefix)" → (["nasty","angry"], true). The NoPrefixSentinel
     // token (case-insensitive) sets the AllowNoPrefix flag and is dropped from the prefix

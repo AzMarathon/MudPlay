@@ -2766,8 +2766,7 @@ public sealed class AppServices
         // bug). Multiple candidates per pattern are normal — shared
         // wordings; we remove ONE matching entry and let the next
         // room re-display correct any cross-variant ambiguity.
-        MonsterDeath = new Game.Combat.MonsterDeathWatcher(
-            Router, MonsterMessages, Log);
+        MonsterDeath = new Game.Combat.MonsterDeathWatcher(Router, Log);
         // Boss-timer auto-start. MUST be the FIRST MonsterDied subscriber: it reads
         // the engaged target name (CombatManager.CurrentTarget) live, and a later
         // subscriber (the roster-resync below) clears it via NoteMonsterDied /
@@ -2777,13 +2776,10 @@ public sealed class AppServices
         // through the engaged name, so they're covered too.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key, Combat.CurrentTarget);
-        // Surface recognized deaths in the Wire Inspector's Classified view — a
-        // matched message names the monster; an exp-inferred death flags the message
-        // as unrecognized (a passive display side-effect; order-independent).
+        // Surface recognized deaths in the Wire Inspector's Classified view (a passive
+        // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
-            CombatClassifier.NoteMonsterDeath(
-                evt.Candidates.Count > 0 ? evt.Candidates[0].Name : null,
-                inferred: evt.IsFallback);
+            CombatClassifier.NoteMonsterDeath(evt.ExperienceGained);
         // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
         // resync handler below: on a kill whose DeathSpell summons, it asserts a
         // hold + sends a CR to re-scan the room, and that hold has to be in place
@@ -2810,64 +2806,17 @@ public sealed class AppServices
             log: Log);
         MonsterDeath.MonsterDied += evt =>
         {
-            // If the dead monster could drop an item we auto-collect, re-survey
-            // the room so the fresh "You notice … here." list picks up the
-            // ground drop. No-op on the fallback path (no monster identity).
-            MaybeReLookForDrops(evt);
-
-            if (evt.IsFallback)
-            {
-                // Fallback path: exp + *Combat Off* proved a monster died but
-                // not which one, so — exactly like the unattributed-death case
-                // below — we can't drop a specific roster slot. Leaving the
-                // stale roster in place strands combat until the next ~5s tick
-                // re-picks the corpse, no-ops it, and only THEN forces a
-                // re-display: the reported "sits through the timeout after a
-                // kill" and "wastes the first round on the next mob before the
-                // survivor is engaged". Datasets whose per-monster DeathLine
-                // patterns are missing route every kill through here, so this is
-                // the common case, not an edge. Nudge the same debounced room
-                // re-display so the server hands back the true roster now — an
-                // empty room clears the Combat gate immediately, a survivor is
-                // re-picked a beat later instead of ~5s later.
-                Log.Info(Game.Combat.MonsterDeathWatcher.LogCategory,
-                    "fallback death — forcing roster resync");
-                Combat.NoteUnattributedDeath();
-                return;
-            }
-            bool removedAny = false;
-            foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
-            {
-                // Order matters: drop CombatManager's _currentTarget
-                // BEFORE removing the entity from the observation.
-                // NoteMonsterDied's resolved-name lookup needs the
-                // entity still present so the raw/resolved mapping
-                // is intact; RemoveDeadEntity then fires
-                // EntitiesObserved, which re-picks from the surviving
-                // engageables and re-issues `attack`. Without this
-                // ordering, a same-name kill (two "giant rat"s in a
-                // room, one dies) leaves CombatManager silent — the
-                // surviving rat shared RawName with our just-dead
-                // target and tripped the "server still swinging"
-                // short-circuit. See CombatManager.NoteMonsterDied.
-                Combat.NoteMonsterDied(id.Name);
-                if (RoomClassifier.RemoveDeadEntity(id.Name))
-                {
-                    Log.Info(Game.Combat.MonsterDeathWatcher.LogCategory,
-                        $"removed dead entity name={id.Name}");
-                    removedAny = true;
-                    break;     // remove one — multiple candidates are alt-names for the same death
-                }
-            }
-
-            // A death we matched but couldn't pin to a roster slot (flavored /
-            // shared wording: dead line "spectre" vs roster "shadow spectre")
-            // leaves the entity list stale. RemoveDeadEntity never fired
-            // EntitiesObserved, so combat would otherwise sit on the dead mob
-            // until its next swing no-ops a tick later. Nudge a room re-display
-            // now so the true roster (possibly empty) lands immediately.
-            if (!removedAny)
-                Combat.NoteUnattributedDeath();
+            // Every death is the exp + *Combat Off* signal (no per-monster identity,
+            // since DeathLine was retired), so we can't drop a specific roster slot:
+            // attribute it to whatever we were fighting (CombatManager.CurrentTarget)
+            // and nudge a debounced room re-display so the server hands back the true
+            // roster — an empty room clears the Combat gate immediately and a survivor
+            // is re-picked a beat later, instead of sitting through the ~5s idle-stall
+            // tick that would otherwise re-pick the corpse, no-op it, and only then
+            // force the re-display.
+            Log.Info(Game.Combat.MonsterDeathWatcher.LogCategory,
+                "death — forcing roster resync");
+            Combat.NoteUnattributedDeath();
         };
 
         Combat = new Game.Combat.CombatManager(
@@ -5864,35 +5813,6 @@ public sealed class AppServices
         return new Game.Inventory.AutoGetItemsManager.ResolvedItem(
             number, name, overlay.AutoCollect ?? false, overlay.CannotBeTaken ?? false,
             MaxCap(overlay), ItemNames.WeightOf(name) ?? 0);
-    }
-
-    // True when the item is user-flagged AutoCollect and not marked
-    // CannotBeTaken — i.e. the auto-get engine would actually pick it up. Backs
-    // the post-kill drop re-look: a monster whose drop resolves to such an item
-    // is worth re-surveying the room for.
-    private bool IsAutoCollectItem(int itemId)
-    {
-        Models.GameData.ItemOverlay overlay = ResolveItemOverlay(itemId);
-        return (overlay.AutoCollect ?? false) && !(overlay.CannotBeTaken ?? false);
-    }
-
-    // On a specific monster death, ask the drop index what the dead monster
-    // could drop; if any of it is an item we auto-collect, nudge a room re-look
-    // so the drop is grabbed. Fallback deaths carry no monster Number, and
-    // unlinked candidates (Number null) can't be looked up — both skip.
-    private void MaybeReLookForDrops(Game.Combat.MonsterDeathEvent evt)
-    {
-        if (evt.IsFallback) return;
-        foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
-        {
-            if (id.Number is not int monsterId) continue;
-            foreach (int itemId in MonsterDrops.DropItemsOf(monsterId))
-                if (IsAutoCollectItem(itemId))
-                {
-                    AutoGetItems.RequestDropReLook();
-                    return;
-                }
-        }
     }
 
     // Resolve a carried entry for AutoDiscard: map the loose carry wording to an

@@ -46,15 +46,6 @@ public sealed class RoomEntityClassifierTests
             Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}",
                 Name: name,
-                HitYou: Array.Empty<string>(),
-                HitOther: Array.Empty<string>(),
-                DeathLine: Array.Empty<string>(),
-                ArmorBlockYou: Array.Empty<string>(),
-                ArmorBlockOther: Array.Empty<string>(),
-                DodgeYou: Array.Empty<string>(),
-                DodgeOther: Array.Empty<string>(),
-                MissYou: Array.Empty<string>(),
-                MissOther: Array.Empty<string>(),
                 FlavorPrefixes: flavorPrefixes,
                 AllowNoPrefix: allowNoPrefix,
                 Links: new[] { new GameDataLink("Monsters", number) }));
@@ -907,11 +898,6 @@ public sealed class RoomEntityClassifierTests
         public void AddMonster(int number, string name)
             => Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}", Name: name,
-                HitYou: Array.Empty<string>(), HitOther: Array.Empty<string>(),
-                DeathLine: Array.Empty<string>(),
-                ArmorBlockYou: Array.Empty<string>(), ArmorBlockOther: Array.Empty<string>(),
-                DodgeYou: Array.Empty<string>(), DodgeOther: Array.Empty<string>(),
-                MissYou: Array.Empty<string>(), MissOther: Array.Empty<string>(),
                 FlavorPrefixes: Array.Empty<string>(), AllowNoPrefix: true,
                 Links: new[] { new GameDataLink("Monsters", number) }));
 

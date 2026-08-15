@@ -645,7 +645,10 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   lines: `…a tortured squeak`, `…to the ground`, `…without a sound`, `…a thousand pieces`, `…an
   agonized bellow`, `…in a heap`, most with no death word) and no distinctive colour (they render
   default/white). So a monster death **cannot be recognized by wording or colour generically** — the
-  exp line is the generic signal; the per-monster death line only adds precise naming/attribution.
+  exp line is the generic signal, and our own targeting (`CombatManager.CurrentTarget`) names the mob.
+  The per-monster `DeathLine` data was therefore **retired** (v3.16.0): every kill is recognized from
+  exp + `*Combat Off*`, and the dead slot is refreshed by the forced room re-display. No per-monster
+  death message is maintained anywhere.
 
 **Attributing a kill to a specific monster** *([CONFIRMED] 2026-08-04, user)*
 - **Monster numbers are never observable in-game** — the client only ever sees monster *names* on

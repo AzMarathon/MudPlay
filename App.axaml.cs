@@ -429,15 +429,6 @@ public partial class App : Application
         MudPlay.Models.GameData.MonsterMessageRecord placeholder = new(
             Id:               id,
             Name:             trimmed,
-            HitYou:           Array.Empty<string>(),
-            HitOther:         Array.Empty<string>(),
-            DeathLine:        Array.Empty<string>(),
-            ArmorBlockYou:    Array.Empty<string>(),
-            ArmorBlockOther:  Array.Empty<string>(),
-            DodgeYou:         Array.Empty<string>(),
-            DodgeOther:       Array.Empty<string>(),
-            MissYou:          Array.Empty<string>(),
-            MissOther:        Array.Empty<string>(),
             FlavorPrefixes:   Array.Empty<string>(),
             AllowNoPrefix:    true,
             Links:            null);

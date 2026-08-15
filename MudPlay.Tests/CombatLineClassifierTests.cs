@@ -79,18 +79,10 @@ public sealed class CombatLineClassifierTests
             Classify("Obvious exits: north, south, west", White));
 
     [Fact]
-    public void NoteMonsterDeath_Matched_TagsWithName()
+    public void NoteMonsterDeath_MarksKillWithExp()
     {
         using var c = new CombatLineClassifier(new MudPlay.Services.MessageRouter());
-        c.NoteMonsterDeath("rotworm", inferred: false);
-        Assert.Contains("[Monster Death: rotworm]", c.RenderLog());
-    }
-
-    [Fact]
-    public void NoteMonsterDeath_Inferred_FlagsUnrecognized()
-    {
-        using var c = new CombatLineClassifier(new MudPlay.Services.MessageRouter());
-        c.NoteMonsterDeath(null, inferred: true);
-        Assert.Contains("message not recognized", c.RenderLog());
+        c.NoteMonsterDeath(950);
+        Assert.Contains("[Monster Death: +950 exp]", c.RenderLog());
     }
 }

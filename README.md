@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.15.2**
-> - Combat engine no longer casts the round's alternate attack spell at a just-killed monster — a kill is recognized on the `You gain N experience.` line (which arrives before the kill's `*Combat Off*`), so `lbol`→`mmis` no longer fires `mmis` at the corpse. Generic; needs no per-monster death message
-> - Room monster names resolve flavor adjectives (large / nasty / huge / …) from one shared vocabulary, so a prefixed name is recognized even when the monster record doesn't list that adjective — no per-monster prefix data needed for the standard set
+> **Version 3.16.0**
+> - Per-monster combat message data retired — hits / misses / dodges / armor-blocks are recognized generically from line colour + wording, and deaths from the experience line, so the Monster editor no longer has a Combat Messages section and no one hand-enters a monster's messages (crucial for custom games with tens of thousands of monsters)
+> - Combat no longer casts the round's alternate at a just-killed monster (kill recognized on the exp line, before `*Combat Off*`); prefixed monster names resolve their flavor adjective from one shared vocabulary
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

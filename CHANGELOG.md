@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.16.0
+
+- Per-monster combat message data retired — hit / miss / dodge / armor-block are recognized generically from line colour + wording, and a death from the experience line, so the Monster editor no longer has a Combat Messages section and no one has to hand-enter a monster's messages (crucial for custom games with tens of thousands of monsters)
+- Monster deaths are now recognized purely from `You gain N experience.` + `*Combat Off*` (our own targeting names the mob); the per-monster death-line matcher was removed
+- `MonsterMessageRecord` shrank to name + flavor-prefix data (the 8 unused hit/miss/dodge/block fields and the death-line field are gone)
+
 ## 3.15.2
 
 - Combat engine no longer casts the round's alternate attack spell at a just-killed monster — a kill is now recognized on the `You gain N experience.` line (which arrives before the kill's `*Combat Off*`) instead of waiting for the `*Combat Off*`, so `lbol`→`mmis` no longer fires `mmis` at the corpse ("You don't see X here!"). Generic — works for any monster, no per-monster death message needed
