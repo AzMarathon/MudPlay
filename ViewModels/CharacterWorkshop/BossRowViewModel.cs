@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -60,6 +61,13 @@ public sealed partial class BossRowViewModel : ObservableObject
     [ObservableProperty] private bool _isCleanup;
     [ObservableProperty] private bool _isActive;
 
+    // Last time this boss's timer was set — by a Mark / Now button, a back-dated Mark,
+    // or an auto-detected kill (all land on BossTimerStore.KilledAt). Shown in local
+    // time; blank when never recorded. Sort key is the kill time in Unix seconds, with
+    // long.MinValue for "never" so those rows sort last regardless of direction.
+    [ObservableProperty] private string _lastKilledDisplay = string.Empty;
+    [ObservableProperty] private long _lastKilledSortKey = long.MinValue;
+
     public BossRespawnType RespawnType { get; }
 
     public BossRowViewModel(
@@ -101,6 +109,10 @@ public sealed partial class BossRowViewModel : ObservableObject
     // blank when no timer is running (never killed / expired / Cleanup / no timer).
     public void RefreshStatus()
     {
+        // Last-killed stamp is independent of the live countdown — it's meaningful even
+        // for an expired / cleanup / idle row, so compute it before the state branches.
+        RefreshLastKilled();
+
         // Cleanup bosses read a DEAD / ALIVE state, not a countdown: DEAD once marked
         // until the next BBS cleanup flips them back to ALIVE. No early windows.
         if (IsCleanup)
@@ -145,6 +157,22 @@ public sealed partial class BossRowViewModel : ObservableObject
         return rem > 0
             ? (BossTimerMath.FormatDuration(TimeSpan.FromSeconds(rem)), (long)rem)
             : (string.Empty, InactiveSort);
+    }
+
+    // Reflect BossTimerStore.KilledAt into the Last Killed column (local time + a
+    // Unix-seconds sort key). Blank / long.MinValue when the boss has no recorded kill.
+    private void RefreshLastKilled()
+    {
+        if (_timers.KilledAt(Name) is { } at)
+        {
+            LastKilledDisplay = at.ToLocalTime().ToString("MMM d, HH:mm", CultureInfo.CurrentCulture);
+            LastKilledSortKey = at.ToUnixTimeSeconds();
+        }
+        else
+        {
+            LastKilledDisplay = string.Empty;
+            LastKilledSortKey = long.MinValue;
+        }
     }
 
     private void ClearLive()

@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.17.4
+
+- Player Workshop → Bosses: new **Last Killed** column (between Timer and Notes) showing when each boss's timer was last set — by a Mark / Now button, a back-dated Mark, or an auto-detected kill
+- Bosses tab now opens sorted by the 100% timer (running timers on top), so a fresh open shows what's active instead of a name-ordered list that looks empty
+
 ## 3.17.3
 
 - Fixed: after auto-training + allocating CP, the loop/auto-lair could resume but then stand idle indefinitely — when the trainer-menu exit prompt was missed, the CP-form keyboard hold wasn't released, so the resumed engine's first move was silently dropped (the walker drew the route but never stepped). The CP-replay grace-timeout now forces the keyboard release before resuming

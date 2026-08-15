@@ -137,6 +137,30 @@ public sealed class BossTimerTests : IDisposable
     }
 
     [Fact]
+    public void BossRow_LastKilled_ReflectsTimerStore()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
+        var (_, timers, _) = NewStores();
+
+        BossRowViewModel row = new(
+            Boss("ogre king", number: 50, rooms: "3/300"), RealmType.ParaMud, 24, timers,
+            onEdit: () => { }, onMarkRequested: _ => { });
+
+        // No kill recorded yet → blank + sentinel sort key (sorts last).
+        Assert.Equal(string.Empty, row.LastKilledDisplay);
+        Assert.Equal(long.MinValue, row.LastKilledSortKey);
+
+        // A recorded kill (button or auto-detect, both land on MarkKilled) surfaces.
+        DateTimeOffset at = DateTimeOffset.UtcNow.AddMinutes(-30);
+        timers.MarkKilled("ogre king", at);
+        row.RefreshStatus();
+
+        Assert.NotEqual(string.Empty, row.LastKilledDisplay);
+        Assert.Equal(at.ToUnixTimeSeconds(), row.LastKilledSortKey);
+    }
+
+    [Fact]
     public void Reset_ClearsTimer()
     {
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));

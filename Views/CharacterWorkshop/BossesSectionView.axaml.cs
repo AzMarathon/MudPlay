@@ -23,6 +23,11 @@ public partial class BossesSectionView : UserControl
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        // The tab's View is swapped into a ContentControl, so it re-attaches every time
+        // the Bosses section is opened — re-apply the default sort there so a fresh open
+        // always surfaces the running timers instead of a name-ordered list that reads
+        // as empty.
+        AttachedToVisualTree += (_, _) => ApplyDefaultSort();
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
@@ -75,31 +80,49 @@ public partial class BossesSectionView : UserControl
     // still floats your running timers to the top. Every other column falls through.
     private void OnSorting(object? sender, DataGridColumnEventArgs e)
     {
-        if (_vm is null) return;
-        string? path = e.Column.SortMemberPath;
-
-        Func<BossRowViewModel, int> group;
-        Comparison<BossRowViewModel> within;
-        switch (path)
-        {
-            case "FullSortKey":    (group, within) = TimerSort(static r => r.FullSortKey); break;
-            case "Early1SortKey":  (group, within) = TimerSort(static r => r.Early1SortKey); break;
-            case "Early2SortKey":  (group, within) = TimerSort(static r => r.Early2SortKey); break;
-            case "Early3SortKey":  (group, within) = TimerSort(static r => r.Early3SortKey); break;
-            case "Name":           group = StatusGroup; within = static (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase); break;
-            case "RespawnSortKey": group = StatusGroup; within = static (a, b) => a.RespawnSortKey.CompareTo(b.RespawnSortKey); break;
-            default: return;
-        }
-
+        if (_vm is null || ComparerFor(e.Column.SortMemberPath) is not { } cmp) return;
+        string path = e.Column.SortMemberPath!;
         e.Handled = true;
         _sortDir = _sortPath == path && _sortDir == ListSortDirection.Ascending
             ? ListSortDirection.Descending
             : ListSortDirection.Ascending;
-        _sortPath = path;
+        ApplySort(path, cmp);
+    }
 
+    // Default sort applied on every open: the 100% countdown, active timers first. Reset
+    // the toggle state so a subsequent header click toggles from this default.
+    private void ApplyDefaultSort()
+    {
+        if (_vm is null || ComparerFor("FullSortKey") is not { } cmp) return;
+        _sortDir = ListSortDirection.Ascending;
+        ApplySort("FullSortKey", cmp);
+    }
+
+    // Resolve a column's fixed-group + within-group comparison, or null when it isn't a
+    // sortable column. Shared by the user-click sort and the default open sort.
+    private static (Func<BossRowViewModel, int> Group, Comparison<BossRowViewModel> Within)? ComparerFor(string? path)
+        => path switch
+        {
+            "FullSortKey"       => TimerSort(static r => r.FullSortKey),
+            "Early1SortKey"     => TimerSort(static r => r.Early1SortKey),
+            "Early2SortKey"     => TimerSort(static r => r.Early2SortKey),
+            "Early3SortKey"     => TimerSort(static r => r.Early3SortKey),
+            "Name"              => (StatusGroup, static (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase)),
+            "RespawnSortKey"    => (StatusGroup, static (a, b) => a.RespawnSortKey.CompareTo(b.RespawnSortKey)),
+            // Recorded kills first (a long.MinValue key = never killed sorts last), by
+            // kill time within the group — descending floats the most recent to the top.
+            "LastKilledSortKey" => (static r => r.LastKilledSortKey == long.MinValue ? 1 : 0,
+                                    static (a, b) => a.LastKilledSortKey.CompareTo(b.LastKilledSortKey)),
+            _ => null,
+        };
+
+    private void ApplySort(string path, (Func<BossRowViewModel, int> Group, Comparison<BossRowViewModel> Within) cmp)
+    {
+        if (_vm is null) return;
+        _sortPath = path;
         _vm.Rows.SortDescriptions.Clear();
         _vm.Rows.SortDescriptions.Add(DataGridSortDescription.FromComparer(
-            new GroupedComparer(group, within, _sortDir == ListSortDirection.Descending)));
+            new GroupedComparer(cmp.Group, cmp.Within, _sortDir == ListSortDirection.Descending)));
     }
 
     // Cleanup spawns (0), active (counting) timers (1), unset / expired (2) — derived

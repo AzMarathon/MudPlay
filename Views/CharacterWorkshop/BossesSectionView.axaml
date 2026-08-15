@@ -100,6 +100,15 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
+                <!-- When this boss's timer was last set — by a Mark / Now button, a
+                     back-dated Mark, or an auto-detected kill. Blank when never
+                     recorded. Sits between Timer and Notes; both are after the
+                     early-window columns (4-6) the code-behind relabels, so those
+                     indices stay put. -->
+                <DataGridTextColumn Header="Last Killed" Width="120" IsReadOnly="True" SortMemberPath="LastKilledSortKey"
+                                    Binding="{ReflectionBinding LastKilledDisplay}"
+                                    FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
                 <!-- Free-text notes from the Manage dialog, shown read-only here.
                      Trimmed to the column width (resize / widen to read a long
                      one, or edit it in Manage). Appended after Timer so the

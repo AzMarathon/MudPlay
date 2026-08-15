@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.17.3**
-> - Fixed: after auto-training and allocating CP, the loop/auto-lair no longer stands idle when the trainer-menu exit prompt is missed — the CP-form keyboard hold is now released before the engine resumes, so its first move isn't silently dropped
+> **Version 3.17.4**
+> - Player Workshop → Bosses: new **Last Killed** column showing when each boss's timer was last set (button, back-dated Mark, or auto-detected kill)
+> - Bosses tab now opens sorted by the 100% timer (running timers on top), so it no longer looks empty on open
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
