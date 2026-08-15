@@ -190,7 +190,7 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Lvl" SortMemberPath="ReqLevel" Width="72">
+                <DataGridTemplateColumn Header="Lvl" SortMemberPath="EffectiveLevel" Width="72">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:SpellBookRowViewModel">
                             <TextBlock Text="{Binding ReqLevelText}" Classes="cellDim"

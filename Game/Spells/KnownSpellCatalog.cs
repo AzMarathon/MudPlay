@@ -427,6 +427,54 @@ public sealed class KnownSpellCatalog
         return 0;
     }
 
+    // TBInfo teaching-script tokens: a line teaching a spell to a class reads e.g.
+    // `check class:class 3:minlevel 50 4025:price ...:learnspell 5087:message 4031`
+    // — the class number, the min level gate, and one or more taught spells. The
+    // data is dirty (truncated tokens), so match tolerantly per token rather than
+    // parsing the whole grammar.
+    private static readonly Regex TeachClassRe    = new(@"\bclass\s+(\d+)",      RegexOptions.Compiled);
+    private static readonly Regex TeachMinLevelRe = new(@"\bminlevel\s+(\d+)",   RegexOptions.Compiled);
+    private static readonly Regex TeachLearnRe    = new(@"\blearnspell\s+(\d+)", RegexOptions.Compiled);
+
+    // Per-class trainer LEARN-level gates, parsed from the TBInfo teaching scripts.
+    // A spell learned from an NPC (Spells."Learned From" = "NPC #...") is gated by a
+    // `check class:class N:minlevel M ... learnspell S` line: class N can't learn
+    // spell S until level M — often HIGHER than the spell's own ReqLevel (a Paladin's
+    // divine disfavour #5087 gates at 50, not the spell row's ReqLevel 19). Returns
+    // spellNumber → the lowest such M across every trainer for classNumber, so the
+    // Spell Book can show the real unlock level instead of the misleading ReqLevel.
+    // Empty when the class has no trainer-gated spells or there's no TBInfo table.
+    public IReadOnlyDictionary<int, int> BuildTeachLevelsForClass(int classNumber)
+    {
+        Dictionary<int, int> result = new();
+        if (classNumber < 1) return result;
+        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        if (doc is null) return result;
+
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            string? action = ReadString(row, "Action");
+            if (string.IsNullOrEmpty(action)
+                || !action.Contains("learnspell", System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            foreach (string line in action.Split('\n'))
+            {
+                Match cm = TeachClassRe.Match(line);
+                Match lm = TeachMinLevelRe.Match(line);
+                if (!cm.Success || !lm.Success) continue;
+                if (!int.TryParse(cm.Groups[1].Value, out int cls) || cls != classNumber) continue;
+                if (!int.TryParse(lm.Groups[1].Value, out int lvl)) continue;
+
+                foreach (Match sm in TeachLearnRe.Matches(line))
+                    if (int.TryParse(sm.Groups[1].Value, out int spell))
+                        result[spell] = result.TryGetValue(spell, out int cur)
+                            ? System.Math.Min(cur, lvl) : lvl;
+            }
+        }
+        return result;
+    }
+
     // Render a cast item's spell as a compact affect line ("AC +10", "Dmg 14–22",
     // "Dur 8 · Strength +3") at the given use-level, reusing the same formatter the
     // spell grid uses so an item's cast reads identically to the learnable spell.

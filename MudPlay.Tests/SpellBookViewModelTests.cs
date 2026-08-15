@@ -44,7 +44,8 @@ public sealed class SpellBookViewModelTests : IDisposable
         SpellRow(103, "gated", "lvlg", magery: 1, mageryLvl: 1, reqLevel: 20),
     ];
 
-    private SpellbookState NewBook(int classNumber, int level, object[]? items = null, object[]? spells = null)
+    private SpellbookState NewBook(int classNumber, int level, object[]? items = null,
+                                   object[]? spells = null, object[]? tbInfo = null)
     {
         string dir = Path.Combine(_root, "set");
         Directory.CreateDirectory(dir);
@@ -52,6 +53,8 @@ public sealed class SpellBookViewModelTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "Classes.json"), JsonSerializer.Serialize(_classes));
         if (items is not null)
             File.WriteAllText(Path.Combine(dir, "Items.json"), JsonSerializer.Serialize(items));
+        if (tbInfo is not null)
+            File.WriteAllText(Path.Combine(dir, "TBInfo.json"), JsonSerializer.Serialize(tbInfo));
 
         GameDataCache cache = new(_root);
         cache.SwitchSet("set");
@@ -302,6 +305,46 @@ public sealed class SpellBookViewModelTests : IDisposable
         Assert.Equal(300, book.GetTeachingItemNumber(100)); // taught by the tome
         Assert.Equal(0, book.GetTeachingItemNumber(101));   // cast-on-use only → no teacher
         Assert.Equal(0, book.GetTeachingItemNumber(999));   // unknown spell → none
+    }
+
+    // A spell learned from an NPC trainer is gated by a TBInfo `check class:class
+    // N:minlevel M ... learnspell S` line at a level often HIGHER than the spell's
+    // ReqLevel (a Paladin's divine disfavour: ReqLevel 19 but trainer-gated to 50).
+    // The book must show that real unlock level and hide the spell below it.
+    [Fact]
+    public void TeachLevel_TrainerGate_RaisesUnlockLevel_AndFiltersBelowIt()
+    {
+        object[] tb =
+        [
+            new Dictionary<string, object>
+            {
+                ["Number"] = 1,
+                // starlight (#100, ReqLevel 2) is trainer-gated to level 40 for Mage (class 12).
+                ["Action"] = "check class:class 12:minlevel 40 999:price 5 1:learnspell 100:text 1\n",
+            },
+        ];
+        SpellbookState book = NewBook(classNumber: 12, level: 12, tbInfo: tb); // Mage, level 12
+
+        Assert.Equal(40, book.GetTeachLevels()[100]);
+
+        using SpellBookViewModel vm = new(book); // Show all OFF by default
+        // Hidden: effective unlock level 40 > character level 12 (ReqLevel 2 would have shown it).
+        Assert.DoesNotContain(vm.Rows, r => r.Short == "star");
+
+        vm.ShowAllSpells = true;
+        SpellBookRowViewModel star = vm.Rows.Single(r => r.Short == "star");
+        Assert.Equal(40, star.EffectiveLevel);   // max(ReqLevel 2, trainer 40)
+        Assert.Equal("40", star.ReqLevelText);
+    }
+
+    [Fact]
+    public void TeachLevel_NoTrainerGate_UsesSpellReqLevel()
+    {
+        SpellbookState book = NewBook(classNumber: 12, level: 50); // no TBInfo seeded
+        using SpellBookViewModel vm = new(book) { ShowAllSpells = true };
+
+        SpellBookRowViewModel star = vm.Rows.Single(r => r.Short == "star");
+        Assert.Equal(2, star.EffectiveLevel);   // falls back to ReqLevel
     }
 
     [Fact]

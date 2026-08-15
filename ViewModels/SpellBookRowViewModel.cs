@@ -18,12 +18,14 @@ public sealed class SpellBookRowViewModel
         int level,
         Func<int, SpellFormulaInput?> resolveChain,
         Func<int, string?>? resolveSpellName = null,
-        Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts = null)
+        Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts = null,
+        int teachLevel = 0)
     {
         Number = spell.Number;
         Short = spell.Short;
         Name = spell.Name;
         ReqLevel = spell.ReqLevel;
+        EffectiveLevel = System.Math.Max(spell.ReqLevel, teachLevel);
         IsObtained = isObtained;
 
         Mana = SpellCalculator.ManaCost(spell.Formula);
@@ -42,8 +44,16 @@ public sealed class SpellBookRowViewModel
     // The full Spells.Name.
     public string Name { get; }
 
-    // Level the spell unlocks at (Spells.ReqLevel).
+    // Level the spell unlocks at (Spells.ReqLevel) — the raw value, not necessarily
+    // when THIS class can learn it (see EffectiveLevel).
     public int ReqLevel { get; }
+
+    // The level THIS class can actually learn the spell — the higher of the spell's
+    // ReqLevel and any trainer `minlevel` gate for the class (from TBInfo). For most
+    // spells this equals ReqLevel; for trainer-gated ones (e.g. a Paladin's divine
+    // disfavour) it's the real, higher unlock level. Drives the Lvl column + the
+    // level filter so the book doesn't show a spell as available before you can learn it.
+    public int EffectiveLevel { get; }
 
     // True when the character has learned this spell.
     public bool IsObtained { get; }
@@ -51,8 +61,8 @@ public sealed class SpellBookRowViewModel
     // Checkmark glyph for the obtained column ("✓" or empty).
     public string ObtainedGlyph => IsObtained ? "✓" : string.Empty;
 
-    // The unlock level as a bare number — the unlock-level cell.
-    public string ReqLevelText => ReqLevel.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    // The effective unlock level as a bare number — the Lvl cell.
+    public string ReqLevelText => EffectiveLevel.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     // Per-round mana cost — numeric, for column sorting.
     public long Mana { get; }

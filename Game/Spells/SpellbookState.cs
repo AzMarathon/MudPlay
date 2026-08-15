@@ -95,6 +95,11 @@ public sealed class SpellbookState
     // when none does. Backs the Spell Book's double-click-to-item-record.
     public int GetTeachingItemNumber(int spellNumber) => _catalog.GetTeachingItemNumber(spellNumber);
 
+    // spellNumber → the trainer LEARN-level gate for the current class (from TBInfo),
+    // when higher than the spell's ReqLevel. Backs the Spell Book's unlock-level
+    // column so it shows when THIS class can actually learn each spell.
+    public IReadOnlyDictionary<int, int> GetTeachLevels() => _catalog.BuildTeachLevelsForClass(ClassNumber);
+
     // True when the character has learned the spell with this Spells.Number.
     public bool IsObtained(int spellNumber) => _obtained.Contains(spellNumber);
 
