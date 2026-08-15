@@ -38,6 +38,11 @@ public sealed class ConversationRowViewModel
         // and the message is a full sentence. No prefix column at all.
         if (entry.Channel == ChatChannel.Server) return string.Empty;
 
+        // An action/emote is a full self-contained sentence ("Fujin hugs you
+        // close!" / "You wave to Suijin!") — the actor is in the text, so no
+        // speaker prefix; the whole green line is the message.
+        if (entry.Channel == ChatChannel.Social) return string.Empty;
+
         // Speaker is null for self-actions whose regex didn't capture a
         // name (e.g. "You yell ..." — the Megamind regex matches the verb
         // shape literally). Surface those as "You" so every chat row has
@@ -66,6 +71,8 @@ public sealed class ConversationRowViewModel
         // Server PvP notices — same red "SERVER" chip.
         ChatChannel.RealmEvent        => "SERVER",
         ChatChannel.Server            => "SERVER",
+        // Actions ride the say grouping — same chip, so they read as room-local.
+        ChatChannel.Social            => "SAY",
         ChatChannel.DaySeparator      => string.Empty,
         _ => "?",
     };

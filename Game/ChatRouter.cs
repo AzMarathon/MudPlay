@@ -40,6 +40,12 @@ public sealed class ChatRouter : IDisposable
     // realm-event subscriptions below; this additive sniff classifies it too.
     public Func<string?>? DisconnectPatternProvider { get; set; }
 
+    // Resolves whether a name is a real player currently in the room / party — the
+    // known-player gate for others'-POV actions/emotes (rejects room names, monsters
+    // and ambient flavour that share the action green). Set by AppServices; null →
+    // gate closed, so no others'-POV action is captured until wired.
+    public Func<string, bool>? IsKnownPlayer { get; set; }
+
     // Compiled form of the current DisconnectPattern, cached against its raw
     // source so we only recompile when the user edits the pattern or swaps BBS.
     private string? _compiledDisconnectSource;
@@ -119,6 +125,26 @@ public sealed class ChatRouter : IDisposable
     {
         TryCaptureTelepath(line.Text);
         TryCustomDisconnectLine(line);
+        TryActionEmote(line);
+    }
+
+    // Capture a BBS action / emote — a full-green line whose head is an emote shape
+    // (own "You …", or "<room player> …") — into the conversation as a Social entry.
+    // Colour is read off the line's attributes (still present here); the head +
+    // known-player gates keep the other green lines (Obvious exits / Wealth /
+    // Encumbrance / stat labels / "You are carrying …") out. See ActionEmoteClassifier.
+    private void TryActionEmote(Terminal.LineExtractor.EmittedLine line)
+    {
+        if (string.IsNullOrEmpty(line.Text)) return;
+        if (!ActionEmoteClassifier.IsAllGreen(line)) return;
+        if (ActionEmoteClassifier.Classify(line.Text, IsKnownPlayer ?? (_ => false), out _)
+            == ActionEmoteClassifier.Kind.None)
+            return;
+
+        // The full green sentence is self-contained (the actor is in the text), so
+        // no speaker split — the row renders the whole line green under the say chip.
+        EntryClassified?.Invoke(new ChatLogEntry(
+            line.Timestamp, ChatChannel.Social, null, line.Text, line.Text));
     }
 
     // Match the active BBS's custom disconnect line against a freshly-emitted

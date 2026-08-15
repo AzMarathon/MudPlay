@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.13.0**
-> - New Combat-tab **Drain spell** slot: a mage life-steal spell (vamp / dtch / nebo) that casts in place of the round's attack when HP drops to its trigger %, healing you off the damage, then reverts to the normal pick once HP recovers or mana runs low
-> - Drains only fire on **living, non-undead** targets (a life-drain can't affect NonLiving / Undead) — otherwise the engine falls back to the normal attack cascade
-> - **"Drains override AOE"** toggle: by default the drain yields to the room AoE when rooming; check it to let the drain pre-empt the AoE too
+> **Version 3.14.0**
+> - Conversation window now captures **actions / emotes** (your board's `action list` socials — hug / wave / smile / tickle / …): ones you perform, ones aimed at you, and ones you witness in the room
+> - They show under the **say** chip (room-local) with the message text in **green** — the board's own colour for them
+> - Detected by colour + shape (own "You <verb>…"; others' only from a player actually in your room), so obvious-exits / wealth / encumbrance green lines and room enter/exit + party-follow movement are never mistaken for an emote
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

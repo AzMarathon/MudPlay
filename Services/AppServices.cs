@@ -1795,6 +1795,10 @@ public sealed class AppServices
         // category — otherwise a board with a non-standard logoff line evicts the
         // roster member but never logs the disconnect in the conversation.
         Chat.DisconnectPatternProvider = () => ResolveActiveBbs()?.DisconnectPattern;
+        // Known-player gate for others'-POV actions/emotes: the actor of a room-local
+        // social is a player in our room's entity list. Rejects room names, monsters
+        // and ambient flavour that share the action-green colour.
+        Chat.IsKnownPlayer = IsKnownRoomPlayer;
         // Engine only — other subsystems register additional
         // handlers without touching the engine.
         RemoteCommands = new Game.Remote.RemoteCommandManager(Chat, PartyState, Players, Log);
@@ -6359,6 +6363,31 @@ public sealed class AppServices
             .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
         return first is null ? null : Bbs.Get(first);
+    }
+
+    // Whether a name is a player currently in our room — the known-player gate for
+    // others'-POV actions/emotes (they're room-local, so the actor is in the room's
+    // entity list). Matches the first name token so "Fujin" resolves a "Fujin
+    // WuzHere" resolved name.
+    private bool IsKnownRoomPlayer(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        if (RoomClassifier.Current is not { } obs) return false;
+        foreach (Game.Combat.RoomEntity e in obs.Entities)
+        {
+            if (e.Kind != Game.Combat.EntityKind.Player) continue;
+            if (FirstTokenEquals(e.RawName, name) || FirstTokenEquals(e.ResolvedName, name))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool FirstTokenEquals(string? full, string name)
+    {
+        if (string.IsNullOrEmpty(full)) return false;
+        int sp = full.IndexOf(' ');
+        string first = sp < 0 ? full : full[..sp];
+        return string.Equals(first, name, StringComparison.OrdinalIgnoreCase);
     }
 
     // Parse the active BBS's nightly-cleanup time + zone into a config for the

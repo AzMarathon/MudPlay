@@ -34,6 +34,13 @@ public enum ChatChannel
     // this channel.
     Server,
 
+    // BBS actions / emotes (MUD socials from the customizable `action list`) —
+    // a full green line, room-local. Own POV starts "You …"; others' POV starts
+    // with a room player's name. Grouped under the Local ("say") filter and chip
+    // in the Conversation window, but the message text renders green. See
+    // Game.ActionEmoteClassifier for detection.
+    Social,
+
     // Synthetic separator inserted by ChatHistoryStore when the wall-clock date
     // rolls over mid-session. Not produced by ChatRouter; the Conversation
     // window renders these as a horizontal rule. ChatLogEntry.Message carries
