@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.14.0
+
+- Conversation window now captures **actions / emotes** (the socials from your board's `action list` — hug / wave / smile / tickle / …): the ones you perform, the ones aimed at you, and the ones you witness in the room
+- They show under the **say** chip (room-local, like say) with the message text in **green** — the board's own colour for them
+- Detected by colour + shape (own "You <verb>…"; others' only from a **player actually in your room**), so the also-green obvious-exits line and room enter/exit + party-follow movement are never mistaken for an emote
+- Combat tab: separators now bracket the Drain spell settings (above and below), setting the group off from the alternate attack spell and the Display section
+
 ## 3.13.0
 
 - New Combat-tab **Drain spell** slot: a mage life-steal spell (e.g. vamp / dtch / nebo) that casts in place of the round's attack once HP drops to its trigger %, healing you off the damage, then reverts to the normal pick when HP recovers or mana falls below its floor — an emergency heal that also attacks (per-target Max casts + Min mana, like the other single-target slots)

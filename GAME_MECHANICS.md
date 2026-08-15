@@ -1892,6 +1892,38 @@ Name (not the Short cast-code). `You have no spells.` is the authoritative empty
 opens on the header but reads zero rows is a **format miss, not an empty book** — it must not clear
 the obtained set. (SpellListParser + report "sp didn't update spellbook".)
 
+## BBS actions / emotes (the `action list` socials) *([CONFIRMED] 2026-08-14, user + live capture)*
+
+MajorMUD / MajorBBS boards ship a **customizable action list** (MUD socials / emotes),
+shown by typing `action list` — a bare **space-separated list of verbs** (e.g. `hug kiss
+wave grin bow bleed nod laugh … smile … tickle`) that wraps across lines, with no header.
+
+- **Using an action is guaranteed a full GREEN line** — ANSI palette **index 2**
+  (`SGR 0;32`), the same green the board paints the whole `Obvious exits:` line.
+  All-green is **necessary but not sufficient** — that exits line is all-green too.
+  (The board greens only the *label* of `Wealth:` / `Encumbrance:` / stat rows, not
+  their values, so those lines aren't all-green; `You are carrying …` isn't green at
+  all — both fail the colour gate before any text test.)
+- **Own POV** begins **`You <verb…>`** — non-targeted (`You growl.`; `tickle` with no
+  target → `You look around looking for someone to tickle.`) or targeted at a player
+  (`You hug Suijin close!`, `You wave to Suijin!`). **The output wording does NOT track
+  the command verb**: `jump` → `You leap in the air!`, `egrin` → `You grin evilly.` —
+  so there is no verb→output map to key on (colour + head shape is the signal).
+- **Target POV** (aimed at you): `<Player> <verb…> [at] you…` (`Fujin hugs you close!`,
+  `Fujin grins slyly at you.`).
+- **3rd-party POV** (you witness it): `<Player> <verb…> [<other>]`; a self-action reads
+  the same to everyone in the room (`Fujin growls ominously.`).
+- **Targeting varies per action** — some are usable only at players, some also at
+  monsters, some self-only. Actions are **room-local** (you only see others' actions when
+  they share your room), so an others'-POV actor is always a **player in your room**.
+- **`Your command had no effect.`** follows an action used with no/invalid target (or one
+  not usable there); that line is **not** green.
+- **Client model** — the Conversation window captures these as a **Social** channel entry,
+  grouped under the room-local "say" filter (say chip stays white, message text renders
+  green). Detection = all-green colour + head shape: own `You <lowercase verb>…` minus the
+  known green status prefixes (`You are/have/notice/feel/…`); others' `<known room player>
+  <lowercase verb>…` minus enter/exit/follow/logon/chat lines (see `ActionEmoteClassifier`).
+
 ## Spell targeting: monster type tags
 
 A spell's eligibility against a monster is a match between a **spell-side targeting tag** and a

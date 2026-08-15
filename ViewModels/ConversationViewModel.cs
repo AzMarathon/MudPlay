@@ -215,6 +215,8 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         ChatChannel.RealmEvent        => ShowRealmEvent,
         // Server PvP announcements share the Realm filter — no separate toggle.
         ChatChannel.Server            => ShowRealmEvent,
+        // Actions / emotes are room-local, so they ride the "say" (Local) toggle.
+        ChatChannel.Social            => ShowLocal,
         _ => true,
     };
 
@@ -295,6 +297,8 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
             [ChatChannel.Yell]              = LookupBrush(app, "AccentAmberBrush"),
             [ChatChannel.RealmEvent]        = LookupBrush(app, "AccentRedBrush"),
             [ChatChannel.Server]            = LookupBrush(app, "AccentRedBrush"),
+            // Actions/emotes keep the say chip (white/chrome); only the body is green.
+            [ChatChannel.Social]            = LookupBrush(app, "ChromeFgBrush"),
             [ChatChannel.DaySeparator]      = LookupBrush(app, "ChromeFgMutedBrush"),
         };
 
@@ -305,6 +309,8 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         IBrush def = LookupBrush(app, "ChromeFgBrush");
         Dictionary<ChatChannel, IBrush> map = new();
         foreach (ChatChannel c in Enum.GetValues<ChatChannel>()) map[c] = def;
+        // Actions/emotes render their body full green (their native wire colour).
+        map[ChatChannel.Social] = LookupBrush(app, "AccentGreenBrush");
         return map;
     }
 
@@ -337,6 +343,8 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         ChatChannel.Yell             => "Yell",
         ChatChannel.RealmEvent       => "RealmEvent",
         ChatChannel.Server           => "RealmEvent",
+        // Grouped with Local so a "say" colour override + the say toggle cover it.
+        ChatChannel.Social           => "Local",
         _ => null,
     };
 
