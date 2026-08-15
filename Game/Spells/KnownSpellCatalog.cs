@@ -285,6 +285,11 @@ public sealed class KnownSpellCatalog
     // slot's AbilVal is the character level required to wear / use the item.
     private const int MinLevelAbilityCode = 135;
 
+    // MajorMUD ability code for a teaching item ("LearnSp"): the slot's AbilVal is
+    // the Spells.Number the item teaches when read. Distinct from CastsSp (43),
+    // which casts a spell on use rather than teaching it.
+    private const int LearnSpAbilityCode = 42;
+
     // Items carry 20 ability slots (Abil-0..19) vs the 10 on Spells / Classes.
     private const int ItemAbilSlots = 20;
 
@@ -394,6 +399,24 @@ public sealed class KnownSpellCatalog
             return byItem != 0 ? byItem : string.Compare(a.SpellName, b.SpellName, StringComparison.OrdinalIgnoreCase);
         });
         return results;
+    }
+
+    // The Items.Number of the first item that TEACHES the given spell — an Items row
+    // carrying a LearnSp ability (code 42) whose value is spellNumber. 0 when no item
+    // teaches it (trainer-only spells) or no Items table is loaded. Powers the Spell
+    // Book's double-click-to-item-record. A full-table scan, run only on that click.
+    public int GetTeachingItemNumber(int spellNumber)
+    {
+        if (spellNumber <= 0) return 0;
+        JsonDocument? items = _cache.GetRawTable("Items");
+        if (items is null) return 0;
+
+        foreach (JsonElement row in items.RootElement.EnumerateArray())
+            for (int i = 0; i < ItemAbilSlots; i++)
+                if (ReadInt(row, $"Abil-{i}") == LearnSpAbilityCode
+                    && ReadInt(row, $"AbilVal-{i}") == spellNumber)
+                    return ReadInt(row, "Number");
+        return 0;
     }
 
     // Render a cast item's spell as a compact affect line ("AC +10", "Dmg 14–22",

@@ -133,7 +133,9 @@
              (SpellBookRowViewModel); the DataGrid's auto-wrapped collection
              view defeats compiled-binding item-type inference, matching the
              SpellCoverageReportWindow pattern. -->
-        <DataGrid ItemsSource="{Binding Rows}"
+        <DataGrid x:Name="SpellGrid"
+                  ItemsSource="{Binding Rows}"
+                  DoubleTapped="OnSpellRowDoubleTapped"
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="0"
                   IsReadOnly="True"
@@ -142,7 +144,8 @@
                   CanUserResizeColumns="True"
                   CanUserReorderColumns="True"
                   HorizontalScrollBarVisibility="Auto"
-                  VerticalScrollBarVisibility="Auto">
+                  VerticalScrollBarVisibility="Auto"
+                  ToolTip.Tip="Double-click a spell to open the record of the item that teaches it.">
             <DataGrid.Columns>
                 <DataGridTextColumn Header=""     Binding="{ReflectionBinding ObtainedGlyph}" SortMemberPath="IsObtained"
                                     Width="34" FontFamily="{StaticResource FontMono}" Foreground="{StaticResource SeverityInfoBrush}"/>

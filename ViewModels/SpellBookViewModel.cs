@@ -35,6 +35,12 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     // The rendered, filtered spell rows.
     public ObservableCollection<SpellBookRowViewModel> Rows { get; } = new();
 
+    // The Items.Number of the item that TEACHES this spell, or 0 when none does
+    // (trainer-only spells). The window's double-click opens that item's record.
+    // Pure — the view owns the actual open so this VM stays a testable projection.
+    public int TeachingItemNumberFor(SpellBookRowViewModel? row)
+        => row is null ? 0 : _book.GetTeachingItemNumber(row.Number);
+
     // The class's cast-on-use items (wands / scrolls / potions), filtered by
     // the search box. Rendered in a section below the spell grid. Empty for a
     // class with no usable cast items.

@@ -108,4 +108,36 @@ public sealed class BlessSuggestionTests
         Assert.Equal("casts spell #999 · Lv 8 · free",
             SpellsSectionViewModel.BlessItemLabel(Item("Mystery Rod", 999, "", 0, 0, 8)));
     }
+
+    // A cast-on-use item entry is Learned (available) only while the character holds
+    // it — so a bless slot pointed at an item you no longer carry flags red / strikes
+    // through, exactly like an unlearned spell.
+    [Fact]
+    public void ComposeBlessSuggestions_ItemCast_LearnedReflectsPossession()
+    {
+        ClassCastItem held = new(ItemNumber: 71, ItemName: "Ruby Wand", SpellNumber: 60,
+            SpellName: "shield", ManaCost: 0, UseCount: 0, MinLevel: 5);
+        ClassCastItem missing = new(ItemNumber: 72, ItemName: "Jade Wand", SpellNumber: 61,
+            SpellName: "haste", ManaCost: 0, UseCount: 0, MinLevel: 5);
+
+        IReadOnlyList<SpellPick> picks = SpellsSectionViewModel.ComposeBlessSuggestions(
+            NoSpells, new[] { held, missing }, level: 20,
+            isPossessed: item => item.ItemNumber == 71);   // only the Ruby Wand is carried
+
+        Assert.True(picks.Single(p => p.Short == "#Ruby Wand").Learned);    // held → available
+        Assert.False(picks.Single(p => p.Short == "#Jade Wand").Learned);   // not held → flagged
+    }
+
+    [Fact]
+    public void ComposeBlessSuggestions_UnknownInventory_ItemsTreatedAsHeld()
+    {
+        ClassCastItem item = new(ItemNumber: 71, ItemName: "Ruby Wand", SpellNumber: 60,
+            SpellName: "shield", ManaCost: 0, UseCount: 0, MinLevel: 5);
+
+        // No possession predicate = inventory never observed → never falsely flagged.
+        IReadOnlyList<SpellPick> picks =
+            SpellsSectionViewModel.ComposeBlessSuggestions(NoSpells, new[] { item }, level: 20);
+
+        Assert.True(picks.Single().Learned);
+    }
 }

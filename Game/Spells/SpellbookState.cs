@@ -91,6 +91,10 @@ public sealed class SpellbookState
     // alongside learnable spells. Empty when no class is set yet.
     public IReadOnlyList<ClassCastItem> GetCastItems() => _catalog.GetClassCastItems(ClassNumber);
 
+    // Items.Number of the first item that teaches the given spell (LearnSp), or 0
+    // when none does. Backs the Spell Book's double-click-to-item-record.
+    public int GetTeachingItemNumber(int spellNumber) => _catalog.GetTeachingItemNumber(spellNumber);
+
     // True when the character has learned the spell with this Spells.Number.
     public bool IsObtained(int spellNumber) => _obtained.Contains(spellNumber);
 

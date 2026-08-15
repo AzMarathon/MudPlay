@@ -20,6 +20,7 @@ public sealed class SpellBookRowViewModel
         Func<int, string?>? resolveSpellName = null,
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts = null)
     {
+        Number = spell.Number;
         Short = spell.Short;
         Name = spell.Name;
         ReqLevel = spell.ReqLevel;
@@ -31,6 +32,9 @@ public sealed class SpellBookRowViewModel
             spell.Formula, level, resolveChain, resolveSpellName, resolveTextblockCasts);
         FormulaText = BuildFormula(spell.Formula);
     }
+
+    // The spell's Spells.Number — used to look up the item that teaches it.
+    public int Number { get; }
 
     // The verbatim Spells.Short cast-code the player types.
     public string Short { get; }

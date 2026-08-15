@@ -287,6 +287,23 @@ public sealed class SpellBookViewModelTests : IDisposable
         Assert.DoesNotContain("Universal Charm", vm.CastItems.Select(r => r.ItemName));
     }
 
+    // Double-click-to-teaching-item lookup: the item carrying a LearnSp (42) ability
+    // for the spell wins; a CastsSp (43) item that only casts it is NOT a teacher.
+    [Fact]
+    public void GetTeachingItemNumber_FindsLearnSpItem_ZeroWhenNoneTeaches()
+    {
+        object[] items =
+        [
+            TeachItemRow(300, "Tome of Starlight", teachesSpell: 100), // LearnSp → starlight (100)
+            ItemRow(301, "Wand of Arc", castSpell: 101, useCount: -1), // only CASTS arc, doesn't teach
+        ];
+        SpellbookState book = NewBook(classNumber: 12, level: 5, items: items); // Mage
+
+        Assert.Equal(300, book.GetTeachingItemNumber(100)); // taught by the tome
+        Assert.Equal(0, book.GetTeachingItemNumber(101));   // cast-on-use only → no teacher
+        Assert.Equal(0, book.GetTeachingItemNumber(999));   // unknown spell → none
+    }
+
     [Fact]
     public void CastItems_EmptyWhenNoItemsTable()
     {
@@ -471,6 +488,24 @@ public sealed class SpellBookViewModelTests : IDisposable
         {
             row[$"Abil-{i}"] = i == 0 ? 43 : 0;
             row[$"AbilVal-{i}"] = i == 0 ? castSpell : 0;
+        }
+        return row;
+    }
+
+    // An item that TEACHES a spell — a LearnSp ability (code 42) in slot 0 whose
+    // value is the taught Spells.Number. No class/equippable gating: the teaching
+    // lookup scans every item for the ability.
+    private static Dictionary<string, object> TeachItemRow(int number, string name, int teachesSpell)
+    {
+        Dictionary<string, object> row = new()
+        {
+            ["Number"] = number,
+            ["Name"] = name,
+        };
+        for (int i = 0; i < 20; i++)
+        {
+            row[$"Abil-{i}"] = i == 0 ? 42 : 0;
+            row[$"AbilVal-{i}"] = i == 0 ? teachesSpell : 0;
         }
         return row;
     }

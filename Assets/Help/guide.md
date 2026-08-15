@@ -308,7 +308,7 @@ For mana-regen classes, the caster can rest to regen and — if configured — r
 
 Press **F2** to open the **Spell Book** — a read-only reference to your class's spells. It's a lookup companion for the Spells settings, not a place you configure automation: use it to find a spell's cast-code and effect, then type that code into the pickers on **Settings → Spells**. F2 again closes it, and it updates itself as you play (type `spells` or `stat` in the game to refresh what it knows).
 
-The header names the class and level it's showing. The grid lists each spell with a **✓** if you've learned it, its **Code** (the cast-code you type), **Name**, **Lvl** (the level it unlocks), **Mana** cost, and **Effect** at your current level (hover the Effect cell for the raw scaling formula). Three controls up top narrow the list:
+The header names the class and level it's showing. The grid lists each spell with a **✓** if you've learned it, its **Code** (the cast-code you type), **Name**, **Lvl** (the level it unlocks), **Mana** cost, and **Effect** at your current level (hover the Effect cell for the raw scaling formula). **Double-click a spell** to open the game-data record of the **item that teaches it** — handy for finding where to buy or how to obtain a spell you haven't learned (spells learned only from a trainer, with no teaching item, do nothing). Three controls up top narrow the list:
 
 - **Show all** — off by default (you see only spells you're high enough level to cast); tick it to preview the whole class list, reading the **Lvl** column for when each unlocks.
 - **Known only** — hides spells you haven't learned yet.
@@ -1161,7 +1161,7 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 ### Bless spells
 
 **Default:** all empty (10 rows on a Stock realm, 15 on ParaMud)
-**What it does:** A ranked list of self-buffs MudPlay recasts whenever they aren't currently active (the on-screen section is headed **Bless spells**, its rows labeled Bless 1, Bless 2, …). Row order is cast priority. Each row can hold a spell code or a `#item name` for a reusable buff item.
+**What it does:** A ranked list of self-buffs MudPlay recasts whenever they aren't currently active (the on-screen section is headed **Bless spells**, its rows labeled Bless 1, Bless 2, …). Row order is cast priority. Each row can hold a spell code or a `#item name` for a reusable buff item. The same learned-spell guard applies here, with one twist for the `#item` entries: an item-cast is only flagged (struck through / red-outlined) when you **aren't carrying or wearing that item** — a buff item you actually hold is treated as available, just like a learned spell.
 **How the options work:** Each row has its own "recast within (seconds)" — how early before the buff's tracked expiry MudPlay proactively recasts it. It defaults to **15**; set it to `0` to wait for the buff to actually wear off before recasting.
 **Important notes:** The visible row count matches your active realm's buff-slot cap; extra picks beyond that cap aren't lost, they just wait until you load a realm that supports more.
 
