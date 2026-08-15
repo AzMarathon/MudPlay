@@ -226,6 +226,7 @@ public sealed partial class CombatManager
             _spellChooser.ResetForNewTarget();
             _alternationRound = 0;
             _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
+            _lastAttackTallyAt = DateTimeOffset.MinValue;
         }
 
         // A per-monster forced attack COMMAND wins over the entire normal flow
@@ -573,6 +574,17 @@ public sealed partial class CombatManager
             && string.Equals(announced, decision.Spell, StringComparison.OrdinalIgnoreCase);
         if (sameSpell)
         {
+            // The tick is damage-line driven, so — exactly as AlternationAdvanceMinGap
+            // documents for the phase advance — a multi-hit attack spell (each cast lands
+            // several damage lines) plus the mob's counter-swing trips this heartbeat 2-3×
+            // within one real ~5s round. Tallying every trip counted a MaxCasts=2 spell to
+            // its cap in a single round, so the engage spell swapped a round early (report
+            // paradigm-20260815-130957: "hamm set to 2, swapped after the first cast").
+            // Gate the tally to once per real round so MaxCasts counts rounds cast, not
+            // tick fires — the cap-preempt still fires on the genuine capping-round tick.
+            if (_now() - _lastAttackTallyAt < AttackTallyMinGap) return;
+            _lastAttackTallyAt = _now();
+
             _spellChooser.MarkCast(decision, target);   // tally this round's fired cast
 
             // Pre-empt the extra auto-repeat. The server will fire this same spell
@@ -589,11 +601,8 @@ public sealed partial class CombatManager
             CombatSpellDecision afterTally = _spellChooser.Choose(settings, ctx);
             bool decisionChanged = afterTally.Action != decision.Action
                 || !string.Equals(afterTally.Spell, decision.Spell, StringComparison.OrdinalIgnoreCase);
-            if (decisionChanged && TryBuildCandidate(obs, target) is { } capCand)
-            {
-                LogSpellReannounce("cap-switch", _announcedSpellCode, afterTally.Spell, target, obs);
-                DispatchRoundAction(settings, capCand, CountEngageable(obs), obs);
-            }
+            if (decisionChanged && TryBuildCandidate(obs, target) is not null)
+                DeferSwitchDispatch(settings, target, "cap-switch", _announcedSpellCode, afterTally.Spell);
             return;
         }
 
@@ -602,13 +611,53 @@ public sealed partial class CombatManager
         // DispatchRoundAction so the switch gets the full weapon-selection / cast /
         // bookkeeping the initial engage does (a weapon/backstab decision leaves spell
         // mode; a different spell is announced, bypassing the round cooldown).
-        if (TryBuildCandidate(obs, target) is { } cand)
-        {
-            LogSpellReannounce("switch", _announcedSpellCode, decision.Spell, target, obs);
-            DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
-        }
+        if (TryBuildCandidate(obs, target) is not null)
+            DeferSwitchDispatch(settings, target, "switch", _announcedSpellCode, decision.Spell);
         else
             _castingSpellTarget = null;   // can't rebuild the target — drop; next observe re-picks
+    }
+
+    // The combat tick is DAMAGE-LINE driven, so a spell switch decided in the
+    // heartbeat above is decided on the round's (possibly killing) damage line —
+    // BEFORE the death / exp / *Combat Off* lines later in the SAME server burst drop
+    // the target. That whole burst is one synchronous dispatch (MessageRouter.Dispatch
+    // fans every line out in-line, fed from a single UI-thread post in
+    // MainWindowViewModel), so firing the switch synchronously here races the kill:
+    // the alternate attack spell (Mage lbol→mmis, report paradigm-20260815-135756) or
+    // the weapon fallback (Paladin harm→aa, reports -120544 / -120934) goes out AT the
+    // corpse ("You don't see X here!") and the survivor is left unengaged. Defer the
+    // dispatch through _post — a queued action can't pre-empt the running burst, so it
+    // runs only after that synchronous dispatch unwinds, by which point a same-burst
+    // exp-inferred kill (DropTargetForInferredKill) or *Combat Off* has already nulled
+    // _currentTarget / _castingSpellTarget. Re-validate against that now-current state
+    // and skip if the target is gone (the next observation re-picks the survivor
+    // cleanly). A legit mid-fight switch (mob still alive) re-validates fine and
+    // dispatches a hair later, still well within the 5 s round, so the cap-preempt
+    // (report paradigm-20260814-061340) is preserved.
+    private void DeferSwitchDispatch(
+        CombatSettings settings, string target, string reason, string? from, string? to)
+    {
+        _post(() =>
+        {
+            if (_disposed || !_isEnabled() || _combatOff) return;
+            // A same-burst kill / departure nulls both target latches; either mismatch
+            // means the switch would land on a corpse (or a different re-picked mob).
+            if (!string.Equals(_castingSpellTarget, target, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase)
+                || _classifier.Current is not { } obs
+                || !TargetPresent(obs, target))
+            {
+                _log?.Combat(LogCategory,
+                    $"spell {reason} {from ?? "?"}→{to ?? "?"} at '{target}' skipped — target "
+                    + "gone before the deferred dispatch (kill/leave landed this burst); no corpse-cast");
+                return;
+            }
+            if (TryBuildCandidate(obs, target) is { } cand)
+            {
+                LogSpellReannounce(reason, from, to, target, obs);
+                DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
+            }
+        });
     }
 
     // Diagnostic for the caster-side corpse-cast / no-re-engage class (reports
@@ -680,6 +729,7 @@ public sealed partial class CombatManager
             _spellChooser.ResetForNewTarget();
             _alternationRound = 0;
             _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
+            _lastAttackTallyAt = DateTimeOffset.MinValue;
         }
 
         // Area debuffs blanket the room and MUST be cast bare — `stnk`, never

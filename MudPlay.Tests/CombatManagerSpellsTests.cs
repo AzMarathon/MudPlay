@@ -56,8 +56,23 @@ public sealed class CombatManagerSpellsTests
         // instead of the zero real elapsed time a synchronous test call has.
         private DateTimeOffset _clock = DateTimeOffset.UtcNow;
 
-        public Harness(bool wireCaster = true)
+        // When deferPost is set, _post queues actions into Posted instead of running
+        // them inline, so a test can interleave server lines between a deferred
+        // switch-dispatch being scheduled and it actually running — mirroring
+        // production, where a queued action runs only after the current server
+        // burst's synchronous dispatch unwinds. DrainPosted() runs the queue.
+        public List<Action> Posted { get; } = new();
+        private readonly bool _deferPost;
+        public void DrainPosted()
         {
+            List<Action> due = new(Posted);
+            Posted.Clear();
+            foreach (Action a in due) a();
+        }
+
+        public Harness(bool wireCaster = true, bool deferPost = false)
+        {
+            _deferPost = deferPost;
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log);
             Cast = new CastCoordinator(Router, Log);
@@ -69,7 +84,7 @@ public sealed class CombatManagerSpellsTests
                 readSettings: () => Settings,
                 isEnabled: () => AutoCombatEnabled,
                 readOwnGivenName: () => "MudPlay",
-                post: a => a(),                          // synchronous in tests
+                post: a => { if (_deferPost) Posted.Add(a); else a(); },
                 log: Log);
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.SetClock(() => _clock);
@@ -145,6 +160,17 @@ public sealed class CombatManagerSpellsTests
         public void Tick()
         {
             _clock += TimeSpan.FromSeconds(5);
+            Cast.OnCombatTick();
+            Combat.OnCombatTick();
+        }
+
+        // An extra combat tick landing WITHIN the same ~5s round — the mob's
+        // counter-swing line trips a second CombatTickElapsed a beat after our own
+        // hit. Advances the fake clock only 1s (under AttackTallyMinGap) so the
+        // MaxCasts tally gate should reject it as not a real round boundary.
+        public void TickSameRound()
+        {
+            _clock += TimeSpan.FromSeconds(1);
             Cast.OnCombatTick();
             Combat.OnCombatTick();
         }
@@ -315,6 +341,92 @@ public sealed class CombatManagerSpellsTests
 
         // The corpse is not re-cast at — spell mode was dropped on the inferred kill.
         Assert.Equal(sentAfterEngage, h.Sent.Count);
+    }
+
+    // Switch-dispatch corpse-cast on the killing round (reports paradigm-20260815-135756
+    // Mage lbol→mmis; -120544 / -120934 Paladin harm→weapon). The combat tick is
+    // DAMAGE-LINE driven, so the heartbeat's cascade switch is decided on the killing
+    // blow's damage line — one server burst ahead of the exp / *Combat Off* that drop the
+    // target. Dispatching the switch synchronously fired the alternate spell (or the
+    // weapon) AT the corpse ("You don't see X here!"). The switch is now deferred through
+    // _post; a same-burst exp-inferred kill nulls the target before the deferred dispatch
+    // runs, and the re-validated dispatch then skips — no `mmis` at the dead mob.
+    [Fact]
+    public void CapSwitchOnKillingRound_ExpDropsTarget_DeferredSwitchSkips_NoCorpseCast()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");            // engage → lbol announced (spell mode)
+        Assert.Equal("lbol giant rat", h.LastSent);
+
+        // Round 1 tallies lbol to its cap and DECIDES the cap-switch to mmis — but the
+        // dispatch is deferred (queued), not run inline.
+        h.Tick();
+        Assert.Single(h.Posted);
+        Assert.DoesNotContain("mmis giant rat", h.AllSent);
+
+        // The killing blow's exp line lands in the same burst and drops the target.
+        h.Feed("You gain 100 experience.");
+
+        // The deferred switch now runs, re-validates against the now-current state,
+        // sees the target gone, and skips — the alternate never corpse-casts.
+        h.DrainPosted();
+        Assert.DoesNotContain("mmis giant rat", h.AllSent);
+    }
+
+    // The other side of the deferral: with the mob still alive at drain time (no kill this
+    // burst) the deferred switch re-validates fine and dispatches the alternate — the
+    // cascade still advances, a hair later than the old synchronous path but well within
+    // the 5 s round, so the cap-preempt (report paradigm-20260814-061340) is preserved.
+    [Fact]
+    public void CapSwitch_TargetAlive_DeferredSwitchDispatchesAlternate()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);
+
+        h.Tick();                                   // cap-switch to mmis, deferred
+        h.DrainPosted();                            // no kill → runs → dispatches the alternate
+
+        Assert.Equal("mmis giant rat", h.LastSent);
+    }
+
+    // MaxCasts must count real rounds, not damage-line ticks. A multi-hit attack spell
+    // (each cast lands several damage lines) plus the mob's counter-swing trips the tick
+    // 2-3× per ~5s round; without the tally gate a MaxCasts=2 spell hit its cap in a
+    // single round and swapped a round early (report paradigm-20260815-130957: "hamm set
+    // to 2, swapped after the first cast"). The engage spell must cast for two full rounds
+    // before the cascade advances, regardless of the extra intra-round ticks.
+    [Fact]
+    public void MaxCasts_ExtraTicksWithinRound_CountRoundsNotTicks()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "hamm", MinEnemies = 0, MaxCastsPerRoom = 2 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("hamm giant rat", h.LastSent);   // engage → hamm (cast round 1 pending)
+
+        // Round 1: the real round-boundary tick tallies once; the mob's counter-swing
+        // trips a second tick the same round, which the gate must reject. Cap (2) is
+        // NOT reached after one round — still hamm.
+        h.Tick();
+        h.TickSameRound();
+        Assert.Equal("hamm giant rat", h.LastSent);
+
+        // Round 2: the second real round tallies the 2nd cast → cap reached → swap to
+        // harm. (The extra same-round tick again does nothing.)
+        h.Tick();
+        h.TickSameRound();
+        Assert.Equal("harm giant rat", h.LastSent);
     }
 
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even

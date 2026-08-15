@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.1**
-> - Combat diagnostics for the caster-side per-round spell re-announce (e.g. `lbol`→`mmis` switch) — logs the switch with its timing vs the last attack / exp / death to pin a corpse-cast on the killing round (caster-side only). Investigating reports paradigm-20260815-135756 / -135853
+> **Version 3.18.5**
+> - Caster combat: the per-round attack-spell cascade switch is deferred past the killing blow's server line burst, so the alternate spell (e.g. `lbol`→`mmis`) or weapon fallback no longer fires at the just-killed mob ("You don't see X here!") and the surviving mob engages cleanly
+> - Caster combat: MaxCasts now counts real rounds, not damage-line ticks — a multi-hit attack spell + the mob's counter-swing no longer trip the cascade a round early (e.g. `hamm` set to 2 swapping after 1 cast)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
