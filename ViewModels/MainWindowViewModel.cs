@@ -748,6 +748,9 @@ public partial class MainWindowViewModel : ObservableObject
         _monsterLookParser.TargetObserved += OnMonsterLookTarget;
         // A kill in the room retires whatever target we last looked at.
         AppServices.Current.MonsterDeath.MonsterDied += OnMonsterDied;
+        // Quest becomes available (trained past its min level, or the login dump) → a
+        // yellow terminal notice.
+        AppServices.Current.QuestAvailability.QuestBecameAvailable += OnQuestAvailable;
 
         // Room-display + movement-refusal parsers feeding RoomTracker.
         // Same per-session LineExtractor binding shape as the who/look
@@ -1457,6 +1460,20 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnMonsterDied(Game.Combat.MonsterDeathEvent _)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() => TargetHpText = "");
 
+    private void OnQuestAvailable(string questName)
+        => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            WriteTerminalStatus($"[{questName} Quest is Now Available]", TerminalStatusKind.Notice));
+
+    // The login sequence sends stat / exp / inventory (and the user's who, etc.) right
+    // after entering the realm. Wait for that to finish rendering, then dump the quests
+    // this character can now begin so the lines land as a clean block at the end of login.
+    private static async Task AnnounceAvailableQuestsAfterLoginAsync()
+    {
+        await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            () => AppServices.Current.QuestAvailability.AnnounceLoginAvailable());
+    }
+
     private void OnRecoveryFailed(Game.Map.RecoveryFailedEvent e)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() => ShowLostRecoveryDialogAsync(e));
 
@@ -1927,6 +1944,9 @@ public partial class MainWindowViewModel : ObservableObject
             // arm window, the latch closes — protects against in-game
             // chat that happens to look like the menu line.
             AppServices.Current.MainMenuEntry.Arm();
+            // Once the post-entry refresh (stat / inventory / who) has printed, dump the
+            // quests this character can now start — once, at the tail of the login sequence.
+            _ = AnnounceAvailableQuestsAfterLoginAsync();
         };
         automator.Aborted += reason =>
         {

@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.18.0
+
+- New: quest-availability announcements — `[<quest> Quest is Now Available]` prints to the terminal the moment you train past a quest's minimum level (a multi-level jump announces every quest whose gate you crossed), plus a one-time dump of everything you can now start at login. Only lists quests your class/race can do and that you haven't already completed. Toggle **Announce available quests** at the top of the Player Workshop → Quest Status tab (per character, on by default)
+
 ## 3.17.4
 
 - Player Workshop → Bosses: new **Last Killed** column (between Timer and Notes) showing when each boss's timer was last set — by a Mark / Now button, a back-dated Mark, or an auto-detected kill
