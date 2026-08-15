@@ -423,6 +423,18 @@ public sealed partial class CombatManager : IDisposable
     private DateTimeOffset _lastExpGainAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ExpKillWindow = TimeSpan.FromSeconds(3);
 
+    // The target a prompt exp-inferred kill just dropped, remembered so the kill's
+    // *Combat Off* can still drop it from the live roster. The exp line lands BEFORE
+    // *Combat Off* and nulls _currentTarget (so the round's alternate can't corpse-cast)
+    // — but that leaves NoteUnattributedDeath, which fires on the Off and removes the
+    // dead mob from the roster, with no identity to remove. In a MULTI-mob room the
+    // lingering corpse is then re-picked ("aa <dead mob>" → "Your command had no
+    // effect."), stalling until the fallback re-display (report paradigm-20260815-081045).
+    // Timestamped so a stale value can't remove a later, living mob — honoured only
+    // within ExpKillWindow of the Off, exactly like the exp→Off correlation itself.
+    private string? _inferredKillPendingRemoval;
+    private DateTimeOffset _inferredKillPendingAt = DateTimeOffset.MinValue;
+
     // Server-confirmed engagement, driven ONLY by the wire *Combat Engaged* /
     // *Combat Off* lines — unlike _combatOff (optimistically cleared on every
     // attack send), this stays a faithful mirror of what the server actually told
@@ -2119,7 +2131,21 @@ public sealed partial class CombatManager : IDisposable
     {
         if (!_isEnabled()) return;
         if (_wireSender is null) return;
-        if (_currentTarget is not { } presumedDead) return;
+
+        // Normally the corpse's identity is the still-set _currentTarget. But a prompt
+        // exp-inferred kill (OnUserGainExperience) fires BEFORE this Off and already
+        // nulled _currentTarget — fall back to the target it stashed so the roster
+        // removal still happens (else the dead mob lingers and gets re-picked). Bounded
+        // by ExpKillWindow so a stale stash can't drop a later, living mob.
+        string? presumedDead = _currentTarget;
+        if (presumedDead is null
+            && _inferredKillPendingRemoval is { } pending
+            && DateTimeOffset.Now - _inferredKillPendingAt < ExpKillWindow)
+        {
+            presumedDead = pending;
+        }
+        _inferredKillPendingRemoval = null;
+        if (presumedDead is null) return;
 
         // A kill we couldn't pin to a roster slot still leaves the roster stale
         // until it resolves — the exact window in which the between-round-cast
@@ -2352,6 +2378,10 @@ public sealed partial class CombatManager : IDisposable
         _lastExpGainAt = DateTimeOffset.MinValue;   // consume — a later non-kill Off must not reuse it
         _lastDeathAt = DateTimeOffset.Now;
         _attackSentSinceDeath = false;
+        // Hand the corpse's identity to the Off-path roster removal (NoteUnattributedDeath):
+        // we're nulling _currentTarget here, so without this it can't tell which mob to drop.
+        _inferredKillPendingRemoval = _currentTarget;
+        _inferredKillPendingAt = DateTimeOffset.Now;
         _currentTarget = null;
         _castingSpellTarget = null;
         _spellChooser.ResetForNewTarget();

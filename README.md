@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.17.0**
-> - Monster flavor adjectives (large / nasty / huge / …) are now one **editable per-set vocabulary** instead of per-monster data — a new **Flavor Prefixes** section in the Game Data Browser lets a custom realm add or remove the words it uses; the room classifier strips a leading word in that list to resolve "large giant rat" → "giant rat"
-> - Per-monster `FlavorPrefixes` retired — removed from every monster record and the Monster editor's Flavor Prefixes box; the shared vocabulary fully replaces it
-> - "Add as flavor prefix" (unknown-entity fix) and the missing-flavor log-row double-click now add the word to the active set's vocabulary
+> **Version 3.17.1**
+> - Fixed: in a room with more than one monster, the engine no longer pauses and attacks the just-killed monster ("Your command had no effect.") before switching to the survivor — the exp-inferred kill drops the dead mob from the room roster immediately
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

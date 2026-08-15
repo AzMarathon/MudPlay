@@ -553,6 +553,40 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
+    public void ExpInferredKill_ThenUnattributedDeath_StillDropsCorpse_ReSwingsAtSurvivor()
+    {
+        // Multi-mob regression (paradigm-20260815-081045): the exp line lands BEFORE the
+        // kill's *Combat Off* and nulls _currentTarget so the round's alternate can't
+        // corpse-cast. NoteUnattributedDeath then fires on that Off with _currentTarget
+        // already null — before the fix it bailed, leaving the dead mob in the roster, so
+        // the re-pick re-swung at the corpse ("aa <dead>" → "no effect") after a pause
+        // until the fallback re-display. The stashed inferred-kill identity now lets the
+        // Off-path drop the corpse and re-pick the survivor immediately.
+        using Harness h = new();
+        h.AddMonster(1, "nasty orc lieutenant", killable: false);
+        h.AddMonster(2, "angry orc lieutenant", killable: false);
+
+        h.Feed("Also here: nasty orc lieutenant, angry orc lieutenant.");
+        Assert.Equal("a nasty orc lieutenant", h.LastSent);
+        Assert.Equal("nasty orc lieutenant", h.Combat.CurrentTarget);
+
+        // Exp line = prompt kill signal, before *Combat Off*. Drops the target (and now
+        // stashes its identity for the Off-path roster removal).
+        h.Feed("You gain 950 experience.");
+        Assert.Null(h.Combat.CurrentTarget);
+        int afterExp = h.Sent.Count;
+
+        // The kill's *Combat Off* routes to NoteUnattributedDeath — _currentTarget is
+        // already null, so the stashed identity drives the roster removal + re-pick.
+        h.Combat.NoteUnattributedDeath();
+
+        Assert.True(h.Sent.Count > afterExp,
+            "expected a fresh swing at the survivor after the exp-inferred kill's Off");
+        Assert.Equal("a angry orc lieutenant", h.LastSent);
+        Assert.Equal("angry orc lieutenant", h.Combat.CurrentTarget);
+    }
+
+    [Fact]
     public void UnattributedDeath_LastMonster_ClearsTarget()
     {
         // The sole monster in the room dies via the fallback path. Attributing the
