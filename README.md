@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.17.2**
-> - Wire Inspector: thorns/ShockShield reflect lines ("The armour spikes stab &lt;monster&gt; for N damage!") are now labelled **Reflect** instead of "Monster Hit (other)" — recognized generically by colour, so it works for any item wording
+> **Version 3.17.3**
+> - Fixed: after auto-training and allocating CP, the loop/auto-lair no longer stands idle when the trainer-menu exit prompt is missed — the CP-form keyboard hold is now released before the engine resumes, so its first move isn't silently dropped
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
