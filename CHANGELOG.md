@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.17.3
+
+- Fixed: after auto-training + allocating CP, the loop/auto-lair could resume but then stand idle indefinitely — when the trainer-menu exit prompt was missed, the CP-form keyboard hold wasn't released, so the resumed engine's first move was silently dropped (the walker drew the route but never stepped). The CP-replay grace-timeout now forces the keyboard release before resuming
+- bug reports addressed: paradigm-20260815-072308, paradigm-20260815-072819
+
 ## 3.17.2
 
 - Wire Inspector: thorns/ShockShield reflect lines ("The armour spikes stab <monster> for N damage!") are now labelled **Reflect** instead of "Monster Hit (other)" — recognized generically by colour (a reflect is white, a real incoming hit is red) so it works for any item wording (armour spikes, collar spikes, …)

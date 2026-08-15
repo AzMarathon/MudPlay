@@ -282,8 +282,19 @@ public sealed class AutoTrainManager : IDisposable
         await Task.Delay(ExitGrace);
         if (_sessionId == session && _phase == Phase.Replaying)
         {
-            _phase = Phase.Idle;
-            StateChanged?.Invoke();
+            // Release the trainer keyboard through the tracker FIRST. The idle transition
+            // below drives the loop-resume walk; if the tracker's keyboard-owning flags
+            // are still set, TrainerScreenGate keeps the engine send-gate held and the
+            // resume's first move byte is silently dropped — the loop stands idle (report
+            // paradigm-20260815-072308). ForceExit fires the exit events, which release
+            // the gate AND settle us to Idle via OnInputMenuExited/OnMenuExited; the guard
+            // below then covers the case nothing was held.
+            _trainer.ForceExit("auto-train CP replay");
+            if (_sessionId == session && _phase == Phase.Replaying)
+            {
+                _phase = Phase.Idle;
+                StateChanged?.Invoke();
+            }
         }
     }
 

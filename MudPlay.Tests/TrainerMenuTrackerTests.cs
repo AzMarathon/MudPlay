@@ -57,6 +57,40 @@ public sealed class TrainerMenuTrackerTests
         Assert.True(tracker.IsInTrainerMenu);
     }
 
+    // ForceExit is the recovery path when the exit prompt is missed (AutoTrainManager's
+    // CP-replay ExitGrace fallback). It must clear the keyboard hold AND fire the exit
+    // event so the event-driven TrainerScreenGate re-evaluates and releases the send-gate
+    // before the loop-resume's first move (report paradigm-20260815-072308).
+    [Fact]
+    public void ForceExit_ReleasesKeyboardHold_AndFiresInputMenuExited()
+    {
+        var (tracker, _, _) = Setup();
+        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        Assert.True(tracker.MenuOwnsKeyboard);   // the input form owns the keyboard
+
+        bool inputExited = false;
+        tracker.InputMenuExited += () => inputExited = true;
+
+        tracker.ForceExit("test");
+
+        Assert.False(tracker.MenuOwnsKeyboard);   // gate can now release
+        Assert.True(inputExited);                 // event fired → TrainerScreenGate re-evaluates
+    }
+
+    [Fact]
+    public void ForceExit_NothingHeld_IsNoOp()
+    {
+        var (tracker, _, _) = Setup();
+        bool fired = false;
+        tracker.InputMenuExited += () => fired = true;
+        tracker.MenuExited += () => fired = true;
+
+        tracker.ForceExit("test");   // nothing armed
+
+        Assert.False(tracker.MenuOwnsKeyboard);
+        Assert.False(fired);         // no spurious events
+    }
+
     [Fact]
     public void OutboundBareTrain_ThenMarker_EntersMenu()
     {

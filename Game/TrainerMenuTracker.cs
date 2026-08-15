@@ -296,4 +296,28 @@ public sealed class TrainerMenuTracker : IDisposable
             MenuExited?.Invoke();
         }
     }
+
+    // Force the keyboard release when the normal exit-prompt detection is missed — the
+    // AutoTrainManager CP-replay ExitGrace fallback calls this. Mirrors OnPrompt's
+    // teardown: clear BOTH keyboard-owning flags BEFORE firing the exit events, so the
+    // event-driven TrainerScreenGate re-evaluates with MenuOwnsKeyboard=false and releases
+    // the engine send-gate before the loop-resume those events drive sends its first move.
+    // Without this, a missed exit prompt leaves the gate held and the resumed loop's first
+    // move byte is silently dropped — the walker draws the route but stands idle (report
+    // paradigm-20260815-072308: 10 minutes idle after CP allocation). No-op when nothing
+    // is held; unconditional otherwise (no skip-echo logic — this is the recovery path).
+    public void ForceExit(string reason)
+    {
+        if (!MenuOwnsKeyboard) return;
+        _log?.Log(LogSeverity.Info, "TrainerMenu",
+            $"Forcing trainer keyboard release ({reason}) — exit prompt missed.");
+        bool fireInputExited = _inputMenuActive;
+        bool fireMenuExited = _inMenu;
+        _inputMenuActive = false;
+        _inMenu = false;
+        _expectingMenuSince = null;
+        _skipNextInputPrompt = false;
+        if (fireInputExited) InputMenuExited?.Invoke();
+        if (fireMenuExited) MenuExited?.Invoke();
+    }
 }
