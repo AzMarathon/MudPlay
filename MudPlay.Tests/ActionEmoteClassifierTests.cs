@@ -90,13 +90,16 @@ public sealed class ActionEmoteClassifierTests
         => Assert.Equal(ActionEmoteClassifier.Kind.None,
             ActionEmoteClassifier.Classify("Griswold ponders the meaning.", _ => false, out _));
 
-    // Green lines that share the colour / shape but aren't actions.
+    // Non-action lines rejected by the HEAD test. Only "Obvious exits:" is actually
+    // all-green (and it fails here on the missing terminal '.'/'!'); the label:value
+    // status lines fail the colour gate upstream (only the label cell is green), but
+    // the head test rejects them anyway — belt-and-suspenders.
     [Theory]
-    [InlineData("Obvious exits: north, east, closed gate west")]   // no terminal ./!
-    [InlineData("Wealth: 173100 copper farthings")]                // label: value
+    [InlineData("Obvious exits: north, east, closed gate west")]
+    [InlineData("Wealth: 173100 copper farthings")]
     [InlineData("Encumbrance: 3919/7320 - Medium [53%]")]
     [InlineData("Name: Fujin WuzHere")]
-    public void Classify_GreenStatusLine_None(string text)
+    public void Classify_NonActionShape_None(string text)
         => Assert.Equal(ActionEmoteClassifier.Kind.None,
             ActionEmoteClassifier.Classify(text, _ => true, out _));
 

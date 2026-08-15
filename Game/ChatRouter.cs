@@ -130,9 +130,10 @@ public sealed class ChatRouter : IDisposable
 
     // Capture a BBS action / emote — a full-green line whose head is an emote shape
     // (own "You …", or "<room player> …") — into the conversation as a Social entry.
-    // Colour is read off the line's attributes (still present here); the head +
-    // known-player gates keep the other green lines (Obvious exits / Wealth /
-    // Encumbrance / stat labels / "You are carrying …") out. See ActionEmoteClassifier.
+    // Colour is read off the line's attributes (still present here). The all-green
+    // gate drops the label-only greens (Wealth: / Encumbrance: / stat rows) and the
+    // non-green "You are carrying …"; the head + known-player gates drop the one
+    // fully-green non-action line, "Obvious exits:". See ActionEmoteClassifier.
     private void TryActionEmote(Terminal.LineExtractor.EmittedLine line)
     {
         if (string.IsNullOrEmpty(line.Text)) return;

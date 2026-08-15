@@ -4,7 +4,7 @@
 > **Version 3.14.0**
 > - Conversation window now captures **actions / emotes** (your board's `action list` socials — hug / wave / smile / tickle / …): ones you perform, ones aimed at you, and ones you witness in the room
 > - They show under the **say** chip (room-local) with the message text in **green** — the board's own colour for them
-> - Detected by colour + shape (own "You <verb>…"; others' only from a player actually in your room), so obvious-exits / wealth / encumbrance green lines and room enter/exit + party-follow movement are never mistaken for an emote
+> - Detected by colour + shape (own "You <verb>…"; others' only from a player actually in your room), so the also-green obvious-exits line and room enter/exit + party-follow movement are never mistaken for an emote
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

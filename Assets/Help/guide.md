@@ -480,7 +480,7 @@ Chat is collected into one merged, timestamped stream (not per-channel tabs). Ea
 
 Each channel has its own color, and web links inside a message are clickable. Party chat isn't shown here — it has its own **Party** window.
 
-**Actions / emotes** (the socials from your board's `action list` — `hug`, `wave`, `smile`, `tickle`, and so on) are pulled in too, whether you perform them, someone aims one at you, or you just witness one in the room. They show under the **SAY** chip (they're room-local, like say) with the message text in **green** — the board's own color for them. Because a bare "You…" line and other green lines (obvious exits, wealth, encumbrance) can look similar, MudPlay only captures true actions: your own start with "You <verb>", and someone else's must come from a **player who's actually in your room** — so room-entry/exit and party-follow movement never get mistaken for an emote.
+**Actions / emotes** (the socials from your board's `action list` — `hug`, `wave`, `smile`, `tickle`, and so on) are pulled in too, whether you perform them, someone aims one at you, or you just witness one in the room. They show under the **SAY** chip (they're room-local, like say) with the message text in **green** — the board's own color for them. Since the obvious-exits line is also fully green, MudPlay only captures true actions: your own start with "You <verb>", and someone else's must come from a **player who's actually in your room** — so obvious exits, room-entry/exit, and party-follow movement never get mistaken for an emote.
 
 ## Filtering and searching
 

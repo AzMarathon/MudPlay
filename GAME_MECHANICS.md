@@ -1899,9 +1899,11 @@ shown by typing `action list` — a bare **space-separated list of verbs** (e.g.
 wave grin bow bleed nod laugh … smile … tickle`) that wraps across lines, with no header.
 
 - **Using an action is guaranteed a full GREEN line** — ANSI palette **index 2**
-  (`SGR 0;32`), the same green the board paints the `Obvious exits:` line. Green is
-  **necessary but not sufficient**: the board also greens `Wealth:`, `Encumbrance:`,
-  stat-screen labels, and `You are carrying …`.
+  (`SGR 0;32`), the same green the board paints the whole `Obvious exits:` line.
+  All-green is **necessary but not sufficient** — that exits line is all-green too.
+  (The board greens only the *label* of `Wealth:` / `Encumbrance:` / stat rows, not
+  their values, so those lines aren't all-green; `You are carrying …` isn't green at
+  all — both fail the colour gate before any text test.)
 - **Own POV** begins **`You <verb…>`** — non-targeted (`You growl.`; `tickle` with no
   target → `You look around looking for someone to tickle.`) or targeted at a player
   (`You hug Suijin close!`, `You wave to Suijin!`). **The output wording does NOT track

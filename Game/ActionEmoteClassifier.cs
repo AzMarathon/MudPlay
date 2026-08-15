@@ -8,17 +8,23 @@ namespace MudPlay.Game;
 // off a full-GREEN terminal line, and which point of view it is.
 //
 // Colour is the necessary gate: using an action is guaranteed an all-green line
-// (ANSI index 2 — SGR 0;32, the same shade the board paints "Obvious exits:").
-// But green alone isn't sufficient — the board also greens "Obvious exits:",
-// "Wealth: …", "Encumbrance: …", stat-screen labels and "You are carrying …".
-// So a green line is an action only when its HEAD matches an emote shape:
-//   - Own POV: begins "You <lowercase verb> …" and is NOT one of the known green
-//     "You …" status lines (You are / have / notice / …).
+// (ANSI index 2 — SGR 0;32, the same shade the board paints the WHOLE "Obvious
+// exits:" line). All-green alone isn't sufficient, because that exits line is
+// all-green too — so a green line is an action only when its HEAD matches an emote
+// shape:
+//   - Own POV: begins "You <lowercase verb> …" (an emote), not "You are/have/… "
+//     (a status line).
 //   - Others' POV: begins "<Player> <lowercase verb> …" where <Player> is a real
 //     player currently in the room (verified by the caller) — which rejects room
-//     names ("Obvious exits: …"), "Wealth:"/"Encumbrance:" (colon, not a space +
-//     verb), monsters, and ambient flavour ("A voice shouts …", "Children rush
-//     past you …"), plus a denylist for enter/exit/follow/logon/chat lines.
+//     names ("Obvious exits: …"), monsters, and ambient flavour ("A voice shouts
+//     …", "Children rush past you …"), plus a denylist for enter/exit/follow/
+//     logon/chat lines.
+//
+// The label-only greens ("Wealth:" / "Encumbrance:" / stat-row labels) are NOT
+// all-green — only the label cell is index 2, the value is another colour — so they
+// fail the colour gate before the head test ever runs; "You are carrying …" isn't
+// green at all. The one fully-green non-action line is "Obvious exits:", caught by
+// the head test (no You/player head, no terminal '.'/'!').
 //
 // The `action list` verb wording does NOT track the output ("jump" → "You leap …",
 // "tickle" → "You look around looking for someone to tickle.") so there's no verb
@@ -51,9 +57,10 @@ public static class ActionEmoteClassifier
         return idx == 2 || idx == 10;   // SGR 32 (0;32 / 1;32) or SGR 92 (bright green)
     }
 
-    // Green "You …" lines that are NOT actions (status / room / inventory). No
-    // emote output begins with any of these, so excluding them can't drop a real
-    // action.
+    // Defensive denylist: "You …" status prefixes that must never read as an emote
+    // if one ever arrives all-green. (Status lines like "You are carrying …" aren't
+    // green today, so this is belt-and-suspenders — but no emote output begins with
+    // any of these, so it can't drop a real action.)
     private static readonly string[] OwnExclusions =
     {
         "You are ", "You have ", "You notice ", "You see ", "You hear ", "You feel ",
