@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.17.4**
-> - Player Workshop → Bosses: new **Last Killed** column showing when each boss's timer was last set (button, back-dated Mark, or auto-detected kill)
-> - Bosses tab now opens sorted by the 100% timer (running timers on top), so it no longer looks empty on open
+> **Version 3.18.0**
+> - New: quest-availability announcements — `[<quest> Quest is Now Available]` prints to the terminal when you train past a quest's minimum level (multi-level jumps announce each crossed quest), plus a one-time dump of what you can start at login. Only quests your class/race can do and haven't completed. Toggle at the top of the Quest Status tab
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -691,6 +691,10 @@ public sealed class AppServices
     // Auto-Trainer "Announce level-ups" toggle.
     public Game.LevelUpAnnouncer LevelUp { get; }
 
+    // Announces a quest becoming available (min level trained past) + the login dump.
+    // MainWindowViewModel subscribes to write the terminal line and fires the login dump.
+    public Game.Quests.QuestAvailabilityAnnouncer QuestAvailability { get; }
+
     // Loaded character's Models.GameData.Macro store.
     // Surfaced by the Game Data Browser → Macros tab; the
     // MacroManager engine intercepts keystrokes and dispatches from
@@ -4647,6 +4651,21 @@ public sealed class AppServices
         // Hydrate wiring so its baseline seed sees freshly-hydrated stats; watches
         // StatParser.ExperienceGained to broadcast newly-trainable levels.
         LevelUp = new Game.LevelUpAnnouncer(PlayerStats, Stats, GameData, Profile, Log);
+
+        // Quest-availability announcer — watches the same StatParser for level crossings.
+        // The name resolver mirrors the Quest Status journal's title rule (user name, else
+        // the crawler's fallback title); injected so the domain service stays out of the
+        // ViewModels layer.
+        QuestAvailability = new Game.Quests.QuestAvailabilityAnnouncer(
+            Stats, Profile,
+            currentLevel: () => PlayerStats.Level,
+            eligibleAtLevel: level => Game.Quests.QuestEligibility.Resolve(
+                GameData, Quests, PlayerStats, Profile,
+                resolveName: static (q, def) => string.IsNullOrWhiteSpace(def.Name)
+                    ? ViewModels.CharacterWorkshop.QuestTextFormatter.FallbackTitle(q)
+                    : def.Name,
+                level),
+            log: Log);
 
         AutoDeposit = new Game.Cash.AutoDepositManager(
             Cash,

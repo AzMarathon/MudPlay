@@ -233,6 +233,11 @@ public sealed class CharacterProfile
     // nothing completed yet.
     public List<QuestProgress>? QuestLog { get; set; }
 
+    // Announce "[<quest> Quest is Now Available]" to the terminal when training crosses a
+    // quest's minimum level, and dump the currently-available list once at login. Toggled
+    // from the top of the Quest Status tab. Defaults on.
+    public bool AnnounceAvailableQuests { get; set; } = true;
+
     // Per-character equipment-manager state (Workshop Equipment tab) — saved
     // gear sets and the auto-equip triggers between them. Drives @equip-<set>,
     // the per-slot editor, and trigger evaluation. null means nothing configured

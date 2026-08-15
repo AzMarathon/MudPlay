@@ -66,6 +66,17 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
 
     partial void OnQuestSearchTextChanged(string value) => ApplyQuestFilter();
 
+    // Top-of-tab toggle: announce "[<quest> Quest is Now Available]" to the terminal as
+    // training crosses a quest's min level, plus a full dump of what's available at login.
+    // Persisted per character (CharacterProfile.AnnounceAvailableQuests).
+    [ObservableProperty] private bool _announceAvailableQuests = true;
+
+    partial void OnAnnounceAvailableQuestsChanged(bool value)
+    {
+        if (_suppress) return;
+        if (_profile.Current is { } p) { p.AnnounceAvailableQuests = value; _profile.Save(); }
+    }
+
     // False when no visible quest resolves (no set / no character) — drives the empty-state hint.
     [ObservableProperty] private bool _hasQuests;
 
@@ -104,6 +115,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         _suppress = true;
         try
         {
+            AnnounceAvailableQuests = _profile.Current?.AnnounceAvailableQuests ?? true;
             _allCards.Clear();
             _bonusesByCard.Clear();
             LoadProgressFromProfile();
