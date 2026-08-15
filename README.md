@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.15.0**
-> - Combat engine now recognizes monster hits / misses / dodges / armor-blocks **generically from line colour + wording** (no per-monster data), for you and party members — surfaced live in the Wire Inspector's new **Classified** view
-> - Wire Inspector gains **Raw / Stripped / Classified** toggle panes (Raw + Classified on by default); the Classified pane also marks recognized monster deaths `[Monster Death: <name>]`; bug reports attach the last 750 lines of the Raw / Classified wire by default
-> - Neutral monsters get a **Kill on sight** checkbox: engage a chosen neutral while leaving other passive neutrals safe to rest among — the engine rests/meditates between kills instead of clearing the whole room
-> - Rest is no longer sent mid-fight when the idle-stall watchdog optimistically clears combat — it waits for a room re-display to re-confirm first
+> **Version 3.15.1**
+> - Combat engine no longer casts the round's alternate attack spell at a just-killed monster — a kill is recognized on the `You gain N experience.` line (which arrives before the kill's `*Combat Off*`), so `lbol`→`mmis` no longer fires `mmis` at the corpse. Generic; needs no per-monster death message
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

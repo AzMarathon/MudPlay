@@ -2319,10 +2319,44 @@ public sealed partial class CombatManager : IDisposable
             + $"(spellTarget={_castingSpellTarget ?? "(none)"})");
     }
 
-    // "You gain N experience." — the prompt kill signal (see _lastExpGainAt). Only
-    // a kill grants exp, and it lands just before the kill's *Combat Off*, so a
-    // fresh stamp here lets OnCombatStatus recognise that Off as our kill's.
-    private void OnUserGainExperience(MatchResult _) => _lastExpGainAt = DateTimeOffset.Now;
+    // "You gain N experience." — the prompt kill signal. Only a kill grants exp, and
+    // it lands on the wire BEFORE the kill's *Combat Off* (death flavour → exp → Off),
+    // so recognise the kill HERE when we've committed an attack at a current target,
+    // rather than waiting for the Off (OnCombatStatus, the backstop). Waiting let the
+    // round's alternate attack corpse-cast at the just-killed mob — lbol kills the
+    // rotworm, then `mmis rotworm` goes out at the corpse → "You don't see rotworm
+    // here!" (report paradigm-20260814-230258). This is generic: the exp line is
+    // identical for every monster, so no per-monster death message is needed. Skip
+    // when a specific death line already dropped this kill (avoid a double-drop of a
+    // freshly re-picked target).
+    private void OnUserGainExperience(MatchResult _)
+    {
+        _lastExpGainAt = DateTimeOffset.Now;
+        if (_currentTarget is not null
+            && _attackSentSinceDeath
+            && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
+        {
+            DropTargetForInferredKill(
+                "kill inferred from exp gain (prompt, pre-*Combat Off*) — dropping target so the round's alternate can't corpse-cast");
+        }
+    }
+
+    // Drop the current target for a kill inferred from an exp gain. Nulls both
+    // _currentTarget and _castingSpellTarget and resets the cascade so the round's
+    // next action can't re-attack the corpse. Keeping _currentTarget left a same-named
+    // sibling looking like the still-engaged target (the RawName-keyed "already
+    // engaged" guard), so it was never re-engaged AND inherited the dead mob's
+    // advanced cascade — a fresh mob opening on the alternate instead of the normal.
+    private void DropTargetForInferredKill(string reason)
+    {
+        _lastExpGainAt = DateTimeOffset.MinValue;   // consume — a later non-kill Off must not reuse it
+        _lastDeathAt = DateTimeOffset.Now;
+        _attackSentSinceDeath = false;
+        _currentTarget = null;
+        _castingSpellTarget = null;
+        _spellChooser.ResetForNewTarget();
+        _log?.Combat(LogCategory, reason);
+    }
 
     // Track *Combat On*/*Combat Off*. Off arms the resume-after-interrupt path
     // (see _combatOff); Engaged means the server is swinging for us again, so we
@@ -2356,19 +2390,7 @@ public sealed partial class CombatManager : IDisposable
                 // here would drop the fresh target and re-attack it (double-fire).
                 && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
             {
-                _lastExpGainAt = DateTimeOffset.MinValue;   // consume — a later non-kill Off must not reuse it
-                _lastDeathAt = DateTimeOffset.Now;
-                _attackSentSinceDeath = false;
-                // Drop the target FULLY (mirroring NoteMonsterDied): null both
-                // _currentTarget and _castingSpellTarget and reset the cascade.
-                // Keeping _currentTarget left a same-named sibling looking like the
-                // still-engaged target (the RawName-keyed "already engaged" guard),
-                // so it was never re-engaged AND inherited the dead mob's advanced
-                // cascade — a fresh mob opening on the alternate instead of the normal.
-                _currentTarget = null;
-                _castingSpellTarget = null;
-                _spellChooser.ResetForNewTarget();
-                _log?.Combat(LogCategory,
+                DropTargetForInferredKill(
                     "kill inferred from exp + *Combat Off* (no between-round cast) — " +
                     "dropping target so the resume can't re-attack the corpse");
             }

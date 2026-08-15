@@ -631,6 +631,21 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   fallback — otherwise, with identical-exp mobs dying every few seconds (a swarm), the prior kill's
   exp stays inside the window and the next fight's non-death `*Combat Off*` fires a phantom fallback
   death on it, a beat before the current mob actually dies.
+- **The exp line is the earliest reliable per-kill signal during combat** *([CONFIRMED] 2026-08-15,
+  user)*. Every kill grants exp, and the exp line lands **before** the kill's `*Combat Off*` (order
+  above). So while engaged with a target we've attacked, a `You gain N experience.` line means that
+  target just died — recognize the kill on the **exp line**, not the later `*Combat Off*`. Waiting for
+  the Off let the round's **alternate** attack corpse-cast: `lbol` kills → `mmis <corpse>` → "You don't
+  see X here!" (report paradigm-20260814-230258). This is generic — the exp line is identical for
+  every monster.
+- **AoE clears the whole room as a burst of exp lines** *([CONFIRMED] 2026-08-15, user — "20 targets
+  dead in 1 spell")*. One room spell prints a `<flavor>` + `You gain N experience.` **pair per monster
+  it kills**, then a **single** `*Combat Off*` at the end. So exp-line count = kill count.
+- **Death messages are arbitrary per-monster flavor** — no shared keyword (a scan of 1035 seed death
+  lines: `…a tortured squeak`, `…to the ground`, `…without a sound`, `…a thousand pieces`, `…an
+  agonized bellow`, `…in a heap`, most with no death word) and no distinctive colour (they render
+  default/white). So a monster death **cannot be recognized by wording or colour generically** — the
+  exp line is the generic signal; the per-monster death line only adds precise naming/attribution.
 
 **Attributing a kill to a specific monster** *([CONFIRMED] 2026-08-04, user)*
 - **Monster numbers are never observable in-game** — the client only ever sees monster *names* on

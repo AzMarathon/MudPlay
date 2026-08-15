@@ -179,6 +179,24 @@ public sealed class CombatManagerTests
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
     }
 
+    [Fact]
+    public void ExpGain_MidFight_DropsTargetPromptly()
+    {
+        // The exp line lands on the wire BEFORE the kill's *Combat Off* (death flavour
+        // → exp → Off). Recognizing the kill here — not on the later Off — drops the
+        // target so the round's alternate attack can't fire at the corpse (report
+        // paradigm-20260814-230258: lbol kills → `mmis` at the dead mob). Generic:
+        // needs no per-monster death message.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");                 // engage + swing (attack committed)
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.Feed("You gain 100 experience.");              // the kill — before any *Combat Off*
+
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
     // ----- confusion-fumble retry (OnActionFailed) ----------------------
 
     [Fact]

@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.15.1
+
+- Combat engine no longer casts the round's alternate attack spell at a just-killed monster — a kill is now recognized on the `You gain N experience.` line (which arrives before the kill's `*Combat Off*`) instead of waiting for the `*Combat Off*`, so `lbol`→`mmis` no longer fires `mmis` at the corpse ("You don't see X here!"). Generic — works for any monster, no per-monster death message needed
+- bug reports addressed: paradigm-20260814-230258
+
 ## 3.15.0
 
 - Combat engine now recognizes monster hits / misses / dodges / armor-blocks **generically from line colour + wording** (no per-monster data), for both you and party members — surfaced live in the Wire Inspector's new **Classified** view
