@@ -399,6 +399,8 @@
                                Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
                 </Grid>
 
+                <Separator Margin="0,6"/>
+
                 <!-- Drain (life-steal) spell — an emergency heal that also attacks. -->
                 <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
                     <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Drain spell"/>
@@ -436,6 +438,8 @@
                               IsChecked="{Binding DrainsOverrideAoe, Mode=TwoWay}"
                               ToolTip.Tip="When checked, the drain overrides the room AoE (multi-attack) too. Off (default): with enough enemies to trigger the AoE, the AoE keeps rooming and the drain only overrides single-target / physical actions."/>
                 </StackPanel>
+
+                <Separator Margin="0,6"/>
 
                 <!-- ============ Display ============ -->
                 <TextBlock Classes="SectionHeader" Text="Display"/>
