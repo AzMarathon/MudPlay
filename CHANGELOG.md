@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.17.2
+
+- Wire Inspector: thorns/ShockShield reflect lines ("The armour spikes stab <monster> for N damage!") are now labelled **Reflect** instead of "Monster Hit (other)" — recognized generically by colour (a reflect is white, a real incoming hit is red) so it works for any item wording (armour spikes, collar spikes, …)
+
 ## 3.17.1
 
 - Fixed: in a room with more than one monster, the engine no longer pauses and fires an attack at the just-killed monster ("Your command had no effect.") before switching to the survivor — the exp-inferred kill now drops the dead mob from the room roster immediately, so the next attack targets a living monster

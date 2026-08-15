@@ -97,7 +97,17 @@ public sealed class CombatLineClassifier : IDisposable
         bool vsYou = You.IsMatch(text);
 
         if (hit)
-            return vsYou ? CombatLineKind.MonsterHitYou : CombatLineKind.MonsterHitOther;
+        {
+            if (vsYou) return CombatLineKind.MonsterHitYou;
+            // Not our own swing and not addressed to us. A monster's weapon hit on a
+            // party member renders in the attack colour (red, indexed 1). A damage line
+            // in the DEFAULT / white colour is instead a thorns/ShockShield reflect —
+            // a worn item striking the attacker back ("The armour spikes stab <monster>
+            // for N damage!"; the item wording varies: "collar spikes", …). There the
+            // monster is the VICTIM, so it's retaliation, not a monster hit. Split by
+            // colour: the reflect is white and follows the red hit that triggered it.
+            return IsAttackRed(fg) ? CombatLineKind.MonsterHitOther : CombatLineKind.Reflect;
+        }
 
         if (IsCyan(fg))
         {
@@ -127,6 +137,13 @@ public sealed class CombatLineClassifier : IDisposable
     // player's own hit colour, NOT an armor block — so bold disqualifies.
     private static bool IsDarkRed(TerminalColor fg, bool bold) =>
         fg.Kind == ColorKind.Indexed && fg.Value == 1 && !bold;
+
+    // The weapon-attack colour, bold-agnostic: any indexed-1 red. A monster's hit
+    // (dark or bright red) uses it; a thorns/ShockShield reflect is white/default, so
+    // this tells a real incoming hit apart from our retaliation among "for N damage"
+    // lines that don't address "you".
+    private static bool IsAttackRed(TerminalColor fg) =>
+        fg.Kind == ColorKind.Indexed && fg.Value == 1;
 
     // The line's colour: the foreground of its first visible (non-space) glyph.
     // Combat lines are emitted in a single colour, so the first glyph is
@@ -209,6 +226,7 @@ public sealed class CombatLineClassifier : IDisposable
         CombatLineKind.DodgeOther       => "Other Dodge",
         CombatLineKind.MonsterMissYou   => "Monster Miss (you)",
         CombatLineKind.MonsterMissOther => "Monster Miss (other)",
+        CombatLineKind.Reflect          => "Reflect",
         _ => "",
     };
 

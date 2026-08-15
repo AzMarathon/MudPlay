@@ -2636,6 +2636,7 @@ glass jug               5               2 gold crowns
 | Guard interposes for a guarded monster (no trailing period, no prefix) | `<guard> moves to protect <protected>` |
 | Incoming mob attack — miss (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> at you` |
 | Incoming mob attack — hit (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> you for N damage!` |
+| Thorns / ShockShield reflect (**white** line, follows the **red** hit that triggered it, inside a *Combat Engaged*…*Combat Off* window) | `The <item-wording> stab <attacker> for N damage!` — **[CONFIRMED 2026-08-15, user]** a worn item with the **ShockShield** property (value = max reflect damage, e.g. 5) strikes the attacker BACK for up to that much when the wearer is hit **physically**; fires after an **armor-block glance** (0 damage to us) OR a real hit. The item wording varies (`armour spikes`, `collar spikes`, …), so it's recognized by COLOUR (white/default, vs the red of a real incoming hit) + `for N damage` + a non-`you` target — NOT by wording. The **monster is the victim**, so it's OUR (or a party member's) damage, classified `Reflect`, not a monster hit |
 | Monster leaves the room (e.g. dragged out by a fleeing player) | `<name> walks out of the room to <dir>.` **or** `<name> exits the room to <dir>.` — both confirmed; the "exits" form (no leading article) was the paradigm drag-out capture |
 | Attacked a target not in the room | `Your command had no effect.` |
 | Toll exit unaffordable | `You do not have enough to cover the toll of N gold crowns.` |

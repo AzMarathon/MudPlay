@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.17.1**
-> - Fixed: in a room with more than one monster, the engine no longer pauses and attacks the just-killed monster ("Your command had no effect.") before switching to the survivor — the exp-inferred kill drops the dead mob from the room roster immediately
+> **Version 3.17.2**
+> - Wire Inspector: thorns/ShockShield reflect lines ("The armour spikes stab &lt;monster&gt; for N damage!") are now labelled **Reflect** instead of "Monster Hit (other)" — recognized generically by colour, so it works for any item wording
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
