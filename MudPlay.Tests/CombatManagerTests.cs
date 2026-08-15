@@ -197,6 +197,22 @@ public sealed class CombatManagerTests
         Assert.Null(h.Combat.CurrentTarget);
     }
 
+    [Fact]
+    public void CombatOff_WithoutExp_KeepsTarget()
+    {
+        // Breaking combat to cast a between-round (0-energy) spell emits a *Combat Off*
+        // with NO exp line — that's our own attack being interrupted, NOT a kill. The
+        // exp line is the discriminator, so with no exp the target must survive.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.Feed("*Combat Off*");                          // no exp preceded it
+
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+    }
+
     // ----- confusion-fumble retry (OnActionFailed) ----------------------
 
     [Fact]

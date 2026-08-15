@@ -178,6 +178,42 @@ public sealed class RoomEntityClassifierTests
         Assert.Equal(80, ent.MonsterNumber);
     }
 
+    // ----- global flavor-prefix vocabulary ---------------------------
+
+    [Fact]
+    public void GlobalPrefixVocab_ResolvesPrefix_NotInMonstersOwnList()
+    {
+        // The monster records NO FlavorPrefixes of its own, yet a standard adjective
+        // from the shared vocabulary still resolves it — so a custom game needs no
+        // per-monster prefix data for the common adjectives.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", allowNoPrefix: true);   // no flavor prefixes
+
+        h.Feed("Also here: large giant rat.");
+
+        RoomEntity ent = h.Observations[0].Entities[0];
+        Assert.Equal(EntityKind.Monster, ent.Kind);
+        Assert.Equal("giant rat", ent.ResolvedName);
+        Assert.Equal(1, ent.MonsterNumber);
+    }
+
+    [Fact]
+    public void GlobalPrefixVocab_CanonicalNameStartingWithPrefix_MatchesItself()
+    {
+        // "huge basilisk" is a canonical name (22 such in the seed) — it must resolve
+        // to ITSELF, not be reduced to "basilisk" by the global strip. The full-name
+        // match runs first, so the strip never sees it.
+        using Harness h = new();
+        h.AddMonster(5, "huge basilisk", allowNoPrefix: true);
+        h.AddMonster(6, "basilisk", allowNoPrefix: true);   // the tail — must NOT win
+
+        h.Feed("Also here: huge basilisk.");
+
+        RoomEntity ent = h.Observations[0].Entities[0];
+        Assert.Equal("huge basilisk", ent.ResolvedName);
+        Assert.Equal(5, ent.MonsterNumber);
+    }
+
     // ----- prefix-stripped monster match -----------------------------
 
     [Fact]

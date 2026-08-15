@@ -2,9 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.15.1
+## 3.15.2
 
 - Combat engine no longer casts the round's alternate attack spell at a just-killed monster — a kill is now recognized on the `You gain N experience.` line (which arrives before the kill's `*Combat Off*`) instead of waiting for the `*Combat Off*`, so `lbol`→`mmis` no longer fires `mmis` at the corpse ("You don't see X here!"). Generic — works for any monster, no per-monster death message needed
+- Room monster names resolve their flavor adjectives (large / nasty / huge / …) from one shared vocabulary, so "large giant rat" is recognized even when the giant-rat record doesn't list "large" — a custom game needs no per-monster prefix data for the standard adjectives (canonical names like "huge basilisk" still match themselves)
 - bug reports addressed: paradigm-20260814-230258
 
 ## 3.15.0

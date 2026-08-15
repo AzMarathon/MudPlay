@@ -335,6 +335,24 @@ public sealed class RoomEntityClassifier : IDisposable
         if (TryMatchMonstersTable(entry, out int fullMatchNumber))
             return new RoomEntity(entry, entry, EntityKind.Monster, fullMatchNumber);
 
+        // Pass 3.5 — shared flavor-prefix vocabulary. Strip a leading adjective from
+        // the global set (MonsterFlavorPrefixes: large / nasty / huge / …) and match
+        // the remainder against a known monster, so "large giant rat" resolves without
+        // the giant-rat record listing "large" itself — a custom game needs no
+        // per-monster FlavorPrefixes for the standard adjectives. Runs AFTER the
+        // full-name pass above so a canonical name that starts with an adjective
+        // ("huge basilisk", "adult red dragon") has already matched itself and isn't
+        // reduced to its tail. No missing-flavor warning — this prefix is expected.
+        int gsp = entry.IndexOf(' ');
+        if (gsp > 0 && MonsterFlavorPrefixes.IsPrefix(entry[..gsp]))
+        {
+            string baseName = entry[(gsp + 1)..];
+            if (TryMatchMonster(baseName, out MonsterMessageRecord? gm) && gm is not null)
+                return new RoomEntity(entry, gm.Name, EntityKind.Monster, ResolveMonsterNumber(gm));
+            if (TryMatchMonstersTable(baseName, out int gnum))
+                return new RoomEntity(entry, baseName, EntityKind.Monster, gnum);
+        }
+
         // Pass 4 — unrecognized leading flavor word. A monster whose
         // Monsters-table row exists but whose flavor prefix isn't recorded in
         // any MonsterMessageRecord shows up as "<unknown-word> <base name>"
