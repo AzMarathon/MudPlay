@@ -162,7 +162,7 @@
                   CanUserReorderColumns="True"
                   HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Auto"
-                  ToolTip.Tip="Double-click a spell to open the record of the item that teaches it.">
+                  ToolTip.Tip="Double-click a spell to open the record of the item — or trainer NPC — that teaches it.">
             <DataGrid.Columns>
                 <DataGridTemplateColumn Header="" SortMemberPath="IsObtained" Width="34">
                     <DataGridTemplateColumn.CellTemplate>

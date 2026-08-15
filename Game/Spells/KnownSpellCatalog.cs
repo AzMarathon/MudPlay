@@ -427,6 +427,29 @@ public sealed class KnownSpellCatalog
         return 0;
     }
 
+    private static readonly Regex LearnedFromNpcRe =
+        new(@"NPC\s*#\s*(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // The Monsters.Number of the NPC that teaches this spell — from the spell's
+    // "Learned From" annotation ("NPC #696"), first NPC when several are listed. 0
+    // when the spell isn't NPC-taught. Backs the Spell Book's double-click for
+    // trainer-taught spells (which have no teaching item — a Paladin's divine
+    // disfavour / greater healing learn from the gaunt one spell-weaver, #696).
+    public int GetTeachingNpcNumber(int spellNumber)
+    {
+        if (spellNumber <= 0) return 0;
+        JsonDocument? doc = _cache.GetRawTable("Spells");
+        if (doc is null) return 0;
+
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            if (ReadInt(row, "Number") != spellNumber) continue;
+            Match m = LearnedFromNpcRe.Match(ReadString(row, "Learned From") ?? string.Empty);
+            return m.Success && int.TryParse(m.Groups[1].Value, out int n) ? n : 0;
+        }
+        return 0;
+    }
+
     // TBInfo teaching-script tokens: a line teaching a spell to a class reads e.g.
     // `check class:class 3:minlevel 50 4025:price ...:learnspell 5087:message 4031`
     // — the class number, the min level gate, and one or more taught spells. The

@@ -95,6 +95,10 @@ public sealed class SpellbookState
     // when none does. Backs the Spell Book's double-click-to-item-record.
     public int GetTeachingItemNumber(int spellNumber) => _catalog.GetTeachingItemNumber(spellNumber);
 
+    // Monsters.Number of the NPC that teaches the given spell (from "Learned From"),
+    // or 0 when it isn't NPC-taught. Backs the double-click for trainer-taught spells.
+    public int GetTeachingNpcNumber(int spellNumber) => _catalog.GetTeachingNpcNumber(spellNumber);
+
     // spellNumber → the trainer LEARN-level gate for the current class (from TBInfo),
     // when higher than the spell's ReqLevel. Backs the Spell Book's unlock-level
     // column so it shows when THIS class can actually learn each spell.

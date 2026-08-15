@@ -307,6 +307,34 @@ public sealed class SpellBookViewModelTests : IDisposable
         Assert.Equal(0, book.GetTeachingItemNumber(999));   // unknown spell → none
     }
 
+    // A trainer-taught spell (no teaching item) resolves the NPC that teaches it from
+    // its "Learned From" annotation, so the Spell Book's double-click can open the
+    // NPC's record instead of an item's.
+    [Fact]
+    public void GetTeachingNpcNumber_FromLearnedFrom_ZeroWhenNotNpcTaught()
+    {
+        object[] spells =
+        [
+            new Dictionary<string, object>
+            {
+                ["Number"] = 100, ["Name"] = "divine disfavour", ["Short"] = "disf",
+                ["Magery"] = 2, ["MageryLVL"] = 1, ["ReqLevel"] = 19,
+                ["Learned From"] = "NPC #696",
+            },
+            new Dictionary<string, object>
+            {
+                ["Number"] = 101, ["Name"] = "starlight", ["Short"] = "star",
+                ["Magery"] = 1, ["MageryLVL"] = 1, ["ReqLevel"] = 2,
+                ["Learned From"] = "Item #396",
+            },
+        ];
+        SpellbookState book = NewBook(classNumber: 12, level: 5, spells: spells);
+
+        Assert.Equal(696, book.GetTeachingNpcNumber(100)); // trainer-taught → the NPC
+        Assert.Equal(0, book.GetTeachingNpcNumber(101));   // item-taught → no NPC
+        Assert.Equal(0, book.GetTeachingNpcNumber(999));   // unknown spell → none
+    }
+
     // A spell learned from an NPC trainer is gated by a TBInfo `check class:class
     // N:minlevel M ... learnspell S` line at a level often HIGHER than the spell's
     // ReqLevel (a Paladin's divine disfavour: ReqLevel 19 but trainer-gated to 50).

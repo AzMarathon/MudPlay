@@ -7,7 +7,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Spell pickers (Combat tab + Spells tab) now strike through and dim spells your character hasn't learned, and outline a slot red when it points at an unlearned spell — a guard against configuring a spell you can't actually cast (the value is still saved; the red outline is just a warning)
 - Bless-slot cast-on-use item entries are flagged the same way, but only when you aren't carrying/wearing the item that provides them
 - Recognize ParaMud's "You add <spell> to your spellbook!" so the learned-spell guard updates the instant you learn a spell from a teaching item
-- Spell Book (F2): double-click a spell to open the record of the item that teaches it
+- Spell Book (F2): double-click a spell to open the record of the item — or trainer NPC — that teaches it
 - Spell Book: the Lvl column now shows the level YOUR class can actually learn each spell — a spell gated higher by its trainer (e.g. a Paladin's divine disfavour at 50, not the spell's base 19) reads correctly and stays hidden until you can learn it
 - Spell Book: the selected row's Code/Lvl/Mana cells stay readable instead of washing out on the highlight
 
