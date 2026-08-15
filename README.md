@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.0**
-> - New: quest-availability announcements — `[<quest> Quest is Now Available]` prints to the terminal when you train past a quest's minimum level (multi-level jumps announce each crossed quest), plus a one-time dump of what you can start at login. Only quests your class/race can do and haven't completed. Toggle at the top of the Quest Status tab
+> **Version 3.18.1**
+> - Combat diagnostics for the caster-side per-round spell re-announce (e.g. `lbol`→`mmis` switch) — logs the switch with its timing vs the last attack / exp / death to pin a corpse-cast on the killing round (caster-side only). Investigating reports paradigm-20260815-135756 / -135853
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -590,7 +590,10 @@ public sealed partial class CombatManager
             bool decisionChanged = afterTally.Action != decision.Action
                 || !string.Equals(afterTally.Spell, decision.Spell, StringComparison.OrdinalIgnoreCase);
             if (decisionChanged && TryBuildCandidate(obs, target) is { } capCand)
+            {
+                LogSpellReannounce("cap-switch", _announcedSpellCode, afterTally.Spell, target, obs);
                 DispatchRoundAction(settings, capCand, CountEngageable(obs), obs);
+            }
             return;
         }
 
@@ -600,9 +603,33 @@ public sealed partial class CombatManager
         // bookkeeping the initial engage does (a weapon/backstab decision leaves spell
         // mode; a different spell is announced, bypassing the round cooldown).
         if (TryBuildCandidate(obs, target) is { } cand)
+        {
+            LogSpellReannounce("switch", _announcedSpellCode, decision.Spell, target, obs);
             DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
+        }
         else
             _castingSpellTarget = null;   // can't rebuild the target — drop; next observe re-picks
+    }
+
+    // Diagnostic for the caster-side corpse-cast / no-re-engage class (reports
+    // paradigm-20260815-135756 / -135853): the combat tick is DAMAGE-LINE driven, so a
+    // killing blow's damage line fires this heartbeat, which re-announces the next spell
+    // at the target BEFORE the death / exp / *Combat Off* lines that follow it in the same
+    // server burst have dropped it — the caster re-announce racing the kill (unlike the
+    // passive physical path, which never re-announces per round). Logs the exact timing
+    // relative to the last attack / exp / death so a capture shows whether the re-announce
+    // fired ahead of the kill signal. Combat-level — only with combat diagnostics on.
+    private void LogSpellReannounce(string reason, string? from, string? to, string target, RoomEntitiesObservation obs)
+    {
+        if (_log is null) return;
+        DateTimeOffset now = DateTimeOffset.Now;
+        _log.Combat(LogCategory,
+            $"spell {reason} {from ?? "?"}→{to ?? "?"} at '{target}' — "
+            + $"sinceAttack={(now - _lastAttackSentAt).TotalMilliseconds:F0}ms, "
+            + $"sinceExp={(now - _lastExpGainAt).TotalMilliseconds:F0}ms, "
+            + $"sinceDeath={(now - _lastDeathAt).TotalMilliseconds:F0}ms, "
+            + $"attackSentSinceDeath={_attackSentSinceDeath}, "
+            + $"targetPresent={TargetPresent(obs, target)}, engageable={CountEngageable(obs)}");
     }
 
     // Give the in-between window its shot BEFORE the attack on engage, so a
