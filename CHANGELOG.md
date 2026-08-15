@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.14.5
+
+- Auto-engine **base modes** (Settings → General) now actually take effect on **profile load** — the live toolbar settles to your base-mode checkboxes each time you load a character, instead of coming up in whatever transient state the last session ended in
+- Legacy characters (from before the base/live split) adopt their current live modes as their base on first load, so nothing changes for them until they edit the checkboxes
+- bug reports addressed: paradigm-20260814-173438
+
 ## 3.14.4
 
 - Auto-All (kill switch) OFF now freezes **every** movement engine — a walk / loop / auto-lair, or a right-click Queue-walk-to, plans but holds until Auto-All is restored (previously a queued walk-to would run with Auto-All off)
