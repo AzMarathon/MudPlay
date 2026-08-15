@@ -133,8 +133,7 @@
              (SpellBookRowViewModel); the DataGrid's auto-wrapped collection
              view defeats compiled-binding item-type inference, matching the
              SpellCoverageReportWindow pattern. -->
-        <DataGrid x:Name="SpellGrid"
-                  ItemsSource="{Binding Rows}"
+        <DataGrid ItemsSource="{Binding Rows}"
                   DoubleTapped="OnSpellRowDoubleTapped"
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="0"
