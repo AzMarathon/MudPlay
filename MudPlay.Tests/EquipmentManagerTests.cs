@@ -686,6 +686,55 @@ public sealed class EquipmentManagerTests
         params (string Name, string Slot)[] items)
         => items.Select(i => new EquippedItem(i.Name, i.Slot)).ToList();
 
+    // ===== BuildPairedSlotRems (paired finger/wrist thrash fix) =====
+
+    [Fact]
+    public void BuildPairedSlotRems_FreesTheOddFinger_BeforeSwappingIn()
+    {
+        // Set wants pearl (F1) + silver (F2); worn is pearl + gold jeweled. Swapping
+        // silver in must rem the odd worn ring (gold jeweled) first so `wear silver`
+        // lands on the freed finger instead of trading with the kept pearl — the
+        // non-converging thrash (report paradigm-20260814-215046).
+        EquipmentSet set = Set("prerest-mana", "Pre-rest Mana",
+            Entry(EquipmentSlot.Finger1, "pearl ring"),
+            Entry(EquipmentSlot.Finger2, "silver ring"));
+        IReadOnlyList<EquippedItem> worn = WornList(
+            ("pearl ring", "Finger"), ("gold jeweled ring", "Finger"));
+        var beingWorn = new HashSet<string>(new[] { "silver ring" }, StringComparer.OrdinalIgnoreCase);
+
+        List<string> rems = EquipmentManager.BuildPairedSlotRems(set, worn, beingWorn);
+
+        Assert.Equal(new[] { "rem gold jeweled ring" }, rems);
+    }
+
+    [Fact]
+    public void BuildPairedSlotRems_FreeFingerAvailable_NoRem()
+    {
+        // Only pearl worn — a finger is free, so `wear silver` fills it; nothing odd
+        // to strip.
+        EquipmentSet set = Set("prerest-mana", "Pre-rest Mana",
+            Entry(EquipmentSlot.Finger1, "pearl ring"),
+            Entry(EquipmentSlot.Finger2, "silver ring"));
+        IReadOnlyList<EquippedItem> worn = WornList(("pearl ring", "Finger"));
+        var beingWorn = new HashSet<string>(new[] { "silver ring" }, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Empty(EquipmentManager.BuildPairedSlotRems(set, worn, beingWorn));
+    }
+
+    [Fact]
+    public void BuildPairedSlotRems_FamilyNotGaining_LeavesWornAlone()
+    {
+        // Nothing in this family is being worn this apply → never strip a worn ring.
+        EquipmentSet set = Set("prerest-mana", "Pre-rest Mana",
+            Entry(EquipmentSlot.Finger1, "pearl ring"),
+            Entry(EquipmentSlot.Finger2, "silver ring"));
+        IReadOnlyList<EquippedItem> worn = WornList(
+            ("pearl ring", "Finger"), ("gold jeweled ring", "Finger"));
+
+        Assert.Empty(EquipmentManager.BuildPairedSlotRems(
+            set, worn, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
+    }
+
     [Fact]
     public void BuildEquipCommands_EmptySet_FillsFromCarriedInOrder()
     {
