@@ -401,7 +401,9 @@ The **Action menu** also carries commands you fire once, on demand, rather than 
 
 ## Base modes
 
-The Settings → General **"Auto-Engines base modes"** checkboxes are your character's default engine states. They set the engines at login and — the key part — the live toolbar toggles **snap back to them at the start of a loop or Auto-Lair**. So you can flip combat off to travel somewhere and it returns to your defaults when the circuit begins.
+The Settings → General **"Auto-Engines base modes"** checkboxes are your character's default engine states. The live toolbar settles to them **every time you load the character** — so a character always comes up in its configured defaults, not in whatever transient state the last session happened to end in — and the toggles also **snap back to them at the start of a loop or Auto-Lair**. So you can flip combat off to travel somewhere and it returns to your defaults when the circuit begins (or next time you load the character).
+
+(A character created before these checkboxes existed adopts its current live modes as its base the first time it loads, so nothing changes until you edit the boxes.)
 
 ## The kill switch
 

@@ -4584,7 +4584,13 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Log.Info(Game.Inventory.EquipmentManager.LogCategory, note);
     }
 
-    private bool _suppressAutoEngineWriteback;
+    // Re-entrancy-safe suppression depth for the auto-engine writeback: a reseed
+    // (SyncAutoEngineTogglesFromProfile) can trigger a Save whose ProfileSaving /
+    // ProfileMutated handlers reseed again, nesting the guard. A plain bool would
+    // let the inner scope's exit un-suppress the outer one, so its remaining
+    // observable assignments would log "User turned X on/off" and re-persist. A
+    // counter stays suppressed until every nested scope has exited.
+    private int _suppressAutoEngineWriteback;
 
     // Set true the first time a live connection drops in the current app
     // session. Gates ReEnableAutoActionsOnReconnect so the re-enable only
@@ -4671,7 +4677,7 @@ public partial class MainWindowViewModel : ObservableObject
         // re-evaluates the combat gate at once so toggling off mid-round
         // releases the walker (and clears InCombat if the room is clear)
         // instead of stalling until the next room re-display.
-        if (_suppressAutoEngineWriteback) return;
+        if (_suppressAutoEngineWriteback > 0) return;
         AppServices.Current.CombatTracker?.OnAutoAttackChanged();
         // OnAutoAttackChanged clears only the Combat gate. Sibling room-observation
         // gate-holders (the deferred-cash / get-items / search Acquisition holds)
@@ -4694,7 +4700,7 @@ public partial class MainWindowViewModel : ObservableObject
         // stops sitting idle mid-rest; toggling on re-asserts and rests now
         // instead of waiting for the next HP-changed event. A profile reseed
         // sets this without a real user toggle — skip then.
-        if (_suppressAutoEngineWriteback) return;
+        if (_suppressAutoEngineWriteback > 0) return;
         AppServices.Current.Health?.Evaluate();
     }
 
@@ -4727,32 +4733,47 @@ public partial class MainWindowViewModel : ObservableObject
     // Called at profile load and at the first start of a loop / auto-lair circuit,
     // so a user who flipped live toolbar toggles to travel to the circuit (combat
     // off to sprint 500 rooms to a loop, say) settles into it with their normal
-    // defaults restored, toolbar badges and all. A no-op when the live state
-    // already matches the base, or when a pre-split character has no base yet
-    // (AutoModeBase null → treated as the current AutoMode). Engines read their
-    // flag per-tick, so persisting the flip + reseeding the badges is enough —
-    // no explicit per-engine re-eval needed here.
+    // defaults restored, toolbar badges and all. The decision is AutoActionDefaults
+    // .ReconcileToBase: a no-op when live already matches the base; a one-time seed
+    // (base := live) for a pre-split character with no base yet, so base-apply then
+    // drives every future load; otherwise live settles to the base. Engines read
+    // their flag per-tick, so persisting the flip + reseeding the badges (only when
+    // live actually changed) is enough — no explicit per-engine re-eval here.
     private void ReconcileAutoModeToBase(string reason)
     {
         if (AppServices.Current.Profile.Current is not { } profile) return;
         Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
-        Models.Profile.AutoActionDefaults baseModes = dto.AutoModeBase ?? dto.AutoMode;
-        if (dto.AutoMode.SameAs(baseModes)) return;
 
-        dto.AutoMode = baseModes.Clone();
+        Models.Profile.AutoModeReconcileResult result =
+            Models.Profile.AutoActionDefaults.ReconcileToBase(dto.AutoModeBase, dto.AutoMode);
+        if (!result.BaseSeeded && !result.LiveChanged) return;   // already settled — nothing to write
+
+        dto.AutoModeBase = result.Base;
+        dto.AutoMode = result.Live;
         profile.Settings ??= new();
         profile.Settings["General"] =
             System.Text.Json.JsonSerializer.SerializeToElement(dto);
         AppServices.Current.Profile.Save();
-        SyncAutoEngineTogglesFromProfile();
-        AppServices.Current.Log.Info("AutoMode",
-            $"Auto-engines reset to base modes ({reason}).");
+
+        if (result.LiveChanged)
+        {
+            SyncAutoEngineTogglesFromProfile();
+            AppServices.Current.Log.Info("AutoMode",
+                $"Auto-engines reset to base modes ({reason}).");
+        }
+        else
+        {
+            // Legacy profile just adopted its live modes as the base — live is
+            // unchanged, so the badges already match; no reseed needed.
+            AppServices.Current.Log.Info("AutoMode",
+                $"Adopted current live modes as this character's base modes ({reason}).");
+        }
     }
 
     private void PersistAutoModeFlag(string flag, bool value,
                                      Action<Models.Profile.AutoActionDefaults> mutator)
     {
-        if (_suppressAutoEngineWriteback) return;
+        if (_suppressAutoEngineWriteback > 0) return;
         if (AppServices.Current.Profile.Current is not { } profile) return;
         profile.Settings ??= new();
         Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
@@ -4770,7 +4791,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void PersistGeneralFlag(string flag, bool value,
                                     Action<Models.Profile.GeneralSettings> mutator)
     {
-        if (_suppressAutoEngineWriteback) return;
+        if (_suppressAutoEngineWriteback > 0) return;
         if (AppServices.Current.Profile.Current is not { } profile) return;
         profile.Settings ??= new();
         Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
@@ -4788,7 +4809,7 @@ public partial class MainWindowViewModel : ObservableObject
     // hooks would re-persist what we just read.
     private void SyncAutoEngineTogglesFromProfile()
     {
-        _suppressAutoEngineWriteback = true;
+        _suppressAutoEngineWriteback++;
         try
         {
             Models.Profile.CharacterProfile? profile = AppServices.Current.Profile.Current;
@@ -4812,7 +4833,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         finally
         {
-            _suppressAutoEngineWriteback = false;
+            _suppressAutoEngineWriteback--;
         }
     }
 

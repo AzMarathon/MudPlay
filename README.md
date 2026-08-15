@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.14.4**
-> - Auto-All (kill switch) OFF now freezes **every** movement engine — a walk / loop / auto-lair, or a right-click Queue-walk-to, holds until Auto-All is restored (previously a queued walk-to would run with Auto-All off)
-> - Hand-casting a combat spell whose cast-code is shared with others (e.g. `vamp`) is now recognized as your attack for the round, so the engine no longer re-announces its own attack spell over it
-> - Drain spell gained hysteresis so it can't flip-flop drain↔normal every round when a heal lands you right at the trigger; the trigger label now reads "Heal when ≤ HP"
-> - Gear-set apply no longer thrashes on paired finger/wrist slots — swapping one ring/bracelet of a pair frees the odd worn one first so the new one lands cleanly instead of trading places forever
+> **Version 3.14.5**
+> - Auto-engine **base modes** (Settings → General) now actually take effect on **profile load** — the live toolbar settles to your base-mode checkboxes each time you load a character, instead of coming up in whatever transient state the last session ended in
+> - Legacy characters (from before the base/live split) adopt their current live modes as their base on first load, so nothing changes for them until they edit the checkboxes
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

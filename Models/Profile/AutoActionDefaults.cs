@@ -56,4 +56,38 @@ public sealed class AutoActionDefaults
         && AutoSneak    == o.AutoSneak
         && AutoHide     == o.AutoHide
         && AutoSearch   == o.AutoSearch;
+
+    // Pure decision for settling the live engine modes back to the character's
+    // base modes (the Settings → General "base modes" checkboxes) — run at every
+    // profile load and each loop / auto-lair circuit start. Base is authoritative:
+    // the live toolbar is what the user flips mid-route, the base is what the
+    // engines return to.
+    //   - `baseModes` null (a character from before the base/live split): adopt the
+    //     current live modes AS the base so the checkboxes the user already sees
+    //     become a concrete, persisted default that drives every future load. This
+    //     is the one-time bootstrap that makes base-apply-on-load actually happen
+    //     for legacy profiles — otherwise a null base reads back as "equal to live"
+    //     and nothing ever applies. Nothing to apply this pass (base == live).
+    //   - base set, live already equal: no-op.
+    //   - base set, live differs: settle live back to the base.
+    public static AutoModeReconcileResult ReconcileToBase(
+        AutoActionDefaults? baseModes, AutoActionDefaults live)
+    {
+        if (baseModes is null)
+            return new AutoModeReconcileResult(live.Clone(), live.Clone(),
+                BaseSeeded: true, LiveChanged: false);
+
+        if (live.SameAs(baseModes))
+            return new AutoModeReconcileResult(baseModes.Clone(), live.Clone(),
+                BaseSeeded: false, LiveChanged: false);
+
+        return new AutoModeReconcileResult(baseModes.Clone(), baseModes.Clone(),
+            BaseSeeded: false, LiveChanged: true);
+    }
 }
+
+// Outcome of AutoActionDefaults.ReconcileToBase: the base + live to persist, and
+// which of the two changed so the caller knows whether to reseed the toolbar badges
+// (LiveChanged) and which log line to emit (BaseSeeded vs reset-to-base).
+public readonly record struct AutoModeReconcileResult(
+    AutoActionDefaults Base, AutoActionDefaults Live, bool BaseSeeded, bool LiveChanged);
