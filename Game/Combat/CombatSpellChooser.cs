@@ -55,6 +55,11 @@ public sealed class CombatSpellChooser
     private int _normalAttackCasts;
     private int _alternateAttackCasts;
     private int _drainCasts;
+    // Drain hysteresis latch: true once the drain has engaged this target, so the HP
+    // gate uses the higher RELEASE threshold to stay engaged instead of the trigger —
+    // stops a heal that lands you right at the trigger from thrashing drain↔normal
+    // (a re-announce + *Combat Off* every round). Per-target; reset on target change.
+    private bool _drainEngaged;
     private readonly HashSet<string> _singleDebuffedTargets =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -84,6 +89,7 @@ public sealed class CombatSpellChooser
         _normalAttackCasts = 0;
         _alternateAttackCasts = 0;
         _drainCasts = 0;
+        _drainEngaged = false;
         _singleDebuffedTargets.Clear();
         _attackSpellLatchedOff = false;
         _castSingleTargetAttackThisTarget = false;
@@ -100,6 +106,7 @@ public sealed class CombatSpellChooser
         _normalAttackCasts = 0;
         _alternateAttackCasts = 0;
         _drainCasts = 0;
+        _drainEngaged = false;
         _attackSpellLatchedOff = false;
         _castSingleTargetAttackThisTarget = false;
     }
@@ -244,14 +251,20 @@ public sealed class CombatSpellChooser
     // slot floor, and the per-target cast cap isn't spent. Yields to the room AoE
     // (multi-attack) unless DrainsOverrideAoe — see the note in Choose. Unlike the
     // attack cascade the drain has no per-target latch: it's HP-gated and re-checked
-    // every round, so it re-engages when mana regenerates and you're still hurt.
+    // every round while it holds. The HP gate is hysteretic (see _drainEngaged): it
+    // engages at the trigger and disengages only once HP recovers a margin above it.
     private bool DrainApplies(
         CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool preferSpell)
     {
         CombatSpellSlot drain = settings.DrainSpell;
         if (!IsConfigured(drain)) return false;
         if (!ctx.SpellsAvailable) return false;
-        if (!ctx.HpBelowDrainTrigger) return false;
+        // Hysteresis: while already draining this target, keep going until HP clears
+        // the RELEASE threshold (trigger + margin); only start when HP first hits the
+        // trigger. A heal that lands you exactly at the trigger would otherwise flip
+        // drain↔normal every round (a re-announce + *Combat Off* bounce each time).
+        bool hpWantsDrain = _drainEngaged ? ctx.HpBelowDrainRelease : ctx.HpBelowDrainTrigger;
+        if (!hpWantsDrain) { _drainEngaged = false; return false; }
         if (!ctx.DrainTargetEligible) return false;          // living + not undead (game data)
         if (IsImmune(ctx, CombatSpellAction.DrainSpell)) return false;   // reactive no-effect backstop
         if (!CastsOk(drain, _drainCasts)) return false;
@@ -363,8 +376,11 @@ public sealed class CombatSpellChooser
                 break;
             case CombatSpellAction.DrainSpell:
                 // Per-target cap only; the drain does NOT arm the single-target
-                // weapon latch (it's HP-gated, not part of the damage cascade).
+                // weapon latch (it's HP-gated, not part of the damage cascade). It
+                // DOES arm the hysteresis latch so the HP gate holds on the release
+                // threshold until HP recovers past it.
                 _drainCasts++;
+                _drainEngaged = true;
                 break;
             case CombatSpellAction.WeaponAttack:
             default:
@@ -519,9 +535,12 @@ public readonly record struct CombatSpellContext(
     bool WeaponIneffective = false,
     bool? AlternationPreferSpell = null,
     // Drain-life gating (see DrainApplies). HpBelowDrainTrigger is true when live HP
-    // is at/under the DrainSpell trigger %; DrainTargetEligible is true when the
-    // current target is living AND not undead (a drain can't affect NonLiving /
-    // Undead). Both default false so a drain never fires unless BuildContext
+    // is at/under the DrainSpell trigger %; HpBelowDrainRelease is true when it's
+    // at/under the higher RELEASE threshold (trigger + hysteresis margin) — the drain
+    // engages on the trigger and holds until HP clears the release. DrainTargetEligible
+    // is true when the current target is living AND not undead (a drain can't affect
+    // NonLiving / Undead). All default false so a drain never fires unless BuildContext
     // populates them — unwired callers / tests behave exactly as before.
     bool HpBelowDrainTrigger = false,
-    bool DrainTargetEligible = false);
+    bool DrainTargetEligible = false,
+    bool HpBelowDrainRelease = false);

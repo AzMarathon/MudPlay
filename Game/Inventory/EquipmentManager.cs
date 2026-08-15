@@ -54,6 +54,17 @@ public sealed class EquipmentManager
     private Func<bool>? _combatOwnsWeaponSlot;
 
     private readonly Queue<string> _pending = new();
+
+    // Thrash guard: a gear set that keeps producing commands without converging (a
+    // paired-slot swap the game won't satisfy, say) must not re-apply forever. Count
+    // applies-that-produced-commands for the SAME set within a window; past the limit,
+    // hold off and warn instead of flooding wear/rem. A converged set produces no
+    // commands so it never counts, and the hold self-releases once the window clears.
+    private const int ThrashApplyLimit = 6;
+    private static readonly TimeSpan ThrashWindow = TimeSpan.FromSeconds(8);
+    private string? _thrashSetId;
+    private readonly Queue<DateTimeOffset> _thrashApplies = new();
+    private bool _thrashHolding;
     private DispatcherTimer? _applyTimer;
     private bool _isEquipping;
 
@@ -293,9 +304,46 @@ public sealed class EquipmentManager
         if (cmds.Count == 0)
             return combatChanged;
 
+        if (IsThrashing(set))
+            return combatChanged;
+
         _log?.Info(LogCategory, $"applying gear set '{set.Name}' — {cmds.Count} command(s)");
         StartPacedSend(cmds);
         return true;
+    }
+
+    // Whether the same set has produced commands too many times in the window — i.e.
+    // it isn't converging (the paired-slot rem-then-wear should normally fix that, so
+    // this is the safety net). Holds off (returns true) past the limit until the
+    // window clears, then lets it try again.
+    private bool IsThrashing(EquipmentSet set)
+    {
+        DateTimeOffset now = DateTimeOffset.Now;
+        if (!string.Equals(_thrashSetId, set.Id, StringComparison.Ordinal))
+        {
+            _thrashSetId = set.Id;
+            _thrashApplies.Clear();
+            _thrashHolding = false;
+        }
+        while (_thrashApplies.Count > 0 && now - _thrashApplies.Peek() > ThrashWindow)
+            _thrashApplies.Dequeue();
+
+        if (_thrashApplies.Count >= ThrashApplyLimit)
+        {
+            if (!_thrashHolding)
+            {
+                _thrashHolding = true;
+                _log?.Warn(LogCategory,
+                    $"gear set '{set.Name}' isn't converging — {_thrashApplies.Count} applies in "
+                    + $"{ThrashWindow.TotalSeconds:0}s; holding off to avoid thrash "
+                    + "(check the paired finger / wrist picks against what's worn)");
+            }
+            return true;
+        }
+
+        _thrashHolding = false;
+        _thrashApplies.Enqueue(now);
+        return false;
     }
 
     // Pick the command list for an apply: the inventory-aware plan when the caller
@@ -319,8 +367,21 @@ public sealed class EquipmentManager
         // Gate the set-only diff on the pack once we've parsed an 'i' so an
         // auto-fire trigger doesn't flood failed wears for gear we no longer hold
         // (e.g. after a death dumped the whole loadout into a deathpile).
-        return BuildWearCommands(set, worn, armorOnly: armorOnly,
+        List<string> wears = BuildWearCommands(set, worn, armorOnly: armorOnly,
             availableNames: haveInventory ? HeldNames(snap) : null);
+        if (wears.Count == 0) return wears;
+
+        // Free paired finger / wrist slots first so a swap of one member lands on the
+        // freed slot instead of trading with the member the set keeps (the non-
+        // converging thrash). Only families actually gaining a member are pruned.
+        var beingWorn = wears
+            .Where(c => c.StartsWith("wear ", StringComparison.Ordinal))
+            .Select(c => c["wear ".Length..])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        List<string> rems = BuildPairedSlotRems(set, snap.EquippedItems, beingWorn);
+        if (rems.Count == 0) return wears;
+        rems.AddRange(wears);
+        return rems;
     }
 
     // ----- pure apply logic (unit-tested directly) ------------------------
@@ -355,6 +416,45 @@ public sealed class EquipmentManager
             cmds.Add($"wear {name}");
         }
         return cmds;
+    }
+
+    private static readonly EquipmentSlot[] PairedFamilies =
+        { EquipmentSlot.Finger1, EquipmentSlot.Wrist1 };
+
+    // `rem` commands to free paired finger / wrist slots BEFORE the set's new members
+    // are worn. The game's `wear <ring>` auto-picks a finger and trades places with
+    // whichever it chooses — often the WRONG family member — so a set that keeps one
+    // ring and swaps the other never converges: the two rings oscillate on one finger
+    // and the set re-applies forever, breaking rest each time (report
+    // paradigm-20260814-215046). For a paired family that's GAINING a member this
+    // apply, `rem` the worn members the set doesn't want (the odd ones out) so the
+    // following `wear` lands on the freed slot instead of trading with a kept member.
+    // Single slots trade-place cleanly, so they're untouched; only families actually
+    // gaining a member are pruned, so a set fully in effect strips nothing.
+    internal static List<string> BuildPairedSlotRems(
+        EquipmentSet set, IReadOnlyList<EquippedItem> worn, ISet<string> beingWorn)
+    {
+        var rems = new List<string>();
+        foreach (EquipmentSlot family in PairedFamilies)
+        {
+            var setMembers = set.Slots
+                .Where(e => !IsVirtual(e.Slot) && FamilyOf(e.Slot) == family
+                            && !string.IsNullOrWhiteSpace(e.ItemName))
+                .Select(e => e.ItemName!.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (setMembers.Count == 0) continue;
+            if (!setMembers.Any(beingWorn.Contains)) continue;   // family isn't gaining a member
+
+            foreach (EquippedItem e in worn)
+            {
+                if (EquipmentSlotMap.FromWornString(e.Slot) is not { } s || FamilyOf(s) != family)
+                    continue;
+                string wornName = e.Name.Trim();
+                if (!setMembers.Contains(wornName))
+                    rems.Add($"rem {wornName}");
+            }
+        }
+        return rems;
     }
 
     // Inventory-aware apply plan for the user-initiated equip paths (Equip All /

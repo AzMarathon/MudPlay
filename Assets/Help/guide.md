@@ -405,7 +405,7 @@ The Settings → General **"Auto-Engines base modes"** checkboxes are your chara
 
 ## The kill switch
 
-The **All auto-responses** toggle at the top of the Action menu (and the `@auto-all` remote command) flips every engine off in one press, remembering what was on so a second press restores it — a fast "stop everything" that doesn't lose your setup. While it's off, auto-entry to the game is gated too.
+The **All auto-responses** toggle at the top of the Action menu (and the `@auto-all` remote command) flips every engine off in one press, remembering what was on so a second press restores it — a fast "stop everything" that doesn't lose your setup. While it's off, auto-entry to the game is gated too, and **all movement is frozen** — a walk, loop, auto-lair, or a right-click Queue-walk-to will plan but hold until you turn Auto-All back on (then it resumes where it left off). Your own manual Pause/Resume is untouched by this.
 
 ## Macros, aliases, and triggers
 
@@ -1085,7 +1085,7 @@ Each row also has **Min enemies** (don't cast this slot below this many hostiles
 ### Drain (life-steal) spell
 
 **Default:** unset (HP trigger 50%, "Drains override AOE" off)
-**What it does:** Some mage spells (e.g. `vamp`, `dtch`, high-level `nebo`) are **life-drain** spells — the damage they deal also **heals you**. This slot treats one as an *emergency heal that also attacks*: when your HP falls to the **Override at HP ≤** percentage, the drain takes the round in place of your normal attack (whatever it would have been — an attack spell or a weapon swing), then the engine reverts to your normal pick the moment HP recovers past the trigger or mana drops below the drain's **Min mana per cast**. It has the same **Max casts** (per-target) and **Min mana** fields as the other single-target rows; **Min enemies** doesn't apply.
+**What it does:** Some mage spells (e.g. `vamp`, `dtch`, high-level `nebo`) are **life-drain** spells — the damage they deal also **heals you**. This slot treats one as an *emergency heal that also attacks*: when your HP falls to the **Heal when ≤ HP** percentage, the drain takes the round in place of your normal attack (whatever it would have been — an attack spell or a weapon swing), then the engine reverts to your normal pick once HP recovers a little past the trigger (a small hysteresis margin, so it can't flip-flop drain↔normal every round) or mana drops below the drain's **Min mana per cast**. It has the same **Max casts** (per-target) and **Min mana** fields as the other single-target rows; **Min enemies** doesn't apply.
 
 **Targeting:** a drain can only affect a **living, non-undead** target — there's no life to steal from a construct or a skeleton — so against a NonLiving or Undead monster the drain is skipped and MudPlay falls back to your normal attack cascade for that fight. (If game data is thin, the game's own "no effect" reply is caught as a backstop.)
 

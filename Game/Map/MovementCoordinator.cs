@@ -82,6 +82,13 @@ public sealed class MovementCoordinator
     // configured meditate trigger; clears when MA recovers past the target.
     public const string ManaRecoveryGate = "ManaRecovery";
 
+    // Asserted for the WHOLE time the Auto-All kill switch is engaged: with Auto-All
+    // off, no movement engine (walk / loop / auto-lair / a right-click Queue-walk-to)
+    // may run — a start plans but holds here until Auto-All is restored, then auto-
+    // resumes. Engine-wait tier (like SearchGate) — never flips the toolbar Start /
+    // Pause / Stop, so the user's own Pause/Resume face is untouched.
+    public const string AutoAllGate = "AutoAll";
+
     // Asserted by the in-room acquisition engine while the loot step runs
     // after a fight clears; clears when all flagged ground items + coins are
     // resolved. This is the get-clear contributor to the in-room loop's

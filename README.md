@@ -1,11 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.14.0**
-> - Conversation window now captures **actions / emotes** (your board's `action list` socials — hug / wave / smile / tickle / …): ones you perform, ones aimed at you, and ones you witness in the room
-> - They show under the **say** chip (room-local) with the message text in **green** — the board's own colour for them
-> - Detected by colour + shape (own "You <verb>…"; others' only from a player actually in your room), so the also-green obvious-exits line and room enter/exit + party-follow movement are never mistaken for an emote
-> - Combat tab: separators now bracket the Drain spell settings, setting them off from the alternate attack spell and the Display section
+> **Version 3.14.4**
+> - Auto-All (kill switch) OFF now freezes **every** movement engine — a walk / loop / auto-lair, or a right-click Queue-walk-to, holds until Auto-All is restored (previously a queued walk-to would run with Auto-All off)
+> - Hand-casting a combat spell whose cast-code is shared with others (e.g. `vamp`) is now recognized as your attack for the round, so the engine no longer re-announces its own attack spell over it
+> - Drain spell gained hysteresis so it can't flip-flop drain↔normal every round when a heal lands you right at the trigger; the trigger label now reads "Heal when ≤ HP"
+> - Gear-set apply no longer thrashes on paired finger/wrist slots — swapping one ring/bracelet of a pair frees the odd worn one first so the new one lands cleanly instead of trading places forever
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -2,6 +2,16 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.14.4
+
+- Auto-All (kill switch) OFF now freezes **every** movement engine — a walk / loop / auto-lair, or a right-click Queue-walk-to, plans but holds until Auto-All is restored (previously a queued walk-to would run with Auto-All off)
+- Manually hand-casting a combat spell whose cast-code is shared with other spells (e.g. `vamp` — vampiric touch plus monster vampiric-* variants) is now correctly recognized as your attack for the round, so the engine no longer re-announces its own attack spell over it
+- Drain spell now has hysteresis: once it engages a target it keeps draining until HP recovers a margin above the trigger, instead of flip-flopping drain↔normal every round when a heal lands you right at the trigger
+- Combat-diagnostics log now traces the drain gate (HP vs trigger/release, target eligibility, mana) each dispatch, for troubleshooting
+- Combat tab: the drain trigger label now reads "Heal when ≤ HP"
+- Gear-set apply no longer thrashes on paired finger/wrist slots — a set that swaps one ring/bracelet of a pair now frees the odd worn one first so the new one lands on the empty slot instead of trading places forever (a safety guard also halts a set that keeps re-applying)
+- bug reports addressed: paradigm-20260814-165045, paradigm-20260814-210019, paradigm-20260814-210613, paradigm-20260814-215046
+
 ## 3.14.0
 
 - Conversation window now captures **actions / emotes** (the socials from your board's `action list` — hug / wave / smile / tickle / …): the ones you perform, the ones aimed at you, and the ones you witness in the room

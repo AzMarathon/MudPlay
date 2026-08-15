@@ -72,4 +72,23 @@ public sealed class CombatSpellIndexTests : IDisposable
         Assert.False(s.IsCombatSpell(""));
         Assert.False(s.IsCombatSpell(null));
     }
+
+    [Fact]
+    public void AmbiguousCastCode_AnyCombatEntry_IsCombat()
+    {
+        // `vamp` = the player's vampiric touch (1000) plus monster vampiric-* dupes at
+        // 0. The 0-energy ones are LAST, so a last-writer-wins map would misfile `vamp`
+        // as in-between (the reported bug). Any-combat-wins keeps it a combat spell.
+        const string json = """
+            [
+              { "Number": 10, "Name": "vampiric touch",  "Short": "vamp", "EnergyCost": 1000 },
+              { "Number": 11, "Name": "vampiric hits",   "Short": "vamp", "EnergyCost": 0 },
+              { "Number": 12, "Name": "vampiric bite",   "Short": "vamp", "EnergyCost": 0 },
+              { "Number": 13, "Name": "lesser vamp ench", "Short": "lven", "EnergyCost": 0 }
+            ]
+            """;
+        CombatSpellIndex s = NewIndex(json: json);
+        Assert.True(s.IsCombatSpell("vamp"));    // ANY combat entry → combat
+        Assert.False(s.IsCombatSpell("lven"));   // only a 0-energy entry → not combat
+    }
 }

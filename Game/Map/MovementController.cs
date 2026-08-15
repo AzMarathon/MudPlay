@@ -174,15 +174,17 @@ public sealed class MovementController : IDisposable
     // running. No-op (and nothing to resume later) when idle or already paused.
     public void SuspendForAutoAll()
     {
-        if (IsIdle || IsUserPaused)
-        {
-            _autoAllSuspended = false;
-            return;
-        }
-        Pause();
+        if (_autoAllSuspended) return;
         _autoAllSuspended = true;
+        // Assert the engine-wait AutoAllGate UNCONDITIONALLY — even when idle — so a
+        // walk / loop / auto-lair / right-click Queue-walk-to STARTED while Auto-All is
+        // off plans but holds (every engine already respects the coordinator), not just
+        // one that was already moving. It's not UserGate, so the toolbar Pause face is
+        // untouched; ReleaseFromAutoAll clears it and the engines auto-resume.
+        _coordinator.AssertGate(MovementCoordinator.AutoAllGate, nameof(MovementController),
+            "Auto-All engaged — movement frozen");
         _log?.Info(nameof(MovementController),
-            "Auto-All engaged — navigation suspended (resumes when Auto-All is restored).");
+            "Auto-All engaged — navigation frozen (resumes when Auto-All is restored).");
     }
 
     // Auto-All kill switch restored: resume the navigation we suspended, unless the
@@ -193,7 +195,11 @@ public sealed class MovementController : IDisposable
     {
         if (!_autoAllSuspended) return;
         _autoAllSuspended = false;
-        Resume();
+        // Drop the gate — the coordinator fires PauseStateChanged(false) when no other
+        // gate remains, and the walker / loop resume from where they held. A gate the
+        // user asserted themselves (UserGate) survives, so their own pause persists.
+        _coordinator.ClearGate(MovementCoordinator.AutoAllGate, nameof(MovementController),
+            "Auto-All restored");
         _log?.Info(nameof(MovementController),
             "Auto-All restored — navigation resumed.");
     }
