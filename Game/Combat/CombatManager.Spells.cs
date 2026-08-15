@@ -280,6 +280,18 @@ public sealed partial class CombatManager
 
         CombatSpellDecision decision = _spellChooser.Choose(settings, ctx);
 
+        // Drain-life gate trace (Combat diagnostics): every dispatch where a drain is
+        // configured logs the gate inputs + the chosen action, so a future report can
+        // see WHY the drain engaged / held / released this round — HP vs the trigger
+        // and the higher release threshold (hysteresis), target eligibility, and mana.
+        // Fires on decision changes (engage / disengage / switch), not every tick, so
+        // it's a readable trail rather than per-round spam.
+        if (!string.IsNullOrWhiteSpace(settings.DrainSpell.SpellName))
+            _log?.Combat(LogCategory,
+                $"drain gate → action={decision.Action}: hp≤trigger={ctx.HpBelowDrainTrigger} "
+                + $"hp≤release={ctx.HpBelowDrainRelease} eligible={ctx.DrainTargetEligible} "
+                + $"mana={ctx.Mana}/{ctx.MaxMana} overrideAoe={settings.DrainsOverrideAoe}");
+
         // A fresh dispatch supersedes any previously announced spell — clear it so a
         // weapon/backstab decision, or a spell whose announce is blocked, is never
         // mistaken by the heartbeat for "the server is still repeating it". A
@@ -759,7 +771,7 @@ public sealed partial class CombatManager
         (int ma, int maxMa) = _readMana!();
         (string? attackOverride, int? attackCap) = AttackOverrideFor(monsterNumber);
         (string? preAttackOverride, int? preAttackCap) = PreAttackOverrideFor(monsterNumber);
-        (bool hpBelowDrain, bool drainEligible) = DrainGates(settings, monsterNumber);
+        (bool hpBelowDrain, bool hpBelowDrainRelease, bool drainEligible) = DrainGates(settings, monsterNumber);
         return new CombatSpellContext(
             EnemyCount:          enemyCount,
             TargetRawName:       target,
@@ -785,7 +797,8 @@ public sealed partial class CombatManager
                 settings, ResolveSpeciesByName(target), monsterNumber),
             AlternationPreferSpell: AlternationPreferSpell(settings),
             HpBelowDrainTrigger: hpBelowDrain,
-            DrainTargetEligible: drainEligible);
+            DrainTargetEligible: drainEligible,
+            HpBelowDrainRelease: hpBelowDrainRelease);
     }
 
     // Resolve the drain spell's two live gates for a target: whether HP has fallen
@@ -794,20 +807,30 @@ public sealed partial class CombatManager
     // chooser's drain rung stays inert. Eligibility fails OPEN when the index is
     // unwired or the number is unknown (the reactive "no effect" line is the
     // backstop); the HP gate fails CLOSED when the HP reader is unwired.
-    private (bool HpBelowTrigger, bool Eligible) DrainGates(CombatSettings settings, int monsterNumber)
-    {
-        if (string.IsNullOrWhiteSpace(settings.DrainSpell.SpellName)) return (false, false);
+    // Hysteresis margin (percentage points) above the drain trigger: once engaged,
+    // the drain keeps going until HP recovers to trigger + this, so a heal that lands
+    // right at the trigger can't thrash drain↔normal every round.
+    private const int DrainReleaseMarginPct = 20;
 
-        bool hpBelow = false;
+    private (bool HpBelowTrigger, bool HpBelowRelease, bool Eligible) DrainGates(
+        CombatSettings settings, int monsterNumber)
+    {
+        if (string.IsNullOrWhiteSpace(settings.DrainSpell.SpellName)) return (false, false, false);
+
+        bool hpBelowTrigger = false, hpBelowRelease = false;
         if (_readHp is not null && settings.DrainHpTrigger > 0)
         {
             (int hp, int maxHp) = _readHp();
             if (maxHp > 0)
-                hpBelow = hp <= (int)Math.Round(maxHp * settings.DrainHpTrigger / 100.0);
+            {
+                hpBelowTrigger = hp <= (int)Math.Round(maxHp * settings.DrainHpTrigger / 100.0);
+                int releasePct = Math.Min(100, settings.DrainHpTrigger + DrainReleaseMarginPct);
+                hpBelowRelease = hp <= (int)Math.Round(maxHp * releasePct / 100.0);
+            }
         }
 
         bool eligible = _monsterLife?.CanDrain(monsterNumber) ?? true;
-        return (hpBelow, eligible);
+        return (hpBelowTrigger, hpBelowRelease, eligible);
     }
 
     // This round's forced spell-vs-physical preference for the alternating /

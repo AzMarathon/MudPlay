@@ -16,28 +16,28 @@ namespace MudPlay.Game.Combat;
 public sealed class CombatSpellIndex
 {
     private readonly GameDataCache _cache;
-    private Dictionary<string, int>? _energyByShort;
+    private Dictionary<string, bool>? _combatByShort;
 
     public CombatSpellIndex(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
-        _cache.ActiveSetChanged += _ => _energyByShort = null;
+        _cache.ActiveSetChanged += _ => _combatByShort = null;
     }
 
     // True when the cast-code is a combat spell — round energy cost in 1..1000.
-    // Unknown cast-codes and zero-energy (in-between) spells return false.
+    // Unknown cast-codes and pure in-between (zero-energy) spells return false.
     public bool IsCombatSpell(string? castCode)
     {
         if (string.IsNullOrWhiteSpace(castCode)) return false;
-        return Build().TryGetValue(castCode.Trim(), out int energy) && energy is >= 1 and <= 1000;
+        return Build().TryGetValue(castCode.Trim(), out bool isCombat) && isCombat;
     }
 
-    private Dictionary<string, int> Build()
+    private Dictionary<string, bool> Build()
     {
-        if (_energyByShort is { } cached) return cached;
+        if (_combatByShort is { } cached) return cached;
 
-        Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, bool> map = new(StringComparer.OrdinalIgnoreCase);
         JsonDocument? doc = _cache.GetRawTable("Spells");
         if (doc is not null)
         {
@@ -52,11 +52,20 @@ public sealed class CombatSpellIndex
                 if (energyEl.ValueKind != JsonValueKind.Number) continue;
                 if (!energyEl.TryGetInt32(out int energy)) continue;
 
-                map[code.Trim()] = energy;   // last writer wins on duplicate cast-codes (rare)
+                // A cast-code often maps to SEVERAL spells — the player's plus monster
+                // variants. Treat the code as a combat spell if ANY of them is (energy
+                // 1..1000): the player casts their own combat version, so the code
+                // stands for a combat action. The old last-writer-wins map let a
+                // 0-energy monster duplicate mask the real combat spell — e.g. `vamp`
+                // is vampiric touch (1000) but also three monster vampiric-* at 0, so a
+                // hand-cast `vamp` was misfiled as an in-between cast and the engine
+                // re-announced its attack over it (report paradigm-20260814-210613).
+                string key = code.Trim();
+                map[key] = map.GetValueOrDefault(key) || energy is >= 1 and <= 1000;
             }
         }
 
-        _energyByShort = map;
+        _combatByShort = map;
         return map;
     }
 }

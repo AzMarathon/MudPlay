@@ -95,8 +95,13 @@ public sealed class AutoModeController
     // character's state or inherit its silenced-automation flag.
     public void ResetSnapshot()
     {
+        bool wasEngaged = _killEngaged;
         _snapshot = null;
         _killEngaged = false;
+        // If the kill switch was engaged, announce it's now off so any Auto-All hold
+        // (the movement-freeze gate) is released — a reload must never leave movement
+        // frozen with no toggle left to clear it.
+        if (wasEngaged) KillSwitchToggled?.Invoke(false);
     }
 
     // Toggle the master switch. If any wired engine is on, snapshot the current

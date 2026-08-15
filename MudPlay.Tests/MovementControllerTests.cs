@@ -276,7 +276,7 @@ public sealed class MovementControllerTests : IDisposable
     }
 
     [Fact]
-    public void SuspendForAutoAll_WhileAutoLair_RoutesThroughManager_ReleaseResumes()
+    public void SuspendForAutoAll_WhileAutoLair_FreezesViaGate_ReleaseResumes()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
@@ -284,24 +284,32 @@ public sealed class MovementControllerTests : IDisposable
         h.AutoLair.Mark(new RoomKey(1, 3));
         h.AutoLair.Start();
 
+        // Auto-All engaged asserts the AutoAllGate — the walker the auto-lair drives
+        // holds, so no step goes out. Release drops the gate and movement resumes.
         h.Controller.SuspendForAutoAll();
-        Assert.True(h.AutoLair.IsPaused);
+        Assert.True(h.Coordinator.IsPaused);
 
         h.Controller.ReleaseFromAutoAll();
-        Assert.False(h.AutoLair.IsPaused);
+        Assert.False(h.Coordinator.IsPaused);
         Assert.Equal(MovementEngineState.Running, h.Controller.State);
     }
 
     [Fact]
-    public void SuspendForAutoAll_WhenIdle_IsNoOp_ReleaseDoesNothing()
+    public void SuspendForAutoAll_WhenIdle_AssertsGate_HoldsLaterWalk()
     {
+        // The reported bug: Auto-All off, but a right-click Queue-walk-to still ran.
+        // Engaging Auto-All while nothing is moving must assert the gate so a walk
+        // STARTED afterwards is held, not free to run.
         using Harness h = NewHarness();
         h.Controller.SuspendForAutoAll();
-        Assert.Equal(MovementEngineState.Idle, h.Controller.State);
-        Assert.False(h.Coordinator.IsPaused);
+        Assert.True(h.Coordinator.IsPaused);   // gate asserted even though idle
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        Assert.Equal(WalkState.Paused, h.Walker.State);   // held — didn't send a step
 
         h.Controller.ReleaseFromAutoAll();
-        Assert.Equal(MovementEngineState.Idle, h.Controller.State);
+        Assert.False(h.Coordinator.IsPaused);             // gate cleared — walk resumes
     }
 
     [Fact]

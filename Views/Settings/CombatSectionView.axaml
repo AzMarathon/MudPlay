@@ -429,7 +429,7 @@
                 </Grid>
                 <!-- Drain trigger + AoE-override, indented to align under the Spell column. -->
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="160,2,0,0" VerticalAlignment="Center">
-                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="Override at HP ≤"/>
+                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="Heal when ≤ HP"/>
                     <NumericUpDown Value="{Binding DrainHpTrigger, Mode=TwoWay}"
                                    Minimum="0" Maximum="100" FormatString="0" Increment="5" Width="100"
                                    ToolTip.Tip="Health % at/under which the drain overrides the round's attack. 0 = off. Above this %, the engine reverts to the normal attack pick."/>

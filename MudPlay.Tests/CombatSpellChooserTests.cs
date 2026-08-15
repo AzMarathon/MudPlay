@@ -1262,10 +1262,14 @@ public sealed class CombatSpellChooserTests
     private static CombatSpellContext DrainCtx(
         int enemies = 1, int mana = 100, int maxMana = 100,
         bool hpBelow = true, bool eligible = true,
-        IReadOnlySet<CombatSpellAction>? immune = null) =>
+        IReadOnlySet<CombatSpellAction>? immune = null, bool? hpRelease = null) =>
         new(enemies, "a rat", mana, maxMana, BackstabPending: false,
             ImmuneAttackSpells: immune,
-            HpBelowDrainTrigger: hpBelow, DrainTargetEligible: eligible);
+            HpBelowDrainTrigger: hpBelow, DrainTargetEligible: eligible,
+            // The release threshold is higher than the trigger, so HP below the
+            // trigger is also below the release; default it to hpBelow unless a test
+            // exercises the in-between band (above trigger, below release).
+            HpBelowDrainRelease: hpRelease ?? hpBelow);
 
     [Fact]
     public void Drain_FiresWhenHurtAndEligible_OverridesAttackSpell()
@@ -1437,5 +1441,47 @@ public sealed class CombatSpellChooserTests
         sut.ResetForNewTarget();
         CombatSpellDecision fresh = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
         Assert.Equal(CombatSpellAction.DrainSpell, fresh.Action);
+    }
+
+    [Fact]
+    public void Drain_Hysteresis_HoldsUntilReleaseThreshold()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("mmis"),
+            DrainSpell = Slot("vamp"),
+        };
+
+        // HP at/under the trigger → engage; the tally arms the hysteresis latch.
+        CombatSpellDecision engage = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
+        Assert.Equal(CombatSpellAction.DrainSpell, engage.Action);
+        sut.MarkCast(engage, "a rat");
+
+        // HP recovered ABOVE the trigger but still below the release → keep draining
+        // (this is the anti-thrash case: without hysteresis it would flip to mmis).
+        CombatSpellDecision held = sut.Choose(settings, DrainCtx(hpBelow: false, hpRelease: true, eligible: true));
+        Assert.Equal(CombatSpellAction.DrainSpell, held.Action);
+        sut.MarkCast(held, "a rat");
+
+        // HP recovered past the release → disengage to the normal attack.
+        CombatSpellDecision released = sut.Choose(settings, DrainCtx(hpBelow: false, hpRelease: false, eligible: true));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, released.Action);
+    }
+
+    [Fact]
+    public void Drain_NotYetEngaged_UsesTriggerNotRelease()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("mmis"),
+            DrainSpell = Slot("vamp"),
+        };
+
+        // Fresh (never engaged) and HP is in the band above the trigger but below the
+        // release — must NOT engage; only the trigger starts a drain.
+        CombatSpellDecision d = sut.Choose(settings, DrainCtx(hpBelow: false, hpRelease: true, eligible: true));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
     }
 }

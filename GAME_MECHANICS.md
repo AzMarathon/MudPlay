@@ -2625,3 +2625,11 @@ glass jug               5               2 gold crowns
     the user taking the round's attack (a user override — the engine must not re-send its
     auto attack that round), while a hand-cast in-between spell keeps the engine's
     resume-after-cast behaviour (it heals/buffs, then the engine resumes attacking).
+  - **[CONFIRMED]** *(2026-08-14, capture `paradigm-20260814-210613`)* **A cast-code
+    (`Spells.Short`) is AMBIGUOUS — it maps to several spells**, the player's plus monster
+    variants, each with its own `EnergyCost`. In Paradigm 1.9.1 `vamp` is the player's
+    **vampiric touch (1000, combat)** AND monster **vampiric hits / bite / rosebush (0)**.
+    The player casts their own version, so a code is a **combat spell if ANY spell with it
+    is** (energy 1–1000) — a last-writer-wins lookup that picked a 0-energy monster
+    duplicate misfiled a hand-cast `vamp` as in-between and the engine re-announced its
+    attack over it. Classify a shared cast-code by "any entry combat", not the last one.
