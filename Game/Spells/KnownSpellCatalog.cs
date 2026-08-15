@@ -401,10 +401,18 @@ public sealed class KnownSpellCatalog
         return results;
     }
 
-    // The Items.Number of the first item that TEACHES the given spell — an Items row
-    // carrying a LearnSp ability (code 42) whose value is spellNumber. 0 when no item
-    // teaches it (trainer-only spells) or no Items table is loaded. Powers the Spell
-    // Book's double-click-to-item-record. A full-table scan, run only on that click.
+    // The Items.Number of the item that TEACHES the given spell — an Items row
+    // carrying a LearnSp ability (code 42) whose value is the taught Spells.Number.
+    // 0 when no item teaches it (trainer-taught spells learn from an NPC, not an
+    // item) or no Items table is loaded. Powers the Spell Book's double-click-to-
+    // item-record. A full-table scan, run only on that click.
+    //
+    // Matched on the EXACT spell number, deliberately: the data carries same-named
+    // spells at different magery levels (e.g. divine disfavour #67 universal /
+    // MageryLVL 2, taught by a scroll, vs #5087 Paladin-only / MageryLVL 1, taught
+    // by a trainer). The Spell Book already shows only the version the class can
+    // actually learn, so the teaching item must be for THAT version — matching a
+    // same-named sibling would point at a scroll for a spell the class can't learn.
     public int GetTeachingItemNumber(int spellNumber)
     {
         if (spellNumber <= 0) return 0;
