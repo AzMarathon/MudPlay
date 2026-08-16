@@ -2,10 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.18.9
+## 3.18.11
 
 - Item-cast buffing no longer double-sends the re-equip: when a buff item (e.g. a warhorn in the off-hand) is used and the swap breaks a rest, auto-equip now stands off the borrowed slot while the item-cast's own restore runs, instead of also firing a redundant `wear` the game rejects
-- bug reports addressed: paradigm-20260815-130733
+- Caster no longer fires the alternate attack spell at a mob the capping cast just killed: when a max-casts-1 nuke lands its own killing blow, the cascade switch waits a short beat for the kill's death/exp to register, then re-checks the target is still alive — so `mmis` stops corpse-casting at "You don't see X here!"
+- After a self-buff cast mid-combat coincides with a kill in a multi-mob room, the caster re-attacks the surviving mob immediately instead of standing idle a round until it gets swung at
+- bug reports addressed: paradigm-20260815-130733, paradigm-20260815-201731, paradigm-20260815-202319
 
 ## 3.18.8
 

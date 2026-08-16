@@ -205,6 +205,22 @@ public sealed partial class CombatManager : IDisposable
     private bool _arrivalSettleBypass;
     private Action<TimeSpan, Action>? _scheduleArrivalSettle;
 
+    // The caster's per-round cascade SWITCH (cap-switch / decision-change) is decided
+    // on the round's damage line — for a MaxCasts-1 nuke that's the spell's OWN killing
+    // blow. The kill's death/exp/*Combat Off* often arrive in a LATER server packet
+    // than that damage line, so deferring "past the current burst" (an immediate UI-post)
+    // still fires the alternate before the kill packet is processed → the alternate
+    // corpse-casts at the just-killed mob ("You don't see X here!"; reports
+    // paradigm-20260815-201731 / -202241, confirmed high-mana so it's the cap-switch, not
+    // the mana fallback). Instead delay the switch dispatch a short REAL-TIME window so
+    // the adjacent kill packet lands and the exp-inferred drop nulls the target first;
+    // the delayed dispatch then re-validates and skips a dead target. The window sits far
+    // under a ~5s combat round, so a live-target switch still lands the same round (the
+    // server swaps next round) — the cap-preempt (report 061340) is preserved. Injected
+    // one-shot scheduler; null in tests that don't opt in (falls back to _post).
+    private static readonly TimeSpan SwitchDispatchDelay = TimeSpan.FromMilliseconds(750);
+    private Action<TimeSpan, Action>? _scheduleSwitchDispatch;
+
     // Backstab flee-on-failure action, bound in AppServices to
     // HealthManager.RunFromBackstabFailure. null until wired; even when wired it
     // fires only on a detected failure AND when CombatSettings.RunIfBackstabFails
@@ -883,6 +899,12 @@ public sealed partial class CombatManager : IDisposable
     // left null in tests that don't exercise the settle (they keep the immediate path).
     public void SetArrivalSettleScheduler(Action<TimeSpan, Action> schedule)
         => _scheduleArrivalSettle = schedule;
+
+    // The one-shot delay scheduler for the cascade switch dispatch (see
+    // SwitchDispatchDelay). Wired in AppServices to a DispatcherTimer; tests inject a
+    // controllable seam.
+    public void SetSwitchDispatchScheduler(Action<TimeSpan, Action> schedule)
+        => _scheduleSwitchDispatch = schedule;
 
     // The arrival-settle window elapsed with no authoritative room re-display having
     // superseded it. Re-run the engage decision against whatever the room now holds —
@@ -2531,6 +2553,25 @@ public sealed partial class CombatManager : IDisposable
             // they type (the reported manual-cast → mmis spam). Rate-limit ONLY the
             // manual-armed resume (ManualResumePacing) — the engine's per-round
             // survival casts must keep resuming every round, so they're never paced.
+            //
+            // DeathInterruptWindow normally blocks this right after a kill so a resume
+            // can't re-announce at the corpse. But when a kill THIS burst left a
+            // survivor in a multi-mob room, the death→re-observe already re-picked that
+            // live survivor as BOTH _currentTarget and _castingSpellTarget — and its
+            // re-cast lost the round's slot to the 500ms burst guard, leaving us parked
+            // in _combatOff spell mode with no heartbeat retry (OnCombatTick bails while
+            // _combatOff, and its deterministic resume is weapon-mode only). Nothing then
+            // re-engaged until the survivor's OWN swing woke OnCombatLine ~5s later —
+            // report paradigm-20260815-202319 ("not re-engaging combat after buffing
+            // mid-combat"): buff armr → rotworm dies to lbol → survivor thin leprous
+            // outcast sat un-attacked a full round. So when the current target IS the
+            // spell target (the re-pick chose this exact mob) AND it's proven present in
+            // the resynced roster (TargetPresent below), it's a survivor, not the
+            // corpse — bypass the death window and resume immediately. The corpse case
+            // can't reach here: a kill nulls _currentTarget, and a re-pick only re-sets
+            // it to a mob RemoveDeadEntity left in the live roster.
+            bool survivorReadied = _currentTarget is { } curT
+                && string.Equals(curT, _castingSpellTarget, StringComparison.OrdinalIgnoreCase);
             bool manualPaced = _lastBetweenRoundCastManual
                 && DateTimeOffset.Now - _lastManualCastResumeAt < ManualResumePacing;
             if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
@@ -2538,7 +2579,7 @@ public sealed partial class CombatManager : IDisposable
                 && !manualPaced
                 && !_userAttackOverride   // user hand-typed this round's attack — hold our own until next round
                 && _castingSpellTarget is { } spellTarget
-                && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
+                && (DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow || survivorReadied)
                 && _classifier.Current is { } liveSpell
                 && TargetPresent(liveSpell, spellTarget)
                 && TryBuildCandidate(liveSpell, spellTarget) is { } spellCand)

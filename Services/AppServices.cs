@@ -2930,6 +2930,17 @@ public sealed class AppServices
             timer.Start();
         });
 
+        // Cascade-switch dispatch delay: a UI-thread one-shot so the per-round spell
+        // switch waits out the short real-time window a kill's exp / *Combat Off* packet
+        // needs to land + drop the target, instead of corpse-casting the alternate at a
+        // mob the capping cast just killed. Same one-shot shape as the settle scheduler.
+        Combat.SetSwitchDispatchScheduler((delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+        });
+
         // HealthManager. Master on/off is
         // GeneralSettings.AutoMode.AutoHealRest (shared with the
         // Settings → General checkbox + toolbar Toggle button). When
