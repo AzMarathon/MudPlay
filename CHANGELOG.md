@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.18.9
+
+- Item-cast buffing no longer double-sends the re-equip: when a buff item (e.g. a warhorn in the off-hand) is used and the swap breaks a rest, auto-equip now stands off the borrowed slot while the item-cast's own restore runs, instead of also firing a redundant `wear` the game rejects
+- bug reports addressed: paradigm-20260815-130733
+
 ## 3.18.8
 
 - Spell pickers (Combat tab + Spells tab) now strike through and dim spells your character hasn't learned, and outline a slot red when it points at an unlearned spell — a guard against configuring a spell you can't actually cast (the value is still saved; the red outline is just a warning)

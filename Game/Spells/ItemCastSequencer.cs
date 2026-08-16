@@ -47,6 +47,10 @@ public sealed class ItemCastSequencer
     // (its Default set), or null. Used as the restore fallback when the live slot
     // can't say what belongs there — see RestoreTarget. Null when unwired (tests).
     private readonly Func<string, string?>? _desiredSlotItem;
+    // Invoked when a swap is about to hit the wire, so auto-equip can stand off the
+    // borrowed slot while this sequence's own restore handles it (see
+    // AutoEquipCoordinator.NoteItemCastSwap). Null when unwired (tests).
+    private readonly Action? _onSwap;
     private readonly WireSender _wire = new();
     private readonly LogService? _log;
 
@@ -54,7 +58,8 @@ public sealed class ItemCastSequencer
         Func<IReadOnlyList<ClassCastItem>> castItems,
         Func<InventorySnapshot> inventory,
         LogService? log = null,
-        Func<string, string?>? desiredSlotItem = null)
+        Func<string, string?>? desiredSlotItem = null,
+        Action? onSwap = null)
     {
         ArgumentNullException.ThrowIfNull(castItems);
         ArgumentNullException.ThrowIfNull(inventory);
@@ -62,6 +67,7 @@ public sealed class ItemCastSequencer
         _inventory = inventory;
         _log = log;
         _desiredSlotItem = desiredSlotItem;
+        _onSwap = onSwap;
     }
 
     // Bind the wire sink (the wrapped engine sender).
@@ -92,6 +98,11 @@ public sealed class ItemCastSequencer
 
         string name = item.ItemName.Trim();
         InventorySnapshot inv = _inventory();
+
+        // Tell auto-equip a slot swap is starting so it stands off the borrowed slot
+        // — this sequence restores it itself, and the rest this swap breaks would
+        // otherwise trip a redundant re-equip that doubles the restore.
+        _onSwap?.Invoke();
 
         // A two-handed cast weapon needs BOTH hands, so it displaces the weapon AND
         // the off-hand: free the off-hand first, wield + use, then eq the 1H weapon

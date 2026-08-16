@@ -44,9 +44,22 @@ public sealed class AutoEquipCoordinator : IDisposable
     private readonly Func<bool> _wornLoadoutKnown;
     private readonly Func<bool> _isAutoEnabled;
     private readonly LogService? _log;
+    private readonly Func<DateTimeOffset> _now;
 
     private PlayerPosition _lastPosition;
     private bool _lastInCombat;
+
+    // An item-cast buff (ItemCastSequencer) temporarily borrows an equip slot: it
+    // removes the worn gear, wields the cast item, uses it, then re-equips the gear
+    // itself. That transient swap — and the rest it breaks — can trip a posture /
+    // combat auto-equip fire that ALSO restores the slot, double-sending the wear
+    // (report paradigm-20260815-130733: an "eq griffon shield" restore followed by a
+    // redundant "wear griffon shield" the game rejects). Hold auto-equip fires briefly
+    // after an item-cast swap so the sequencer's own restore owns the slot — the same
+    // "leave the slot to whoever's swapping it" courtesy _combatOwnsWeaponSlot gives
+    // the combat engine.
+    private DateTimeOffset _lastItemCastSwapAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan ItemCastSwapSuppressWindow = TimeSpan.FromSeconds(4);
 
     public AutoEquipCoordinator(
         PlayerState player,
@@ -56,7 +69,8 @@ public sealed class AutoEquipCoordinator : IDisposable
         Func<string, EquipResult> applyBySetId,
         Func<bool> wornLoadoutKnown,
         Func<bool> isAutoEnabled,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(readEquipment);
@@ -73,11 +87,18 @@ public sealed class AutoEquipCoordinator : IDisposable
         _wornLoadoutKnown = wornLoadoutKnown;
         _isAutoEnabled = isAutoEnabled;
         _log = log;
+        _now = now ?? (() => DateTimeOffset.Now);
 
         _lastPosition = player.Position;
         _lastInCombat = player.InCombat;
         _player.PropertyChanged += OnPlayerChanged;
     }
+
+    // Note that an item-cast buff swap just began (ItemCastSequencer): its
+    // equip / use / restore dance owns whatever slot it borrowed, so auto-equip
+    // fires are held for a short window (see _lastItemCastSwapAt) rather than
+    // double-restoring the slot.
+    public void NoteItemCastSwap() => _lastItemCastSwapAt = _now();
 
     // ----- pure decision logic (unit-tested) ------------------------------
 
@@ -146,6 +167,15 @@ public sealed class AutoEquipCoordinator : IDisposable
         // Now", "Equip All", @equip-<set>) don't flow through here, so they still
         // work with the kill-switch on.
         if (!_isAutoEnabled()) return;
+        // An item-cast buff swap just borrowed an equip slot and restores it itself
+        // (see _lastItemCastSwapAt) — often the very rest-break that swap caused is
+        // what fired this. Hold so the sequencer's own restore isn't doubled.
+        if (_now() - _lastItemCastSwapAt < ItemCastSwapSuppressWindow)
+        {
+            _log?.Debug(EquipmentManager.LogCategory,
+                $"auto-equip '{type}' held: item-cast swap in progress (its own restore owns the slot)");
+            return;
+        }
         if (ResolveTarget(_readEquipment(), type) is not { } setId) return;
         // Hold the fire until a full 'i' has established the worn set. Diffing a
         // set against an empty (never-parsed) loadout treats every item as unworn

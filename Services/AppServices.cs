@@ -3633,7 +3633,11 @@ public sealed class AppServices
         // weapon (read from Inventory's last `i` dump). Duration drives the
         // recast clock. Wire-sender bound in MainWindowViewModel.
         ItemCast = new Game.Spells.ItemCastSequencer(
-            () => Spellbook.GetCastItems(), () => Inventory.Snapshot, Log, DesiredEquipSlotItem);
+            () => Spellbook.GetCastItems(), () => Inventory.Snapshot, Log, DesiredEquipSlotItem,
+            // Stand auto-equip off the slot the item-cast borrows so its own restore
+            // isn't doubled by the rest-break the swap triggers (AutoEquip is built
+            // just below; this lambda reads it at fire time). See NoteItemCastSwap.
+            onSwap: () => AutoEquip?.NoteItemCastSwap());
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
 
