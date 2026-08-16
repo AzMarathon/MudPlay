@@ -6,6 +6,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Navigation: new **ROOM INFO** rail section — left-click any room on the map to list clickable links to everything attached to it: the room itself (its name links to the room record), each monster (lair / summoned / placed), each floor item, the shop, and the cast-on-enter room spell. A monster or room-spell link opens its full record dialog; the room / item / shop links open the record in the Game Data Browser. Left-clicking never forces the panel open — expand it when you like and it shows the last room you clicked
 - New room→floor-item index (`roomitem` placements) backing the floor-item links; monster and spell records can now be opened by number from anywhere (shared MonsterRecordDialogService / SpellRecordDialogService)
+- Game Data Browser: double-clicking a **Shops** row opens the room-detail popup for the shop's room directly (was: a hop to the Rooms tab); a shop that spans several rooms opens on the first and lists the others as clickable siblings in the popup's title
 
 ## 3.18.18
 

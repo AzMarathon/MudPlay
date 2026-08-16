@@ -3,7 +3,9 @@ using System.Text.Json;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
 using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
@@ -15,10 +17,11 @@ namespace MudPlay.ViewModels.GameData.Tables;
 // ClassRest is a class-bitmask restriction, MinLVL / MaxLVL are the customer-level gates.
 // ShopType renders via LookupEnums ("Weapons" / "Armour" / "Bank" / "Tavern" / etc.).
 //
-// Double-click hops to the Rooms tab and selects the room this shop is attached to (read from
-// the row's Assigned To field, formatted as "Room {map}/{room}"). There's no per-shop edit
-// dialog — the MDB is the source of truth for shops; if you want to look at the room a shop
-// sits in, the Rooms tab is where the rest of the geography lives.
+// Double-click opens the interactive room-detail popup for the room this shop sits in (read
+// from the row's Assigned To field, formatted as "Room {map}/{room}") — the same popup the
+// Rooms tab opens, showing the shop's stock, exits, and neighbours. A shop that spans several
+// rooms opens on the first and lists the rest as clickable siblings in the popup's title.
+// There's no per-shop edit dialog — the MDB is the source of truth for shops.
 public sealed class ShopsSectionViewModel : JsonTableSectionViewModel, IEditableTableSectionViewModel
 {
     private readonly GameDataCache _cache;
@@ -59,13 +62,14 @@ public sealed class ShopsSectionViewModel : JsonTableSectionViewModel, IEditable
         : base(cache, resolver)
     {
         _cache = cache;
-        OpenEditAsyncCommand = new RelayCommand<GameDataRow?>(JumpToRoom);
+        OpenEditAsyncCommand = new RelayCommand<GameDataRow?>(OpenRoomPopup);
     }
 
-    // Resolve the shop's host room from Assigned To = "Room {map}/{room}" and ask the browser to
-    // switch to the Rooms tab + highlight the matching entry. No-op when the shop has no Assigned
-    // To (a stockless bank, an unbound merchant, etc.) or the map/room pair can't be parsed.
-    private void JumpToRoom(GameDataRow? row)
+    // Resolve the shop's host room from Assigned To = "Room {map}/{room}" and open the interactive
+    // room-detail popup on it (the popup itself surfaces the shop's other rooms as clickable
+    // siblings, resolved from each room's Shop field). No-op when the shop has no Assigned To
+    // (a stockless bank, an unbound merchant, etc.) or the map/room pair can't be parsed.
+    private void OpenRoomPopup(GameDataRow? row)
     {
         if (row is null) return;
         string? shopNumberStr = row.Get("Number");
@@ -75,14 +79,7 @@ public sealed class ShopsSectionViewModel : JsonTableSectionViewModel, IEditable
         (int mapNo, int roomNo) = ReadAssignedRoom(shopNumber);
         if (mapNo == 0 && roomNo == 0) return;
 
-        // Predicate runs against each Rooms row — Map Number + Room
-        // Number live as numeric strings on the row (JSON numbers
-        // stringified at load).
-        string mapStr  = mapNo.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        string roomStr = roomNo.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        RequestNavigation("rooms",
-            r => string.Equals(r.Get("Map Number"),  mapStr,  StringComparison.Ordinal)
-              && string.Equals(r.Get("Room Number"), roomStr, StringComparison.Ordinal));
+        RoomDetailPopup.Show(AppServices.Current.Dialogs, new RoomKey(mapNo, roomNo));
     }
 
     // Look up the shop in the active set's Shops.json and parse the FIRST "Room {map}/{room}"
@@ -105,9 +102,10 @@ public sealed class ShopsSectionViewModel : JsonTableSectionViewModel, IEditable
             if (!el.TryGetProperty("Assigned To", out JsonElement assignedEl)) return (0, 0);
             if (assignedEl.ValueKind != JsonValueKind.String) return (0, 0);
 
-            // Take just the FIRST "Room M/R" token from a comma-separated list.
-            // Multi-branch shops (Bank of Godfrey is "Room 1/297, Room 6/1334")
-            // would otherwise fail the parse. Shared with the auto-train catalogue.
+            // Take just the FIRST "Room M/R" token from a comma-separated list — the popup
+            // opens on it and surfaces the shop's other rooms as clickable siblings itself.
+            // Multi-branch shops (Bank of Godfrey is "Room 1/297, Room 6/1334") would
+            // otherwise fail the parse. Shared with the auto-train catalogue.
             return Game.GameData.ShopRoomParser.TryParseFirstRoom(assignedEl.GetString(), out int mapNo, out int roomNo)
                 ? (mapNo, roomNo)
                 : (0, 0);

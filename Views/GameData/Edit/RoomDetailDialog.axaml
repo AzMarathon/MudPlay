@@ -92,12 +92,35 @@
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
         <Grid RowDefinitions="Auto,*,Auto">
 
-            <!-- Header: clickable title + map/room caption. -->
+            <!-- Header: clickable title + map/room caption. When the shop spans several rooms
+                 the siblings render as clickable links in brackets next to the title; clicking
+                 one re-roots the popup on that room. -->
             <StackPanel Grid.Row="0" Spacing="2" Margin="0,0,0,10">
-                <Button Classes="TitleLink"
-                        Content="{Binding Title}"
-                        Command="{Binding OpenInNavigationCommand}"
-                        ToolTip.Tip="Open the Navigation map centred on this room"/>
+                <WrapPanel Orientation="Horizontal">
+                    <Button Classes="TitleLink"
+                            Content="{Binding Title}"
+                            Command="{Binding OpenInNavigationCommand}"
+                            ToolTip.Tip="Open the Navigation map centred on this room"/>
+                    <StackPanel Orientation="Horizontal" Margin="6,0,0,0"
+                                VerticalAlignment="Bottom"
+                                IsVisible="{Binding HasShopSiblings}">
+                        <TextBlock Text="[" Classes="Note" VerticalAlignment="Center"/>
+                        <ItemsControl ItemsSource="{Binding ShopSiblingRooms}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RoomDetailLink">
+                                    <Button Classes="MdbLink" Content="{Binding Text}"
+                                            Command="{Binding Open}" Margin="0,0,4,0"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="]" Classes="Note" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </WrapPanel>
                 <Button Classes="SubLink"
                         Content="{Binding KeyLabel}"
                         Command="{Binding OpenInNavigationCommand}"/>
