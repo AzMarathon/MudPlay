@@ -477,17 +477,20 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             if (greetTxt > 0)
             {
                 // Decode the greet textblock into the "what can I ask, and what
-                // flags fire when I do" tree so the row is click-through in the
-                // dialog. Depth becomes leading spaces so the popup reads as an
-                // outline. Null actions keep the row plain when the block has no
-                // player keywords (a pure dialogue greet).
+                // flags fire when I do" tree, then group it by keyword: each
+                // depth-0 line is a player keyword, the deeper lines beneath it
+                // are the effects it triggers. The dialog surfaces the keywords as
+                // chips and flies out each one's effects on click — so a block with
+                // dozens of keywords stays compact on the tab. A block with no
+                // player keywords (a pure dialogue greet) keeps the plain row.
                 IReadOnlyList<TBInfoActionLine> decoded =
                     TBInfoActionDecoder.DecodeGreet(
                         AppServices.Current.TBInfo, _cache, _roomGraph, greetTxt);
-                IReadOnlyList<string>? greetActions = decoded.Count > 0
-                    ? decoded.Select(l => new string(' ', l.Depth * 2) + l.Text).ToList()
-                    : null;
-                kv.Add(new MdbInfoRow("Greet", $"Textblock #{greetTxt}", greetActions));
+                IReadOnlyList<GreetKeyword> keywords = GroupGreetKeywords(decoded);
+                if (keywords.Count > 0)
+                    kv.Add(new MdbInfoRow("Greet", $"Textblock #{greetTxt}", Keywords: keywords));
+                else
+                    AddRow(kv, "Greet", $"Textblock #{greetTxt}");
             }
 
             AddRowIfNonZero(kv, "BS Defense", ReadInt(el, "BSDefense"));
@@ -961,6 +964,35 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         string list = string.Join(", ", items.Select(i => i.Text));
         IReadOnlyList<ItemLink> links = items.Select(i => new ItemLink(i.Text, i.Id)).ToList();
         kv.Add(new MdbInfoRow($"{label} ({items.Count})", list, Items: links));
+    }
+
+    // Group the flat, depth-tagged greet decode into per-keyword blocks: a depth-0
+    // line opens a new keyword; the deeper lines that follow (re-indented relative
+    // to it) are the effects that fire when it's asked. Depth-0 lines before the
+    // first keyword (there shouldn't be any) are ignored. Empty when the block has
+    // no player keywords.
+    private static IReadOnlyList<GreetKeyword> GroupGreetKeywords(IReadOnlyList<TBInfoActionLine> lines)
+    {
+        List<GreetKeyword> keywords = new();
+        string? keyword = null;
+        List<string> effects = new();
+        foreach (TBInfoActionLine line in lines)
+        {
+            if (line.Depth == 0)
+            {
+                if (keyword is not null)
+                    keywords.Add(new GreetKeyword(keyword, effects));
+                keyword = line.Text;
+                effects = new List<string>();
+            }
+            else if (keyword is not null)
+            {
+                effects.Add(new string(' ', (line.Depth - 1) * 2) + line.Text);
+            }
+        }
+        if (keyword is not null)
+            keywords.Add(new GreetKeyword(keyword, effects));
+        return keywords;
     }
 
     // True when a Room.RawLairTag lists wccNo as one of its spawn monsters. v1.11p tags are

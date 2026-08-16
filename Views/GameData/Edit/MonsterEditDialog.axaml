@@ -11,10 +11,14 @@
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>
+        <!-- Right-aligned so the label hugs its input regardless of column
+             width — a short label ("Name", "Relationship") sits next to its box
+             instead of stranding dead space between them. -->
         <Style Selector="TextBlock.FieldLabel">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
         </Style>
         <Style Selector="TextBlock.SectionHeader">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
@@ -39,12 +43,6 @@
             <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,4,0,1"/>
-        </Style>
-        <!-- The keyword/effect outline printed inline under a Greet textblock. -->
-        <Style Selector="TextBlock.MdbAction">
-            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
         </Style>
         <!-- A textblock-backed value (Greet) that pops its command keywords on
              click. Styled to read as a link, not a chrome button. -->
@@ -88,7 +86,7 @@
                                  fits the longest monster names + the Use-tier
                                  labels without the old excess width. -->
                             <TextBlock Classes="SectionHeader" Text="Monster"/>
-                            <Grid ColumnDefinitions="110,240" RowDefinitions="Auto,Auto"
+                            <Grid ColumnDefinitions="68,240" RowDefinitions="Auto,Auto"
                                   ColumnSpacing="8" RowSpacing="6"
                                   HorizontalAlignment="Left">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Name"/>
@@ -108,7 +106,7 @@
                                  cast-codes are all short, so the old 280 was
                                  wasted width. -->
                             <TextBlock Classes="SectionHeader" Text="Details"/>
-                            <Grid ColumnDefinitions="160,140,8,Auto,64"
+                            <Grid ColumnDefinitions="130,140,8,Auto,64"
                                   RowDefinitions="Auto,Auto,Auto"
                                   ColumnSpacing="8" RowSpacing="6"
                                   HorizontalAlignment="Left">
@@ -248,23 +246,53 @@
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
 
-                                            <!-- Textblock-backed rows (Greet) print the textblock
-                                                 number, then the command keywords the block
-                                                 responds to as an inline indented outline right
-                                                 underneath (indented lines are the effects that
-                                                 fire when the keyword is asked). -->
-                                            <StackPanel Grid.Column="1" IsVisible="{Binding HasActions}">
-                                                <TextBlock Classes="MdbValue" Text="{Binding Value}"/>
-                                                <ItemsControl ItemsSource="{Binding Actions}" Margin="0,2,0,0">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="x:String">
-                                                            <TextBlock Classes="MdbAction"
-                                                                       Text="{Binding}"
-                                                                       TextWrapping="Wrap" Margin="0,1"/>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
+                                            <!-- Textblock-backed rows (Greet) surface each keyword
+                                                 the block responds to as a clickable chip; clicking
+                                                 one flies out the effects that fire when it's asked.
+                                                 Only the keywords sit on the tab, so a block with
+                                                 dozens of them stays compact. -->
+                                            <ItemsControl Grid.Column="1" ItemsSource="{Binding Keywords}"
+                                                          IsVisible="{Binding HasKeywords}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:GreetKeyword">
+                                                        <Button Classes="MdbLink"
+                                                                Content="{Binding Keyword}"
+                                                                Margin="0,0,10,2">
+                                                            <Button.Flyout>
+                                                                <Flyout Placement="Bottom">
+                                                                    <StackPanel MaxWidth="560">
+                                                                        <TextBlock Classes="SectionHeader"
+                                                                                   Text="{Binding Keyword, StringFormat='Responds to “{0}” with:'}"/>
+                                                                        <!-- Right padding reserves a gutter so the overlay
+                                                                             vertical scrollbar doesn't sit on the text. -->
+                                                                        <ScrollViewer MaxHeight="360"
+                                                                                      Padding="0,0,16,0"
+                                                                                      VerticalScrollBarVisibility="Auto"
+                                                                                      HorizontalScrollBarVisibility="Auto">
+                                                                            <ItemsControl ItemsSource="{Binding Effects}">
+                                                                                <ItemsControl.ItemTemplate>
+                                                                                    <DataTemplate x:DataType="x:String">
+                                                                                        <TextBlock Text="{Binding}"
+                                                                                                   Foreground="{StaticResource ChromeFgBrush}"
+                                                                                                   FontFamily="{StaticResource FontMono}"
+                                                                                                   FontSize="11"
+                                                                                                   TextWrapping="NoWrap" Margin="0,1"/>
+                                                                                    </DataTemplate>
+                                                                                </ItemsControl.ItemTemplate>
+                                                                            </ItemsControl>
+                                                                        </ScrollViewer>
+                                                                    </StackPanel>
+                                                                </Flyout>
+                                                            </Button.Flyout>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
