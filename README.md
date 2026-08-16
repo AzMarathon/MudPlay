@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.12**
-> - Item-cast buffing no longer double-sends the re-equip: when a buff item (e.g. a warhorn in the off-hand) is used and the swap breaks a rest, auto-equip stands off the borrowed slot while the item-cast's own restore runs, instead of firing a redundant `wear` the game rejects
-> - Caster no longer fires the alternate attack spell at a mob the capping cast just killed: when a max-casts-1 nuke lands its own killing blow, the cascade switch waits a short beat for the kill to register, then re-checks the target is still alive — so `mmis` stops corpse-casting at "You don't see X here!"
-> - Attack spell with a max-casts of 1 no longer swaps to the alternate before it ever fires in a multi-monster room: the other monsters' swings were tripping the round counter early, so the normal spell got skipped ("LBOL → MMIS without firing LBOL"); the count is now anchored to real rounds
-> - After a self-buff cast mid-combat coincides with a kill in a multi-mob room, the caster re-attacks the surviving mob immediately instead of standing idle a round
+> **Version 3.18.13**
+> - Monster record: the Greet textblock's keyword/effect outline now prints inline right under the textblock number, instead of behind a click-to-open popup
+> - Monster record: long attack names (e.g. "claws you with its plague-ridden claws") now wrap in full instead of being clipped in the Mob's Attacks list
+> - Monster record: the Relationship dropdown and the Override Pre-attack / Override Attack boxes are narrower, and the Name box is trimmed a little
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -592,12 +592,18 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
                         ? $"({displayPct}%) Attack {i + 1}"
                         : $"({displayPct}%) {attName}";
 
+                    // The attack name is often a full sentence ("claws you with its
+                    // plague-ridden claws") — far wider than the key column. Emit it as
+                    // a full-width header row so it wraps in full, then indent its stats
+                    // beneath it as empty-key value rows.
+                    kv.Add(new MdbInfoRow(header, string.Empty, FullWidth: true));
+
                     if (attType == 1 || attType == 3)
                     {
                         int min = ReadInt(el, $"AttMin-{i}");
                         int max = ReadInt(el, $"AttMax-{i}");
                         int acc = ReadInt(el, $"AttAcc-{i}");
-                        AddRow(kv, header, $"Min-Max: {min}-{max}");
+                        AddRow(kv, string.Empty, $"Min-Max: {min}-{max}");
                         AddRow(kv, string.Empty, $"Accuracy: {acc}");
                         AddRow(kv, string.Empty, FormatEnergyRow(attEnergy, monsterEnergy));
                         if (hitSpell > 0)
@@ -609,7 +615,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
                         int spellLvl  = ReadInt(el, $"AttMax-{i}");
                         int successPc = ReadInt(el, $"AttMin-{i}");
                         string spell  = ResolveSpellWithEffect(spellId, spellLvl);
-                        AddRow(kv, header,
+                        AddRow(kv, string.Empty,
                             spellLvl > 0 ? $"Spell: {spell} lvl {spellLvl}" : $"Spell: {spell}");
                         AddRow(kv, string.Empty, $"Success %: {successPc}");
                         AddRow(kv, string.Empty, FormatEnergyRow(attEnergy, monsterEnergy));

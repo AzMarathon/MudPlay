@@ -31,6 +31,21 @@
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
         </Style>
+        <!-- A full-width attack-name header (spans both MDB columns so a long
+             attack sentence wraps in full); its stat sub-rows follow indented. -->
+        <Style Selector="TextBlock.MdbAttackName">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,4,0,1"/>
+        </Style>
+        <!-- The keyword/effect outline printed inline under a Greet textblock. -->
+        <Style Selector="TextBlock.MdbAction">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+        </Style>
         <!-- A textblock-backed value (Greet) that pops its command keywords on
              click. Styled to read as a link, not a chrome button. -->
         <Style Selector="Button.MdbLink">
@@ -69,9 +84,11 @@
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Spacing="6">
                             <!-- Name + Use — left-aligned, value column fixed
-                                 at 280 so they don't track the splitter. -->
+                                 so they don't track the splitter. 240 comfortably
+                                 fits the longest monster names + the Use-tier
+                                 labels without the old excess width. -->
                             <TextBlock Classes="SectionHeader" Text="Monster"/>
-                            <Grid ColumnDefinitions="110,280" RowDefinitions="Auto,Auto"
+                            <Grid ColumnDefinitions="110,240" RowDefinitions="Auto,Auto"
                                   ColumnSpacing="8" RowSpacing="6"
                                   HorizontalAlignment="Left">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Name"/>
@@ -86,15 +103,18 @@
                             <!-- Details — left-aligned grid, fixed value
                                  column widths so the Relationship dropdown
                                  + Override spell rows don't stretch with
-                                 the splitter. -->
+                                 the splitter. The value column is 140: the
+                                 relationship options + override spell ids /
+                                 cast-codes are all short, so the old 280 was
+                                 wasted width. -->
                             <TextBlock Classes="SectionHeader" Text="Details"/>
-                            <Grid ColumnDefinitions="160,280,8,Auto,64"
+                            <Grid ColumnDefinitions="160,140,8,Auto,64"
                                   RowDefinitions="Auto,Auto,Auto"
                                   ColumnSpacing="8" RowSpacing="6"
                                   HorizontalAlignment="Left">
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Relationship"/>
-                                <ComboBox  Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="4"
+                                <ComboBox  Grid.Row="0" Grid.Column="1"
                                            ItemsSource="{Binding AvailableRelationships}"
                                            SelectedItem="{Binding Relationship, Mode=TwoWay}"
                                            HorizontalAlignment="Stretch"/>
@@ -171,7 +191,18 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:MdbInfoRow">
                                         <Grid ColumnDefinitions="140,*" Margin="0,1">
-                                            <TextBlock Grid.Column="0" Classes="MdbKey" Text="{Binding Key}"/>
+                                            <TextBlock Grid.Column="0" Classes="MdbKey"
+                                                       Text="{Binding Key}"
+                                                       VerticalAlignment="Top"
+                                                       IsVisible="{Binding ShowKeyCell}"/>
+
+                                            <!-- Attack-name headers span both columns so a
+                                                 long attack sentence wraps in full instead of
+                                                 being clipped in the key column. -->
+                                            <TextBlock Grid.Column="0" Grid.ColumnSpan="2"
+                                                       Classes="MdbAttackName"
+                                                       Text="{Binding Key}" TextWrapping="Wrap"
+                                                       IsVisible="{Binding FullWidth}"/>
 
                                             <!-- Plain rows render the value as text. -->
                                             <TextBlock Grid.Column="1" Classes="MdbValue"
@@ -217,39 +248,23 @@
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
 
-                                            <!-- Textblock-backed rows (Greet) render a clickable
-                                                 value that pops the command keywords the block
-                                                 responds to. -->
-                                            <Button Grid.Column="1" Classes="MdbLink"
-                                                    Content="{Binding Value}"
-                                                    HorizontalAlignment="Left"
-                                                    IsVisible="{Binding HasActions}">
-                                                <Button.Flyout>
-                                                    <Flyout Placement="Bottom">
-                                                        <StackPanel MaxWidth="560">
-                                                            <TextBlock Classes="SectionHeader"
-                                                                       Text="Responds to (indented lines are the effects that fire)"/>
-                                                            <!-- Right padding reserves a gutter so the overlay
-                                                                 vertical scrollbar doesn't sit on top of the text. -->
-                                                            <ScrollViewer MaxHeight="360"
-                                                                          Padding="0,0,16,0"
-                                                                          VerticalScrollBarVisibility="Auto"
-                                                                          HorizontalScrollBarVisibility="Auto">
-                                                                <ItemsControl ItemsSource="{Binding Actions}">
-                                                                    <ItemsControl.ItemTemplate>
-                                                                        <DataTemplate x:DataType="x:String">
-                                                                            <TextBlock Text="{Binding}"
-                                                                                       FontFamily="{StaticResource FontMono}"
-                                                                                       FontSize="11"
-                                                                                       TextWrapping="NoWrap" Margin="0,1"/>
-                                                                        </DataTemplate>
-                                                                    </ItemsControl.ItemTemplate>
-                                                                </ItemsControl>
-                                                            </ScrollViewer>
-                                                        </StackPanel>
-                                                    </Flyout>
-                                                </Button.Flyout>
-                                            </Button>
+                                            <!-- Textblock-backed rows (Greet) print the textblock
+                                                 number, then the command keywords the block
+                                                 responds to as an inline indented outline right
+                                                 underneath (indented lines are the effects that
+                                                 fire when the keyword is asked). -->
+                                            <StackPanel Grid.Column="1" IsVisible="{Binding HasActions}">
+                                                <TextBlock Classes="MdbValue" Text="{Binding Value}"/>
+                                                <ItemsControl ItemsSource="{Binding Actions}" Margin="0,2,0,0">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <TextBlock Classes="MdbAction"
+                                                                       Text="{Binding}"
+                                                                       TextWrapping="Wrap" Margin="0,1"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

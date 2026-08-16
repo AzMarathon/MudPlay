@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.18.13
+
+- Monster record: the Greet textblock's keyword/effect outline now prints inline right under the textblock number, instead of behind a click-to-open popup
+- Monster record: long attack names (e.g. "claws you with its plague-ridden claws") now wrap in full instead of being clipped in the Mob's Attacks list
+- Monster record: the Relationship dropdown and the Override Pre-attack / Override Attack boxes are narrower (they only ever hold short values), and the Name box is trimmed a little
+
 ## 3.18.12
 
 - Item-cast buffing no longer double-sends the re-equip: when a buff item (e.g. a warhorn in the off-hand) is used and the swap breaks a rest, auto-equip now stands off the borrowed slot while the item-cast's own restore runs, instead of also firing a redundant `wear` the game rejects
