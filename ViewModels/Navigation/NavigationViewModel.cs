@@ -2629,12 +2629,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public void OnRoomLeftClicked(RoomKey key)
     {
         // Any left-click refreshes the ROOM INFO panel's contents (it's informational
-        // and doesn't consume the click). Only auto-open it in Idle mode, though — in
-        // LoopBuild / AutoLair / ExpEstimator the click is placing a waypoint, so
-        // popping the panel open on every click would fight the building flow. It still
-        // updates in place if the user has it open.
+        // and doesn't consume the click), but never forces the panel open — its expand
+        // state is the user's to set. Collapsed stays collapsed; when the user expands
+        // it, it already shows the last-clicked room.
         RoomInfo.Show(key);
-        if (CurrentMode == NavigationMode.Idle) IsRoomInfoExpanded = true;
 
         switch (CurrentMode)
         {

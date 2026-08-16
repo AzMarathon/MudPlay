@@ -564,8 +564,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetMonsterGameDataOpener(OpenMonsterGameData);
         AppServices.Current.SetMonstersAccuracyOpener(OpenMonstersWithAccuracy);
         AppServices.Current.SetRoomGameDataOpener(OpenRoomGameData);
-        // Navigation Room Info panel: room-spell + shop links jump to their records.
-        AppServices.Current.SetSpellGameDataOpener(OpenSpellGameData);
+        // Navigation Room Info panel: the shop link jumps to the shop's browser record.
         AppServices.Current.SetShopGameDataOpener(OpenShopGameData);
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
@@ -3568,15 +3567,6 @@ public partial class MainWindowViewModel : ObservableObject
         ShowGameDataBrowser("rooms",
             row => string.Equals(row.Get("Map Number"),  mapStr,  StringComparison.Ordinal)
                 && string.Equals(row.Get("Room Number"), roomStr, StringComparison.Ordinal));
-    }
-
-    // Registered on AppServices so the Navigation Room Info panel's room-spell
-    // link jumps straight to the spell's Game Data record.
-    private void OpenSpellGameData(int spellNumber)
-    {
-        string numStr = spellNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        ShowGameDataBrowser("spells",
-            row => string.Equals(row.Get("Number"), numStr, StringComparison.Ordinal));
     }
 
     // Registered on AppServices so the Navigation Room Info panel's shop link

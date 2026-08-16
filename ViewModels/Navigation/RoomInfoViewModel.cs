@@ -112,13 +112,14 @@ public sealed partial class RoomInfoViewModel : ObservableObject
                 $"{shopName}(#{shop})", null, new RelayCommand(() => _services.OpenShopGameData(shop)));
         }
 
-        // Room spell — the cast-on-enter effect.
+        // Room spell — the cast-on-enter effect. Opens the spell record DIALOG (Message /
+        // Game-Data tabs), like the monster link, not a Game Data Browser jump.
         if (room.Spell > 0)
         {
             int spell = room.Spell;
             string spellName = _services.GameData.FindNameByNumber("Spells", spell) ?? $"Spell #{spell}";
             RoomSpellLink = new RoomDetailLink(
-                $"{spellName}(#{spell})", null, new RelayCommand(() => _services.OpenSpellGameData(spell)));
+                $"{spellName}(#{spell})", null, new AsyncRelayCommand(() => _services.OpenSpellRecordAsync(spell)));
         }
 
         RaiseSectionVisibility();
