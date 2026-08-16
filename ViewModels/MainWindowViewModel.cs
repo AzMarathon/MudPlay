@@ -3868,7 +3868,15 @@ public partial class MainWindowViewModel : ObservableObject
     // before any BBS is configured.
     private void SwitchActiveGameDataSet(string setName)
     {
-        AppServices.Current.GameData.SwitchSet(setName);
+        // Re-selecting / re-importing the already-active set: SwitchSet no-ops on
+        // an unchanged name, which after a re-import over the same set would leave
+        // the stale tables cached until the user swapped away and back. Force a
+        // re-ingest (fresh tables + ActiveSetChanged) in that case.
+        Services.GameDataCache cache = AppServices.Current.GameData;
+        if (string.Equals(cache.ActiveSet, setName, System.StringComparison.OrdinalIgnoreCase))
+            cache.ReloadActiveSet();
+        else
+            cache.SwitchSet(setName);
 
         BbsProfile? bbs = ResolveActiveBbs();
         if (bbs is not null)

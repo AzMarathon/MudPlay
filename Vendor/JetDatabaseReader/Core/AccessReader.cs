@@ -64,6 +64,24 @@ namespace JetDatabaseReader
         private const int  OBJ_TABLE     = 1;
         private const uint SYSTABLE_MASK = 0x80000002U;
 
+        // A chained (bitmask 0x00) LVAL page row is [next_dp: 4 bytes][data: the
+        // rest of the row]. The remainder is the memo payload (UTF-16LE for Jet4
+        // unicode memos); there is NO per-row length field, so the chunk length is
+        // simply rowSize - 4. The old chain reader assumed an 8-byte
+        // [next_dp(4)][len(4)] header and started the data 4 bytes too late,
+        // dropping the first 4 bytes = the first two UTF-16 characters of every
+        // memo that spanned more than one LVAL page ("class 1" -> "ass 1"). Kept as
+        // a tiny testable helper so the offset is pinned by a unit test.
+        internal static (uint NextDp, int DataStart, int DataLen) ParseLvalChainRow(
+            byte[] page, int rowStart, int rowSize)
+        {
+            uint nextDp = (uint)(page[rowStart]
+                               | (page[rowStart + 1] << 8)
+                               | (page[rowStart + 2] << 16)
+                               | (page[rowStart + 3] << 24));
+            return (nextDp, rowStart + 4, rowSize - 4);
+        }
+
         // ── Format-specific offsets ───────────────────────────────────────
 
         // Data page
@@ -1633,11 +1651,15 @@ namespace JetDatabaseReader
                     int rowSize = rowEnd - rowStart + 1;
                     if (rowSize < 8) return LvalChainResult.Failure($"rowSize {rowSize} < 8");
 
-                    // LVAL chain format: [next_dp(4)][data_len(4)][data...]
-                    currentDp = Ru32(page, rowStart);
-                    int dataLen = (int)Ru32(page, rowStart + 4);
-                    int dataStart = rowStart + 8;
-                    int availableData = Math.Min(dataLen, rowSize - 8);
+                    // Chained-LVAL row layout: [next_dp(4)][data...]. The remainder
+                    // of the row is the memo payload; there is NO per-row length
+                    // field, so the chunk is rowSize - 4 bytes, bounded by the
+                    // memo's remaining length. (See ParseLvalChainRow — the old code
+                    // assumed an 8-byte [next_dp(4)][len(4)] header, starting 4 bytes
+                    // too late and dropping the first two UTF-16 chars of every
+                    // chained memo: "class 1" imported as "ass 1".)
+                    (currentDp, int dataStart, int chunkLen) = ParseLvalChainRow(page, rowStart, rowSize);
+                    int availableData = Math.Min(chunkLen, maxLen - totalLen);
 
                     if (availableData > 0 && dataStart + availableData <= page.Length)
                     {
