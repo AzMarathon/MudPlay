@@ -194,6 +194,27 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
         </Style>
+        <!-- ROOM INFO title — the room name itself is the link to the room record.
+             Bold like a header but clickable (hand cursor, underline on hover). -->
+        <Style Selector="Button.RoomTitleLink">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.RoomTitleLink /template/ ContentPresenter">
+            <Setter Property="TextBlock.TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style Selector="Button.RoomTitleLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
         <!-- Muted sub-group label inside ROOM INFO. -->
         <Style Selector="TextBlock.RoomInfoGroup">
             <Setter Property="FontSize" Value="10"/>
@@ -964,20 +985,14 @@
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
                                     <StackPanel IsVisible="{Binding RoomInfo.HasRoom}" Spacing="2">
-                                        <TextBlock Text="{Binding RoomInfo.RoomName}"
-                                                   FontWeight="SemiBold" TextWrapping="Wrap"
-                                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                                        <!-- The room name itself opens the room's game-data record. -->
+                                        <Button Classes="RoomTitleLink"
+                                                Content="{Binding RoomInfo.RoomName}"
+                                                Command="{Binding RoomInfo.OpenRoomRecordCommand}"
+                                                ToolTip.Tip="Open this room's Game Data record"/>
                                         <TextBlock Text="{Binding RoomInfo.RoomKeyLabel}"
                                                    FontSize="11"
                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
-
-                                        <!-- Room record -->
-                                        <StackPanel IsVisible="{Binding RoomInfo.HasRoomRecord}" Spacing="1">
-                                            <TextBlock Classes="RoomInfoGroup" Text="Room record"/>
-                                            <Button Classes="RecordLink"
-                                                    Content="{Binding RoomInfo.RoomRecordLink.Text}"
-                                                    Command="{Binding RoomInfo.RoomRecordLink.Open}"/>
-                                        </StackPanel>
 
                                         <!-- Monsters -->
                                         <StackPanel IsVisible="{Binding RoomInfo.HasMonsters}" Spacing="1">

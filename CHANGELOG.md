@@ -4,8 +4,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.19.0
 
-- Navigation: new **ROOM INFO** rail section — left-click any room on the map to list clickable links to every game-data record attached to it (the room record, each monster that lairs/spawns/is placed there, each floor item, the shop, and the room's cast-on-enter spell); each link opens that record in the Game Data Browser
-- New room→floor-item index (`roomitem` placements) backing the Room Info floor-item links
+- Navigation: new **ROOM INFO** rail section — left-click any room on the map to list clickable links to everything attached to it: the room itself (its name links to the room record), each monster (lair / summoned / placed), each floor item, the shop, and the cast-on-enter room spell. A monster link opens the full monster record dialog; the room / item / shop / spell links open the record in the Game Data Browser
+- New room→floor-item index (`roomitem` placements) backing the floor-item links; monster records can now be opened by number from anywhere (shared MonsterRecordDialogService)
 
 ## 3.18.18
 

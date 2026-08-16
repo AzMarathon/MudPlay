@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.19.0**
-> - Navigation: new **ROOM INFO** rail section — left-click any room on the map to list clickable links to every game-data record attached to it (the room, each monster, each floor item, the shop, and the room spell); each link opens that record in the Game Data Browser
+> - Navigation: new **ROOM INFO** rail section — left-click any room on the map to list clickable links to everything attached to it (the room, each monster, each floor item, the shop, and the room spell). A monster link opens the full monster record dialog; the others open the record in the Game Data Browser
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

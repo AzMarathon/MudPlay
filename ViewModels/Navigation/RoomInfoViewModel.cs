@@ -20,6 +20,9 @@ public sealed partial class RoomInfoViewModel : ObservableObject
 {
     private readonly AppServices _services;
 
+    // Identity of the room currently shown — the target of the title-link command.
+    private RoomKey _key;
+
     public RoomInfoViewModel(AppServices services)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -31,12 +34,6 @@ public sealed partial class RoomInfoViewModel : ObservableObject
 
     [ObservableProperty] private string _roomName = string.Empty;
     [ObservableProperty] private string _roomKeyLabel = string.Empty;
-
-    // The room's own Rooms-table record.
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasRoomRecord))]
-    private RoomDetailLink? _roomRecordLink;
-    public bool HasRoomRecord => RoomRecordLink is not null;
 
     // The shop as a whole (when the room hosts one) — one link to its Shops record.
     [ObservableProperty]
@@ -60,6 +57,7 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     // NavigationViewModel.OnRoomLeftClicked on any left-click.
     public void Show(RoomKey key)
     {
+        _key = key;
         Monsters.Clear();
         FloorItems.Clear();
         ShopLink = null;
@@ -69,24 +67,16 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         Room? room = _services.RoomGraph.GetRoom(key);
         if (room is null)
         {
-            // No record for the key in the active set — still offer the room link so a
-            // click resolves to the (possibly empty) Rooms browser row.
+            // No record for the key in the active set — the title still links to the
+            // (possibly empty) Rooms browser row via OpenRoomRecord.
             RoomName = "???";
             RoomKeyLabel = key.ToString();
-            RoomRecordLink = new RoomDetailLink(
-                $"Room {key}", null,
-                new RelayCommand(() => _services.OpenRoomGameData(key.Map, key.Room)));
             RaiseSectionVisibility();
             return;
         }
 
         RoomName = room.DisplayName;
         RoomKeyLabel = $"Map {key.Map} · Room {key.Room}";
-
-        // The room record itself.
-        RoomRecordLink = new RoomDetailLink(
-            room.DisplayName, key.ToString(),
-            new RelayCommand(() => _services.OpenRoomGameData(key.Map, key.Room)));
 
         // Monsters — lair + summoned (shared resolver), then the placed NPC the
         // resolver omits (a boss / shopkeeper lives on the room's Npc field).
@@ -134,10 +124,15 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         RaiseSectionVisibility();
     }
 
+    // The room title itself is the link to the room's game-data record.
+    [RelayCommand]
+    private void OpenRoomRecord() => _services.OpenRoomGameData(_key.Map, _key.Room);
+
     // The label carries the monster's record number — "chest(#69)" — mirroring the
-    // room-detail popup so the panel doubles as a quick lookup key.
+    // room-detail popup so the panel doubles as a quick lookup key. Clicking opens the
+    // monster record DIALOG (like the item record), not a Game Data Browser jump.
     private RoomDetailLink MakeMonsterLink(int id, string name, string? note)
-        => new($"{name}(#{id})", note, new RelayCommand(() => _services.OpenMonsterGameData(id)));
+        => new($"{name}(#{id})", note, new AsyncRelayCommand(() => _services.OpenMonsterRecordAsync(id)));
 
     // HasMonsters / HasFloorItems track collection counts, not observable fields, so
     // a re-populate has to poke their bindings by hand.
