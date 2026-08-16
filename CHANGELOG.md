@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.18.13
+
+- Monster record: the Greet textblock now surfaces each keyword the block responds to as a chip right on the tab; click a keyword to fly out the effects it triggers — so a monster with dozens of keywords (e.g. The Grey Lord) stays compact instead of blowing the pane out
+- Monster record: long attack names (e.g. "claws you with its plague-ridden claws") now wrap in full instead of being clipped in the Mob's Attacks list
+- Monster record: the Name / Relationship / Override fields sit closer to their labels (labels right-aligned, columns tightened) and the whole editable panel is packed tighter vertically — less dead space between labels, headers, and boxes
+
 ## 3.18.12
 
 - Item-cast buffing no longer double-sends the re-equip: when a buff item (e.g. a warhorn in the off-hand) is used and the swap breaks a rest, auto-equip now stands off the borrowed slot while the item-cast's own restore runs, instead of also firing a redundant `wear` the game rejects
