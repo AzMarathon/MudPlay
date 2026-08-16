@@ -75,6 +75,18 @@ public sealed class AppServices
     public void SetRoomGameDataOpener(Action<int, int> opener) => _roomGameDataOpener = opener;
     public void OpenRoomGameData(int map, int room) => _roomGameDataOpener?.Invoke(map, room);
 
+    // Same indirection for the Spells section — lets the Navigation Room Info
+    // panel's room-spell link jump to the spell's Game Data record.
+    private Action<int>? _spellGameDataOpener;
+    public void SetSpellGameDataOpener(Action<int> opener) => _spellGameDataOpener = opener;
+    public void OpenSpellGameData(int spellNumber) => _spellGameDataOpener?.Invoke(spellNumber);
+
+    // Same indirection for the Shops section — lets the Navigation Room Info
+    // panel's shop link jump to the shop's Game Data record.
+    private Action<int>? _shopGameDataOpener;
+    public void SetShopGameDataOpener(Action<int> opener) => _shopGameDataOpener = opener;
+    public void OpenShopGameData(int shopNumber) => _shopGameDataOpener?.Invoke(shopNumber);
+
     // Opens (or re-focuses) the Navigation window and centres the map on a
     // given room. Used by the room-detail popup's clickable room title. No-op
     // until the main VM binds it.
@@ -1232,6 +1244,10 @@ public sealed class AppServices
     // rooms). Builds lazily on first query and self-invalidates on a set swap (no
     // ActiveSetChanged subscription).
     public ItemSourceIndex ItemSources { get; private set; } = null!;
+
+    // Room→floor-item index (TBInfo `roomitem` placements) backing the Navigation
+    // Room Info panel. Lazy + self-invalidating like ItemSources.
+    public RoomFloorItemIndex RoomFloorItems { get; private set; } = null!;
 
     // Active fulfiller for NeedKind.PathItem needs an NPC / room hands over for
     // free: on a one-shot walk-to that needs an uncarried item a deterministic
@@ -2396,6 +2412,11 @@ public sealed class AppServices
         // entries, so it's constructed after the store above. Lazy and
         // self-invalidating, so there's no ActiveSetChanged subscription to wire.
         ItemSources = new ItemSourceIndex(GameData, TBInfo, Log);
+
+        // RoomFloorItemIndex — the room→floor-item (`roomitem`) mapping for the
+        // Navigation Room Info panel. Reads TBInfo's typed entries like ItemSources;
+        // lazy and self-invalidating, so no ActiveSetChanged subscription.
+        RoomFloorItems = new RoomFloorItemIndex(GameData, TBInfo, Log);
 
         // Shared item-record opener — opens the item edit dialog by Number from any
         // surface (the Item Finder's double-click), reusing the browser's read-only

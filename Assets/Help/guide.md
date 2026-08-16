@@ -115,7 +115,7 @@ Three areas:
 
 - A **top status bar** — an engine badge reading **IDLE / WALKING / LOOPING / AUTO-LAIR**, a plain-English status line, the **Go to…** button, and a **search box**.
 - The **map** on the left.
-- A **right rail** of collapsible panels: **CURRENT NAV** (the live step list), **GOTO** (your favourites), **LOOPS + AUTO-LAIRS** (your saved circuits), and **EXP/HR ESTIMATOR** — with a **Navigation Management** button at the bottom for full editing.
+- A **right rail** of collapsible panels: **ROOM INFO** (records for the last-clicked room — see below), **CURRENT NAV** (the live step list), **GOTO** (your favourites), **LOOPS + AUTO-LAIRS** (your saved circuits), and **EXP/HR ESTIMATOR** — with a **Navigation Management** button at the bottom for full editing.
 
 A row of action chips — **Save**, **Run**, **Loop mode**, **Lair mode** — sits just above the map.
 
@@ -161,6 +161,8 @@ The **EXP/HR ESTIMATOR** panel in the right rail projects how much experience a 
 **Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on…**, and toggles to mark a room **Avoid** or **Stash**.
 
 **Shift+right-click** skips the menu when a room's only jump is unambiguous — a room with just an up exit, just a down exit, or a single teleport destination immediately follows it (recentres the map there) instead of opening the menu.
+
+**Left-click any room** to inspect it in the **ROOM INFO** rail panel (it opens to the top of the rail the moment you click). It lists clickable links to every game-data record attached to that room — the **room record** itself, each **monster** that lairs, is summoned, or is placed there, each **floor item** the room scatter-places (via its `roomitem` command), the **shop** as a whole when the room hosts one, and the room's cast-on-enter **room spell**. Clicking any link opens that record in the **Game Data Browser** — a quick way to jump from "what's in this room" to the full monster / item / shop / spell / room record without hunting through the browser's tables.
 
 The **Overlays ▾** button layers lairs, shops, and spell rooms onto the map and toggles the **Legend** — which you can **drag anywhere on the map** (it remembers where you put it; toggle it off and back on and it snaps back into view if the window has since shrunk). Route lines are colour-coded — walk-to **blue**, a running loop **green**, a loop you're previewing **red**, an Auto-Lair approach **orange**. Exit stubs carry their own colours (shown in the Legend): **red** for a trapped exit, **magenta** "Action required" for an exit you can't just walk — one that needs a command or in-room action to cross (a `go path`-style named exit, a lever, or an ask-a-guard door), and **cyan** for a hidden exit revealed with `sea`.
 

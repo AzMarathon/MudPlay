@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Navigation"
+        xmlns:gd="using:MudPlay.ViewModels.GameData.Edit"
         xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:controls="using:MudPlay.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -174,6 +175,31 @@
         </Style>
         <Style Selector="Expander.RailSection /template/ Border#ToggleButtonBackground">
             <Setter Property="Background" Value="Transparent"/>
+        </Style>
+
+        <!-- ROOM INFO clickable game-data record link — cyan mono, underline on
+             hover, chrome-free; mirrors the room-detail popup's MdbLink. -->
+        <Style Selector="Button.RecordLink">
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.RecordLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
+        <!-- Muted sub-group label inside ROOM INFO. -->
+        <Style Selector="TextBlock.RoomInfoGroup">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="Margin" Value="0,4,0,1"/>
         </Style>
 
         <!-- Engine-state badge in the top bar — Idle grey, Walking +
@@ -919,6 +945,90 @@
                              loop / Auto-Lair row can't sit flush under the
                              fixed Manage footer and read as cut off. -->
                         <StackPanel Spacing="4" Margin="0,0,0,12">
+
+                            <!-- ROOM INFO — populated on any left-click of a room;
+                                 clickable links to every game-data record attached
+                                 to it (room / monsters / floor items / shop / spell).
+                                 First in the rail so its auto-expand-on-click lands
+                                 at the top of the scroll view. -->
+                            <Expander Classes="RailSection"
+                                      IsExpanded="{Binding IsRoomInfoExpanded, Mode=TwoWay}">
+                                <Expander.Header>
+                                    <TextBlock Classes="RailSectionHeader" Text="ROOM INFO" Margin="0"/>
+                                </Expander.Header>
+                                <StackPanel Spacing="4" HorizontalAlignment="Stretch">
+
+                                    <TextBlock IsVisible="{Binding !RoomInfo.HasRoom}"
+                                               Text="Click a room on the map to inspect it."
+                                               TextWrapping="Wrap" FontSize="11"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+
+                                    <StackPanel IsVisible="{Binding RoomInfo.HasRoom}" Spacing="2">
+                                        <TextBlock Text="{Binding RoomInfo.RoomName}"
+                                                   FontWeight="SemiBold" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                                        <TextBlock Text="{Binding RoomInfo.RoomKeyLabel}"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+
+                                        <!-- Room record -->
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasRoomRecord}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Room record"/>
+                                            <Button Classes="RecordLink"
+                                                    Content="{Binding RoomInfo.RoomRecordLink.Text}"
+                                                    Command="{Binding RoomInfo.RoomRecordLink.Open}"/>
+                                        </StackPanel>
+
+                                        <!-- Monsters -->
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasMonsters}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Monsters"/>
+                                            <ItemsControl ItemsSource="{Binding RoomInfo.Monsters}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="gd:RoomDetailLink">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <Button Classes="RecordLink"
+                                                                    Content="{Binding Text}" Command="{Binding Open}"/>
+                                                            <TextBlock Text="{Binding Detail}"
+                                                                       IsVisible="{Binding HasDetail}"
+                                                                       FontSize="11" VerticalAlignment="Center"
+                                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <!-- Floor items -->
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasFloorItems}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Floor items"/>
+                                            <ItemsControl ItemsSource="{Binding RoomInfo.FloorItems}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="gd:RoomDetailLink">
+                                                        <Button Classes="RecordLink"
+                                                                Content="{Binding Text}" Command="{Binding Open}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <!-- Shop -->
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasShop}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Shop"/>
+                                            <Button Classes="RecordLink"
+                                                    Content="{Binding RoomInfo.ShopLink.Text}"
+                                                    Command="{Binding RoomInfo.ShopLink.Open}"/>
+                                        </StackPanel>
+
+                                        <!-- Room spell -->
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasRoomSpell}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Room spell"/>
+                                            <Button Classes="RecordLink"
+                                                    Content="{Binding RoomInfo.RoomSpellLink.Text}"
+                                                    Command="{Binding RoomInfo.RoomSpellLink.Open}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Expander>
 
                             <!-- CURRENT NAV. HorizontalAlignment=Stretch on
                                  the body StackPanel is the same width

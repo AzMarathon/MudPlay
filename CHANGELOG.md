@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.19.0
+
+- Navigation: new **ROOM INFO** rail section — left-click any room on the map to list clickable links to every game-data record attached to it (the room record, each monster that lairs/spawns/is placed there, each floor item, the shop, and the room's cast-on-enter spell); each link opens that record in the Game Data Browser
+- New room→floor-item index (`roomitem` placements) backing the Room Info floor-item links
+
 ## 3.18.18
 
 - Quest guides: a single-quoted `'command'` in a step is now a clickable green link — clicking it types that command at the game exactly as if you'd entered it in the terminal (macro/alias expansion included), alongside the existing clickable `(map/room)` walk links
