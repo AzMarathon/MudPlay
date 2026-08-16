@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.13**
-> - Monster record: the Greet textblock now surfaces each keyword the block responds to as a chip right on the tab; click a keyword to fly out the effects it triggers — so a monster with dozens of keywords stays compact instead of blowing the pane out
-> - Monster record: long attack names (e.g. "claws you with its plague-ridden claws") now wrap in full instead of being clipped in the Mob's Attacks list
-> - Monster record: the Name / Relationship / Override fields sit closer to their labels and the editable panel is packed tighter vertically — less dead space between labels, headers, and boxes
+> **Version 3.18.14**
+> - Game-data import: long textblock memos (those big enough to span more than one database page) no longer lose their first two characters — the Jet multi-page "long value" memo reader used a header 4 bytes too large, so e.g. a class-restricted quest's `class 1` directive imported as `ass 1` and never resolved to the class name. **Re-import your MDB(s) to correct already-imported data.**
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
