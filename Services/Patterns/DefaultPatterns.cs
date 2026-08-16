@@ -649,6 +649,13 @@ public static class DefaultPatterns
         // Lazy capture so the terminating period isn't swallowed.
         yield return new RegexPattern(KnownPatterns.LearnSpell,
             @"(?i)^You read .+ and learn the spell (.+?)\.\s*$");
+        // ParaMud's teaching-item wording — `read <code>` on a spellbook item
+        // confirms with "You add <name> to your spellbook!". Same signal as the
+        // learn-scroll line; group 1 is the full Name (resolved through
+        // MarkObtainedByName). Requiring "to your spellbook" keeps unrelated
+        // "You add <x> to your pack." lines from matching.
+        yield return new RegexPattern(KnownPatterns.LearnSpellFromItem,
+            @"(?i)^You add (.+?) to your spellbook!?\s*$");
 
         // ----- Trap-disarm flow ------------------------------------------
         // Direction capture is the LONG form (north / northeast / up /

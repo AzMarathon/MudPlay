@@ -44,7 +44,8 @@ public sealed class SpellBookViewModelTests : IDisposable
         SpellRow(103, "gated", "lvlg", magery: 1, mageryLvl: 1, reqLevel: 20),
     ];
 
-    private SpellbookState NewBook(int classNumber, int level, object[]? items = null, object[]? spells = null)
+    private SpellbookState NewBook(int classNumber, int level, object[]? items = null,
+                                   object[]? spells = null, object[]? tbInfo = null)
     {
         string dir = Path.Combine(_root, "set");
         Directory.CreateDirectory(dir);
@@ -52,6 +53,8 @@ public sealed class SpellBookViewModelTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "Classes.json"), JsonSerializer.Serialize(_classes));
         if (items is not null)
             File.WriteAllText(Path.Combine(dir, "Items.json"), JsonSerializer.Serialize(items));
+        if (tbInfo is not null)
+            File.WriteAllText(Path.Combine(dir, "TBInfo.json"), JsonSerializer.Serialize(tbInfo));
 
         GameDataCache cache = new(_root);
         cache.SwitchSet("set");
@@ -287,6 +290,91 @@ public sealed class SpellBookViewModelTests : IDisposable
         Assert.DoesNotContain("Universal Charm", vm.CastItems.Select(r => r.ItemName));
     }
 
+    // Double-click-to-teaching-item lookup: the item carrying a LearnSp (42) ability
+    // for the spell wins; a CastsSp (43) item that only casts it is NOT a teacher.
+    [Fact]
+    public void GetTeachingItemNumber_FindsLearnSpItem_ZeroWhenNoneTeaches()
+    {
+        object[] items =
+        [
+            TeachItemRow(300, "Tome of Starlight", teachesSpell: 100), // LearnSp → starlight (100)
+            ItemRow(301, "Wand of Arc", castSpell: 101, useCount: -1), // only CASTS arc, doesn't teach
+        ];
+        SpellbookState book = NewBook(classNumber: 12, level: 5, items: items); // Mage
+
+        Assert.Equal(300, book.GetTeachingItemNumber(100)); // taught by the tome
+        Assert.Equal(0, book.GetTeachingItemNumber(101));   // cast-on-use only → no teacher
+        Assert.Equal(0, book.GetTeachingItemNumber(999));   // unknown spell → none
+    }
+
+    // A trainer-taught spell (no teaching item) resolves the NPC that teaches it from
+    // its "Learned From" annotation, so the Spell Book's double-click can open the
+    // NPC's record instead of an item's.
+    [Fact]
+    public void GetTeachingNpcNumber_FromLearnedFrom_ZeroWhenNotNpcTaught()
+    {
+        object[] spells =
+        [
+            new Dictionary<string, object>
+            {
+                ["Number"] = 100, ["Name"] = "divine disfavour", ["Short"] = "disf",
+                ["Magery"] = 2, ["MageryLVL"] = 1, ["ReqLevel"] = 19,
+                ["Learned From"] = "NPC #696",
+            },
+            new Dictionary<string, object>
+            {
+                ["Number"] = 101, ["Name"] = "starlight", ["Short"] = "star",
+                ["Magery"] = 1, ["MageryLVL"] = 1, ["ReqLevel"] = 2,
+                ["Learned From"] = "Item #396",
+            },
+        ];
+        SpellbookState book = NewBook(classNumber: 12, level: 5, spells: spells);
+
+        Assert.Equal(696, book.GetTeachingNpcNumber(100)); // trainer-taught → the NPC
+        Assert.Equal(0, book.GetTeachingNpcNumber(101));   // item-taught → no NPC
+        Assert.Equal(0, book.GetTeachingNpcNumber(999));   // unknown spell → none
+    }
+
+    // A spell learned from an NPC trainer is gated by a TBInfo `check class:class
+    // N:minlevel M ... learnspell S` line at a level often HIGHER than the spell's
+    // ReqLevel (a Paladin's divine disfavour: ReqLevel 19 but trainer-gated to 50).
+    // The book must show that real unlock level and hide the spell below it.
+    [Fact]
+    public void TeachLevel_TrainerGate_RaisesUnlockLevel_AndFiltersBelowIt()
+    {
+        object[] tb =
+        [
+            new Dictionary<string, object>
+            {
+                ["Number"] = 1,
+                // starlight (#100, ReqLevel 2) is trainer-gated to level 40 for Mage (class 12).
+                ["Action"] = "check class:class 12:minlevel 40 999:price 5 1:learnspell 100:text 1\n",
+            },
+        ];
+        SpellbookState book = NewBook(classNumber: 12, level: 12, tbInfo: tb); // Mage, level 12
+
+        Assert.Equal(40, book.GetTeachLevels()[100]);
+
+        using SpellBookViewModel vm = new(book); // Show all OFF by default
+        // Hidden: effective unlock level 40 > character level 12 (ReqLevel 2 would have shown it).
+        Assert.DoesNotContain(vm.Rows, r => r.Short == "star");
+
+        vm.ShowAllSpells = true;
+        SpellBookRowViewModel star = vm.Rows.Single(r => r.Short == "star");
+        Assert.Equal(40, star.EffectiveLevel);   // max(ReqLevel 2, trainer 40)
+        Assert.Equal("40", star.ReqLevelText);
+    }
+
+    [Fact]
+    public void TeachLevel_NoTrainerGate_UsesSpellReqLevel()
+    {
+        SpellbookState book = NewBook(classNumber: 12, level: 50); // no TBInfo seeded
+        using SpellBookViewModel vm = new(book) { ShowAllSpells = true };
+
+        SpellBookRowViewModel star = vm.Rows.Single(r => r.Short == "star");
+        Assert.Equal(2, star.EffectiveLevel);   // falls back to ReqLevel
+    }
+
     [Fact]
     public void CastItems_EmptyWhenNoItemsTable()
     {
@@ -471,6 +559,24 @@ public sealed class SpellBookViewModelTests : IDisposable
         {
             row[$"Abil-{i}"] = i == 0 ? 43 : 0;
             row[$"AbilVal-{i}"] = i == 0 ? castSpell : 0;
+        }
+        return row;
+    }
+
+    // An item that TEACHES a spell — a LearnSp ability (code 42) in slot 0 whose
+    // value is the taught Spells.Number. No class/equippable gating: the teaching
+    // lookup scans every item for the ability.
+    private static Dictionary<string, object> TeachItemRow(int number, string name, int teachesSpell)
+    {
+        Dictionary<string, object> row = new()
+        {
+            ["Number"] = number,
+            ["Name"] = name,
+        };
+        for (int i = 0; i < 20; i++)
+        {
+            row[$"Abil-{i}"] = i == 0 ? 42 : 0;
+            row[$"AbilVal-{i}"] = i == 0 ? teachesSpell : 0;
         }
         return row;
     }

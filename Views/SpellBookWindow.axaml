@@ -11,6 +11,24 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
+    <Window.Styles>
+        <!-- Spell-grid cell colours are set via classes (NOT a local Foreground) so
+             the selected-row override below can win — a local value beats a
+             pseudo-class style, which is why the dim Lvl / Mana / Code text used to
+             wash out (barely readable) on the selection highlight. -->
+        <Style Selector="TextBlock.cellGlyph"><Setter Property="Foreground" Value="{StaticResource SeverityInfoBrush}"/></Style>
+        <Style Selector="TextBlock.cellCode"><Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/></Style>
+        <Style Selector="TextBlock.cellName"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
+        <Style Selector="TextBlock.cellDim"><Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/></Style>
+        <Style Selector="TextBlock.cellEffect"><Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/></Style>
+        <!-- Selected row: force bright, high-contrast text on every cell. -->
+        <Style Selector="DataGridRow:selected TextBlock.cellGlyph"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
+        <Style Selector="DataGridRow:selected TextBlock.cellCode"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
+        <Style Selector="DataGridRow:selected TextBlock.cellName"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
+        <Style Selector="DataGridRow:selected TextBlock.cellDim"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
+        <Style Selector="DataGridRow:selected TextBlock.cellEffect"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
+    </Window.Styles>
+
     <DockPanel LastChildFill="True">
 
         <!-- ============ Control strip ============ -->
@@ -134,6 +152,7 @@
              view defeats compiled-binding item-type inference, matching the
              SpellCoverageReportWindow pattern. -->
         <DataGrid ItemsSource="{Binding Rows}"
+                  DoubleTapped="OnSpellRowDoubleTapped"
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="0"
                   IsReadOnly="True"
@@ -142,42 +161,58 @@
                   CanUserResizeColumns="True"
                   CanUserReorderColumns="True"
                   HorizontalScrollBarVisibility="Auto"
-                  VerticalScrollBarVisibility="Auto">
+                  VerticalScrollBarVisibility="Auto"
+                  ToolTip.Tip="Double-click a spell to open the record of the item — or trainer NPC — that teaches it.">
             <DataGrid.Columns>
-                <DataGridTextColumn Header=""     Binding="{ReflectionBinding ObtainedGlyph}" SortMemberPath="IsObtained"
-                                    Width="34" FontFamily="{StaticResource FontMono}" Foreground="{StaticResource SeverityInfoBrush}"/>
-                <DataGridTextColumn Header="Code" Binding="{ReflectionBinding Short}"        SortMemberPath="Short"
-                                    Width="72" FontFamily="{StaticResource FontMono}" Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="Name" Binding="{ReflectionBinding Name}"         SortMemberPath="Name"
-                                    Width="160" Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTemplateColumn Header="Lvl" SortMemberPath="ReqLevel" Width="72">
+                <DataGridTemplateColumn Header="" SortMemberPath="IsObtained" Width="34">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:SpellBookRowViewModel">
-                            <TextBlock Text="{Binding ReqLevelText}"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       FontFamily="{StaticResource FontMono}"
-                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                            <TextBlock Text="{Binding ObtainedGlyph}" Classes="cellGlyph"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       FontFamily="{StaticResource FontMono}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Code" SortMemberPath="Short" Width="72">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="vm:SpellBookRowViewModel">
+                            <TextBlock Text="{Binding Short}" Classes="cellCode"
+                                       VerticalAlignment="Center" Margin="12,0,0,0"
+                                       FontFamily="{StaticResource FontMono}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Name" SortMemberPath="Name" Width="160">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="vm:SpellBookRowViewModel">
+                            <TextBlock Text="{Binding Name}" Classes="cellName"
+                                       VerticalAlignment="Center" Margin="4,0,0,0"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Lvl" SortMemberPath="EffectiveLevel" Width="72">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="vm:SpellBookRowViewModel">
+                            <TextBlock Text="{Binding ReqLevelText}" Classes="cellDim"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       FontFamily="{StaticResource FontMono}"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <DataGridTemplateColumn Header="Mana" SortMemberPath="Mana" Width="72">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:SpellBookRowViewModel">
-                            <TextBlock Text="{Binding ManaText}"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       FontFamily="{StaticResource FontMono}"
-                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                            <TextBlock Text="{Binding ManaText}" Classes="cellDim"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       FontFamily="{StaticResource FontMono}"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <DataGridTemplateColumn Header="Effect" SortMemberPath="EffectText" Width="*" MinWidth="220">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:SpellBookRowViewModel">
-                            <TextBlock Text="{Binding EffectText}"
+                            <TextBlock Text="{Binding EffectText}" Classes="cellEffect"
                                        ToolTip.Tip="{Binding FormulaText}"
-                                       Foreground="{StaticResource ChromeFgSecBrush}"
                                        FontFamily="{StaticResource FontMono}"
                                        FontSize="11"
                                        Margin="8,0"

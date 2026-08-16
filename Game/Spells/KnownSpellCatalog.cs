@@ -285,6 +285,11 @@ public sealed class KnownSpellCatalog
     // slot's AbilVal is the character level required to wear / use the item.
     private const int MinLevelAbilityCode = 135;
 
+    // MajorMUD ability code for a teaching item ("LearnSp"): the slot's AbilVal is
+    // the Spells.Number the item teaches when read. Distinct from CastsSp (43),
+    // which casts a spell on use rather than teaching it.
+    private const int LearnSpAbilityCode = 42;
+
     // Items carry 20 ability slots (Abil-0..19) vs the 10 on Spells / Classes.
     private const int ItemAbilSlots = 20;
 
@@ -394,6 +399,103 @@ public sealed class KnownSpellCatalog
             return byItem != 0 ? byItem : string.Compare(a.SpellName, b.SpellName, StringComparison.OrdinalIgnoreCase);
         });
         return results;
+    }
+
+    // The Items.Number of the item that TEACHES the given spell — an Items row
+    // carrying a LearnSp ability (code 42) whose value is the taught Spells.Number.
+    // 0 when no item teaches it (trainer-taught spells learn from an NPC, not an
+    // item) or no Items table is loaded. Powers the Spell Book's double-click-to-
+    // item-record. A full-table scan, run only on that click.
+    //
+    // Matched on the EXACT spell number, deliberately: the data carries same-named
+    // spells at different magery levels (e.g. divine disfavour #67 universal /
+    // MageryLVL 2, taught by a scroll, vs #5087 Paladin-only / MageryLVL 1, taught
+    // by a trainer). The Spell Book already shows only the version the class can
+    // actually learn, so the teaching item must be for THAT version — matching a
+    // same-named sibling would point at a scroll for a spell the class can't learn.
+    public int GetTeachingItemNumber(int spellNumber)
+    {
+        if (spellNumber <= 0) return 0;
+        JsonDocument? items = _cache.GetRawTable("Items");
+        if (items is null) return 0;
+
+        foreach (JsonElement row in items.RootElement.EnumerateArray())
+            for (int i = 0; i < ItemAbilSlots; i++)
+                if (ReadInt(row, $"Abil-{i}") == LearnSpAbilityCode
+                    && ReadInt(row, $"AbilVal-{i}") == spellNumber)
+                    return ReadInt(row, "Number");
+        return 0;
+    }
+
+    private static readonly Regex LearnedFromNpcRe =
+        new(@"NPC\s*#\s*(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // The Monsters.Number of the NPC that teaches this spell — from the spell's
+    // "Learned From" annotation ("NPC #696"), first NPC when several are listed. 0
+    // when the spell isn't NPC-taught. Backs the Spell Book's double-click for
+    // trainer-taught spells (which have no teaching item — a Paladin's divine
+    // disfavour / greater healing learn from the gaunt one spell-weaver, #696).
+    public int GetTeachingNpcNumber(int spellNumber)
+    {
+        if (spellNumber <= 0) return 0;
+        JsonDocument? doc = _cache.GetRawTable("Spells");
+        if (doc is null) return 0;
+
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            if (ReadInt(row, "Number") != spellNumber) continue;
+            Match m = LearnedFromNpcRe.Match(ReadString(row, "Learned From") ?? string.Empty);
+            return m.Success && int.TryParse(m.Groups[1].Value, out int n) ? n : 0;
+        }
+        return 0;
+    }
+
+    // TBInfo teaching-script tokens: a line teaching a spell to a class reads e.g.
+    // `check class:class 3:minlevel 50 4025:price ...:learnspell 5087:message 4031`
+    // — the class number, the min level gate, and one or more taught spells. The
+    // data is dirty (truncated tokens), so match tolerantly per token rather than
+    // parsing the whole grammar.
+    private static readonly Regex TeachClassRe    = new(@"\bclass\s+(\d+)",      RegexOptions.Compiled);
+    private static readonly Regex TeachMinLevelRe = new(@"\bminlevel\s+(\d+)",   RegexOptions.Compiled);
+    private static readonly Regex TeachLearnRe    = new(@"\blearnspell\s+(\d+)", RegexOptions.Compiled);
+
+    // Per-class trainer LEARN-level gates, parsed from the TBInfo teaching scripts.
+    // A spell learned from an NPC (Spells."Learned From" = "NPC #...") is gated by a
+    // `check class:class N:minlevel M ... learnspell S` line: class N can't learn
+    // spell S until level M — often HIGHER than the spell's own ReqLevel (a Paladin's
+    // divine disfavour #5087 gates at 50, not the spell row's ReqLevel 19). Returns
+    // spellNumber → the lowest such M across every trainer for classNumber, so the
+    // Spell Book can show the real unlock level instead of the misleading ReqLevel.
+    // Empty when the class has no trainer-gated spells or there's no TBInfo table.
+    public IReadOnlyDictionary<int, int> BuildTeachLevelsForClass(int classNumber)
+    {
+        Dictionary<int, int> result = new();
+        if (classNumber < 1) return result;
+        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        if (doc is null) return result;
+
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            string? action = ReadString(row, "Action");
+            if (string.IsNullOrEmpty(action)
+                || !action.Contains("learnspell", System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            foreach (string line in action.Split('\n'))
+            {
+                Match cm = TeachClassRe.Match(line);
+                Match lm = TeachMinLevelRe.Match(line);
+                if (!cm.Success || !lm.Success) continue;
+                if (!int.TryParse(cm.Groups[1].Value, out int cls) || cls != classNumber) continue;
+                if (!int.TryParse(lm.Groups[1].Value, out int lvl)) continue;
+
+                foreach (Match sm in TeachLearnRe.Matches(line))
+                    if (int.TryParse(sm.Groups[1].Value, out int spell))
+                        result[spell] = result.TryGetValue(spell, out int cur)
+                            ? System.Math.Min(cur, lvl) : lvl;
+            }
+        }
+        return result;
     }
 
     // Render a cast item's spell as a compact affect line ("AC +10", "Dmg 14–22",

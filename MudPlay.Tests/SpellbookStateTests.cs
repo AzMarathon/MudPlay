@@ -165,6 +165,42 @@ public sealed class SpellbookStateTests : IDisposable
         Assert.Same(first, book.AvailablePicks);
     }
 
+    // ----- AvailablePicks.Learned (the picker's unlearned guard) ---------
+
+    [Fact]
+    public void AvailablePicks_NothingObtainedYet_AllLearned()
+    {
+        SpellbookState book = New().book;
+        book.Refresh(12, 1);   // Mage; obtained set unknown (never parsed)
+
+        // Nothing flagged before the spell list is known — no false strike-through.
+        Assert.All(book.AvailablePicks, p => Assert.True(p.Learned));
+    }
+
+    [Fact]
+    public void AvailablePicks_KnownObtainedSet_FlagsUnlearned()
+    {
+        SpellbookState book = New().book;
+        book.Refresh(12, 1);
+        book.SetObtainedByNames(new[] { "starlight" });
+
+        Assert.True(book.AvailablePicks.Single(p => p.Short == "star").Learned);
+        Assert.False(book.AvailablePicks.Single(p => p.Short == "high").Learned);
+    }
+
+    [Fact]
+    public void AvailablePicks_LearnLine_FlipsToLearnedLive()
+    {
+        SpellbookState book = New().book;
+        book.Refresh(12, 1);
+        book.SetObtainedByNames(new[] { "starlight" });   // establishes a known set
+        Assert.False(book.AvailablePicks.Single(p => p.Short == "high").Learned);
+
+        // The "You add high arc to your spellbook!" path.
+        book.MarkObtainedByName("high arc");
+        Assert.True(book.AvailablePicks.Single(p => p.Short == "high").Learned);
+    }
+
     // ----- obtained set -------------------------------------------------
 
     [Fact]

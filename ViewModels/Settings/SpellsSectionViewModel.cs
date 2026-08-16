@@ -29,6 +29,8 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     private readonly ProfileService _profile;
     private readonly GameDataCache _gameData;
     private readonly Game.Spells.SpellbookState _spellbook;
+    private readonly Game.Inventory.InventoryManager _inventory;
+    private readonly ItemNameStore _itemNames;
     private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
@@ -70,17 +72,21 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     // on a class / level change (level gates the item list).
     public IReadOnlyList<Game.Spells.SpellPick> BlessSpellSuggestions
         => _blessSuggestions ??= ComposeBlessSuggestions(
-            _spellbook.AvailablePicks, _spellbook.GetCastItems(), _spellbook.Level);
+            _spellbook.AvailablePicks, _spellbook.GetCastItems(), _spellbook.Level,
+            BuildPossessedItemPredicate());
 
     // Compose the Bless suggestion list. Static + pure so the unlimited-only /
     // level-gate / token-format logic is unit-tested without the AppServices-bound
     // spellbook. Limited-charge items are excluded — they can't sustain a recast
     // loop, so they stay a manual-use affair. Items are appended after the spells,
-    // ordered by their use-level (lowest first) then name.
+    // ordered by their use-level (lowest first) then name. isPossessed marks each
+    // item-cast Learned when the character holds it (null ⇒ inventory unknown ⇒ all
+    // held, so nothing is falsely flagged).
     internal static IReadOnlyList<Game.Spells.SpellPick> ComposeBlessSuggestions(
         IReadOnlyList<Game.Spells.SpellPick> spellPicks,
         IReadOnlyList<Game.Spells.ClassCastItem> castItems,
-        int level)
+        int level,
+        System.Func<Game.Spells.ClassCastItem, bool>? isPossessed = null)
     {
         List<Game.Spells.SpellPick> picks = new(spellPicks);
         IEnumerable<Game.Spells.ClassCastItem> usable = castItems
@@ -89,9 +95,31 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
             .OrderBy(item => item.MinLevel)
             .ThenBy(item => item.ItemName, StringComparer.OrdinalIgnoreCase);
         foreach (Game.Spells.ClassCastItem item in usable)
+            // A cast-on-use item is "available" only while carried/worn, so a bless
+            // slot pointing at one you no longer hold flags red exactly like an
+            // unlearned spell — via the same Learned flag.
             picks.Add(new Game.Spells.SpellPick(
-                Game.Spells.ItemCastToken.Format(item.ItemName), BlessItemLabel(item)));
+                Game.Spells.ItemCastToken.Format(item.ItemName), BlessItemLabel(item),
+                Learned: isPossessed?.Invoke(item) ?? true));
         return picks;
+    }
+
+    // Which cast-on-use items the character currently holds (worn or carried),
+    // resolved to Items.Number through the name store so matching is by identity,
+    // not fuzzy display name. Returns null when the inventory has never been
+    // observed — item-casts are then treated as held (never falsely flagged),
+    // mirroring the unknown-spell-list case.
+    private System.Func<Game.Spells.ClassCastItem, bool>? BuildPossessedItemPredicate()
+    {
+        Game.Inventory.InventorySnapshot snap = _inventory.Snapshot;
+        if (snap.LastUpdated == System.DateTimeOffset.MinValue) return null;
+
+        HashSet<int> owned = new();
+        foreach (Game.Inventory.EquippedItem e in snap.EquippedItems)
+            if (_itemNames.FindByName(e.Name) is int n) owned.Add(n);
+        foreach (string name in snap.CarriedItems)
+            if (_itemNames.FindByName(name) is int n) owned.Add(n);
+        return item => owned.Contains(item.ItemNumber);
     }
 
     // The dropdown sub-label for a cast-on-use item entry: the spell it casts,
@@ -158,12 +186,24 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     // ----- Healing / regen ------------------------------------------
 
-    [ObservableProperty] private string? _minorHealSpell;
-    [ObservableProperty] private string? _majorHealSpell;
-    [ObservableProperty] private string? _hpRegenSpell;
-    [ObservableProperty] private string? _maRegenSpell;
-    [ObservableProperty] private string? _whenHpFullSpell;
-    [ObservableProperty] private string? _whenMaFullSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MinorHealSpellUnlearned))]
+    private string? _minorHealSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MajorHealSpellUnlearned))]
+    private string? _majorHealSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HpRegenSpellUnlearned))]
+    private string? _hpRegenSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MaRegenSpellUnlearned))]
+    private string? _maRegenSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WhenHpFullSpellUnlearned))]
+    private string? _whenHpFullSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WhenMaFullSpellUnlearned))]
+    private string? _whenMaFullSpell;
 
     // ----- Mana-regen reroll (Paradigm roll spells) -----------------
     // Empty threshold = rerolling off (the spell just recasts on expiry).
@@ -180,11 +220,36 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     // ----- Cures + utility ------------------------------------------
 
-    [ObservableProperty] private string? _cureHoldsSpell;
-    [ObservableProperty] private string? _curePoisonSpell;
-    [ObservableProperty] private string? _cureDiseaseSpell;
-    [ObservableProperty] private string? _cureBlindnessSpell;
-    [ObservableProperty] private string? _roomLightSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CureHoldsSpellUnlearned))]
+    private string? _cureHoldsSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CurePoisonSpellUnlearned))]
+    private string? _curePoisonSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CureDiseaseSpellUnlearned))]
+    private string? _cureDiseaseSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CureBlindnessSpellUnlearned))]
+    private string? _cureBlindnessSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RoomLightSpellUnlearned))]
+    private string? _roomLightSpell;
+
+    // Red-outline flags — the slot names a spell the character hasn't learned.
+    // All eleven pick from SpellSuggestions (spell-only). Re-raised on the name
+    // change (attributes above) and on a spellbook change (OnSpellbookChanged).
+    public bool MinorHealSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, MinorHealSpell);
+    public bool MajorHealSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, MajorHealSpell);
+    public bool HpRegenSpellUnlearned       => IsSpellUnlearned(SpellSuggestions, HpRegenSpell);
+    public bool MaRegenSpellUnlearned       => IsSpellUnlearned(SpellSuggestions, MaRegenSpell);
+    public bool WhenHpFullSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, WhenHpFullSpell);
+    public bool WhenMaFullSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, WhenMaFullSpell);
+    public bool CureHoldsSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, CureHoldsSpell);
+    public bool CurePoisonSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, CurePoisonSpell);
+    public bool CureDiseaseSpellUnlearned   => IsSpellUnlearned(SpellSuggestions, CureDiseaseSpell);
+    public bool CureBlindnessSpellUnlearned => IsSpellUnlearned(SpellSuggestions, CureBlindnessSpell);
+    public bool RoomLightSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, RoomLightSpell);
 
     // ----- Bless slots (realm-sized: Stock 10 / ParaMud 15) ---------
 
@@ -223,17 +288,23 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         _profile = profile;
         _gameData = gameData;
         _spellbook = AppServices.Current.Spellbook;
+        _inventory = AppServices.Current.Inventory;
+        _itemNames = AppServices.Current.ItemNames;
         Priority = new PriorityRankingViewModel(MarkDirty);
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
         _spellbook.Changed += OnSpellbookChanged;
         _gameData.ActiveSetChanged += OnRealmChanged;
+        // A bless picker's cast-on-use ITEM entries are "available" only while the
+        // item is carried/worn, so re-gate them when the inventory changes.
+        _inventory.Changed += OnInventoryChanged;
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
             _spellbook.Changed -= OnSpellbookChanged;
             _gameData.ActiveSetChanged -= OnRealmChanged;
+            _inventory.Changed -= OnInventoryChanged;
         });
         _suppressDirty = true;
         LoadFromProfile();
@@ -247,6 +318,29 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(BlessSpellSuggestions));
         // Class / level swap rescales the roll range shown in the reroll hint.
         OnPropertyChanged(nameof(ManaRegenRerollHint));
+        // The learned set (hence every slot's red-outline flag) just changed.
+        OnPropertyChanged(nameof(MinorHealSpellUnlearned));
+        OnPropertyChanged(nameof(MajorHealSpellUnlearned));
+        OnPropertyChanged(nameof(HpRegenSpellUnlearned));
+        OnPropertyChanged(nameof(MaRegenSpellUnlearned));
+        OnPropertyChanged(nameof(WhenHpFullSpellUnlearned));
+        OnPropertyChanged(nameof(WhenMaFullSpellUnlearned));
+        OnPropertyChanged(nameof(CureHoldsSpellUnlearned));
+        OnPropertyChanged(nameof(CurePoisonSpellUnlearned));
+        OnPropertyChanged(nameof(CureDiseaseSpellUnlearned));
+        OnPropertyChanged(nameof(CureBlindnessSpellUnlearned));
+        OnPropertyChanged(nameof(RoomLightSpellUnlearned));
+        foreach (SelfBlessSlotViewModel slot in BlessSlots) slot.RefreshUnlearned();
+    }
+
+    // Inventory changed — only the bless picker's cast-on-use ITEM entries depend on
+    // what's carried, so re-gate just those (learned spells + the heal/cure slots
+    // are unaffected).
+    private void OnInventoryChanged()
+    {
+        _blessSuggestions = null;
+        OnPropertyChanged(nameof(BlessSpellSuggestions));
+        foreach (SelfBlessSlotViewModel slot in BlessSlots) slot.RefreshUnlearned();
     }
 
     // Resolves the current MaRegenSpell pick to its roll range (nature tap /
@@ -455,7 +549,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
                 i,
                 full.TryGetValue(i, out string? code) ? code : null,
                 margins.TryGetValue(i, out int m) ? m : SpellsSettings.DefaultBlessRecastMarginSec,
-                MarkDirty));
+                MarkDirty,
+                // Bless slots pick from spells + cast-on-use items; only real spells
+                // the character hasn't learned flag red (item codes report Learned).
+                c => IsSpellUnlearned(BlessSpellSuggestions, c)));
     }
 
     // Merge the visible rows with the preserved out-of-range slots into the

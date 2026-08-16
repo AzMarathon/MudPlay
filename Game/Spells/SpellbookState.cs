@@ -91,6 +91,19 @@ public sealed class SpellbookState
     // alongside learnable spells. Empty when no class is set yet.
     public IReadOnlyList<ClassCastItem> GetCastItems() => _catalog.GetClassCastItems(ClassNumber);
 
+    // Items.Number of the first item that teaches the given spell (LearnSp), or 0
+    // when none does. Backs the Spell Book's double-click-to-item-record.
+    public int GetTeachingItemNumber(int spellNumber) => _catalog.GetTeachingItemNumber(spellNumber);
+
+    // Monsters.Number of the NPC that teaches the given spell (from "Learned From"),
+    // or 0 when it isn't NPC-taught. Backs the double-click for trainer-taught spells.
+    public int GetTeachingNpcNumber(int spellNumber) => _catalog.GetTeachingNpcNumber(spellNumber);
+
+    // spellNumber → the trainer LEARN-level gate for the current class (from TBInfo),
+    // when higher than the spell's ReqLevel. Backs the Spell Book's unlock-level
+    // column so it shows when THIS class can actually learn each spell.
+    public IReadOnlyDictionary<int, int> GetTeachLevels() => _catalog.BuildTeachLevelsForClass(ClassNumber);
+
     // True when the character has learned the spell with this Spells.Number.
     public bool IsObtained(int spellNumber) => _obtained.Contains(spellNumber);
 
@@ -130,15 +143,29 @@ public sealed class SpellbookState
         {
             _available = new List<KnownSpell>(_catalog.Query(classNumber, level: 0, charAlign));
             _obtained.RemoveWhere(n => !_available.Exists(s => s.Number == n));
-            _availablePicks = _available
-                .Where(s => !string.IsNullOrWhiteSpace(s.Short))
-                .GroupBy(s => s.Short.Trim(), StringComparer.OrdinalIgnoreCase)
-                .Select(g => new SpellPick(g.Key, g.First().Name.Trim()))
-                .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+            RebuildAvailablePicks();
         }
 
         if (classChanged || levelChanged) Changed?.Invoke();
+    }
+
+    // Rebuild the distinct-by-cast-code pick list, stamping each with whether the
+    // character has obtained it. Runs on a class change (new _available) AND on
+    // every obtained-set change (learn line / spells poll / reroll), so the
+    // picker's learned flag tracks live. When nothing is obtained yet (unknown —
+    // the spell list hasn't been parsed) every pick is Learned so the guard stays
+    // silent rather than striking through the whole class.
+    private void RebuildAvailablePicks()
+    {
+        bool obtainedKnown = _obtained.Count > 0;
+        _availablePicks = _available
+            .Where(s => !string.IsNullOrWhiteSpace(s.Short))
+            .GroupBy(s => s.Short.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => new SpellPick(
+                g.Key, g.First().Name.Trim(),
+                Learned: !obtainedKnown || g.Any(s => _obtained.Contains(s.Number))))
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     // Replace the obtained set with exactly the spells named in names (the
@@ -155,6 +182,7 @@ public sealed class SpellbookState
         if (next.SetEquals(_obtained)) return;
         _obtained.Clear();
         _obtained.UnionWith(next);
+        RebuildAvailablePicks();
         Changed?.Invoke();
     }
 
@@ -165,7 +193,11 @@ public sealed class SpellbookState
     public KnownSpell? MarkObtainedByName(string name)
     {
         if (FindAvailableByName(name) is not { } match) return null;
-        if (_obtained.Add(match.Number)) Changed?.Invoke();
+        if (_obtained.Add(match.Number))
+        {
+            RebuildAvailablePicks();
+            Changed?.Invoke();
+        }
         return match;
     }
 
@@ -174,6 +206,7 @@ public sealed class SpellbookState
     {
         if (_obtained.Count == 0) return;
         _obtained.Clear();
+        RebuildAvailablePicks();
         Changed?.Invoke();
     }
 

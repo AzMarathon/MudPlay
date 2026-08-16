@@ -35,6 +35,19 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     // The rendered, filtered spell rows.
     public ObservableCollection<SpellBookRowViewModel> Rows { get; } = new();
 
+    // The Items.Number of the item that TEACHES this spell, or 0 when none does
+    // (trainer-taught spells — see TeachingNpcNumberFor). The window's double-click
+    // opens that item's record. Pure — the view owns the actual open so this VM
+    // stays a testable projection.
+    public int TeachingItemNumberFor(SpellBookRowViewModel? row)
+        => row is null ? 0 : _book.GetTeachingItemNumber(row.Number);
+
+    // The Monsters.Number of the NPC that teaches this spell, or 0 when it isn't
+    // NPC-taught. The window's double-click opens the NPC's record when the spell has
+    // no teaching item (a trainer-only spell like a Paladin's divine disfavour).
+    public int TeachingNpcNumberFor(SpellBookRowViewModel? row)
+        => row is null ? 0 : _book.GetTeachingNpcNumber(row.Number);
+
     // The class's cast-on-use items (wands / scrolls / potions), filtered by
     // the search box. Rendered in a section below the spell grid. Empty for a
     // class with no usable cast items.
@@ -118,18 +131,27 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
                 : System.Array.Empty<KnownSpell>();
         }
 
+        // Trainer learn-level gates for this class (TBInfo). A spell taught by an NPC
+        // often can't be learned until a level HIGHER than its ReqLevel (a Paladin's
+        // divine disfavour gates at 50, not 19); use that as the effective unlock level
+        // so the Lvl column and the level gate reflect when THIS class can learn it.
+        IReadOnlyDictionary<int, int> teachLevels = _book.GetTeachLevels();
+
         string filter = SearchText.Trim();
         Rows.Clear();
         foreach (KnownSpell spell in _book.Available)
         {
             bool obtained = _book.IsObtained(spell.Number);
             if (ShowObtainedOnly && !obtained) continue;
+            int teachLevel = teachLevels.TryGetValue(spell.Number, out int tl) ? tl : 0;
+            int effectiveLevel = System.Math.Max(spell.ReqLevel, teachLevel);
             // Level gate (default): hide above-level spells unless Show-all is on.
             // Skipped when the level is unknown (0) so a fresh book isn't empty.
-            if (!ShowAllSpells && _book.Level > 0 && spell.ReqLevel > _book.Level) continue;
+            if (!ShowAllSpells && _book.Level > 0 && effectiveLevel > _book.Level) continue;
             if (filter.Length > 0 && !Matches(spell, filter)) continue;
             Rows.Add(new SpellBookRowViewModel(
-                spell, obtained, _book.Level, ResolveChain, _book.ResolveSpellName, ResolveTextblockCasts));
+                spell, obtained, _book.Level, ResolveChain, _book.ResolveSpellName,
+                ResolveTextblockCasts, teachLevel));
         }
 
         // Cast-on-use items: a separate section, filtered by the same search
