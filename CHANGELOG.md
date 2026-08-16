@@ -6,7 +6,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Monster record: the Greet textblock now surfaces each keyword the block responds to as a chip right on the tab; click a keyword to fly out the effects it triggers — so a monster with dozens of keywords (e.g. The Grey Lord) stays compact instead of blowing the pane out
 - Monster record: long attack names (e.g. "claws you with its plague-ridden claws") now wrap in full instead of being clipped in the Mob's Attacks list
-- Monster record: the Name, Relationship, and Override Pre-attack / Override Attack fields sit closer to their labels (labels right-aligned, columns tightened) — no more dead space between a label and its box
+- Monster record: the Name / Relationship / Override fields sit closer to their labels (labels right-aligned, columns tightened) and the whole editable panel is packed tighter vertically — less dead space between labels, headers, and boxes
 
 ## 3.18.12
 

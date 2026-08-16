@@ -24,7 +24,7 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,6,0,4"/>
+            <Setter Property="Margin" Value="0,3,0,1"/>
         </Style>
         <Style Selector="TextBlock.MdbKey">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
@@ -80,14 +80,14 @@
                         BorderThickness="1" CornerRadius="3" Padding="10"
                         Margin="0,0,8,0">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="2">
                             <!-- Name + Use — left-aligned, value column fixed
                                  so they don't track the splitter. 240 comfortably
                                  fits the longest monster names + the Use-tier
                                  labels without the old excess width. -->
                             <TextBlock Classes="SectionHeader" Text="Monster"/>
                             <Grid ColumnDefinitions="68,240" RowDefinitions="Auto,Auto"
-                                  ColumnSpacing="8" RowSpacing="6"
+                                  ColumnSpacing="6" RowSpacing="4"
                                   HorizontalAlignment="Left">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Name"/>
                                 <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name, Mode=TwoWay}"/>
@@ -108,7 +108,7 @@
                             <TextBlock Classes="SectionHeader" Text="Details"/>
                             <Grid ColumnDefinitions="130,140,8,Auto,64"
                                   RowDefinitions="Auto,Auto,Auto"
-                                  ColumnSpacing="8" RowSpacing="6"
+                                  ColumnSpacing="6" RowSpacing="4"
                                   HorizontalAlignment="Left">
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Relationship"/>
@@ -135,7 +135,7 @@
                                  cleanly inside the pane instead of
                                  stretching all the way to the splitter. -->
                             <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="14"
-                                  HorizontalAlignment="Left" Margin="0,8,0,0">
+                                  HorizontalAlignment="Left" Margin="0,4,0,0">
                                 <Border Grid.Column="0" Width="220"
                                         BorderBrush="{StaticResource ChromeBorderBrush}"
                                         BorderThickness="1" CornerRadius="3" Padding="8">
