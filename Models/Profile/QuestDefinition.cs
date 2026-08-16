@@ -33,7 +33,10 @@ public sealed class QuestDefinition
     // state before the universal seed (or the user) supplies a name.
     public string Name { get; set; } = string.Empty;
 
-    // Whether the quest shows in the journal. Defaults to shown.
+    // Whether the quest shows in the journal. Defaults to shown. Governs the
+    // per-taste show/hide for a quest THIS character can complete; the opt-in to
+    // show a "Cannot complete" quest anyway is a per-character fact and lives on
+    // QuestProgress.ShowIfIneligible instead.
     public bool Visible { get; set; } = true;
 
     // User-edited step checklist as markdown, or null to fall back to the
@@ -61,6 +64,15 @@ public sealed class QuestDefinition
     // row as not-a-real-quest. It stays in the editor so it can be un-blocked.
     // Has no meaning on a manual quest (delete it instead). Defaults to false.
     public bool Blocked { get; set; }
+
+    // Class Numbers this quest is restricted to, or null/empty for no explicit
+    // restriction. A hand-set override for the genuinely class-locked quests the
+    // crawl can't detect reliably — Magebane (Witchunter), Tarl — where a stray
+    // unguarded grant in the data reads as an open path. When set, a character
+    // whose class isn't in the list is marked "Cannot complete" (and the quest is
+    // dropped from the login availability dump). Empty/null leaves eligibility to
+    // the crawl's own class/race guards. Editable per quest in the Quest editor.
+    public System.Collections.Generic.List<int>? ClassRestrict { get; set; }
 
     public QuestDefinition() { }
 

@@ -279,38 +279,57 @@ internal static partial class QuestTextFormatter
     [GeneratedRegex(@"^\[\s*[xX]?\s*\]")]
     private static partial Regex CheckboxMarker();
 
-    // Split a step label into render segments, isolating any (map/room) coordinate token
-    // (e.g. (5/297)) into its own segment carrying the parsed RoomKey so the view can
-    // render it as a clickable walk-to link; the surrounding prose stays as plain
-    // segments (null room). A coordinate whose numbers don't fit a positive int is left
+    // Split a step label into render segments, isolating the two clickable token
+    // kinds so the view can wrap each in a link: a (map/room) coordinate (e.g.
+    // (5/297)) carries the parsed RoomKey for a walk-to link; a single-quoted
+    // 'command' (e.g. 'ask jorah transport') carries the unquoted command text for
+    // a send-to-game link. Surrounding prose stays as plain segments (both null). A
+    // coordinate whose numbers don't fit a positive int, or an empty quote, is left
     // folded into the prose. Returns a single plain segment when the label holds no
-    // coordinate, and an empty list for empty input.
-    public static IReadOnlyList<(string Text, RoomKey? Room)> SplitRoomLinks(string text)
+    // token, and an empty list for empty input.
+    public static IReadOnlyList<(string Text, RoomKey? Room, string? Command)> SplitStepLinks(string text)
     {
-        var segments = new List<(string Text, RoomKey? Room)>();
+        var segments = new List<(string Text, RoomKey? Room, string? Command)>();
         if (string.IsNullOrEmpty(text)) return segments;
 
         int pos = 0;
-        foreach (Match m in RoomLink().Matches(text))
+        foreach (Match m in StepLink().Matches(text))
         {
-            // Non-positive or over-range coordinate: not a real room — leave the
-            // token in the prose run rather than offering a dead link.
-            if (!int.TryParse(m.Groups[1].Value, out int map)
-                || !int.TryParse(m.Groups[2].Value, out int room)
-                || map <= 0 || room <= 0)
-                continue;
+            if (m.Groups["map"].Success)
+            {
+                // Non-positive or over-range coordinate: not a real room — leave the
+                // token in the prose run rather than offering a dead link.
+                if (!int.TryParse(m.Groups["map"].Value, out int map)
+                    || !int.TryParse(m.Groups["room"].Value, out int room)
+                    || map <= 0 || room <= 0)
+                    continue;
 
-            if (m.Index > pos) segments.Add((text[pos..m.Index], null));
-            segments.Add((m.Value, new RoomKey(map, room)));
-            pos = m.Index + m.Length;
+                if (m.Index > pos) segments.Add((text[pos..m.Index], null, null));
+                segments.Add((m.Value, new RoomKey(map, room), null));
+                pos = m.Index + m.Length;
+            }
+            else // a 'command' quote
+            {
+                string command = m.Groups["cmd"].Value.Trim();
+                if (command.Length == 0) continue;   // empty quote — leave in prose
+
+                if (m.Index > pos) segments.Add((text[pos..m.Index], null, null));
+                segments.Add((m.Value, null, command));
+                pos = m.Index + m.Length;
+            }
         }
-        if (pos < text.Length) segments.Add((text[pos..], null));
+        if (pos < text.Length) segments.Add((text[pos..], null, null));
         return segments;
     }
 
-    // Map/room coordinate token: "(", digits, "/", digits, ")" — the link target.
-    [GeneratedRegex(@"\((\d+)/(\d+)\)")]
-    private static partial Regex RoomLink();
+    // A clickable quest-step token: either a (map/room) coordinate (walk link) or a
+    // single-quoted 'command' (send-to-game link). The command arm requires the
+    // quotes to sit on non-letter boundaries so a prose apostrophe (don't, they're,
+    // Jorah's) never opens a bogus quoted run — only a deliberately quoted command
+    // is isolated. Content is any non-apostrophe run, so an internal apostrophe ends
+    // the token (commands rarely carry one).
+    [GeneratedRegex(@"\((?<map>\d+)/(?<room>\d+)\)|(?<![A-Za-z])'(?<cmd>[^']+?)'(?![A-Za-z])")]
+    private static partial Regex StepLink();
 
     // "Room 9/1259" inside a Called-From string — a location's room reference.
     [GeneratedRegex(@"Room\s+(\d+)/(\d+)", RegexOptions.IgnoreCase)]

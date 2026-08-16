@@ -568,6 +568,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
         AppServices.Current.SetNavManagerOpener(OpenNavManager);
+        AppServices.Current.SetTypedInputSender(SendUserText);
 
         // Engine-state chip — same shape as the Navigation window's
         // top-bar badge (IDLE / WALKING / LOOPING / AUTO-LAIR). Lives

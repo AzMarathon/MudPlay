@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using MudPlay.Game.Calculators;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Quests;
@@ -99,6 +100,10 @@ public static class QuestCrawler
         // and the rest advance by relative addability). See DiscoverValueLadders.
         IReadOnlyDictionary<int, int> valueLadders = DiscoverValueLadders(rawChains, grantedFlags);
 
+        // Pass 5: which alignment (if any) each flag's quest gates on — the Quest tab's
+        // Evil/Neutral/Good checkboxes filter on this.
+        IReadOnlyDictionary<int, AlignmentBucket> flagAlignments = DetectFlagAlignments(rawChains);
+
         var quests = new List<CrawledQuest>();
         foreach (IGrouping<int, ParsedChain> flagGroup in chains.GroupBy(c => c.Flag).OrderBy(g => g.Key))
         {
@@ -106,12 +111,13 @@ public static class QuestCrawler
             List<ParsedChain> flagChains = flagGroup.ToList();
             (IReadOnlyList<int>? classRestrict, IReadOnlyList<int>? raceRestrict) = ResolveRestrictions(flagChains);
             IReadOnlyDictionary<int, int>? classLevels = ResolveClassLevels(flagChains, classRestrict);
+            AlignmentBucket? align = flagAlignments.TryGetValue(flag, out AlignmentBucket b) ? b : null;
             if (valueLadders.TryGetValue(flag, out int maxValue))
-                quests.AddRange(CrawlValueLadder(flag, rawChains, maxValue, grantedFlags, classId, classRestrict, raceRestrict, classLevels));
+                quests.AddRange(CrawlValueLadder(flag, rawChains, maxValue, grantedFlags, classId, classRestrict, raceRestrict, classLevels, align));
             else if (ladders.TryGetValue(flag, out IReadOnlyList<(int Step, int Level)>? ladder))
-                quests.AddRange(CrawlMultiPart(flag, flagChains, ladder, classId, classRestrict, raceRestrict, classLevels));
+                quests.AddRange(CrawlMultiPart(flag, flagChains, ladder, classId, classRestrict, raceRestrict, classLevels, align));
             else
-                quests.Add(CrawlSinglePart(flag, flagChains, classId, classRestrict, raceRestrict, classLevels));
+                quests.Add(CrawlSinglePart(flag, flagChains, classId, classRestrict, raceRestrict, classLevels, align));
         }
         return quests;
     }
@@ -139,6 +145,47 @@ public static class QuestCrawler
             ? null
             : real.SelectMany(c => c.RaceIds).Distinct().OrderBy(x => x).ToArray();
         return (classes, races);
+    }
+
+    // The alignment each flag's quest requires, read from the goodaligned/evilaligned
+    // gate directives on the chains that build it. A chain gating good-only tags the
+    // flag Good, evil-only tags Evil, and one bracketed by BOTH (a "not too good, not
+    // too evil" neutral range) tags Neutral — using only which gate types appear, never
+    // their thresholds. Abilities 126/127/128 are the canonical Good/Neutral/Evil
+    // alignment ladders, forced to their known bucket regardless of detection quirks;
+    // the same gate-shape detection catches any other alignment-gated quest. A flag
+    // with no alignment gate is absent from the map (not alignment-restricted).
+    private static Dictionary<int, AlignmentBucket> DetectFlagAlignments(IReadOnlyList<string> rawChains)
+    {
+        var result = new Dictionary<int, AlignmentBucket>();
+        foreach (string raw in rawChains)
+        {
+            bool hasGood = false, hasEvil = false;
+            var flags = new HashSet<int>();
+            foreach (string segment in raw.Split(':'))
+            {
+                string[] p = segment.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (p.Length == 0) continue;
+                switch (p[0].ToLowerInvariant())
+                {
+                    case "goodaligned": hasGood = true; break;
+                    case "evilaligned": hasEvil = true; break;
+                    case "giveability" or "addability" when p.Length >= 2 && int.TryParse(p[1], out int f):
+                        flags.Add(f);
+                        break;
+                }
+            }
+            if ((!hasGood && !hasEvil) || flags.Count == 0) continue;
+            AlignmentBucket bucket = hasGood && hasEvil ? AlignmentBucket.Neutral
+                                   : hasGood ? AlignmentBucket.Good
+                                   : AlignmentBucket.Evil;
+            foreach (int f in flags) result[f] = bucket;
+        }
+        // Canonical alignment ladders win over any per-chain detection quirk.
+        foreach ((int flag, AlignmentBucket canon) in
+                 new[] { (126, AlignmentBucket.Good), (127, AlignmentBucket.Neutral), (128, AlignmentBucket.Evil) })
+            if (result.ContainsKey(flag)) result[flag] = canon;
+        return result;
     }
 
     // The lowest level gate each restricted class faces for this quest: class Number →
@@ -336,7 +383,7 @@ public static class QuestCrawler
     private static IEnumerable<CrawledQuest> CrawlValueLadder(int flag, IReadOnlyList<string> rawChains,
         int maxValue, HashSet<int> grantedFlags, int? classId,
         IReadOnlyList<int>? classRestrict, IReadOnlyList<int>? raceRestrict,
-        IReadOnlyDictionary<int, int>? classLevels)
+        IReadOnlyDictionary<int, int>? classLevels, AlignmentBucket? alignment)
     {
         var parsed = new List<(int Value, ParsedChain Chain)>();
         var takenAnywhere = new HashSet<int>();
@@ -384,7 +431,7 @@ public static class QuestCrawler
             yield return new CrawledQuest(
                 flag, upper, level, bonuses, awards, classRestrict, raceRestrict, classLevels,
                 BandOrdinal: i + 1, StepRangeStart: rangeStart, StepRangeEnd: rangeEnd,
-                ProgressByValue: true, ExpAward: exp);
+                ProgressByValue: true, ExpAward: exp, RequiredAlignment: alignment);
         }
     }
 
@@ -462,7 +509,7 @@ public static class QuestCrawler
     // skill it teaches is the reward (Smash, Meditate, Perfect Stealth, SeeHidden).
     private static CrawledQuest CrawlSinglePart(int flag, List<ParsedChain> chains, int? classId,
         IReadOnlyList<int>? classRestrict, IReadOnlyList<int>? raceRestrict,
-        IReadOnlyDictionary<int, int>? classLevels)
+        IReadOnlyDictionary<int, int>? classLevels, AlignmentBucket? alignment)
     {
         int requiredLevel = ResolveLevel(chains, classId, classRestrict);
         IReadOnlyList<QuestBonus> bonuses = ResolveLowestRewardBonuses(chains, classId);
@@ -471,7 +518,7 @@ public static class QuestCrawler
         int exp = SumDistinctStepExp(chains.Select(c => (c.GiveStep, c.Exp)));
         return new CrawledQuest(
             flag, 0, requiredLevel, bonuses, awardItems, classRestrict, raceRestrict, classLevels,
-            AwardsAbility: awardsAbility, ExpAward: exp);
+            AwardsAbility: awardsAbility, ExpAward: exp, RequiredAlignment: alignment);
     }
 
     // A multi-part quest: one quest per ladder tier. Each band carries the reward group
@@ -485,7 +532,7 @@ public static class QuestCrawler
     private static IEnumerable<CrawledQuest> CrawlMultiPart(int flag, List<ParsedChain> chains,
         IReadOnlyList<(int Step, int Level)> ladder, int? classId,
         IReadOnlyList<int>? classRestrict, IReadOnlyList<int>? raceRestrict,
-        IReadOnlyDictionary<int, int>? classLevels)
+        IReadOnlyDictionary<int, int>? classLevels, AlignmentBucket? alignment)
     {
         var bandLevels = ladder.Select(m => m.Level).ToHashSet();
 
@@ -534,7 +581,8 @@ public static class QuestCrawler
 
             yield return new CrawledQuest(
                 flag, level, level, bonuses, items, classRestrict, raceRestrict, classLevels,
-                BandOrdinal: i + 1, StepRangeStart: rangeStart, StepRangeEnd: rangeEnd, ExpAward: exp);
+                BandOrdinal: i + 1, StepRangeStart: rangeStart, StepRangeEnd: rangeEnd, ExpAward: exp,
+                RequiredAlignment: alignment);
         }
     }
 

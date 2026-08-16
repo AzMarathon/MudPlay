@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.16**
-> - Startup: the three biggest game-data tables (Rooms / Monsters / Items) are parsed on a background thread as the app launches, ahead of the auto-loaded profile's set switch — trimming a chunk of the cold-start delay before the client can react to combat on reconnect (bigger sets benefit most)
-> - Game-data import: long textblock memos (those big enough to span more than one database page) no longer lose their first two characters — the Jet multi-page "long value" memo reader used a header 4 bytes too large, so e.g. a class-restricted quest's `class 1` directive imported as `ass 1` and never resolved to the class name. **Re-import your MDB(s) to correct already-imported data.**
-> - Game-data import: re-importing over the currently-active set now re-ingests the fresh tables immediately, instead of showing the old data until you switch sets and back
+> **Version 3.18.18**
+> - Quest guides: a single-quoted `'command'` in a step is now a clickable green link — clicking it types that command at the game exactly as if you'd entered it in the terminal, alongside the existing clickable `(map/room)` walk links
+> - Quest eligibility: three Evil / Neutral / Good checkboxes at the top of the Quest Status tab (saved per character, off by default) declare which alignment chain(s) you're on, so alignment-gated quests only show as available when their box is ticked
+> - Quest eligibility: the Quest editor's "Restrict to classes" control is a checkable class dropdown for the genuinely class-locked quests the crawler can't detect on its own (Magebane, Tarl)
+> - Quest journal: quests this character can't complete are hidden by default — tick "Show in quest journal" in the editor to keep one visible (saved per character)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

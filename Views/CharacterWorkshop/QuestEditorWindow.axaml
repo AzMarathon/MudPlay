@@ -57,7 +57,7 @@
 
             <!-- Detail editor for the selected quest -->
             <Grid Grid.Column="1" IsVisible="{Binding HasSelection}"
-                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*">
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*">
 
                 <!-- Flag / level context + crawled class/race restriction -->
                 <StackPanel Grid.Row="0" Spacing="2">
@@ -105,9 +105,10 @@
                 <!-- Visibility + class-resolved bonus -->
                 <Grid Grid.Row="4" ColumnDefinitions="Auto,*" Margin="0,8,0,0">
                     <CheckBox Grid.Column="0"
-                              IsChecked="{Binding SelectedQuest.Visible, Mode=TwoWay}"
+                              IsChecked="{Binding SelectedQuest.ShowInJournal, Mode=TwoWay}"
                               Content="Show in quest journal"
-                              Foreground="{StaticResource ChromeFgBrush}"/>
+                              Foreground="{StaticResource ChromeFgBrush}"
+                              ToolTip.Tip="Whether this quest appears in the Quest Status journal. A quest this character can't complete starts unchecked and is hidden — tick it to show the quest anyway. (It never appears in the login availability dump regardless.)"/>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
                                 HorizontalAlignment="Right" VerticalAlignment="Center"
                                 IsVisible="{Binding SelectedQuest.HasBonus}">
@@ -120,16 +121,48 @@
                     </StackPanel>
                 </Grid>
 
+                <!-- Explicit class restriction — for the genuinely class-locked quests the
+                     crawl can't detect (Magebane = Witchunter, Tarl). Comma-separated class
+                     names; blank leaves it to the crawl's own guards. -->
+                <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="10"
+                            Margin="0,8,0,0" VerticalAlignment="Center">
+                    <TextBlock Classes="Label" Margin="0" Text="Restrict to classes"
+                               VerticalAlignment="Center"/>
+                    <Button MinWidth="220" HorizontalAlignment="Left" HorizontalContentAlignment="Stretch"
+                            ToolTip.Tip="Tick the classes this quest is locked to (a character of any other class is marked Cannot complete, hidden from the journal, and dropped from the login availability dump). Use for the class-locked quests the crawler can't detect on its own. None ticked = leave eligibility to the crawl.">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding SelectedQuest.ClassRestrictSummary}"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="▾" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Button.Flyout>
+                            <Flyout Placement="Bottom">
+                                <ScrollViewer MaxHeight="320">
+                                    <ItemsControl ItemsSource="{Binding SelectedQuest.ClassOptions}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:ClassRestrictOption">
+                                                <CheckBox Content="{Binding Name}"
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                          Margin="4,1"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </StackPanel>
+
                 <!-- Reward — pre-filled with the crawler's inferred award; edit freely
                      to correct awards the give-chain crawl can't see. -->
-                <TextBlock Grid.Row="5" Classes="Label" Text="Reward (crawled award pre-filled; edit freely)"/>
-                <TextBox Grid.Row="6"
+                <TextBlock Grid.Row="6" Classes="Label" Text="Reward (crawled award pre-filled; edit freely)"/>
+                <TextBox Grid.Row="7"
                          Text="{Binding SelectedQuest.Rewards, Mode=TwoWay}"
                          PlaceholderText="(no reward)"/>
 
                 <!-- Step markdown — pre-filled with the crawled steps; edit freely. -->
-                <TextBlock Grid.Row="7" Classes="Label" Text="Steps (markdown — crawled steps pre-filled; edit freely)"/>
-                <TextBox Grid.Row="8"
+                <TextBlock Grid.Row="8" Classes="Label" Text="Steps (markdown — crawled steps pre-filled; edit freely)"/>
+                <TextBox Grid.Row="9"
                          Text="{Binding SelectedQuest.Steps, Mode=TwoWay}"
                          AcceptsReturn="True" TextWrapping="Wrap"
                          VerticalContentAlignment="Top"

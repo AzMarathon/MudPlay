@@ -90,6 +90,19 @@ public sealed class AppServices
     public void SetQueueWalkOpener(Action<Game.Map.RoomKey> opener) => _queueWalkOpener = opener;
     public void QueueWalkTo(Game.Map.RoomKey key) => _queueWalkOpener?.Invoke(key);
 
+    // Type text at the game through the SAME path the terminal / Conversation input
+    // uses — macro split, alias expansion, and the outbound cast/attack/chat/movement
+    // observers — so a programmatic send is indistinguishable from the user typing
+    // it. Distinct from SendGameCommand, which rides the raw wire-sender with none of
+    // that. Used by the quest guide's clickable `'command'` links. No-op until the
+    // main VM binds it.
+    private Action<string>? _typedInputSender;
+    public void SetTypedInputSender(Action<string> sender) => _typedInputSender = sender;
+    public void SendTypedInput(string text)
+    {
+        if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text);
+    }
+
     // Opens (or re-focuses) the single Navigation Management dialog. Both the map
     // window's "Navigation Management" button and the toolbar Start button route
     // here so there's only ever one instance — no two identical windows. The bool

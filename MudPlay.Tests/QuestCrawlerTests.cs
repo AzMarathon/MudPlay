@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using MudPlay.Game.Calculators;
 using MudPlay.Game.Quests;
 using MudPlay.Services;
 using MudPlay.ViewModels.CharacterWorkshop;
@@ -762,6 +763,52 @@ public sealed class QuestCrawlerTests : IDisposable
 
         // Every granting chain is class-2 guarded → the whole ladder restricts to {2}.
         Assert.All(bands, b => Assert.Equal(new[] { 2 }, b.ClassIds));
+    }
+
+    // ----- alignment-gate detection (RequiredAlignment) -----
+
+    [Fact]
+    public void Crawl_GoodAlignedGate_TagsRequiredAlignmentGood()
+    {
+        // A goodaligned gate (no evilaligned) on the granting chain → Good-only quest.
+        CrawledQuest q = Assert.Single(QuestCrawler.Crawl(
+            CacheWithTbInfo("goodaligned -51 801:giveability 200 1:minlevel 15"), classId: null));
+        Assert.Equal(AlignmentBucket.Good, q.RequiredAlignment);
+    }
+
+    [Fact]
+    public void Crawl_EvilAlignedGate_TagsRequiredAlignmentEvil()
+    {
+        CrawledQuest q = Assert.Single(QuestCrawler.Crawl(
+            CacheWithTbInfo("evilaligned 60 865:giveability 201 1:minlevel 15"), classId: null));
+        Assert.Equal(AlignmentBucket.Evil, q.RequiredAlignment);
+    }
+
+    [Fact]
+    public void Crawl_BothAlignGates_BracketToNeutral()
+    {
+        // A "not too evil, not too good" bracket (both gate types) → Neutral-only.
+        CrawledQuest q = Assert.Single(QuestCrawler.Crawl(
+            CacheWithTbInfo("evilaligned -50 839:goodaligned 29 839:giveability 202 1:minlevel 15"), classId: null));
+        Assert.Equal(AlignmentBucket.Neutral, q.RequiredAlignment);
+    }
+
+    [Fact]
+    public void Crawl_NoAlignGate_LeavesRequiredAlignmentNull()
+    {
+        CrawledQuest q = Assert.Single(QuestCrawler.Crawl(
+            CacheWithTbInfo("giveability 125 2:minlevel 15:addability 2 1"), classId: null));
+        Assert.Null(q.RequiredAlignment);
+    }
+
+    [Fact]
+    public void Crawl_CanonicalFlag128_ForcedEvil_EvenWhenGateShapeDisagrees()
+    {
+        // Ability 128 is the canonical Evil ladder — the canonical mapping wins over a
+        // stray goodaligned gate on one of its chains.
+        CrawledQuest q = Assert.Single(QuestCrawler.Crawl(
+            CacheWithTbInfo("goodaligned -51 801:giveability 128 1:minlevel 15"), classId: null));
+        Assert.Equal(AlignmentBucket.Evil, q.RequiredAlignment);
     }
 
     [Fact]

@@ -26,12 +26,15 @@ public static class QuestEligibility
         int? classId = ResolveId(gameData, "Classes", stats.Class);
         int? raceId = ResolveId(gameData, "Races", stats.Race);
         Dictionary<(int, int), bool> complete = ProgressComplete(profile);
+        bool alGood = profile.Current?.QuestAlignGood ?? false;
+        bool alNeutral = profile.Current?.QuestAlignNeutral ?? false;
+        bool alEvil = profile.Current?.QuestAlignEvil ?? false;
 
         foreach (CrawledQuest q in QuestCrawler.Crawl(gameData, classId))
         {
             QuestDefinition def = quests.Resolve(q.Flag, q.Step);
             if (def.Blocked || !def.Visible) continue;
-            if (IsIneligible(q, classId, raceId)) continue;
+            if (QuestEligibilityResolver.IsIneligible(q, classId, raceId, def.ClassRestrict, alGood, alNeutral, alEvil)) continue;
             int required = def.RequiredLevel ?? q.RequiredLevel;
             if (required <= 0 || required > level) continue;
             if (complete.TryGetValue((q.Flag, q.Step), out bool done) && done) continue;
@@ -67,13 +70,6 @@ public static class QuestEligibility
         if (string.IsNullOrEmpty(name)) return null;
         int num = GetInt(gameData.FindRowByName(table, name), "Number");
         return num > 0 ? num : null;
-    }
-
-    private static bool IsIneligible(CrawledQuest q, int? classId, int? raceId)
-    {
-        if (q.ClassIds is { Count: > 0 } cls && classId is int c && !cls.Contains(c)) return true;
-        if (q.RaceIds is { Count: > 0 } rcs && raceId is int r && !rcs.Contains(r)) return true;
-        return false;
     }
 
     private static int GetInt(JsonElement? rowOpt, string prop)

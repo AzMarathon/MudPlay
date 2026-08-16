@@ -55,24 +55,42 @@
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="TextDecorations" Value="Underline"/>
         </Style>
+        <!-- Inline 'command' link inside a step line: green hot-text the user clicks
+             to type that command at the game (distinct from the cyan walk links). -->
+        <Style Selector="TextBlock.CmdLinkText">
+            <Setter Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid Margin="22" RowDefinitions="Auto,*">
 
         <!-- Header strip: quest name filter on the far left, the modeless name /
-             show-hide / step editor launcher on the right. -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="0,0,0,10">
-            <TextBox Grid.Column="0" Classes="clearable"
+             show-hide / step editor launcher on the right; alignment-quest opt-in
+             checkboxes on the second row. -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto"
+              ColumnSpacing="8" RowSpacing="6" Margin="0,0,0,10">
+            <TextBox Grid.Row="0" Grid.Column="0" Classes="clearable"
                      Text="{Binding QuestSearchText, Mode=TwoWay}"
                      PlaceholderText="Search quests by name…"
                      MaxWidth="300" HorizontalAlignment="Left"
                      VerticalAlignment="Center"/>
-            <CheckBox Grid.Column="1" Content="Announce available quests"
+            <CheckBox Grid.Row="0" Grid.Column="1" Content="Announce available quests"
                       IsChecked="{Binding AnnounceAvailableQuests, Mode=TwoWay}"
                       VerticalAlignment="Center"
                       ToolTip.Tip="Print [&lt;quest&gt; Quest is Now Available] to the terminal when you train past a quest's minimum level, and list everything available once at login."/>
-            <Button Grid.Column="2" Content="Edit Quests…"
+            <Button Grid.Row="0" Grid.Column="2" Content="Edit Quests…"
                     Command="{Binding EditQuestsCommand}"/>
+
+            <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                        Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+                        ToolTip.Tip="Alignment quest chains lock you in once started, regardless of your live alignment — so check the path(s) this character is on. Alignment quests only show as doable when their box is ticked. Off by default.">
+                <TextBlock Text="Alignment quests:" VerticalAlignment="Center" Opacity="0.75"/>
+                <CheckBox Content="Good"    IsChecked="{Binding QuestAlignGood, Mode=TwoWay}"/>
+                <CheckBox Content="Neutral" IsChecked="{Binding QuestAlignNeutral, Mode=TwoWay}"/>
+                <CheckBox Content="Evil"    IsChecked="{Binding QuestAlignEvil, Mode=TwoWay}"/>
+            </StackPanel>
         </Grid>
 
         <!-- Empty-state: no visible quest resolved from the active set / character. -->

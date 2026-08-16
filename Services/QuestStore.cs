@@ -158,12 +158,14 @@ public sealed class QuestStore
             string.IsNullOrWhiteSpace(d.Steps) ? null : d.Steps,
             string.IsNullOrWhiteSpace(d.Rewards) ? null : d.Rewards,
             d.RequiredLevel,
-            d.Blocked);
+            d.Blocked)
+        { ClassRestrict = d.ClassRestrict is { Count: > 0 } ? d.ClassRestrict : null };
 
     // A manual row the user added but left wholly blank — nothing worth persisting.
     private static bool IsEmptyManual(QuestDefinition d) =>
         string.IsNullOrWhiteSpace(d.Name) && d.Steps is null && d.Rewards is null
-        && d.RequiredLevel is null && !d.Blocked;
+        && d.RequiredLevel is null && !d.Blocked
+        && (d.ClassRestrict is null || d.ClassRestrict.Count == 0);
 
     private static bool SameContent(QuestDefinition a, QuestDefinition b) =>
         string.Equals(a.Name, b.Name, StringComparison.Ordinal)
@@ -171,7 +173,17 @@ public sealed class QuestStore
         && string.Equals(a.Steps, b.Steps, StringComparison.Ordinal)
         && string.Equals(a.Rewards, b.Rewards, StringComparison.Ordinal)
         && a.RequiredLevel == b.RequiredLevel
-        && a.Blocked == b.Blocked;
+        && a.Blocked == b.Blocked
+        && SameClassRestrict(a.ClassRestrict, b.ClassRestrict);
+
+    // Order-insensitive equality of two class-restriction lists, treating null and
+    // empty alike (neither is a restriction).
+    private static bool SameClassRestrict(List<int>? a, List<int>? b)
+    {
+        int ca = a?.Count ?? 0, cb = b?.Count ?? 0;
+        if (ca == 0) return cb == 0;
+        return ca == cb && a!.OrderBy(x => x).SequenceEqual(b!.OrderBy(x => x));
+    }
 
     private void LoadInto(Dictionary<(int Flag, int Step), QuestDefinition> target, string path, string label)
     {

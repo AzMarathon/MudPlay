@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
@@ -27,6 +28,16 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
     public event Action<bool>? CloseRequested;
 
     private readonly QuestStore _quests;
+    private readonly GameDataCache _gameData;
+
+    // Every class in the active set (Number, Name), enumerated once — the source for
+    // each row's "Restrict to classes" checklist.
+    private readonly List<(int Number, string Name)> _allClasses = new();
+
+    // The character's current show-anyway opt-ins keyed by (flag, step), seeded from the
+    // journal VM's per-character QuestProgress. Read back after Save via each row's
+    // ShowIfIneligibleOverride — this VM never writes the profile itself.
+    private readonly IReadOnlyDictionary<(int Flag, int Step), bool> _showAnyway;
 
     // Every crawled quest in crawl order (flag, then band level), editable.
     public ObservableCollection<QuestEditRowViewModel> Quests { get; } = new();
@@ -42,15 +53,33 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
     public bool HasSelection => SelectedQuest is not null;
 
     // gameData: active set, source of the crawl + item names. quests: overlay store
-    // the edits persist to. classId: character class number for class-resolved
-    // bonus labels, or null for the no-class default.
-    public QuestEditorViewModel(GameDataCache gameData, QuestStore quests, int? classId)
+    // the edits persist to. classId / raceId / align*: the current character's identity
+    // and alignment-quest opt-ins, so each row can pre-compute whether this character is
+    // ineligible (drives the "Show in quest journal" default). classId null = the no-class
+    // default profile, which is never class-gated.
+    public QuestEditorViewModel(GameDataCache gameData, QuestStore quests, int? classId,
+                                int? raceId = null, bool alignGood = false,
+                                bool alignNeutral = false, bool alignEvil = false,
+                                IReadOnlyDictionary<(int Flag, int Step), bool>? showAnyway = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(quests);
         _quests = quests;
+        _gameData = gameData;
+        _showAnyway = showAnyway ?? new Dictionary<(int, int), bool>();
 
         Quests.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasQuests));
+
+        // Enumerate the active set's classes once for every row's restriction checklist.
+        if (gameData.GetRawTable("Classes") is { } classDoc)
+            foreach (JsonElement row in classDoc.RootElement.EnumerateArray())
+            {
+                if (!row.TryGetProperty("Name", out JsonElement n) || n.ValueKind != JsonValueKind.String) continue;
+                string? name = n.GetString();
+                int number = row.TryGetProperty("Number", out JsonElement num)
+                    && num.ValueKind == JsonValueKind.Number && num.TryGetInt32(out int v) ? v : 0;
+                if (!string.IsNullOrEmpty(name) && number > 0) _allClasses.Add((number, name));
+            }
 
         // Kill / ask-NPC target placement, resolved once for the whole draft pass so a
         // crawled quest's auto-draft step can link to the room the quest places its
@@ -63,6 +92,8 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
         foreach (CrawledQuest q in QuestCrawler.Crawl(gameData, classId))
         {
             QuestDefinition def = quests.Resolve(q.Flag, q.Step);
+            bool ineligible = QuestEligibilityResolver.IsIneligible(
+                q, classId, raceId, def.ClassRestrict, alignGood, alignNeutral, alignEvil);
             Quests.Add(new QuestEditRowViewModel(
                 q.Flag, q.Step,
                 QuestTextFormatter.FallbackTitle(q),
@@ -76,7 +107,10 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
                 def.Visible,
                 def.Steps ?? string.Empty,
                 def.Rewards ?? string.Empty,
-                def.RequiredLevel)
+                def.RequiredLevel,
+                ineligible,
+                _showAnyway.GetValueOrDefault((q.Flag, q.Step)),
+                BuildClassOptions(def.ClassRestrict))
             { Blocked = def.Blocked });
         }
 
@@ -113,7 +147,7 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
 
     // A master-list row for a manual quest: every crawl-baseline field is empty, so the
     // editable boxes pre-fill straight from the definition and persist verbatim.
-    private static QuestEditRowViewModel BuildManualRow(QuestDefinition def) =>
+    private QuestEditRowViewModel BuildManualRow(QuestDefinition def) =>
         new(def.Flag, def.Step,
             fallbackLabel: "(custom quest)",
             autoSteps: string.Empty,
@@ -126,13 +160,28 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
             visible: def.Visible,
             steps: def.Steps ?? string.Empty,
             rewards: def.Rewards ?? string.Empty,
-            requiredLevel: def.RequiredLevel)
+            requiredLevel: def.RequiredLevel,
+            ineligible: false,
+            showIfIneligible: _showAnyway.GetValueOrDefault((def.Flag, def.Step)),
+            classOptions: BuildClassOptions(def.ClassRestrict))
         { Blocked = def.Blocked };
+
+    // A fresh checklist of every class for one row, ticking the ones already in this
+    // quest's ClassRestrict. Each row gets its own option instances so their checked
+    // state stays independent.
+    private IReadOnlyList<ClassRestrictOption> BuildClassOptions(List<int>? restrict)
+    {
+        HashSet<int>? selected = restrict is { Count: > 0 } ? new HashSet<int>(restrict) : null;
+        var options = new List<ClassRestrictOption>(_allClasses.Count);
+        foreach ((int Number, string Name) c in _allClasses)
+            options.Add(new ClassRestrictOption(c.Number, c.Name, selected?.Contains(c.Number) == true));
+        return options;
+    }
 
     [RelayCommand]
     private void Save()
     {
-        _quests.Save(Quests.Select(q => q.ToDefinition()));
+        _quests.Save(Quests.Select(row => row.ToDefinition()));
         CloseRequested?.Invoke(true);
     }
 

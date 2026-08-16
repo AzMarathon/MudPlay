@@ -77,6 +77,25 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         if (_profile.Current is { } p) { p.AnnounceAvailableQuests = value; _profile.Save(); }
     }
 
+    // Top-of-tab alignment-quest checkboxes: which alignment chain(s) this character is
+    // committed to. An alignment-gated quest is only shown as doable when its bucket is
+    // checked here. Persisted per character; toggling one re-runs eligibility so those
+    // quests appear / disappear. All default off — never auto-checked (a player decision).
+    [ObservableProperty] private bool _questAlignGood;
+    [ObservableProperty] private bool _questAlignNeutral;
+    [ObservableProperty] private bool _questAlignEvil;
+
+    partial void OnQuestAlignGoodChanged(bool value) => SaveAlignmentPref(p => p.QuestAlignGood = value);
+    partial void OnQuestAlignNeutralChanged(bool value) => SaveAlignmentPref(p => p.QuestAlignNeutral = value);
+    partial void OnQuestAlignEvilChanged(bool value) => SaveAlignmentPref(p => p.QuestAlignEvil = value);
+
+    private void SaveAlignmentPref(Action<CharacterProfile> apply)
+    {
+        if (_suppress) return;
+        if (_profile.Current is { } p) { apply(p); _profile.Save(); }
+        Rebuild();   // eligibility changed — re-mark "Cannot complete" + re-filter the list
+    }
+
     // False when no visible quest resolves (no set / no character) — drives the empty-state hint.
     [ObservableProperty] private bool _hasQuests;
 
@@ -116,6 +135,9 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         try
         {
             AnnounceAvailableQuests = _profile.Current?.AnnounceAvailableQuests ?? true;
+            QuestAlignGood = _profile.Current?.QuestAlignGood ?? false;
+            QuestAlignNeutral = _profile.Current?.QuestAlignNeutral ?? false;
+            QuestAlignEvil = _profile.Current?.QuestAlignEvil ?? false;
             _allCards.Clear();
             _bonusesByCard.Clear();
             LoadProgressFromProfile();
@@ -132,16 +154,31 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
 
             int? classId = ResolveClassId();
             int? raceId = ResolveRaceId();
+            bool alGood = _profile.Current?.QuestAlignGood ?? false;
+            bool alNeutral = _profile.Current?.QuestAlignNeutral ?? false;
+            bool alEvil = _profile.Current?.QuestAlignEvil ?? false;
             foreach (CrawledQuest q in QuestCrawler.Crawl(_gameData, classId))
             {
                 QuestDefinition def = _quests.Resolve(q.Flag, q.Step);
-                // Blocked = a false positive the user flagged out of the journal; hidden =
-                // a per-taste hide. Either keeps the card out of the list (both un-doable
-                // in the editor, which lists every quest regardless).
-                if (def.Blocked || !def.Visible) continue;
+                bool ineligible = QuestEligibilityResolver.IsIneligible(
+                    q, classId, raceId, def.ClassRestrict, alGood, alNeutral, alEvil);
+                // Blocked = a false positive the user flagged out of the journal. A quest
+                // this character can't complete is hidden unless they opted back in per
+                // character (QuestProgress.ShowIfIneligible); an eligible one honours the
+                // per-taste Visible hide. Either way it stays in the editor, which lists
+                // every quest regardless.
+                if (def.Blocked) continue;
+
+                // Capture the quest's bonuses for every non-blocked quest — even ones we're
+                // about to hide from the journal — so PublishBonuses can still apply a
+                // completed quest's permanent bonus when it's out of the list (a quest's
+                // stat gain follows its completion, not its journal visibility).
+                _bonusesByCard[(q.Flag, q.Step)] = q.Bonuses;
+
+                if (ineligible) { if (!ShowsWhenIneligible(q.Flag, q.Step)) continue; }
+                else if (!def.Visible) continue;
 
                 QuestProgress prog = GetOrCreateProgress(q.Flag, q.Step);
-                _bonusesByCard[(q.Flag, q.Step)] = q.Bonuses;
 
                 // The user's reward override (set in the editor) wins over the crawler's
                 // inferred award — it's how awards the give-chain crawl can't see (e.g.
@@ -166,7 +203,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
                     // override edits the item/ability award line, not the raw give-chain exp.
                     QuestTextFormatter.Experience(q),
                     QuestTextFormatter.Requirements(_gameData, q),
-                    IsIneligible(q, classId, raceId),
+                    ineligible,
                     prog.Complete,
                     steps,
                     OnCardCompletionChanged);
@@ -281,15 +318,22 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     }
 
     // Split a step label into render runs, wrapping each `(map/room)` coordinate in
-    // a command that walks there. A plain run carries no command; only the
-    // coordinate run is clickable.
+    // a walk-there command and each single-quoted `'command'` in a send-to-game
+    // command. Plain runs carry no command; only the tokens are clickable.
     private static IReadOnlyList<QuestStepSegmentViewModel> BuildSegments(string display)
     {
         var segments = new List<QuestStepSegmentViewModel>();
-        foreach ((string segText, RoomKey? room) in QuestTextFormatter.SplitRoomLinks(display))
-            segments.Add(room is { } key
-                ? new QuestStepSegmentViewModel(segText, new RelayCommand(() => WalkTo(key)))
-                : new QuestStepSegmentViewModel(segText));
+        foreach ((string segText, RoomKey? room, string? command) in QuestTextFormatter.SplitStepLinks(display))
+        {
+            if (room is { } key)
+                segments.Add(new QuestStepSegmentViewModel(
+                    segText, new RelayCommand(() => WalkTo(key)), QuestStepLinkKind.Walk));
+            else if (command is { } cmd)
+                segments.Add(new QuestStepSegmentViewModel(
+                    segText, new RelayCommand(() => SendStepCommand(cmd)), QuestStepLinkKind.Send));
+            else
+                segments.Add(new QuestStepSegmentViewModel(segText));
+        }
         return segments;
     }
 
@@ -303,6 +347,12 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         AppServices.Current.Walker.WalkTo(room);
     }
 
+    // Type a quest-step's `'command'` at the game exactly as if the user typed it in
+    // the terminal — macro/alias expansion and the outbound observers all run — so a
+    // guide's quoted command is indistinguishable from a keystroke.
+    private static void SendStepCommand(string command)
+        => AppServices.Current.SendTypedInput(command);
+
     // ----- editor ---------------------------------------------------------
 
     // Open the modeless Quest editor (name / show-hide / step markdown). The async
@@ -311,10 +361,32 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     [RelayCommand]
     private async Task EditQuests()
     {
-        var editor = new QuestEditorViewModel(_gameData, _quests, ResolveClassId());
+        // Seed the editor with this character's current show-anyway opt-ins (per-quest),
+        // so a "Cannot complete" quest's "Show in quest journal" checkbox reflects the
+        // character's saved choice rather than the board's.
+        Dictionary<(int Flag, int Step), bool> showAnyway = _progress.Values
+            .Where(p => p.ShowIfIneligible)
+            .ToDictionary(p => (p.Flag, p.Step), _ => true);
+
+        var editor = new QuestEditorViewModel(
+            _gameData, _quests, ResolveClassId(), ResolveRaceId(),
+            _profile.Current?.QuestAlignGood ?? false,
+            _profile.Current?.QuestAlignNeutral ?? false,
+            _profile.Current?.QuestAlignEvil ?? false,
+            showAnyway);
         bool? saved = await AppServices.Current.Dialogs
             .OpenWindowAsync<QuestEditorViewModel, bool>(editor);
-        if (saved == true) Rebuild();
+        if (saved != true) return;
+
+        // The show-anyway opt-in is per character, so it lands on QuestProgress here (the
+        // sole QuestLog writer) rather than through QuestStore's per-set overlay. Only
+        // ineligible rows carry a meaningful value; write it (incl. clearing to false).
+        foreach (QuestEditRowViewModel row in editor.Quests)
+            if (row.IsIneligible)
+                GetOrCreateProgress(row.Flag, row.Step).ShowIfIneligible = row.ShowIfIneligibleOverride;
+
+        Persist();
+        Rebuild();
     }
 
     // ----- toggle handlers ------------------------------------------------
@@ -358,15 +430,20 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
 
     // ----- publish + persist ----------------------------------------------
 
-    // Flatten every completed card's class-resolved bonuses (quests stack, so no
-    // dedup) and hand them to the shared state the Character Info tab reads.
+    // Flatten every completed quest's class-resolved bonuses (quests stack, so no dedup)
+    // and hand them to the shared state the Character Info tab reads. Keyed off the
+    // per-character completion records, not the visible cards, so a completed quest's
+    // permanent bonus still applies when the quest is hidden from the journal (search
+    // filter, per-taste hide, or the cannot-complete auto-hide) — its stat gain is a
+    // function of completion, not visibility. _bonusesByCard holds every non-blocked
+    // crawled quest this set produced (captured before any hide).
     private void PublishBonuses()
     {
         var bonuses = new List<QuestBonus>();
-        foreach (QuestCardViewModel card in Quests)
+        foreach (QuestProgress p in _progress.Values)
         {
-            if (!card.IsComplete) continue;
-            if (_bonusesByCard.TryGetValue((card.Flag, card.Step), out IReadOnlyList<QuestBonus>? b))
+            if (!p.Complete) continue;
+            if (_bonusesByCard.TryGetValue((p.Flag, p.Step), out IReadOnlyList<QuestBonus>? b))
                 bonuses.AddRange(b);
         }
         _bonusState.Update(bonuses);
@@ -383,9 +460,17 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         _profile.Save();
     }
 
-    // A record is worth persisting only when it carries completion or step progress;
-    // empty drafts are dropped so the log stays a delta, not a full crawl mirror.
-    private static bool IsMeaningful(QuestProgress p) => p.Complete || p.CheckedSteps is { Count: > 0 };
+    // A record is worth persisting only when it carries completion, step progress, or the
+    // show-a-cannot-complete-quest opt-in; empty drafts are dropped so the log stays a
+    // delta, not a full crawl mirror.
+    private static bool IsMeaningful(QuestProgress p) =>
+        p.Complete || p.CheckedSteps is { Count: > 0 } || p.ShowIfIneligible;
+
+    // Whether the character opted to keep this cannot-complete quest in the journal —
+    // a read against the hydrated per-character progress (no entry created for a quest
+    // that's staying hidden).
+    private bool ShowsWhenIneligible(int flag, int step) =>
+        _progress.TryGetValue((flag, step), out QuestProgress? p) && p.ShowIfIneligible;
 
     // ----- helpers --------------------------------------------------------
 
@@ -426,13 +511,6 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     // restriction set — a provable "can't take it" (a Warrior viewing Meditate, a Human
     // viewing the Gaunt-One SeeHidden quest). An unknown class/race never excludes: the
     // restriction sets are conservative, so we only flag what the crawl proves shut.
-    private static bool IsIneligible(CrawledQuest q, int? classId, int? raceId)
-    {
-        if (q.ClassIds is { Count: > 0 } cls && classId is int c && !cls.Contains(c)) return true;
-        if (q.RaceIds is { Count: > 0 } rcs && raceId is int r && !rcs.Contains(r)) return true;
-        return false;
-    }
-
     private static string ResolveTitle(QuestDefinition def, CrawledQuest q) =>
         !string.IsNullOrWhiteSpace(def.Name) ? def.Name : QuestTextFormatter.FallbackTitle(q);
 
