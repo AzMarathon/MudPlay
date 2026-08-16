@@ -382,4 +382,54 @@ public sealed class QuestStoreTests : IDisposable
 
         Assert.Empty(store.ManualQuests());
     }
+
+    // ----- eligibility overrides (class restriction + show-when-ineligible) -----
+
+    [Fact]
+    public void Save_PersistsClassRestrict_AndSurvivesReload()
+    {
+        QuestStore store = new(seedPath: _seedPath);
+        store.OnActiveBbsChanged(_scratchBbs);
+
+        // The hand-set class lock for a quest the crawl can't detect (Magebane → Witchunter)
+        // must round-trip through the overlay, order-insensitively.
+        store.Save([new QuestDefinition(50, 1, "Witchunter Quest") { ClassRestrict = [8, 3] }]);
+
+        QuestStore reloaded = new(seedPath: _seedPath);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
+        List<int>? restrict = reloaded.Resolve(50, 1).ClassRestrict;
+        Assert.NotNull(restrict);
+        Assert.Equal([3, 8], restrict!.OrderBy(x => x).ToList());
+    }
+
+    [Fact]
+    public void Save_ReSavingSeedClassRestrict_IsDroppedAsDelta()
+    {
+        // A seed already carrying the same lock is the baseline (order-insensitive), so
+        // re-saving it isn't a user delta and mustn't freeze into the overlay.
+        WriteSeed(new QuestDefinition(50, 1, "Seed Name") { ClassRestrict = [3, 8] });
+        QuestStore store = new(seedPath: _seedPath);
+        store.OnActiveBbsChanged(_scratchBbs);
+
+        store.Save([new QuestDefinition(50, 1, "Seed Name") { ClassRestrict = [8, 3] }]);
+
+        WriteSeed(new QuestDefinition(50, 1, "Seed Name") { ClassRestrict = [3, 8, 9] });
+        QuestStore reloaded = new(seedPath: _seedPath);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
+        Assert.Equal([3, 8, 9], reloaded.Resolve(50, 1).ClassRestrict!.OrderBy(x => x).ToList());
+    }
+
+    [Fact]
+    public void Save_PersistsShowIfIneligible_AndSurvivesReload()
+    {
+        QuestStore store = new(seedPath: _seedPath);
+        store.OnActiveBbsChanged(_scratchBbs);
+
+        // The opt-in to keep a "Cannot complete" quest in the journal is a real delta.
+        store.Save([new QuestDefinition(50, 1, "Name") { ShowIfIneligible = true }]);
+
+        QuestStore reloaded = new(seedPath: _seedPath);
+        reloaded.OnActiveBbsChanged(_scratchBbs);
+        Assert.True(reloaded.Resolve(50, 1).ShowIfIneligible);
+    }
 }

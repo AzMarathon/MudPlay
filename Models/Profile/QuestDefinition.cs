@@ -33,8 +33,18 @@ public sealed class QuestDefinition
     // state before the universal seed (or the user) supplies a name.
     public string Name { get; set; } = string.Empty;
 
-    // Whether the quest shows in the journal. Defaults to shown.
+    // Whether the quest shows in the journal. Defaults to shown. Governs the
+    // per-taste show/hide for a quest THIS character can complete; a
+    // "Cannot complete" quest is gated by ShowIfIneligible instead (see below).
     public bool Visible { get; set; } = true;
+
+    // Opt-in to keep showing this quest in the journal even when the character
+    // can't complete it (class/race/alignment/class-restrict gate fails). Default
+    // false: a "Cannot complete" quest is hidden from the journal unless the user
+    // ticks "Show in quest journal" for it in the editor. Never affects the login
+    // availability dump — that always excludes ineligible quests. Only meaningful
+    // for a quest the current character is ineligible for; ignored otherwise.
+    public bool ShowIfIneligible { get; set; }
 
     // User-edited step checklist as markdown, or null to fall back to the
     // crawler's auto-drafted steps. Lets the user add amplifying information the

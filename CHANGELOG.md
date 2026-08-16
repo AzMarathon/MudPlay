@@ -6,7 +6,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Quest guides: a single-quoted `'command'` in a step is now a clickable green link — clicking it types that command at the game exactly as if you'd entered it in the terminal (macro/alias expansion included), alongside the existing clickable `(map/room)` walk links
 - Quest eligibility: alignment quests no longer show as doable for the wrong alignment — three Evil / Neutral / Good checkboxes at the top of the Quest Status tab (saved per character, off by default) declare which alignment chain(s) you're on, and alignment-gated quests only appear as available when their box is ticked
-- Quest eligibility: the Quest editor gains a "Restrict to classes" field for the genuinely class-locked quests the crawler can't detect on its own (Magebane, Tarl) — a character of any other class is marked Cannot complete and dropped from the login availability dump
+- Quest eligibility: the Quest editor's "Restrict to classes" control is a checkable class dropdown for the genuinely class-locked quests the crawler can't detect on its own (Magebane, Tarl)
+- Quest journal: quests this character can't complete (wrong class/race/alignment, or a class restriction) are now hidden by default — tick "Show in quest journal" in the editor to keep one visible; they never appear in the login availability dump regardless
 
 ## 3.18.16
 

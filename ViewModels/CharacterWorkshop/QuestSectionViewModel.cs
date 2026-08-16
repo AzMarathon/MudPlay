@@ -160,10 +160,15 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
             foreach (CrawledQuest q in QuestCrawler.Crawl(_gameData, classId))
             {
                 QuestDefinition def = _quests.Resolve(q.Flag, q.Step);
-                // Blocked = a false positive the user flagged out of the journal; hidden =
-                // a per-taste hide. Either keeps the card out of the list (both un-doable
-                // in the editor, which lists every quest regardless).
-                if (def.Blocked || !def.Visible) continue;
+                bool ineligible = QuestEligibilityResolver.IsIneligible(
+                    q, classId, raceId, def.ClassRestrict, alGood, alNeutral, alEvil);
+                // Blocked = a false positive the user flagged out of the journal. A quest
+                // this character can't complete is hidden unless the user opted back in
+                // (ShowIfIneligible); an eligible one honours the per-taste Visible hide.
+                // Either way it stays in the editor, which lists every quest regardless.
+                if (def.Blocked) continue;
+                if (ineligible) { if (!def.ShowIfIneligible) continue; }
+                else if (!def.Visible) continue;
 
                 QuestProgress prog = GetOrCreateProgress(q.Flag, q.Step);
                 _bonusesByCard[(q.Flag, q.Step)] = q.Bonuses;
@@ -191,7 +196,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
                     // override edits the item/ability award line, not the raw give-chain exp.
                     QuestTextFormatter.Experience(q),
                     QuestTextFormatter.Requirements(_gameData, q),
-                    QuestEligibilityResolver.IsIneligible(q, classId, raceId, def.ClassRestrict, alGood, alNeutral, alEvil),
+                    ineligible,
                     prog.Complete,
                     steps,
                     OnCardCompletionChanged);
@@ -349,7 +354,11 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     [RelayCommand]
     private async Task EditQuests()
     {
-        var editor = new QuestEditorViewModel(_gameData, _quests, ResolveClassId());
+        var editor = new QuestEditorViewModel(
+            _gameData, _quests, ResolveClassId(), ResolveRaceId(),
+            _profile.Current?.QuestAlignGood ?? false,
+            _profile.Current?.QuestAlignNeutral ?? false,
+            _profile.Current?.QuestAlignEvil ?? false);
         bool? saved = await AppServices.Current.Dialogs
             .OpenWindowAsync<QuestEditorViewModel, bool>(editor);
         if (saved == true) Rebuild();

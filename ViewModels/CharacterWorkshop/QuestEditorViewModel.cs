@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
@@ -29,6 +30,10 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
     private readonly QuestStore _quests;
     private readonly GameDataCache _gameData;
 
+    // Every class in the active set (Number, Name), enumerated once — the source for
+    // each row's "Restrict to classes" checklist.
+    private readonly List<(int Number, string Name)> _allClasses = new();
+
     // Every crawled quest in crawl order (flag, then band level), editable.
     public ObservableCollection<QuestEditRowViewModel> Quests { get; } = new();
 
@@ -43,9 +48,13 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
     public bool HasSelection => SelectedQuest is not null;
 
     // gameData: active set, source of the crawl + item names. quests: overlay store
-    // the edits persist to. classId: character class number for class-resolved
-    // bonus labels, or null for the no-class default.
-    public QuestEditorViewModel(GameDataCache gameData, QuestStore quests, int? classId)
+    // the edits persist to. classId / raceId / align*: the current character's identity
+    // and alignment-quest opt-ins, so each row can pre-compute whether this character is
+    // ineligible (drives the "Show in quest journal" default). classId null = the no-class
+    // default profile, which is never class-gated.
+    public QuestEditorViewModel(GameDataCache gameData, QuestStore quests, int? classId,
+                                int? raceId = null, bool alignGood = false,
+                                bool alignNeutral = false, bool alignEvil = false)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(quests);
@@ -53,6 +62,17 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
         _gameData = gameData;
 
         Quests.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasQuests));
+
+        // Enumerate the active set's classes once for every row's restriction checklist.
+        if (gameData.GetRawTable("Classes") is { } classDoc)
+            foreach (JsonElement row in classDoc.RootElement.EnumerateArray())
+            {
+                if (!row.TryGetProperty("Name", out JsonElement n) || n.ValueKind != JsonValueKind.String) continue;
+                string? name = n.GetString();
+                int number = row.TryGetProperty("Number", out JsonElement num)
+                    && num.ValueKind == JsonValueKind.Number && num.TryGetInt32(out int v) ? v : 0;
+                if (!string.IsNullOrEmpty(name) && number > 0) _allClasses.Add((number, name));
+            }
 
         // Kill / ask-NPC target placement, resolved once for the whole draft pass so a
         // crawled quest's auto-draft step can link to the room the quest places its
@@ -65,6 +85,8 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
         foreach (CrawledQuest q in QuestCrawler.Crawl(gameData, classId))
         {
             QuestDefinition def = quests.Resolve(q.Flag, q.Step);
+            bool ineligible = QuestEligibilityResolver.IsIneligible(
+                q, classId, raceId, def.ClassRestrict, alignGood, alignNeutral, alignEvil);
             Quests.Add(new QuestEditRowViewModel(
                 q.Flag, q.Step,
                 QuestTextFormatter.FallbackTitle(q),
@@ -79,7 +101,9 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
                 def.Steps ?? string.Empty,
                 def.Rewards ?? string.Empty,
                 def.RequiredLevel,
-                ClassNamesText(def.ClassRestrict))
+                ineligible,
+                def.ShowIfIneligible,
+                BuildClassOptions(def.ClassRestrict))
             { Blocked = def.Blocked });
         }
 
@@ -130,48 +154,27 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
             steps: def.Steps ?? string.Empty,
             rewards: def.Rewards ?? string.Empty,
             requiredLevel: def.RequiredLevel,
-            classRestrictText: ClassNamesText(def.ClassRestrict))
+            ineligible: false,
+            showIfIneligible: def.ShowIfIneligible,
+            classOptions: BuildClassOptions(def.ClassRestrict))
         { Blocked = def.Blocked };
 
-    // Class Numbers → a comma-separated name list for the editor field ("" when none).
-    private string ClassNamesText(System.Collections.Generic.List<int>? nums)
+    // A fresh checklist of every class for one row, ticking the ones already in this
+    // quest's ClassRestrict. Each row gets its own option instances so their checked
+    // state stays independent.
+    private IReadOnlyList<ClassRestrictOption> BuildClassOptions(List<int>? restrict)
     {
-        if (nums is not { Count: > 0 }) return string.Empty;
-        return string.Join(", ", nums.Select(n => _gameData.FindNameByNumber("Classes", n) ?? n.ToString()));
-    }
-
-    // The editor field's comma-separated class names (or raw numbers) → class Numbers,
-    // or null when blank. A token that resolves to neither a known class name nor a
-    // positive integer is dropped.
-    private System.Collections.Generic.List<int>? ParseClassRestrict(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return null;
-        var ids = new System.Collections.Generic.List<int>();
-        foreach (string raw in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (int.TryParse(raw, out int n) && n > 0) { if (!ids.Contains(n)) ids.Add(n); continue; }
-            int byName = GetInt(_gameData.FindRowByName("Classes", raw), "Number");
-            if (byName > 0 && !ids.Contains(byName)) ids.Add(byName);
-        }
-        return ids.Count > 0 ? ids : null;
-    }
-
-    private static int GetInt(System.Text.Json.JsonElement? rowOpt, string prop)
-    {
-        if (rowOpt is not System.Text.Json.JsonElement row || row.ValueKind != System.Text.Json.JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(prop, out System.Text.Json.JsonElement v)) return 0;
-        return v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
+        HashSet<int>? selected = restrict is { Count: > 0 } ? new HashSet<int>(restrict) : null;
+        var options = new List<ClassRestrictOption>(_allClasses.Count);
+        foreach ((int Number, string Name) c in _allClasses)
+            options.Add(new ClassRestrictOption(c.Number, c.Name, selected?.Contains(c.Number) == true));
+        return options;
     }
 
     [RelayCommand]
     private void Save()
     {
-        _quests.Save(Quests.Select(row =>
-        {
-            QuestDefinition def = row.ToDefinition();
-            def.ClassRestrict = ParseClassRestrict(row.ClassRestrictText);
-            return def;
-        }));
+        _quests.Save(Quests.Select(row => row.ToDefinition()));
         CloseRequested?.Invoke(true);
     }
 

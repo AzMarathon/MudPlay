@@ -159,17 +159,21 @@ public sealed class QuestStore
             string.IsNullOrWhiteSpace(d.Rewards) ? null : d.Rewards,
             d.RequiredLevel,
             d.Blocked)
-        { ClassRestrict = d.ClassRestrict is { Count: > 0 } ? d.ClassRestrict : null };
+        {
+            ShowIfIneligible = d.ShowIfIneligible,
+            ClassRestrict = d.ClassRestrict is { Count: > 0 } ? d.ClassRestrict : null,
+        };
 
     // A manual row the user added but left wholly blank — nothing worth persisting.
     private static bool IsEmptyManual(QuestDefinition d) =>
         string.IsNullOrWhiteSpace(d.Name) && d.Steps is null && d.Rewards is null
-        && d.RequiredLevel is null && !d.Blocked
+        && d.RequiredLevel is null && !d.Blocked && !d.ShowIfIneligible
         && (d.ClassRestrict is null || d.ClassRestrict.Count == 0);
 
     private static bool SameContent(QuestDefinition a, QuestDefinition b) =>
         string.Equals(a.Name, b.Name, StringComparison.Ordinal)
         && a.Visible == b.Visible
+        && a.ShowIfIneligible == b.ShowIfIneligible
         && string.Equals(a.Steps, b.Steps, StringComparison.Ordinal)
         && string.Equals(a.Rewards, b.Rewards, StringComparison.Ordinal)
         && a.RequiredLevel == b.RequiredLevel

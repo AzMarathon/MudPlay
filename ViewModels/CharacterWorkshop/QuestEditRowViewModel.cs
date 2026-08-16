@@ -1,4 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Models.Profile;
 
@@ -48,6 +52,12 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
     public string RequirementsText { get; }
     public bool HasRequirements => RequirementsText.Length > 0;
 
+    // True when the current character can't complete this quest (crawl class/race guard,
+    // the ClassRestrict override, or an unticked alignment gate). Fixed at editor-open
+    // time. Flips "Show in quest journal" from the per-taste Visible hide to the
+    // ShowIfIneligible opt-in, so a cannot-complete quest starts unchecked.
+    public bool IsIneligible { get; }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ListLabel))]
     private string _name;
@@ -55,6 +65,10 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ListLabel))]
     private bool _visible;
+
+    // Backs ShowInJournal for a "Cannot complete" quest (the show-anyway opt-in). Kept
+    // separate from Visible so the two never clobber each other.
+    private bool _showIfIneligible;
 
     // Live block flag bound to the editor's "Block" toggle (crawled quests only). When
     // set the quest is suppressed from the journal entirely as a false positive; the row
@@ -72,17 +86,19 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
     // (including 0 to force ungated) persists as a user override.
     [ObservableProperty] private int? _requiredLevelInput;
 
-    // Comma-separated class names this quest is restricted to (blank = no restriction).
-    // Persisted as class Numbers on QuestDefinition.ClassRestrict — the editor VM does
-    // the name↔number conversion since it owns the Classes table. The explicit override
-    // for genuinely class-locked quests the crawl can't detect (Magebane, Tarl).
-    [ObservableProperty] private string _classRestrictText;
+    // The classes this quest is restricted to, one checkable row per class in the active
+    // set. IsSelected persists as class Numbers on QuestDefinition.ClassRestrict — the
+    // editor VM builds these (it owns the Classes table). The explicit override for the
+    // genuinely class-locked quests the crawl can't detect (Magebane, Tarl).
+    public ObservableCollection<ClassRestrictOption> ClassOptions { get; } = new();
 
     public QuestEditRowViewModel(int flag, int step, string fallbackLabel,
                                  string autoSteps, string autoRewards, string bonusText,
                                  string levelText, int autoRequiredLevel, string requirementsText,
                                  string name, bool visible, string steps, string rewards,
-                                 int? requiredLevel, string classRestrictText = "")
+                                 int? requiredLevel, bool ineligible = false,
+                                 bool showIfIneligible = false,
+                                 IReadOnlyList<ClassRestrictOption>? classOptions = null)
     {
         Flag = flag;
         Step = step;
@@ -93,6 +109,8 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
         LevelText = levelText;
         AutoRequiredLevel = autoRequiredLevel;
         RequirementsText = requirementsText;
+        IsIneligible = ineligible;
+        _showIfIneligible = showIfIneligible;
         // Prefill the editable boxes from the crawl baseline so the user starts from the
         // auto-draft rather than a blank field; a saved overlay value (if any) wins.
         _name = string.IsNullOrWhiteSpace(name) ? fallbackLabel : name;
@@ -102,16 +120,70 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
         // Show the crawled level when there's one to correct, blank when the crawl found
         // none — so an empty box always reads as "no override".
         _requiredLevelInput = requiredLevel ?? (autoRequiredLevel > 0 ? autoRequiredLevel : null);
-        _classRestrictText = classRestrictText;
+
+        if (classOptions is not null)
+            foreach (ClassRestrictOption option in classOptions)
+            {
+                option.PropertyChanged += OnClassOptionChanged;
+                ClassOptions.Add(option);
+            }
     }
 
-    // Left-list label: the current name (or the auto-draft fallback), suffixed when blocked / hidden.
+    private void OnClassOptionChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ClassRestrictOption.IsSelected))
+            OnPropertyChanged(nameof(ClassRestrictSummary));
+    }
+
+    // The "Show in quest journal" checkbox. For a quest this character CAN complete it
+    // toggles the per-taste Visible hide (shown by default); for a "Cannot complete"
+    // quest it toggles the show-anyway opt-in (hidden by default) — so a cannot-complete
+    // quest opens with the box unchecked, per the journal's auto-hide.
+    public bool ShowInJournal
+    {
+        get => IsIneligible ? _showIfIneligible : Visible;
+        set
+        {
+            if (IsIneligible)
+            {
+                if (_showIfIneligible == value) return;
+                _showIfIneligible = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ListLabel));
+            }
+            else Visible = value;
+        }
+    }
+
+    // Dropdown-button caption summarizing the class restriction.
+    public string ClassRestrictSummary
+    {
+        get
+        {
+            List<string> picked = ClassOptions.Where(o => o.IsSelected).Select(o => o.Name).ToList();
+            if (picked.Count == 0) return "Any class";
+            if (picked.Count <= 3) return string.Join(", ", picked);
+            return $"{picked.Count} classes";
+        }
+    }
+
+    // The ticked classes' Numbers for persistence, or null when none are ticked.
+    public List<int>? SelectedClassNumbers()
+    {
+        List<int> ids = ClassOptions.Where(o => o.IsSelected).Select(o => o.Number).ToList();
+        return ids.Count > 0 ? ids : null;
+    }
+
+    // Left-list label: the current name (or the auto-draft fallback), suffixed to show
+    // why it's out of the journal — blocked, per-taste hidden, or an un-opted-in
+    // cannot-complete quest.
     public string ListLabel
     {
         get
         {
             string baseName = string.IsNullOrWhiteSpace(Name) ? FallbackLabel : Name;
             if (Blocked) return $"{baseName}  (blocked)";
+            if (IsIneligible && !_showIfIneligible) return $"{baseName}  (cannot complete — hidden)";
             return Visible ? baseName : $"{baseName}  (hidden)";
         }
     }
@@ -130,7 +202,8 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
                 Flag, Step, (Name ?? string.Empty).Trim(), Visible,
                 string.IsNullOrWhiteSpace(Steps) ? null : Steps,
                 string.IsNullOrWhiteSpace(Rewards) ? null : Rewards,
-                RequiredLevelInput);
+                RequiredLevelInput)
+            { ShowIfIneligible = _showIfIneligible, ClassRestrict = SelectedClassNumbers() };
 
         string name = (Name ?? string.Empty).Trim();
         if (string.Equals(name, FallbackLabel, StringComparison.Ordinal)) name = string.Empty;
@@ -149,6 +222,7 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
         int? requiredLevel = RequiredLevelInput;
         if (requiredLevel is null || requiredLevel == AutoRequiredLevel) requiredLevel = null;
 
-        return new QuestDefinition(Flag, Step, name, Visible, steps, rewards, requiredLevel, Blocked);
+        return new QuestDefinition(Flag, Step, name, Visible, steps, rewards, requiredLevel, Blocked)
+            { ShowIfIneligible = _showIfIneligible, ClassRestrict = SelectedClassNumbers() };
     }
 }
