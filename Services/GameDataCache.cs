@@ -151,6 +151,21 @@ public sealed class GameDataCache
         EvictAll();
     }
 
+    // Re-ingest the active set's tables from disk AND notify consumers. This is
+    // the "re-imported over the currently-active set" case: the set name is
+    // unchanged, so SwitchSet no-ops and the stale in-memory tables would linger
+    // until the user swapped sets away and back. Evicting the raw cache makes the
+    // next read re-parse the fresh JSON, and re-firing ActiveSetChanged (with the
+    // same name) drives every store / view-model to rebuild its derived state —
+    // exactly what a real swap does. No-op when no set is active.
+    public void ReloadActiveSet()
+    {
+        if (ActiveSet is null) return;
+        EvictAll();
+        Log?.Log(LogSeverity.Info, "GameData", $"Re-ingested game data set '{ActiveSet}'.");
+        ActiveSetChanged?.Invoke(ActiveSet);
+    }
+
     // Lazy-load (or return the cached) JsonDocument for tableName in the active
     // set. Returns null when no set is active or the table file does not exist on
     // disk. The table name is matched case-insensitively against the JSON

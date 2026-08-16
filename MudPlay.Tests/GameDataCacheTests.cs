@@ -86,6 +86,42 @@ public sealed class GameDataCacheTests : IDisposable
     }
 
     [Fact]
+    public void ReloadActiveSet_EvictsTables_RefiresEvent_AndRereadsFreshJson()
+    {
+        string dir = SeedSet("alpha", ("Monsters", "[{\"Number\":1,\"Name\":\"Goblin\"}]"));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        _ = cache.GetRawTable("Monsters");                       // load + cache
+        Assert.Contains("Monsters", cache.LoadedTables);
+
+        List<string?> fired = new();
+        cache.ActiveSetChanged += s => fired.Add(s);
+
+        // Re-import the SAME set: rewrite the table on disk under the same name.
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), "[{\"Number\":1,\"Name\":\"Orc\"}]");
+        cache.ReloadActiveSet();
+
+        Assert.Empty(cache.LoadedTables);                        // evicted
+        Assert.Equal(new[] { "alpha" }, fired);                  // consumers notified, same name
+        Assert.Equal("alpha", cache.ActiveSet);                  // still active
+        // Next read re-parses the fresh JSON, not the stale cached doc.
+        Assert.Equal("Orc", cache.GetRawTable("Monsters")!.RootElement[0].GetProperty("Name").GetString());
+    }
+
+    [Fact]
+    public void ReloadActiveSet_NoActiveSet_IsNoOp()
+    {
+        GameDataCache cache = NewCache();
+        List<string?> fired = new();
+        cache.ActiveSetChanged += s => fired.Add(s);
+
+        cache.ReloadActiveSet();
+
+        Assert.Empty(fired);
+        Assert.Null(cache.ActiveSet);
+    }
+
+    [Fact]
     public void GetRawTable_ReturnsNull_WhenNoSetActive()
     {
         SeedSet("alpha", ("Monsters", "[]"));

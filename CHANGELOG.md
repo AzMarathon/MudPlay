@@ -2,9 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.18.14
+## 3.18.15
 
 - Game-data import: long textblock memos (those big enough to span more than one database page) no longer lose their first two characters — the Jet multi-page "long value" memo reader used a header 4 bytes too large, so e.g. a class-restricted quest's `class 1` directive imported as `ass 1` and never resolved to the class name (visible in a monster's Greet keyword effects). **Re-import your MDB(s) to correct already-imported data.**
+- Game-data import: re-importing over the currently-active set now re-ingests the fresh tables immediately, instead of showing the old data until you switch to another set and back
 
 ## 3.18.13
 

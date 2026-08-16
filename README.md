@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.14**
+> **Version 3.18.15**
 > - Game-data import: long textblock memos (those big enough to span more than one database page) no longer lose their first two characters — the Jet multi-page "long value" memo reader used a header 4 bytes too large, so e.g. a class-restricted quest's `class 1` directive imported as `ass 1` and never resolved to the class name. **Re-import your MDB(s) to correct already-imported data.**
+> - Game-data import: re-importing over the currently-active set now re-ingests the fresh tables immediately, instead of showing the old data until you switch sets and back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
