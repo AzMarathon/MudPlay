@@ -56,11 +56,12 @@ public sealed class CombatManagerSpellsTests
         // instead of the zero real elapsed time a synchronous test call has.
         private DateTimeOffset _clock = DateTimeOffset.UtcNow;
 
-        // When deferPost is set, _post queues actions into Posted instead of running
-        // them inline, so a test can interleave server lines between a deferred
-        // switch-dispatch being scheduled and it actually running — mirroring
-        // production, where a queued action runs only after the current server
-        // burst's synchronous dispatch unwinds. DrainPosted() runs the queue.
+        // When deferPost is set, the cascade switch-dispatch scheduler queues actions
+        // into Posted instead of running them inline, so a test can interleave server
+        // lines between a deferred switch-dispatch being scheduled and it actually
+        // running — mirroring production, where the real-time delay lets the kill's
+        // exp / *Combat Off* packet land + drop the target before the switch fires.
+        // DrainPosted() runs the queue (the delay window elapsing).
         public List<Action> Posted { get; } = new();
         private readonly bool _deferPost;
         public void DrainPosted()
@@ -102,6 +103,11 @@ public sealed class CombatManagerSpellsTests
             // controls when the window elapses (FireSettle). Only arms on arrival
             // observations, so the existing Also-Here tests are unaffected.
             Combat.SetArrivalSettleScheduler((_, cb) => PendingSettle = cb);
+            // The cascade switch-dispatch delay (production path). Runs inline unless a
+            // test opts into deferPost, in which case it queues into Posted so the test
+            // controls when the delay window elapses (DrainPosted) — modelling the kill
+            // packet landing in the gap between schedule and dispatch.
+            Combat.SetSwitchDispatchScheduler((_, cb) => { if (_deferPost) Posted.Add(cb); else cb(); });
             if (wireCaster)
                 Combat.SetCombatSpellCaster(Cast, () => (Ma, MaxMa));
         }
@@ -343,14 +349,16 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(sentAfterEngage, h.Sent.Count);
     }
 
-    // Switch-dispatch corpse-cast on the killing round (reports paradigm-20260815-135756
-    // Mage lbol→mmis; -120544 / -120934 Paladin harm→weapon). The combat tick is
-    // DAMAGE-LINE driven, so the heartbeat's cascade switch is decided on the killing
-    // blow's damage line — one server burst ahead of the exp / *Combat Off* that drop the
-    // target. Dispatching the switch synchronously fired the alternate spell (or the
-    // weapon) AT the corpse ("You don't see X here!"). The switch is now deferred through
-    // _post; a same-burst exp-inferred kill nulls the target before the deferred dispatch
-    // runs, and the re-validated dispatch then skips — no `mmis` at the dead mob.
+    // Switch-dispatch corpse-cast on the killing round (reports paradigm-20260815-201731
+    // / -202241 Mage lbol→mmis at MA 99-108; -120544 / -120934 Paladin harm→weapon). The
+    // combat tick is DAMAGE-LINE driven, so the heartbeat's cascade switch is decided on
+    // the killing blow's damage line — ahead of the exp / *Combat Off* that drop the
+    // target, which often arrive in a LATER packet. Dispatching the switch synchronously
+    // (or via a bare UI-post that can't bridge the packet gap) fired the alternate spell
+    // (or the weapon) AT the corpse ("You don't see X here!"). The switch is now delayed a
+    // short real-time window; the kill's exp lands + nulls the target in that window, and
+    // the re-validated dispatch then skips — no `mmis` at the dead mob. The exp fed here
+    // between schedule and drain models that later-packet kill.
     [Fact]
     public void CapSwitchOnKillingRound_ExpDropsTarget_DeferredSwitchSkips_NoCorpseCast()
     {
@@ -377,10 +385,11 @@ public sealed class CombatManagerSpellsTests
         Assert.DoesNotContain("mmis giant rat", h.AllSent);
     }
 
-    // The other side of the deferral: with the mob still alive at drain time (no kill this
-    // burst) the deferred switch re-validates fine and dispatches the alternate — the
-    // cascade still advances, a hair later than the old synchronous path but well within
-    // the 5 s round, so the cap-preempt (report paradigm-20260814-061340) is preserved.
+    // The other side of the delay: with the mob still alive when the window elapses (no
+    // kill this burst) the delayed switch re-validates fine and dispatches the alternate —
+    // the cascade still advances, a hair later than the old synchronous path but well
+    // within the 5 s round, so the cap-preempt (report paradigm-20260814-061340) is
+    // preserved. (Screenshot case: a mob that SURVIVES lbol correctly takes mmis.)
     [Fact]
     public void CapSwitch_TargetAlive_DeferredSwitchDispatchesAlternate()
     {
@@ -396,6 +405,50 @@ public sealed class CombatManagerSpellsTests
         h.DrainPosted();                            // no kill → runs → dispatches the alternate
 
         Assert.Equal("mmis giant rat", h.LastSent);
+    }
+
+    // Report paradigm-20260815-202319 ("not re-engaging combat after buffing mid-combat"):
+    // a between-round self-buff (armr) fires, then the round's nuke (lbol, MaxCasts=1)
+    // KILLS one mob in a multi-mob room. The death→re-observe re-picks the live survivor
+    // as BOTH _currentTarget and _castingSpellTarget, but its re-cast loses the round's
+    // slot to the 500ms burst guard — parking the engine in _combatOff spell mode. The
+    // spell heartbeat bails while _combatOff, and the between-round-cast spell-resume used
+    // to be blocked by the DeathInterruptWindow (a DIFFERENT mob just died), so nothing
+    // re-engaged until the survivor's OWN swing woke OnCombatLine ~5s later. The resume now
+    // recognises a re-picked live survivor (currentTarget == castingSpellTarget, present in
+    // the resynced roster) and fires immediately on the kill's *Combat Off*.
+    [Fact]
+    public void BetweenRoundBuff_KillLeavesSurvivor_ResumesSurvivorImmediately()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "rotworm");
+        h.AddMonster(2, "thin leprous outcast");
+
+        h.Feed("Also here: rotworm, thin leprous outcast.");
+        Assert.Equal("lbol rotworm", h.LastSent);            // engaged the first mob
+
+        // A between-round survival buff interrupts the round (it drops *Combat Off*).
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteBetweenRoundCast();
+
+        // lbol kills rotworm this round; its exp drops the target. The room re-display
+        // then hands us the survivor, which the re-observe re-picks — but the re-cast
+        // loses the round's slot to the burst guard, so nothing new goes out yet (parked
+        // in _combatOff spell mode with the survivor latched).
+        h.Feed("You gain 100 experience.");
+        h.Feed("Also here: thin leprous outcast.");
+        Assert.Equal("lbol rotworm", h.LastSent);            // re-pick's cast blocked — still parked
+        int sentBeforeOff = h.Sent.Count;
+
+        // The kill's *Combat Off* lands in the resume window: the survivor re-engages
+        // immediately (cascade reset for the new target → the normal spell) instead of
+        // stalling a full round.
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(sentBeforeOff + 1, h.Sent.Count);
+        Assert.Equal("lbol thin leprous outcast", h.LastSent);
     }
 
     // MaxCasts must count real rounds, not damage-line ticks. A multi-hit attack spell
@@ -427,6 +480,36 @@ public sealed class CombatManagerSpellsTests
         h.Tick();
         h.TickSameRound();
         Assert.Equal("harm giant rat", h.LastSent);
+    }
+
+    // Report paradigm-20260815-202241 ("LBOL → MMIS without firing LBOL"): in a MULTI-mob
+    // room the OTHER mobs' swing lines trip the damage-driven combat tick within ~100ms of
+    // the engage. The tally clock reset to MinValue let that premature tick count the attack
+    // spell as a fired round, so a MaxCasts-1 nuke cap-switched to the alternate the SAME
+    // round and the normal spell never went out (engageable=2, sinceAttack≈79ms). The tally
+    // clock is now anchored at the engage moment, so AttackTallyMinGap rejects the premature
+    // tick and the normal spell holds until a genuine round elapses. (Single-mob rooms were
+    // never affected — their first tick is a real round.)
+    [Fact]
+    public void MaxCasts1_MultiMobEngage_PrematureTickDoesNotSwapBeforeFirstCast()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "rotworm");
+        h.AddMonster(2, "thin leprous outcast");
+
+        h.Feed("Also here: rotworm, thin leprous outcast.");
+        Assert.Equal("lbol rotworm", h.LastSent);          // engage → lbol (round 0, not yet fired)
+
+        // A second mob's swing trips a combat tick a beat after the engage — far short of a
+        // real round. The gate must reject it: lbol hasn't fired, so no tally, no swap.
+        h.TickSameRound();
+        Assert.Equal("lbol rotworm", h.LastSent);          // still lbol — no premature mmis
+
+        // The first genuine round now tallies lbol → MaxCasts=1 reached → swap to the alternate.
+        h.Tick();
+        Assert.Equal("mmis rotworm", h.LastSent);
     }
 
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even

@@ -2930,6 +2930,17 @@ public sealed class AppServices
             timer.Start();
         });
 
+        // Cascade-switch dispatch delay: a UI-thread one-shot so the per-round spell
+        // switch waits out the short real-time window a kill's exp / *Combat Off* packet
+        // needs to land + drop the target, instead of corpse-casting the alternate at a
+        // mob the capping cast just killed. Same one-shot shape as the settle scheduler.
+        Combat.SetSwitchDispatchScheduler((delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+        });
+
         // HealthManager. Master on/off is
         // GeneralSettings.AutoMode.AutoHealRest (shared with the
         // Settings → General checkbox + toolbar Toggle button). When
@@ -3633,7 +3644,11 @@ public sealed class AppServices
         // weapon (read from Inventory's last `i` dump). Duration drives the
         // recast clock. Wire-sender bound in MainWindowViewModel.
         ItemCast = new Game.Spells.ItemCastSequencer(
-            () => Spellbook.GetCastItems(), () => Inventory.Snapshot, Log, DesiredEquipSlotItem);
+            () => Spellbook.GetCastItems(), () => Inventory.Snapshot, Log, DesiredEquipSlotItem,
+            // Stand auto-equip off the slot the item-cast borrows so its own restore
+            // isn't doubled by the rest-break the swap triggers (AutoEquip is built
+            // just below; this lambda reads it at fire time). See NoteItemCastSwap.
+            onSwap: () => AutoEquip?.NoteItemCastSwap());
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
 

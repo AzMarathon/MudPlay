@@ -1,12 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.8**
-> - Spell pickers (Combat tab + Spells tab) now strike through and dim spells your character hasn't learned, and outline a slot red when it points at an unlearned spell — a guard against configuring a spell you can't actually cast (the value is still saved; the red outline is just a warning)
-> - Bless-slot cast-on-use item entries are flagged the same way, but only when you aren't carrying/wearing the item that provides them
-> - Recognize ParaMud's "You add <spell> to your spellbook!" so the learned-spell guard updates the instant you learn a spell from a teaching item
-> - Spell Book (F2): double-click a spell to open the record of the item — or trainer NPC — that teaches it
-> - Spell Book: the Lvl column now shows the level YOUR class can actually learn each spell (respecting trainer level gates), and the selected row stays readable
+> **Version 3.18.12**
+> - Item-cast buffing no longer double-sends the re-equip: when a buff item (e.g. a warhorn in the off-hand) is used and the swap breaks a rest, auto-equip stands off the borrowed slot while the item-cast's own restore runs, instead of firing a redundant `wear` the game rejects
+> - Caster no longer fires the alternate attack spell at a mob the capping cast just killed: when a max-casts-1 nuke lands its own killing blow, the cascade switch waits a short beat for the kill to register, then re-checks the target is still alive — so `mmis` stops corpse-casting at "You don't see X here!"
+> - Attack spell with a max-casts of 1 no longer swaps to the alternate before it ever fires in a multi-monster room: the other monsters' swings were tripping the round counter early, so the normal spell got skipped ("LBOL → MMIS without firing LBOL"); the count is now anchored to real rounds
+> - After a self-buff cast mid-combat coincides with a kill in a multi-mob room, the caster re-attacks the surviving mob immediately instead of standing idle a round
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

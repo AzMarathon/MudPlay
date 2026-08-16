@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using MudPlay.Game;
 using MudPlay.Game.Inventory;
@@ -135,6 +137,49 @@ public sealed class AutoEquipCoordinatorTests
         // Re-enabled: a fresh combat transition now applies the Default set.
         player.InCombat = false;
         autoEnabled = true;
+        player.InCombat = true;
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    // ===== item-cast swap suppression =====
+
+    // An item-cast buff temporarily borrows an equip slot and restores it itself;
+    // an auto-equip fire it triggers (e.g. the rest it breaks) within the window must
+    // be HELD so the restore isn't doubled (report paradigm-20260815-130733).
+    [Fact]
+    public void Fire_HeldBrieflyAfterItemCastSwap_ThenResumes()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(SetFor(EquipTriggerType.Default, enabled: true, "default-set"));
+        var applied = new List<string>();
+        DateTimeOffset clock = DateTimeOffset.UnixEpoch;
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true,
+            log: null,
+            now: () => clock);
+
+        // Baseline: entering combat fires the Default set.
+        player.InCombat = true;
+        Assert.Equal(new[] { "default-set" }, applied);
+
+        // Item-cast swap just began — a fire inside the window is held.
+        applied.Clear();
+        player.InCombat = false;
+        coord.NoteItemCastSwap();
+        player.InCombat = true;
+        Assert.Empty(applied);
+
+        // Past the window, a fresh fire applies again.
+        applied.Clear();
+        player.InCombat = false;
+        clock += TimeSpan.FromSeconds(5);
         player.InCombat = true;
         Assert.Equal(new[] { "default-set" }, applied);
     }
