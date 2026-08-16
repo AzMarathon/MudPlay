@@ -2886,6 +2886,10 @@ public sealed class AppServices
             // "short orc lieutenant" matches this room's "orc lieutenant" record.
             RoomClassifier.ResolveBaseName,
             MonsterSpawns, MonsterSummonTargets);
+        // Pass 0 of the classifier resolves an observed name against the current room's monsters
+        // (NPC + lair + Summoned-By spawns + what those summon) so a homonym pins to the record
+        // actually here — engagement + per-monster overrides all inherit the right Number.
+        RoomClassifier.SetRoomAwareResolver(RoomAwareMonster.ResolveInCurrentRoom);
         SummonSettle = new Game.Combat.SummonOnDeathSettle(
             MonsterDeath, RoomClassifier, MovementCoordinator, MonsterDeathSummon,
             currentTargetName: () => Combat.CurrentTarget,

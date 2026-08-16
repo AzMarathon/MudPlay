@@ -434,7 +434,8 @@ public sealed class CombatStateTracker : IDisposable
         {
             if (e.Kind != EntityKind.Monster) continue;
             _anyNpcPresent = true;
-            if (IsEngageable(e))
+            bool engageable = IsEngageable(e);
+            if (engageable)
             {
                 targetable++;
                 if (IsActionable(e))
@@ -446,6 +447,7 @@ public sealed class CombatStateTracker : IDisposable
             // On-sight attackers only (Enemy relationship) — a passive KOS-neutral is
             // engageable but never attacks until we hit it, so it doesn't count here.
             if (IsAttackingHostile(e)) attacking++;
+            LogMonsterDecision(e, engageable);
             if (!roomHasSeeHidden && e.MonsterNumber is int n
                 && _hasSeeHidden?.Invoke(n) == true)
             {
@@ -637,6 +639,31 @@ public sealed class CombatStateTracker : IDisposable
         try { overlay = _resolveOverlay(n) ?? new MonsterOverlay(); }
         catch { return true; }
         return (overlay.Relationship ?? MonsterRelationship.Enemy) == MonsterRelationship.Enemy;
+    }
+
+    // Per-monster Combat-level trace so a log read explains WHY the engine engaged or skipped
+    // each room occupant: the detection (name → resolved record Number), its user Relationship +
+    // Kill-on-sight, and the resulting engage / skip decision. Exactly what a "why did it attack
+    // the friendly NPC?" report needs. Combat severity — verbose per-observation detail.
+    private void LogMonsterDecision(RoomEntity e, bool engageable)
+    {
+        if (_log is null) return;
+
+        string record = e.MonsterNumber is int n ? $"#{n}" : "unresolved";
+        string relationship = "Enemy (default)";
+        bool killOnSight = false;
+        if (e.MonsterNumber is int mn && _resolveOverlay is not null)
+        {
+            MonsterOverlay? overlay;
+            try { overlay = _resolveOverlay(mn); } catch { overlay = null; }
+            relationship = (overlay?.Relationship ?? MonsterRelationship.Enemy).ToString();
+            killOnSight = overlay?.KillOnSight == true;
+        }
+
+        _log.Combat(LogCategory,
+            $"detected '{e.ResolvedName}' ({record}) · relationship {relationship}"
+            + (killOnSight ? " · kill-on-sight" : "")
+            + $" → {(engageable ? "engage" : "skip")}");
     }
 
     // Actionable = we can actually kill it (a weapon can hit it OR an eligible

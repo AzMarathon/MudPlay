@@ -919,6 +919,7 @@ public sealed class RoomEntityClassifierTests
             Directory.CreateDirectory(Path.Combine(_root, "alpha"));
             File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
             File.WriteAllText(Path.Combine(_root, "alpha", "Monsters.json"), MonstersJson);
+            File.WriteAllText(Path.Combine(_root, "alpha", "Spells.json"), SpellsJson);
 
             GameDataCache cache = new(_root);
             cache.SwitchSet("alpha");
@@ -930,6 +931,15 @@ public sealed class RoomEntityClassifierTests
             DefaultPatterns.Seed(Router);
             // gameData wired so Pass 0 (room-aware) + Pass 3 (Monsters-table) can resolve.
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Tracker, log: null, gameData: cache);
+            // Wire room-aware Pass 0 (placed NPC + lair + Summoned-By spawns + their summons) —
+            // the same resolver production uses.
+            var roomAware = new RoomAwareMonsterResolver(
+                cache,
+                () => Tracker.State.CurrentRoom,
+                Classifier.ResolveBaseName,
+                new MonsterSpawnIndex(cache),
+                new MonsterSummonTargetsIndex(cache));
+            Classifier.SetRoomAwareResolver(roomAware.ResolveInCurrentRoom);
             Classifier.EntitiesObserved += Observations.Add;
         }
 
@@ -966,19 +976,32 @@ public sealed class RoomEntityClassifierTests
               { "Map Number": 1, "Room Number": 7, "Name": "Rat Den",
                 "Light": 0, "Shop": 0, "Lair": "(Max 2): 7,[6-0-5-1]", "Delay": 5,
                 "N": "0", "S": "0", "E": "0", "W": "0",
-                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "1/3" }
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "1/3" },
+              { "Map Number": 1, "Room Number": 9, "Name": "Crypt",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 5, "NPC": 500,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "1/3", "D": "0" }
             ]
             """;
 
         // #1 giant rat is the "global" variant (also a message-catalog record via AddMonster);
         // #7 is the Rat Den's lair variant (same name, different Number). #499 is the placed
-        // "old man" NPC in the Asylum. Room-aware resolution should prefer #7 in the Rat Den.
+        // "old man" NPC in the Asylum. #404 zombie is listed BEFORE #303 so a global name match
+        // picks #404, but necromancer #500 (placed in the Crypt) summons #303 on death — room-
+        // aware should widen to that summoned minion.
         private const string MonstersJson = """
             [
               { "Number": 1,   "Name": "giant rat" },
               { "Number": 7,   "Name": "giant rat" },
-              { "Number": 499, "Name": "old man" }
+              { "Number": 404, "Name": "zombie" },
+              { "Number": 303, "Name": "zombie" },
+              { "Number": 499, "Name": "old man" },
+              { "Number": 500, "Name": "necromancer", "DeathSpell": 900 }
             ]
+            """;
+
+        private const string SpellsJson = """
+            [ { "Number": 900, "Name": "raise dead", "Abil-0": 12, "AbilVal-0": 303 } ]
             """;
     }
 
@@ -1037,6 +1060,19 @@ public sealed class RoomEntityClassifierTests
         // Same name, two Numbers — room-aware pins it to the lair's #7, not the message-catalog
         // #1, so per-monster overrides land on the variant actually in this room.
         Assert.Equal(7, h.Classifier.Current!.Value.Entities[0].MonsterNumber);
+    }
+
+    [Fact]
+    public void RoomAware_ResolvesMonsterSummonedByPlacedMonster()
+    {
+        using TrackerHarness h = new();
+        // The Crypt places necromancer #500, which summons the zombie #303 on death. A global
+        // name match would pick #404 (listed first); room-aware widens to the summoner's minion.
+        h.Tracker.NoteRoomObserved(new RoomObservation("Crypt", new HashSet<Direction> { Direction.U }));
+
+        h.FeedAlsoHere("Also here: zombie.");
+
+        Assert.Equal(303, h.Classifier.Current!.Value.Entities[0].MonsterNumber);
     }
 
     [Fact]

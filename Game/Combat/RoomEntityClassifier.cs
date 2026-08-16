@@ -66,6 +66,12 @@ public sealed class RoomEntityClassifier : IDisposable
     private readonly LogService? _log;
     private readonly GameDataCache? _gameData;
     private readonly FlavorPrefixStore _flavorPrefixes;
+
+    // Room-aware name → Number resolver (RoomAwareMonsterResolver.ResolveInCurrentRoom), backing
+    // Pass 0. Late-bound: the resolver depends on this classifier's ResolveBaseName, so it's
+    // constructed after us and wired in via SetRoomAwareResolver. Null → Pass 0 is inert.
+    private Func<string, int?>? _roomAwareResolve;
+
     private readonly IDisposable _alsoHereSub;
     private Terminal.LineExtractor? _lines;
     private string? _alsoHereBuffer;     // multi-line continuation
@@ -134,6 +140,15 @@ public sealed class RoomEntityClassifier : IDisposable
         _alsoHereSub = _router.Subscribe(KnownPatterns.RoomAlsoHere, OnRoomAlsoHere);
         if (_roomTracker is not null)
             _roomTracker.StateChanged += OnRoomTrackerStateChanged;
+    }
+
+    // Wire the room-aware resolver used by Pass 0 (RoomAwareMonsterResolver.ResolveInCurrentRoom).
+    // Late-bound because that resolver takes this classifier's ResolveBaseName, so it's built
+    // after us; AppServices calls this once both exist.
+    public void SetRoomAwareResolver(Func<string, int?> resolve)
+    {
+        ArgumentNullException.ThrowIfNull(resolve);
+        _roomAwareResolve = resolve;
     }
 
     // Bind to the per-session LineExtractor so the classifier can stitch wrapped
@@ -319,15 +334,15 @@ public sealed class RoomEntityClassifier : IDisposable
 
     private RoomEntity Classify(string entry, string rawAlsoHereLine)
     {
-        // Pass 0 — room-aware. The current room record names the specific monster Number(s)
-        // present here — its fixed Npc, then each lair member — so resolve the observed name
-        // against those FIRST and pin it to that exact record. This disambiguates a homonym to
-        // the variant actually in THIS room, so per-monster overrides that key on the Number —
-        // spell overrides, relationship, KillOnSight — apply to the right monster. Falls through
-        // when the room record doesn't list the name (a wandering / summoned mob) or the current
-        // room isn't known yet, in which case the name-only passes below take over.
-        if (ResolveByCurrentRoom(entry) is { } roomNum)
-            return new RoomEntity(entry, _gameData!.FindNameByNumber("Monsters", roomNum) ?? entry,
+        // Pass 0 — room-aware. Resolve the observed name to the specific monster the CURRENT
+        // room actually places or summons here — its NPC fixture, lair members, Summoned-By
+        // spawns, AND the monsters those can summon (RoomAwareMonsterResolver) — before any
+        // global name match. This pins a homonym to the variant in THIS room, so per-monster
+        // overrides that key on the Number (spell overrides, relationship, KillOnSight) land on
+        // the right record. Falls through when the room doesn't host that name, or the current
+        // room / resolver isn't wired, in which case the name-only passes below take over.
+        if (_roomAwareResolve?.Invoke(entry) is { } roomNum)
+            return new RoomEntity(entry, _gameData?.FindNameByNumber("Monsters", roomNum) ?? entry,
                                   EntityKind.Monster, roomNum);
 
         // Pass 1 — monster match (direct + prefix-stripped).
@@ -415,39 +430,6 @@ public sealed class RoomEntityClassifier : IDisposable
         return numEl.TryGetInt32(out number);
     }
 
-    // Resolve the observed name to the specific monster Number the current room record places
-    // here — the fixed Npc first, then each lair member (RoomTooltipBuilder.ParseLairTag). Null
-    // when there's no bound GameDataCache / current room, or the name matches none of the room's
-    // own monsters. Backs Pass 0 in Classify.
-    private int? ResolveByCurrentRoom(string entry)
-    {
-        if (_gameData is null) return null;
-        if (_roomTracker?.State.CurrentRoom is not { } room) return null;
-
-        if (room.Npc > 0 && RoomMonsterMatches(entry, room.Npc)) return room.Npc;
-
-        if (room.HasLair)
-        {
-            RoomTooltipBuilder.ParseLairTag(room.RawLairTag!, out _, out IReadOnlyList<int> memberIds);
-            foreach (int id in memberIds)
-                if (RoomMonsterMatches(entry, id)) return id;
-        }
-        return null;
-    }
-
-    // True when the observed name is monsterNumber's canonical Monsters-table Name — directly,
-    // or after stripping one leading flavor adjective from the per-set vocabulary
-    // ("large old man" → "old man"). Mirrors Classify's own prefix rule.
-    private bool RoomMonsterMatches(string entry, int monsterNumber)
-    {
-        string? name = _gameData!.FindNameByNumber("Monsters", monsterNumber);
-        if (string.IsNullOrEmpty(name)) return false;
-        if (string.Equals(entry, name, StringComparison.OrdinalIgnoreCase)) return true;
-        int sp = entry.IndexOf(' ');
-        return sp > 0
-            && _flavorPrefixes.IsPrefix(entry[..sp])
-            && string.Equals(entry[(sp + 1)..], name, StringComparison.OrdinalIgnoreCase);
-    }
 
     // Strip a monster display name's flavor prefix down to its canonical base name
     // ("short orc lieutenant" → "orc lieutenant") using the same matching Classify does

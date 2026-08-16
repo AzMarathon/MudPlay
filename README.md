@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.19.2**
-> - Combat: **room-aware monster identification** — an observed name resolves against the monsters the current room record places here (its NPC + lair members) before any global name match, so a homonym pins to the variant in this room and per-monster overrides (spell overrides, relationship, Kill-on-sight) land on the right record
+> **Version 3.19.3**
+> - Combat: **room-aware monster identification** — an observed name resolves against the monsters the current room places or summons here (its NPC + lair members + Summoned-By spawns + the monsters those summon) before any global name match, so a homonym pins to the variant in this room and per-monster overrides (spell overrides, relationship, Kill-on-sight) land on the right record
+> - Combat: the program log now traces each room occupant (detection → relationship + Kill-on-sight → engage/skip) at Combat severity, so a log read explains why the engine did or didn't attack something
 > - Combat: a friendly / neutral NPC whose name couldn't be pinned to its monster record (e.g. a greet-only "old man" quest-giver) is no longer attacked on sight — such records resolve to their record by name so their Relationship / Kill-on-sight setting is honoured, and the engine never proactively attacks a monster it can't identify (fixes a v3.15.0 regression)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
