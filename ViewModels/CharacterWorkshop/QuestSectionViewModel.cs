@@ -77,6 +77,25 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         if (_profile.Current is { } p) { p.AnnounceAvailableQuests = value; _profile.Save(); }
     }
 
+    // Top-of-tab alignment-quest checkboxes: which alignment chain(s) this character is
+    // committed to. An alignment-gated quest is only shown as doable when its bucket is
+    // checked here. Persisted per character; toggling one re-runs eligibility so those
+    // quests appear / disappear. All default off — never auto-checked (a player decision).
+    [ObservableProperty] private bool _questAlignGood;
+    [ObservableProperty] private bool _questAlignNeutral;
+    [ObservableProperty] private bool _questAlignEvil;
+
+    partial void OnQuestAlignGoodChanged(bool value) => SaveAlignmentPref(p => p.QuestAlignGood = value);
+    partial void OnQuestAlignNeutralChanged(bool value) => SaveAlignmentPref(p => p.QuestAlignNeutral = value);
+    partial void OnQuestAlignEvilChanged(bool value) => SaveAlignmentPref(p => p.QuestAlignEvil = value);
+
+    private void SaveAlignmentPref(Action<CharacterProfile> apply)
+    {
+        if (_suppress) return;
+        if (_profile.Current is { } p) { apply(p); _profile.Save(); }
+        Rebuild();   // eligibility changed — re-mark "Cannot complete" + re-filter the list
+    }
+
     // False when no visible quest resolves (no set / no character) — drives the empty-state hint.
     [ObservableProperty] private bool _hasQuests;
 
@@ -116,6 +135,9 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         try
         {
             AnnounceAvailableQuests = _profile.Current?.AnnounceAvailableQuests ?? true;
+            QuestAlignGood = _profile.Current?.QuestAlignGood ?? false;
+            QuestAlignNeutral = _profile.Current?.QuestAlignNeutral ?? false;
+            QuestAlignEvil = _profile.Current?.QuestAlignEvil ?? false;
             _allCards.Clear();
             _bonusesByCard.Clear();
             LoadProgressFromProfile();
@@ -132,6 +154,9 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
 
             int? classId = ResolveClassId();
             int? raceId = ResolveRaceId();
+            bool alGood = _profile.Current?.QuestAlignGood ?? false;
+            bool alNeutral = _profile.Current?.QuestAlignNeutral ?? false;
+            bool alEvil = _profile.Current?.QuestAlignEvil ?? false;
             foreach (CrawledQuest q in QuestCrawler.Crawl(_gameData, classId))
             {
                 QuestDefinition def = _quests.Resolve(q.Flag, q.Step);
@@ -166,7 +191,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
                     // override edits the item/ability award line, not the raw give-chain exp.
                     QuestTextFormatter.Experience(q),
                     QuestTextFormatter.Requirements(_gameData, q),
-                    IsIneligible(q, classId, raceId),
+                    QuestEligibilityResolver.IsIneligible(q, classId, raceId, def.ClassRestrict, alGood, alNeutral, alEvil),
                     prog.Complete,
                     steps,
                     OnCardCompletionChanged);
@@ -439,13 +464,6 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     // restriction set — a provable "can't take it" (a Warrior viewing Meditate, a Human
     // viewing the Gaunt-One SeeHidden quest). An unknown class/race never excludes: the
     // restriction sets are conservative, so we only flag what the crawl proves shut.
-    private static bool IsIneligible(CrawledQuest q, int? classId, int? raceId)
-    {
-        if (q.ClassIds is { Count: > 0 } cls && classId is int c && !cls.Contains(c)) return true;
-        if (q.RaceIds is { Count: > 0 } rcs && raceId is int r && !rcs.Contains(r)) return true;
-        return false;
-    }
-
     private static string ResolveTitle(QuestDefinition def, CrawledQuest q) =>
         !string.IsNullOrWhiteSpace(def.Name) ? def.Name : QuestTextFormatter.FallbackTitle(q);
 

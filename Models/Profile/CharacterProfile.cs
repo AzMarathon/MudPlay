@@ -238,6 +238,18 @@ public sealed class CharacterProfile
     // from the top of the Quest Status tab. Defaults on.
     public bool AnnounceAvailableQuests { get; set; } = true;
 
+    // Which alignment quest chains this character is doing — the Evil/Neutral/Good
+    // checkboxes at the top of the Quest Status tab. In game you commit to one
+    // alignment quest chain and are then locked to it regardless of your live
+    // alignment, so which alignment quests you can complete is a declared player
+    // choice, not something inferred. An alignment-gated quest (RequiredAlignment)
+    // is eligible only when its bucket is enabled here. All default off — a fresh
+    // character declares nothing, so no alignment quests show until the player opts
+    // into a path (never auto-checked).
+    public bool QuestAlignGood { get; set; }
+    public bool QuestAlignNeutral { get; set; }
+    public bool QuestAlignEvil { get; set; }
+
     // Per-character equipment-manager state (Workshop Equipment tab) — saved
     // gear sets and the auto-equip triggers between them. Drives @equip-<set>,
     // the per-slot editor, and trigger evaluation. null means nothing configured

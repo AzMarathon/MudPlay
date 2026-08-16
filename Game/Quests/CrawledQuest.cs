@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MudPlay.Game.Calculators;
 
 namespace MudPlay.Game.Quests;
 
@@ -90,4 +91,13 @@ public sealed record CrawledQuest(
     int StepRangeEnd = 0,
     bool AwardsAbility = false,
     bool ProgressByValue = false,
-    int ExpAward = 0);
+    int ExpAward = 0,
+    // The alignment a character must hold to complete this quest, or null when the
+    // quest isn't alignment-gated. Derived from the quest's goodaligned/evilaligned
+    // gate directives (canonically abilities 126=Good / 127=Neutral / 128=Evil): a
+    // chain that gates good-only → Good, evil-only → Evil, and one bracketed by both
+    // (a "not too good, not too evil" range) → Neutral. The Quest tab's per-character
+    // Evil/Neutral/Good checkboxes filter on this — a player commits to one alignment
+    // quest chain and is locked to it, so which they can complete is their call, not
+    // something derivable from live alignment.
+    AlignmentBucket? RequiredAlignment = null);

@@ -62,6 +62,15 @@ public sealed class QuestDefinition
     // Has no meaning on a manual quest (delete it instead). Defaults to false.
     public bool Blocked { get; set; }
 
+    // Class Numbers this quest is restricted to, or null/empty for no explicit
+    // restriction. A hand-set override for the genuinely class-locked quests the
+    // crawl can't detect reliably — Magebane (Witchunter), Tarl — where a stray
+    // unguarded grant in the data reads as an open path. When set, a character
+    // whose class isn't in the list is marked "Cannot complete" (and the quest is
+    // dropped from the login availability dump). Empty/null leaves eligibility to
+    // the crawl's own class/race guards. Editable per quest in the Quest editor.
+    public System.Collections.Generic.List<int>? ClassRestrict { get; set; }
+
     public QuestDefinition() { }
 
     public QuestDefinition(int flag, int step, string name = "", bool visible = true,
