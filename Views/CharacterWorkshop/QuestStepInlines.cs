@@ -31,14 +31,21 @@ public static class QuestStepInlines
         var inlines = new InlineCollection();
         if (e.NewValue is IReadOnlyList<QuestStepSegmentViewModel> segments)
             foreach (QuestStepSegmentViewModel seg in segments)
-                inlines.Add(seg.IsLink
-                    ? new InlineUIContainer(new Button
-                    {
-                        Classes = { "MapLink" },
-                        Command = seg.WalkCommand,
-                        Content = new TextBlock { Text = seg.Text, Classes = { "MapLinkText" } },
-                    })
-                    : new Run(seg.Text));
+            {
+                if (!seg.IsLink) { inlines.Add(new Run(seg.Text)); continue; }
+
+                // Walk links read cyan (MapLinkText); send-command links read green
+                // (CmdLinkText) so a "walks me there" token is visually distinct from
+                // a "types this at the game" one. Both share the flat MapLink chrome.
+                var linkText = new TextBlock { Text = seg.Text };
+                linkText.Classes.Add(seg.Kind == QuestStepLinkKind.Send ? "CmdLinkText" : "MapLinkText");
+                inlines.Add(new InlineUIContainer(new Button
+                {
+                    Classes = { "MapLink" },
+                    Command = seg.Command,
+                    Content = linkText,
+                }));
+            }
         target.Inlines = inlines;
     }
 }

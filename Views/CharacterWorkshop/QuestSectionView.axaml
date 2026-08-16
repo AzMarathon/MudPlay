@@ -55,6 +55,13 @@
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="TextDecorations" Value="Underline"/>
         </Style>
+        <!-- Inline 'command' link inside a step line: green hot-text the user clicks
+             to type that command at the game (distinct from the cyan walk links). -->
+        <Style Selector="TextBlock.CmdLinkText">
+            <Setter Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid Margin="22" RowDefinitions="Auto,*">

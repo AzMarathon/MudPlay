@@ -58,53 +58,98 @@ public sealed class QuestTextFormatterTests
     }
 
     [Fact]
-    public void SplitRoomLinks_IsolatesCoordinateAsLinkBetweenProseRuns()
+    public void SplitStepLinks_IsolatesCoordinateAsLinkBetweenProseRuns()
     {
-        var segs = QuestTextFormatter.SplitRoomLinks("sit throne @ (5/297) receive crown").ToList();
+        var segs = QuestTextFormatter.SplitStepLinks("sit throne @ (5/297) receive crown").ToList();
         Assert.Equal(3, segs.Count);
-        Assert.Equal(("sit throne @ ", (RoomKey?)null), segs[0]);
-        Assert.Equal(("(5/297)", (RoomKey?)new RoomKey(5, 297)), segs[1]);
-        Assert.Equal((" receive crown", (RoomKey?)null), segs[2]);
+        Assert.Equal(("sit throne @ ", (RoomKey?)null, (string?)null), segs[0]);
+        Assert.Equal(("(5/297)", (RoomKey?)new RoomKey(5, 297), (string?)null), segs[1]);
+        Assert.Equal((" receive crown", (RoomKey?)null, (string?)null), segs[2]);
     }
 
     [Fact]
-    public void SplitRoomLinks_LeadingCoordinateEmitsNoEmptyProseRun()
+    public void SplitStepLinks_LeadingCoordinateEmitsNoEmptyProseRun()
     {
-        var segs = QuestTextFormatter.SplitRoomLinks("(1/3) go north").ToList();
+        var segs = QuestTextFormatter.SplitStepLinks("(1/3) go north").ToList();
         Assert.Equal(2, segs.Count);
-        Assert.Equal(("(1/3)", (RoomKey?)new RoomKey(1, 3)), segs[0]);
-        Assert.Equal((" go north", (RoomKey?)null), segs[1]);
+        Assert.Equal(("(1/3)", (RoomKey?)new RoomKey(1, 3), (string?)null), segs[0]);
+        Assert.Equal((" go north", (RoomKey?)null, (string?)null), segs[1]);
     }
 
     [Fact]
-    public void SplitRoomLinks_MultipleCoordinates_EachBecomesItsOwnLink()
+    public void SplitStepLinks_MultipleCoordinates_EachBecomesItsOwnLink()
     {
-        var segs = QuestTextFormatter.SplitRoomLinks("(1/2) then (3/4)").ToList();
+        var segs = QuestTextFormatter.SplitStepLinks("(1/2) then (3/4)").ToList();
         Assert.Equal(new RoomKey?[] { new RoomKey(1, 2), null, new RoomKey(3, 4) },
                      segs.Select(s => s.Room).ToArray());
     }
 
     [Fact]
-    public void SplitRoomLinks_NoCoordinate_ReturnsSinglePlainRun()
+    public void SplitStepLinks_NoToken_ReturnsSinglePlainRun()
     {
-        var seg = Assert.Single(QuestTextFormatter.SplitRoomLinks("just plain prose"));
-        Assert.Equal(("just plain prose", (RoomKey?)null), seg);
+        var seg = Assert.Single(QuestTextFormatter.SplitStepLinks("just plain prose"));
+        Assert.Equal(("just plain prose", (RoomKey?)null, (string?)null), seg);
     }
 
     [Fact]
-    public void SplitRoomLinks_OverRangeCoordinate_StaysFoldedInProse()
+    public void SplitStepLinks_OverRangeCoordinate_StaysFoldedInProse()
     {
         // A number too large for int isn't a real room — it must not become a link,
         // and the whole token stays in the prose run.
-        var seg = Assert.Single(QuestTextFormatter.SplitRoomLinks("go (99999999999/3)"));
+        var seg = Assert.Single(QuestTextFormatter.SplitStepLinks("go (99999999999/3)"));
         Assert.Null(seg.Room);
         Assert.Equal("go (99999999999/3)", seg.Text);
     }
 
     [Fact]
-    public void SplitRoomLinks_EmptyInput_ReturnsNoSegments()
+    public void SplitStepLinks_EmptyInput_ReturnsNoSegments()
     {
-        Assert.Empty(QuestTextFormatter.SplitRoomLinks(string.Empty));
+        Assert.Empty(QuestTextFormatter.SplitStepLinks(string.Empty));
+    }
+
+    // ----- single-quoted command tokens -----
+
+    [Fact]
+    public void SplitStepLinks_IsolatesSingleQuotedCommand_UnquotesTheCommand()
+    {
+        var segs = QuestTextFormatter.SplitStepLinks("then 'ask jorah transport' and wait").ToList();
+        Assert.Equal(3, segs.Count);
+        Assert.Equal(("then ", (RoomKey?)null, (string?)null), segs[0]);
+        // The shown text keeps the quotes; the Command carries the unquoted verb.
+        Assert.Equal(("'ask jorah transport'", (RoomKey?)null, (string?)"ask jorah transport"), segs[1]);
+        Assert.Equal((" and wait", (RoomKey?)null, (string?)null), segs[2]);
+    }
+
+    [Fact]
+    public void SplitStepLinks_ProseApostrophes_AreNotTreatedAsCommand()
+    {
+        // Apostrophes sitting between letters (don't, they're) must not open a bogus
+        // quoted run — the whole line stays one plain segment.
+        var seg = Assert.Single(
+            QuestTextFormatter.SplitStepLinks("don't bother buffing, they're stripped"));
+        Assert.Null(seg.Command);
+        Assert.Null(seg.Room);
+        Assert.Equal("don't bother buffing, they're stripped", seg.Text);
+    }
+
+    [Fact]
+    public void SplitStepLinks_MixedRoomAndCommand_BothBecomeLinks()
+    {
+        var segs = QuestTextFormatter.SplitStepLinks("(2/2566) 'touch ruby'").ToList();
+        Assert.Equal(3, segs.Count);
+        Assert.Equal(new RoomKey(2, 2566), segs[0].Room);
+        Assert.Null(segs[0].Command);
+        Assert.Equal("touch ruby", segs[2].Command);
+        Assert.Null(segs[2].Room);
+    }
+
+    [Fact]
+    public void SplitStepLinks_EmptyQuote_StaysFoldedInProse()
+    {
+        // '' carries no command — leave it in the prose run, no dead link.
+        var seg = Assert.Single(QuestTextFormatter.SplitStepLinks("nothing here ''"));
+        Assert.Null(seg.Command);
+        Assert.Equal("nothing here ''", seg.Text);
     }
 
     // ----- Step: seed-style auto-draft rendering -----------------------------

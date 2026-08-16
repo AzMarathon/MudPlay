@@ -281,15 +281,22 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     }
 
     // Split a step label into render runs, wrapping each `(map/room)` coordinate in
-    // a command that walks there. A plain run carries no command; only the
-    // coordinate run is clickable.
+    // a walk-there command and each single-quoted `'command'` in a send-to-game
+    // command. Plain runs carry no command; only the tokens are clickable.
     private static IReadOnlyList<QuestStepSegmentViewModel> BuildSegments(string display)
     {
         var segments = new List<QuestStepSegmentViewModel>();
-        foreach ((string segText, RoomKey? room) in QuestTextFormatter.SplitRoomLinks(display))
-            segments.Add(room is { } key
-                ? new QuestStepSegmentViewModel(segText, new RelayCommand(() => WalkTo(key)))
-                : new QuestStepSegmentViewModel(segText));
+        foreach ((string segText, RoomKey? room, string? command) in QuestTextFormatter.SplitStepLinks(display))
+        {
+            if (room is { } key)
+                segments.Add(new QuestStepSegmentViewModel(
+                    segText, new RelayCommand(() => WalkTo(key)), QuestStepLinkKind.Walk));
+            else if (command is { } cmd)
+                segments.Add(new QuestStepSegmentViewModel(
+                    segText, new RelayCommand(() => SendStepCommand(cmd)), QuestStepLinkKind.Send));
+            else
+                segments.Add(new QuestStepSegmentViewModel(segText));
+        }
         return segments;
     }
 
@@ -302,6 +309,12 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         AppServices.Current.MovementControl.Stop();
         AppServices.Current.Walker.WalkTo(room);
     }
+
+    // Type a quest-step's `'command'` at the game exactly as if the user typed it in
+    // the terminal — macro/alias expansion and the outbound observers all run — so a
+    // guide's quoted command is indistinguishable from a keystroke.
+    private static void SendStepCommand(string command)
+        => AppServices.Current.SendTypedInput(command);
 
     // ----- editor ---------------------------------------------------------
 
