@@ -27,6 +27,7 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
     public event Action<bool>? CloseRequested;
 
     private readonly QuestStore _quests;
+    private readonly GameDataCache _gameData;
 
     // Every crawled quest in crawl order (flag, then band level), editable.
     public ObservableCollection<QuestEditRowViewModel> Quests { get; } = new();
@@ -49,6 +50,7 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(quests);
         _quests = quests;
+        _gameData = gameData;
 
         Quests.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasQuests));
 
@@ -76,7 +78,8 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
                 def.Visible,
                 def.Steps ?? string.Empty,
                 def.Rewards ?? string.Empty,
-                def.RequiredLevel)
+                def.RequiredLevel,
+                ClassNamesText(def.ClassRestrict))
             { Blocked = def.Blocked });
         }
 
@@ -113,7 +116,7 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
 
     // A master-list row for a manual quest: every crawl-baseline field is empty, so the
     // editable boxes pre-fill straight from the definition and persist verbatim.
-    private static QuestEditRowViewModel BuildManualRow(QuestDefinition def) =>
+    private QuestEditRowViewModel BuildManualRow(QuestDefinition def) =>
         new(def.Flag, def.Step,
             fallbackLabel: "(custom quest)",
             autoSteps: string.Empty,
@@ -126,13 +129,49 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
             visible: def.Visible,
             steps: def.Steps ?? string.Empty,
             rewards: def.Rewards ?? string.Empty,
-            requiredLevel: def.RequiredLevel)
+            requiredLevel: def.RequiredLevel,
+            classRestrictText: ClassNamesText(def.ClassRestrict))
         { Blocked = def.Blocked };
+
+    // Class Numbers → a comma-separated name list for the editor field ("" when none).
+    private string ClassNamesText(System.Collections.Generic.List<int>? nums)
+    {
+        if (nums is not { Count: > 0 }) return string.Empty;
+        return string.Join(", ", nums.Select(n => _gameData.FindNameByNumber("Classes", n) ?? n.ToString()));
+    }
+
+    // The editor field's comma-separated class names (or raw numbers) → class Numbers,
+    // or null when blank. A token that resolves to neither a known class name nor a
+    // positive integer is dropped.
+    private System.Collections.Generic.List<int>? ParseClassRestrict(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var ids = new System.Collections.Generic.List<int>();
+        foreach (string raw in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (int.TryParse(raw, out int n) && n > 0) { if (!ids.Contains(n)) ids.Add(n); continue; }
+            int byName = GetInt(_gameData.FindRowByName("Classes", raw), "Number");
+            if (byName > 0 && !ids.Contains(byName)) ids.Add(byName);
+        }
+        return ids.Count > 0 ? ids : null;
+    }
+
+    private static int GetInt(System.Text.Json.JsonElement? rowOpt, string prop)
+    {
+        if (rowOpt is not System.Text.Json.JsonElement row || row.ValueKind != System.Text.Json.JsonValueKind.Object) return 0;
+        if (!row.TryGetProperty(prop, out System.Text.Json.JsonElement v)) return 0;
+        return v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
+    }
 
     [RelayCommand]
     private void Save()
     {
-        _quests.Save(Quests.Select(q => q.ToDefinition()));
+        _quests.Save(Quests.Select(row =>
+        {
+            QuestDefinition def = row.ToDefinition();
+            def.ClassRestrict = ParseClassRestrict(row.ClassRestrictText);
+            return def;
+        }));
         CloseRequested?.Invoke(true);
     }
 

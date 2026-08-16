@@ -72,11 +72,17 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
     // (including 0 to force ungated) persists as a user override.
     [ObservableProperty] private int? _requiredLevelInput;
 
+    // Comma-separated class names this quest is restricted to (blank = no restriction).
+    // Persisted as class Numbers on QuestDefinition.ClassRestrict — the editor VM does
+    // the name↔number conversion since it owns the Classes table. The explicit override
+    // for genuinely class-locked quests the crawl can't detect (Magebane, Tarl).
+    [ObservableProperty] private string _classRestrictText;
+
     public QuestEditRowViewModel(int flag, int step, string fallbackLabel,
                                  string autoSteps, string autoRewards, string bonusText,
                                  string levelText, int autoRequiredLevel, string requirementsText,
                                  string name, bool visible, string steps, string rewards,
-                                 int? requiredLevel)
+                                 int? requiredLevel, string classRestrictText = "")
     {
         Flag = flag;
         Step = step;
@@ -96,6 +102,7 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
         // Show the crawled level when there's one to correct, blank when the crawl found
         // none — so an empty box always reads as "no override".
         _requiredLevelInput = requiredLevel ?? (autoRequiredLevel > 0 ? autoRequiredLevel : null);
+        _classRestrictText = classRestrictText;
     }
 
     // Left-list label: the current name (or the auto-draft fallback), suffixed when blocked / hidden.

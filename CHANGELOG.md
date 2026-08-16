@@ -2,9 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.18.17
+## 3.18.18
 
 - Quest guides: a single-quoted `'command'` in a step is now a clickable green link — clicking it types that command at the game exactly as if you'd entered it in the terminal (macro/alias expansion included), alongside the existing clickable `(map/room)` walk links
+- Quest eligibility: alignment quests no longer show as doable for the wrong alignment — three Evil / Neutral / Good checkboxes at the top of the Quest Status tab (saved per character, off by default) declare which alignment chain(s) you're on, and alignment-gated quests only appear as available when their box is ticked
+- Quest eligibility: the Quest editor gains a "Restrict to classes" field for the genuinely class-locked quests the crawler can't detect on its own (Magebane, Tarl) — a character of any other class is marked Cannot complete and dropped from the login availability dump
 
 ## 3.18.16
 
