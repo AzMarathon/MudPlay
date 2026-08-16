@@ -27,6 +27,16 @@ public sealed class QuestProgress
     // (single-part quests only). null / empty when nothing's ticked.
     public List<int>? CheckedSteps { get; set; }
 
+    // Per-character opt-in to keep this quest in the journal even though the
+    // character can't complete it (wrong class/race/alignment, or a class
+    // restriction). Default false: a "Cannot complete" quest is hidden unless the
+    // user ticks "Show in quest journal" for it in the editor. Lives here rather
+    // than on the per-set QuestDefinition because eligibility is a per-character
+    // fact, so the choice to override it follows the character, not the board.
+    // Never affects the login availability dump — that always excludes ineligible
+    // quests.
+    public bool ShowIfIneligible { get; set; }
+
     public QuestProgress() { }
 
     public QuestProgress(int flag, int step)

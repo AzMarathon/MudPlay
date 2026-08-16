@@ -5,7 +5,7 @@
 > - Quest guides: a single-quoted `'command'` in a step is now a clickable green link — clicking it types that command at the game exactly as if you'd entered it in the terminal, alongside the existing clickable `(map/room)` walk links
 > - Quest eligibility: three Evil / Neutral / Good checkboxes at the top of the Quest Status tab (saved per character, off by default) declare which alignment chain(s) you're on, so alignment-gated quests only show as available when their box is ticked
 > - Quest eligibility: the Quest editor's "Restrict to classes" control is a checkable class dropdown for the genuinely class-locked quests the crawler can't detect on its own (Magebane, Tarl)
-> - Quest journal: quests this character can't complete are hidden by default — tick "Show in quest journal" in the editor to keep one visible
+> - Quest journal: quests this character can't complete are hidden by default — tick "Show in quest journal" in the editor to keep one visible (saved per character)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

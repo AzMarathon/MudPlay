@@ -67,8 +67,14 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
     private bool _visible;
 
     // Backs ShowInJournal for a "Cannot complete" quest (the show-anyway opt-in). Kept
-    // separate from Visible so the two never clobber each other.
+    // separate from Visible so the two never clobber each other. Persisted per character
+    // on QuestProgress (not on the per-set QuestDefinition), so the editor VM seeds it in
+    // and reads it back via ShowIfIneligibleOverride rather than through ToDefinition.
     private bool _showIfIneligible;
+
+    // The live show-anyway value, read back by the journal VM to persist onto the
+    // per-character QuestProgress. Only meaningful for an ineligible quest.
+    public bool ShowIfIneligibleOverride => _showIfIneligible;
 
     // Live block flag bound to the editor's "Block" toggle (crawled quests only). When
     // set the quest is suppressed from the journal entirely as a false positive; the row
@@ -203,7 +209,7 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
                 string.IsNullOrWhiteSpace(Steps) ? null : Steps,
                 string.IsNullOrWhiteSpace(Rewards) ? null : Rewards,
                 RequiredLevelInput)
-            { ShowIfIneligible = _showIfIneligible, ClassRestrict = SelectedClassNumbers() };
+            { ClassRestrict = SelectedClassNumbers() };
 
         string name = (Name ?? string.Empty).Trim();
         if (string.Equals(name, FallbackLabel, StringComparison.Ordinal)) name = string.Empty;
@@ -223,6 +229,6 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
         if (requiredLevel is null || requiredLevel == AutoRequiredLevel) requiredLevel = null;
 
         return new QuestDefinition(Flag, Step, name, Visible, steps, rewards, requiredLevel, Blocked)
-            { ShowIfIneligible = _showIfIneligible, ClassRestrict = SelectedClassNumbers() };
+            { ClassRestrict = SelectedClassNumbers() };
     }
 }

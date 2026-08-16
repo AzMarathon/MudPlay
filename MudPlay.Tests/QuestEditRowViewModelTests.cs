@@ -29,9 +29,8 @@ public sealed class QuestEditRowViewModelTests
 
         row.ShowInJournal = false;               // per-taste hide
         Assert.False(row.Visible);
-        QuestDefinition def = row.ToDefinition();
-        Assert.False(def.Visible);
-        Assert.False(def.ShowIfIneligible);      // untouched for an eligible quest
+        Assert.False(row.ToDefinition().Visible);
+        Assert.False(row.ShowIfIneligibleOverride);   // untouched for an eligible quest
     }
 
     [Fact]
@@ -43,9 +42,10 @@ public sealed class QuestEditRowViewModelTests
 
         row.ShowInJournal = true;                // opt back in
         Assert.True(row.ShowInJournal);
-        QuestDefinition def = row.ToDefinition();
-        Assert.True(def.ShowIfIneligible);
-        Assert.True(def.Visible);                // Visible left alone — the two never clobber
+        // The opt-in reads back for per-character persistence; Visible (the per-set field)
+        // is left alone so the two never clobber each other.
+        Assert.True(row.ShowIfIneligibleOverride);
+        Assert.True(row.ToDefinition().Visible);
     }
 
     [Fact]

@@ -418,18 +418,4 @@ public sealed class QuestStoreTests : IDisposable
         reloaded.OnActiveBbsChanged(_scratchBbs);
         Assert.Equal([3, 8, 9], reloaded.Resolve(50, 1).ClassRestrict!.OrderBy(x => x).ToList());
     }
-
-    [Fact]
-    public void Save_PersistsShowIfIneligible_AndSurvivesReload()
-    {
-        QuestStore store = new(seedPath: _seedPath);
-        store.OnActiveBbsChanged(_scratchBbs);
-
-        // The opt-in to keep a "Cannot complete" quest in the journal is a real delta.
-        store.Save([new QuestDefinition(50, 1, "Name") { ShowIfIneligible = true }]);
-
-        QuestStore reloaded = new(seedPath: _seedPath);
-        reloaded.OnActiveBbsChanged(_scratchBbs);
-        Assert.True(reloaded.Resolve(50, 1).ShowIfIneligible);
-    }
 }

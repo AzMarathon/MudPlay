@@ -163,15 +163,22 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
                 bool ineligible = QuestEligibilityResolver.IsIneligible(
                     q, classId, raceId, def.ClassRestrict, alGood, alNeutral, alEvil);
                 // Blocked = a false positive the user flagged out of the journal. A quest
-                // this character can't complete is hidden unless the user opted back in
-                // (ShowIfIneligible); an eligible one honours the per-taste Visible hide.
-                // Either way it stays in the editor, which lists every quest regardless.
+                // this character can't complete is hidden unless they opted back in per
+                // character (QuestProgress.ShowIfIneligible); an eligible one honours the
+                // per-taste Visible hide. Either way it stays in the editor, which lists
+                // every quest regardless.
                 if (def.Blocked) continue;
-                if (ineligible) { if (!def.ShowIfIneligible) continue; }
+
+                // Capture the quest's bonuses for every non-blocked quest — even ones we're
+                // about to hide from the journal — so PublishBonuses can still apply a
+                // completed quest's permanent bonus when it's out of the list (a quest's
+                // stat gain follows its completion, not its journal visibility).
+                _bonusesByCard[(q.Flag, q.Step)] = q.Bonuses;
+
+                if (ineligible) { if (!ShowsWhenIneligible(q.Flag, q.Step)) continue; }
                 else if (!def.Visible) continue;
 
                 QuestProgress prog = GetOrCreateProgress(q.Flag, q.Step);
-                _bonusesByCard[(q.Flag, q.Step)] = q.Bonuses;
 
                 // The user's reward override (set in the editor) wins over the crawler's
                 // inferred award — it's how awards the give-chain crawl can't see (e.g.
@@ -354,14 +361,32 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     [RelayCommand]
     private async Task EditQuests()
     {
+        // Seed the editor with this character's current show-anyway opt-ins (per-quest),
+        // so a "Cannot complete" quest's "Show in quest journal" checkbox reflects the
+        // character's saved choice rather than the board's.
+        Dictionary<(int Flag, int Step), bool> showAnyway = _progress.Values
+            .Where(p => p.ShowIfIneligible)
+            .ToDictionary(p => (p.Flag, p.Step), _ => true);
+
         var editor = new QuestEditorViewModel(
             _gameData, _quests, ResolveClassId(), ResolveRaceId(),
             _profile.Current?.QuestAlignGood ?? false,
             _profile.Current?.QuestAlignNeutral ?? false,
-            _profile.Current?.QuestAlignEvil ?? false);
+            _profile.Current?.QuestAlignEvil ?? false,
+            showAnyway);
         bool? saved = await AppServices.Current.Dialogs
             .OpenWindowAsync<QuestEditorViewModel, bool>(editor);
-        if (saved == true) Rebuild();
+        if (saved != true) return;
+
+        // The show-anyway opt-in is per character, so it lands on QuestProgress here (the
+        // sole QuestLog writer) rather than through QuestStore's per-set overlay. Only
+        // ineligible rows carry a meaningful value; write it (incl. clearing to false).
+        foreach (QuestEditRowViewModel row in editor.Quests)
+            if (row.IsIneligible)
+                GetOrCreateProgress(row.Flag, row.Step).ShowIfIneligible = row.ShowIfIneligibleOverride;
+
+        Persist();
+        Rebuild();
     }
 
     // ----- toggle handlers ------------------------------------------------
@@ -405,15 +430,20 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
 
     // ----- publish + persist ----------------------------------------------
 
-    // Flatten every completed card's class-resolved bonuses (quests stack, so no
-    // dedup) and hand them to the shared state the Character Info tab reads.
+    // Flatten every completed quest's class-resolved bonuses (quests stack, so no dedup)
+    // and hand them to the shared state the Character Info tab reads. Keyed off the
+    // per-character completion records, not the visible cards, so a completed quest's
+    // permanent bonus still applies when the quest is hidden from the journal (search
+    // filter, per-taste hide, or the cannot-complete auto-hide) — its stat gain is a
+    // function of completion, not visibility. _bonusesByCard holds every non-blocked
+    // crawled quest this set produced (captured before any hide).
     private void PublishBonuses()
     {
         var bonuses = new List<QuestBonus>();
-        foreach (QuestCardViewModel card in Quests)
+        foreach (QuestProgress p in _progress.Values)
         {
-            if (!card.IsComplete) continue;
-            if (_bonusesByCard.TryGetValue((card.Flag, card.Step), out IReadOnlyList<QuestBonus>? b))
+            if (!p.Complete) continue;
+            if (_bonusesByCard.TryGetValue((p.Flag, p.Step), out IReadOnlyList<QuestBonus>? b))
                 bonuses.AddRange(b);
         }
         _bonusState.Update(bonuses);
@@ -430,9 +460,17 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         _profile.Save();
     }
 
-    // A record is worth persisting only when it carries completion or step progress;
-    // empty drafts are dropped so the log stays a delta, not a full crawl mirror.
-    private static bool IsMeaningful(QuestProgress p) => p.Complete || p.CheckedSteps is { Count: > 0 };
+    // A record is worth persisting only when it carries completion, step progress, or the
+    // show-a-cannot-complete-quest opt-in; empty drafts are dropped so the log stays a
+    // delta, not a full crawl mirror.
+    private static bool IsMeaningful(QuestProgress p) =>
+        p.Complete || p.CheckedSteps is { Count: > 0 } || p.ShowIfIneligible;
+
+    // Whether the character opted to keep this cannot-complete quest in the journal —
+    // a read against the hydrated per-character progress (no entry created for a quest
+    // that's staying hidden).
+    private bool ShowsWhenIneligible(int flag, int step) =>
+        _progress.TryGetValue((flag, step), out QuestProgress? p) && p.ShowIfIneligible;
 
     // ----- helpers --------------------------------------------------------
 

@@ -34,6 +34,11 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
     // each row's "Restrict to classes" checklist.
     private readonly List<(int Number, string Name)> _allClasses = new();
 
+    // The character's current show-anyway opt-ins keyed by (flag, step), seeded from the
+    // journal VM's per-character QuestProgress. Read back after Save via each row's
+    // ShowIfIneligibleOverride — this VM never writes the profile itself.
+    private readonly IReadOnlyDictionary<(int Flag, int Step), bool> _showAnyway;
+
     // Every crawled quest in crawl order (flag, then band level), editable.
     public ObservableCollection<QuestEditRowViewModel> Quests { get; } = new();
 
@@ -54,12 +59,14 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
     // default profile, which is never class-gated.
     public QuestEditorViewModel(GameDataCache gameData, QuestStore quests, int? classId,
                                 int? raceId = null, bool alignGood = false,
-                                bool alignNeutral = false, bool alignEvil = false)
+                                bool alignNeutral = false, bool alignEvil = false,
+                                IReadOnlyDictionary<(int Flag, int Step), bool>? showAnyway = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(quests);
         _quests = quests;
         _gameData = gameData;
+        _showAnyway = showAnyway ?? new Dictionary<(int, int), bool>();
 
         Quests.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasQuests));
 
@@ -102,7 +109,7 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
                 def.Rewards ?? string.Empty,
                 def.RequiredLevel,
                 ineligible,
-                def.ShowIfIneligible,
+                _showAnyway.GetValueOrDefault((q.Flag, q.Step)),
                 BuildClassOptions(def.ClassRestrict))
             { Blocked = def.Blocked });
         }
@@ -155,7 +162,7 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
             rewards: def.Rewards ?? string.Empty,
             requiredLevel: def.RequiredLevel,
             ineligible: false,
-            showIfIneligible: def.ShowIfIneligible,
+            showIfIneligible: _showAnyway.GetValueOrDefault((def.Flag, def.Step)),
             classOptions: BuildClassOptions(def.ClassRestrict))
         { Blocked = def.Blocked };
 
