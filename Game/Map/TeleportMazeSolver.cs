@@ -104,11 +104,10 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     private int _attempts;
 
     // Paradigm rm-relocalize scratch: how many times the current `rm` has been
-    // re-sent after a dropped reply, and the room a plain step departed from so a
-    // step that `rm` shows didn't move us (a blocked door/gate) is caught instead
-    // of re-planning the same step forever.
+    // re-sent after a dropped reply. Only the initial teleport-landing relocalize
+    // fires `rm` now (the plain route to the goal is verified unhindered, so it's
+    // driven without per-step re-location), so this covers just that one query.
     private int _rmRetries;
-    private RoomKey? _paradigmStepFrom;
 
     // Relocalization scratch — snapshot the landing room's own exit mask when a
     // look sweep begins, then fill one neighbour mask per `look <dir>` reply.
@@ -122,14 +121,15 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     private RoomKey _entranceSource;
     private Direction _entranceDir;
 
-    // Self-driven final walk — the plain (teleport-free) route to the goal, each
-    // step paired with the room the graph says it lands in. The solver drives
-    // these moves itself (ungated, like a reshuffle) and verifies each landing by
-    // name + exit-mask, instead of handing the leg to AutoWalkManager, whose
-    // heuristic tracker can't confirm same-named maze steps and whose moves stall
-    // on the combat gate.
-    private readonly Queue<(Direction Dir, RoomKey Expected)> _finalRoute = new();
-    private RoomKey _stepExpected;
+    // Self-driven final walk — the plain (teleport-free) route to the goal. Once
+    // the landing relocalization confirms we're in a solvable room (a plain route
+    // to the goal exists), that route is a verified-unhindered corridor with no
+    // teleport end-casts on it (the asylum's 9/1200, 9/1199, 9/1197, 9/1198 → the
+    // old man), so the solver just paces the moves out — ungated, like a reshuffle
+    // — with NO per-step re-location. Handing the leg to AutoWalkManager instead
+    // fails inside the pocket: its heuristic tracker can't confirm same-named maze
+    // steps and its moves stall on the combat gate the asylum's monsters assert.
+    private readonly Queue<Direction> _finalRoute = new();
 
     // Memoized "can a plain route reach the goal from here?" — a spell's landing
     // pool (up to ~24 rooms) is re-scored on every reshuffle, and the goal is
@@ -260,10 +260,10 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
                 SendNextLook();
                 break;
             case Phase.Settling:
-            case Phase.Walking:
-                // A fresh display inside the settle window — a teleport (or a
-                // driven step's self-look) can echo two, so keep the last and
-                // restart the timer.
+                // A fresh display inside the settle window — a teleport can echo
+                // two, so keep the last and restart the timer. (The fast walk in
+                // Phase.Walking is pure time-paced and must NOT be extended by a
+                // stray render, so it isn't handled here.)
                 RestartSettle();
                 break;
         }
@@ -332,43 +332,21 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
 
         IReadOnlyList<Direction>? plain = _bfs.FindPath(here, _goal);
         if (plain is { Count: > 0 })
-        {
-            if (_isParadigm())
-                ParadigmStep(here, plain[0]);   // one step, then re-locate via `rm`
-            else
-                DriveFinalWalk(here, plain);     // stock: queued walk, name+mask verify
-        }
+            DriveFinalWalk(here, plain);   // in a solvable room — drive the unhindered route
         else
             Reshuffle(here);
     }
 
-    // Paradigm plain-route step: walk ONE square toward the goal, let the landing
-    // settle, then re-locate with `rm` and re-plan from the authoritative answer
-    // (in OnParadigmPositionResolved → ContinueFromLocated). No self-look or
-    // name+mask verify — `rm` names the exact room, so a surprise teleport or
-    // blocked door is caught by re-planning rather than a signature check, and
-    // arrival at the dead-end goal cell (which the look sweep can't relocalize) is
-    // just `here == goal`. The settle before `rm` is what keeps a stuck-gate step
-    // from racing the query (report 152718).
-    private void ParadigmStep(RoomKey here, Direction d)
-    {
-        _paradigmStepFrom = here;
-        _lastObserved = null;
-        _log?.Debug(LogSource, $"plain step {d.ToLongName()} from {here}; settle then re-locate via `rm`");
-        SendMove(d);
-        BeginParadigmSettle();
-    }
-
-    // Walk the plain (teleport-free) route to the goal ourselves, one step at a
-    // time. Handing the leg to AutoWalkManager fails inside the pocket: its
-    // heuristic tracker can't confirm same-named landings without `rm` (which the
-    // solve suppresses), and its moves stall on the combat gate that the asylum's
-    // monsters keep asserting. Driving the moves directly (ungated, like a
-    // reshuffle) and verifying each landing by the graph's name + exit-mask keeps
-    // the final leg as robust as the reshuffle loop — and recognizes arrival at a
-    // dead-end goal cell (the old man's Padded Cell) by name instead of trying to
-    // signature-relocalize a room the index deliberately omits, which walked us
-    // straight back out.
+    // Drive the plain (teleport-free) route to the goal ourselves. Reaching this
+    // means the landing relocalization already confirmed we're in a solvable room
+    // (`FindPath` found a route), and the user-confirmed asylum topology makes that
+    // route an unhindered corridor with no teleport end-casts on it — so we just
+    // pace the moves out, ungated like a reshuffle, with NO per-step re-location:
+    // no `look` sweep on stock, no `rm` on Paradigm. The realm no longer matters
+    // here; the per-step verify only existed to catch surprise teleports / blocked
+    // doors that this route is known not to have. Arrival is deterministic, so the
+    // dead-end goal cell (the old man's Padded Cell, which the index omits) is
+    // reached by walking the route rather than trying to relocalize onto it.
     private void DriveFinalWalk(RoomKey here, IReadOnlyList<Direction> route)
     {
         _finalRoute.Clear();
@@ -381,12 +359,12 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
                 FailSolve("plain route step missing from graph");
                 return;
             }
-            _finalRoute.Enqueue((d, exit.Target));
+            _finalRoute.Enqueue(d);
             cur = exit.Target;
         }
 
         _log?.Log(LogSeverity.Info, LogSource,
-            $"located at {here}; driving {_finalRoute.Count}-step plain route to {_goal}");
+            $"located at {here}; driving {_finalRoute.Count}-step unhindered route to {_goal} (no per-step re-location)");
         StepFinalWalk();
     }
 
@@ -394,57 +372,17 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     {
         if (_finalRoute.Count == 0)
         {
-            Finish();   // defensive — nothing left to walk
+            // Deterministic unhindered route — the last step lands us on the goal.
+            _tracker.SetLocated(_goal);
+            Finish();
             return;
         }
 
-        (Direction dir, RoomKey expected) = _finalRoute.Dequeue();
-        _stepExpected = expected;
+        Direction dir = _finalRoute.Dequeue();
         _phase = Phase.Walking;
-        _log?.Debug(LogSource, $"final walk: step {dir.ToLongName()} → expect {expected}");
+        _log?.Debug(LogSource, $"final walk: step {dir.ToLongName()} ({_finalRoute.Count} left)");
         SendMove(dir);
-        // Brief mode renders only a NAME on entry — force a self-look so the
-        // landing's full exits render for the name + mask verification.
-        _lastObserved = null;
-        SendSelfLook();
-        RestartSettle();
-        RestartLookTimeout();
-    }
-
-    private void VerifyStep()
-    {
-        if (_lastObserved is not { } obs)
-        {
-            FailSolve("walk step did not render");
-            return;
-        }
-
-        Room? expected = _graph.GetRoom(_stepExpected);
-        bool onRoute = expected is not null
-            && string.Equals(obs.Name, expected.Name, StringComparison.OrdinalIgnoreCase)
-            && MaskOf(obs.Exits) == expected.ExitMask;
-
-        if (onRoute)
-        {
-            _tracker.SetLocated(_stepExpected);
-            if (_finalRoute.Count == 0)
-                Finish();
-            else
-                StepFinalWalk();
-            return;
-        }
-
-        // Landed off the planned plain route — a blocked move, or a surprise
-        // teleport we mis-attributed. Re-relocalize from scratch and re-plan
-        // rather than blindly firing the rest of a route from the wrong room.
-        if (++_attempts > MaxReshuffleAttempts)
-        {
-            FailSolve($"exceeded {MaxReshuffleAttempts} reshuffle attempts");
-            return;
-        }
-        _log?.Log(LogSeverity.Info, LogSource,
-            $"walk step landed off-route (saw '{obs.Name}'); re-relocalizing");
-        ObserveLandingAndRelocalize();
+        RestartSettle();   // pure pacing between moves — no self-look, no verify
     }
 
     private void Reshuffle(RoomKey here)
@@ -554,7 +492,6 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     private void ObserveLandingAndRelocalize()
     {
         _lastObserved = null;
-        _paradigmStepFrom = null;   // this landing is a teleport, not a plain step
         if (_isParadigm())
         {
             BeginParadigmSettle();   // wait for the teleport's redisplay, then `rm`
@@ -603,18 +540,6 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     {
         if (!Active || _phase != Phase.Resyncing) return;
         _lookTimeout?.Stop();
-
-        // A plain step `rm` shows didn't move us (blocked door/gate) would otherwise
-        // re-plan the same step forever — escape via a reshuffle teleport instead.
-        if (_paradigmStepFrom is { } from && from.Equals(here))
-        {
-            _paradigmStepFrom = null;
-            _log?.Log(LogSeverity.Info, LogSource,
-                $"plain step from {from} did not move (blocked); reshuffling");
-            Reshuffle(here);
-            return;
-        }
-        _paradigmStepFrom = null;
 
         _log?.Log(LogSeverity.Info, LogSource, $"relocalized to {here} via authoritative `rm`");
         ContinueFromLocated(here);
@@ -760,13 +685,22 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     {
         _settleTimer?.Stop();
         if (!Active) return;
-        if (_phase != Phase.Settling && _phase != Phase.Walking) return;
+
+        // Fast walk: the settle window is pure pacing between moves — no render is
+        // awaited, so just advance to the next move (or finish on the last).
+        if (_phase == Phase.Walking)
+        {
+            StepFinalWalk();
+            return;
+        }
+
+        if (_phase != Phase.Settling) return;
 
         // Paradigm: the redisplay (if any) has gone quiet — ask `rm` now. Unlike
         // the stock sweep this doesn't need a rendered display to key off, so a
         // blocked move that renders nothing still advances to the query, whose
         // same-room answer is read as "didn't move".
-        if (_isParadigm() && _phase == Phase.Settling)
+        if (_isParadigm())
         {
             BeginParadigmResync();
             return;
@@ -780,10 +714,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
             return;
         }
         _lookTimeout?.Stop();
-        if (_phase == Phase.Settling)
-            BeginRelocalize();   // stock post-teleport: full 1x2 look sweep
-        else
-            VerifyStep();        // stock driven step: name + mask check
+        BeginRelocalize();   // stock post-teleport: full 1x2 look sweep
     }
 
     private void RestartLookTimeout()
@@ -814,8 +745,6 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
             else
                 FailSolve("`rm` resync got no Location: reply");
         }
-        else if (_phase == Phase.Walking)
-            FailSolve("walk step landing did not render");
     }
 
     private void StopTimers()

@@ -1634,6 +1634,18 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
     random-teleport maze (the tracker sits at Suspect, not Confirmed), so the look-sweep is the only thing
     that can drive the asylum — Paradigm included. Implemented in `TeleportMazeIndex` (detection +
     signatures) and `TeleportMazeSolver` (the state machine).
+  - **[CONFIRMED, user 2026-08-16] Once relocalized into a "solvable" room, the plain route to the
+    goal is unhindered — drive it with no per-step re-location.** The initial teleport-landing
+    relocalization (the 1x2 look-sweep on stock, `rm` on Paradigm) still runs — that's how the solver
+    confirms which room it landed in. But the moment that relocalization yields a room from which a
+    plain BFS route to the goal exists (`FindPath(here, goal)` non-empty — the "solvable room" test),
+    that route is a **deterministic, teleport-free corridor with no cast end-casts on it**, so the
+    solver paces the moves straight out with **no per-step verification**: no `look` sweep on stock,
+    no `rm` on Paradigm. The per-step re-location only existed to catch surprise teleports / blocked
+    doors that this route is confirmed not to have, so it was pure spam. The concrete asylum instance:
+    **map 9, rooms 1200 / 1199 / 1197 / 1198** are the solvable rooms — from any of them the walk to
+    the **old man (NPC #499, phoenix-feather quest start)** is unhindered. The trigger stays structural
+    (any maze's plain-route rooms), with these four the confirmed real case.
   - **[CONFIRMED, user design 2026-07-17] Paradigm asylum pull-lever = pocket dimension.** Only the
     Paradigm 1.9.1 data (not stock v1.11p) gives room `9/1259` a `pull lever` CMD teleport back to the
     entry area `9/1180`. That one escape edge would otherwise defeat the one-way pocket test (reachability
