@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.19.3
+
+- Combat: **room-aware monster identification** — an observed monster name is now resolved against the monsters the current room actually places or summons here (its NPC + lair members + Summoned-By spawns + the monsters those summon) before any global name match, so a homonym pins to the variant in THIS room and per-monster overrides (spell overrides, relationship, Kill-on-sight) land on the right record
+- Combat: the program log now traces each room occupant at **Combat** severity — the detection (name → resolved record number), its relationship + Kill-on-sight, and the engage/skip decision — so a log read explains exactly why the engine did (or didn't) attack something
+- Combat: a friendly / neutral NPC whose name the classifier couldn't pin to its monster record (e.g. a greet-only "old man" quest-giver) is no longer attacked on sight — such records also resolve to their Monsters-table row by name so their Relationship / Kill-on-sight setting is honoured, and the engagement gate never proactively attacks a monster it can't identify (fixes a regression from the v3.15.0 neutral kill-on-sight work)
+
 ## 3.19.0
 
 - Navigation: new **ROOM INFO** rail section — left-click any room on the map to list clickable links to everything attached to it: the room itself (its name links to the room record), each monster (lair / summoned / placed), each floor item, the shop, and the cast-on-enter room spell. A monster or room-spell link opens its full record dialog, the shop opens the room-detail popup (its stock menu), and the room / item links open the record in the Game Data Browser. Left-clicking never forces the panel open — expand it when you like and it shows the last room you clicked

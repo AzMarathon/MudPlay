@@ -66,6 +66,12 @@ public sealed class RoomEntityClassifier : IDisposable
     private readonly LogService? _log;
     private readonly GameDataCache? _gameData;
     private readonly FlavorPrefixStore _flavorPrefixes;
+
+    // Room-aware name → Number resolver (RoomAwareMonsterResolver.ResolveInCurrentRoom), backing
+    // Pass 0. Late-bound: the resolver depends on this classifier's ResolveBaseName, so it's
+    // constructed after us and wired in via SetRoomAwareResolver. Null → Pass 0 is inert.
+    private Func<string, int?>? _roomAwareResolve;
+
     private readonly IDisposable _alsoHereSub;
     private Terminal.LineExtractor? _lines;
     private string? _alsoHereBuffer;     // multi-line continuation
@@ -134,6 +140,15 @@ public sealed class RoomEntityClassifier : IDisposable
         _alsoHereSub = _router.Subscribe(KnownPatterns.RoomAlsoHere, OnRoomAlsoHere);
         if (_roomTracker is not null)
             _roomTracker.StateChanged += OnRoomTrackerStateChanged;
+    }
+
+    // Wire the room-aware resolver used by Pass 0 (RoomAwareMonsterResolver.ResolveInCurrentRoom).
+    // Late-bound because that resolver takes this classifier's ResolveBaseName, so it's built
+    // after us; AppServices calls this once both exist.
+    public void SetRoomAwareResolver(Func<string, int?> resolve)
+    {
+        ArgumentNullException.ThrowIfNull(resolve);
+        _roomAwareResolve = resolve;
     }
 
     // Bind to the per-session LineExtractor so the classifier can stitch wrapped
@@ -319,6 +334,17 @@ public sealed class RoomEntityClassifier : IDisposable
 
     private RoomEntity Classify(string entry, string rawAlsoHereLine)
     {
+        // Pass 0 — room-aware. Resolve the observed name to the specific monster the CURRENT
+        // room actually places or summons here — its NPC fixture, lair members, Summoned-By
+        // spawns, AND the monsters those can summon (RoomAwareMonsterResolver) — before any
+        // global name match. This pins a homonym to the variant in THIS room, so per-monster
+        // overrides that key on the Number (spell overrides, relationship, KillOnSight) land on
+        // the right record. Falls through when the room doesn't host that name, or the current
+        // room / resolver isn't wired, in which case the name-only passes below take over.
+        if (_roomAwareResolve?.Invoke(entry) is { } roomNum)
+            return new RoomEntity(entry, _gameData?.FindNameByNumber("Monsters", roomNum) ?? entry,
+                                  EntityKind.Monster, roomNum);
+
         // Pass 1 — monster match (direct + prefix-stripped).
         if (TryMatchMonster(entry, out MonsterMessageRecord? mm))
             return new RoomEntity(entry, mm!.Name, EntityKind.Monster, ResolveMonsterNumber(mm));
@@ -404,6 +430,7 @@ public sealed class RoomEntityClassifier : IDisposable
         return numEl.TryGetInt32(out number);
     }
 
+
     // Strip a monster display name's flavor prefix down to its canonical base name
     // ("short orc lieutenant" → "orc lieutenant") using the same matching Classify does
     // — so a room-aware resolver can compare a looked-at name against room monsters' base
@@ -450,19 +477,20 @@ public sealed class RoomEntityClassifier : IDisposable
         return false;
     }
 
-    // The MonsterMessageRecord carries a back-reference to the Monsters-table row
-    // via its Links; typically a single (Monsters, N) entry. Returns the first
-    // such number, or null when the record has none (a user-curated entry not
-    // bound to a specific monster row).
-    private static int? ResolveMonsterNumber(MonsterMessageRecord m)
+    // The MonsterMessageRecord carries a back-reference to the Monsters-table row via its
+    // Links; typically a single (Monsters, N) entry. When it has none — a user-curated entry,
+    // or a greet/flavor record that was never bound to a specific row — fall back to matching
+    // the record's own Name against the Monsters table. Without this fallback the classifier
+    // hands back a numberless Monster, and the combat gate then can't read its relationship /
+    // KillOnSight overlay, so it defaults a friendly NPC (a greet-only "old man" quest-giver)
+    // to a fightable enemy. Returns null only when neither a link nor a name match resolves.
+    private int? ResolveMonsterNumber(MonsterMessageRecord m)
     {
-        if (m.Links is null) return null;
-        foreach (GameDataLink link in m.Links)
-        {
-            if (string.Equals(link.Table, "Monsters", StringComparison.OrdinalIgnoreCase))
-                return link.Number;
-        }
-        return null;
+        if (m.Links is { } links)
+            foreach (GameDataLink link in links)
+                if (string.Equals(link.Table, "Monsters", StringComparison.OrdinalIgnoreCase))
+                    return link.Number;
+        return TryMatchMonstersTable(m.Name, out int number) ? number : null;
     }
 
     private bool TryMatchPlayer(string givenName, out PlayerRecord? hit)
