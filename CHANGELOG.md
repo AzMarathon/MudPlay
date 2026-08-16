@@ -2,9 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.19.1
+## 3.19.2
 
-- Combat: a friendly / neutral NPC whose name the classifier couldn't pin to its monster record (e.g. a greet-only "old man" quest-giver) is no longer attacked on sight — such records now resolve to their Monsters-table row by name so their Relationship / Kill-on-sight setting is honoured, and the engagement gate never proactively attacks a monster it can't identify (fixes a regression from the v3.15.0 neutral kill-on-sight work)
+- Combat: **room-aware monster identification** — an observed monster name is now resolved against the monsters the current room record actually places here (its fixed NPC + each lair member) before any global name match, so a homonym pins to the variant in THIS room and per-monster overrides (spell overrides, relationship, Kill-on-sight) land on the right record
+- Combat: a friendly / neutral NPC whose name the classifier couldn't pin to its monster record (e.g. a greet-only "old man" quest-giver) is no longer attacked on sight — such records also resolve to their Monsters-table row by name so their Relationship / Kill-on-sight setting is honoured, and the engagement gate never proactively attacks a monster it can't identify (fixes a regression from the v3.15.0 neutral kill-on-sight work)
 
 ## 3.19.0
 

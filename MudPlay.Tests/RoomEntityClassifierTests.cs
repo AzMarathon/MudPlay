@@ -918,6 +918,7 @@ public sealed class RoomEntityClassifierTests
                 "mudplay-classifier-tracker-tests-" + Path.GetRandomFileName());
             Directory.CreateDirectory(Path.Combine(_root, "alpha"));
             File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
+            File.WriteAllText(Path.Combine(_root, "alpha", "Monsters.json"), MonstersJson);
 
             GameDataCache cache = new(_root);
             cache.SwitchSet("alpha");
@@ -927,7 +928,8 @@ public sealed class RoomEntityClassifierTests
 
             Router = new MessageRouter();
             DefaultPatterns.Seed(Router);
-            Classifier = new RoomEntityClassifier(Router, Monsters, Players, Tracker);
+            // gameData wired so Pass 0 (room-aware) + Pass 3 (Monsters-table) can resolve.
+            Classifier = new RoomEntityClassifier(Router, Monsters, Players, Tracker, log: null, gameData: cache);
             Classifier.EntitiesObserved += Observations.Add;
         }
 
@@ -956,7 +958,26 @@ public sealed class RoomEntityClassifierTests
               { "Map Number": 1, "Room Number": 3, "Name": "North Square",
                 "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
                 "N": "0", "S": "1/1", "E": "0", "W": "0",
-                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 5, "Name": "Asylum",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 5, "NPC": 499,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "1/3", "D": "0" },
+              { "Map Number": 1, "Room Number": 7, "Name": "Rat Den",
+                "Light": 0, "Shop": 0, "Lair": "(Max 2): 7,[6-0-5-1]", "Delay": 5,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "1/3" }
+            ]
+            """;
+
+        // #1 giant rat is the "global" variant (also a message-catalog record via AddMonster);
+        // #7 is the Rat Den's lair variant (same name, different Number). #499 is the placed
+        // "old man" NPC in the Asylum. Room-aware resolution should prefer #7 in the Rat Den.
+        private const string MonstersJson = """
+            [
+              { "Number": 1,   "Name": "giant rat" },
+              { "Number": 7,   "Name": "giant rat" },
+              { "Number": 499, "Name": "old man" }
             ]
             """;
     }
@@ -985,6 +1006,51 @@ public sealed class RoomEntityClassifierTests
         Assert.NotNull(h.Classifier.Current);
         Assert.Single(h.Classifier.Current!.Value.Entities);
         Assert.Equal("giant rat", h.Classifier.Current.Value.Entities[0].ResolvedName);
+    }
+
+    // ----- room-aware resolution (Pass 0) ----------------------------
+
+    [Fact]
+    public void RoomAware_ResolvesPlacedNpcByName()
+    {
+        using TrackerHarness h = new();
+        // Standing in the Asylum, whose room record places the "old man" NPC (#499).
+        h.Tracker.NoteRoomObserved(new RoomObservation("Asylum", new HashSet<Direction> { Direction.U }));
+
+        h.FeedAlsoHere("Also here: old man.");
+
+        RoomEntity ent = h.Classifier.Current!.Value.Entities[0];
+        Assert.Equal(EntityKind.Monster, ent.Kind);
+        Assert.Equal(499, ent.MonsterNumber);   // pinned to the room's placed NPC
+    }
+
+    [Fact]
+    public void RoomAware_DisambiguatesHomonymToRoomLairVariant()
+    {
+        using TrackerHarness h = new();
+        h.AddMonster(1, "giant rat");   // the "global" giant rat (#1) via the message catalog
+        // Standing in the Rat Den, whose lair is the #7 giant-rat variant.
+        h.Tracker.NoteRoomObserved(new RoomObservation("Rat Den", new HashSet<Direction> { Direction.D }));
+
+        h.FeedAlsoHere("Also here: giant rat.");
+
+        // Same name, two Numbers — room-aware pins it to the lair's #7, not the message-catalog
+        // #1, so per-monster overrides land on the variant actually in this room.
+        Assert.Equal(7, h.Classifier.Current!.Value.Entities[0].MonsterNumber);
+    }
+
+    [Fact]
+    public void RoomAware_FallsThroughToNameMatch_WhenNotRoomListed()
+    {
+        using TrackerHarness h = new();
+        h.AddMonster(1, "giant rat");
+        // In the Asylum (places #499 old man) — a giant rat here isn't in the room record.
+        h.Tracker.NoteRoomObserved(new RoomObservation("Asylum", new HashSet<Direction> { Direction.U }));
+
+        h.FeedAlsoHere("Also here: giant rat.");
+
+        // Room-aware finds no match → falls through to the name-based passes (message catalog #1).
+        Assert.Equal(1, h.Classifier.Current!.Value.Entities[0].MonsterNumber);
     }
 
     [Fact]
