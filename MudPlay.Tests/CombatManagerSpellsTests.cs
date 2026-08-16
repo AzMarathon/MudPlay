@@ -482,6 +482,36 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("harm giant rat", h.LastSent);
     }
 
+    // Report paradigm-20260815-202241 ("LBOL → MMIS without firing LBOL"): in a MULTI-mob
+    // room the OTHER mobs' swing lines trip the damage-driven combat tick within ~100ms of
+    // the engage. The tally clock reset to MinValue let that premature tick count the attack
+    // spell as a fired round, so a MaxCasts-1 nuke cap-switched to the alternate the SAME
+    // round and the normal spell never went out (engageable=2, sinceAttack≈79ms). The tally
+    // clock is now anchored at the engage moment, so AttackTallyMinGap rejects the premature
+    // tick and the normal spell holds until a genuine round elapses. (Single-mob rooms were
+    // never affected — their first tick is a real round.)
+    [Fact]
+    public void MaxCasts1_MultiMobEngage_PrematureTickDoesNotSwapBeforeFirstCast()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "rotworm");
+        h.AddMonster(2, "thin leprous outcast");
+
+        h.Feed("Also here: rotworm, thin leprous outcast.");
+        Assert.Equal("lbol rotworm", h.LastSent);          // engage → lbol (round 0, not yet fired)
+
+        // A second mob's swing trips a combat tick a beat after the engage — far short of a
+        // real round. The gate must reject it: lbol hasn't fired, so no tally, no swap.
+        h.TickSameRound();
+        Assert.Equal("lbol rotworm", h.LastSent);          // still lbol — no premature mmis
+
+        // The first genuine round now tallies lbol → MaxCasts=1 reached → swap to the alternate.
+        h.Tick();
+        Assert.Equal("mmis rotworm", h.LastSent);
+    }
+
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even
     // with an exp gain sitting nearby, e.g. party share-exp) is NOT a kill — the
     // resume must still re-announce the spell rather than dropping a live target.
