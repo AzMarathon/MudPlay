@@ -85,12 +85,6 @@ public sealed class AppServices
     public void SetRoomGameDataOpener(Action<int, int> opener) => _roomGameDataOpener = opener;
     public void OpenRoomGameData(int map, int room) => _roomGameDataOpener?.Invoke(map, room);
 
-    // Same indirection for the Shops section — lets the Navigation Room Info
-    // panel's shop link jump to the shop's Game Data record.
-    private Action<int>? _shopGameDataOpener;
-    public void SetShopGameDataOpener(Action<int> opener) => _shopGameDataOpener = opener;
-    public void OpenShopGameData(int shopNumber) => _shopGameDataOpener?.Invoke(shopNumber);
-
     // Opens (or re-focuses) the Navigation window and centres the map on a
     // given room. Used by the room-detail popup's clickable room title. No-op
     // until the main VM binds it.

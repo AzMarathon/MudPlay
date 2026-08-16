@@ -103,13 +103,16 @@ public sealed partial class RoomInfoViewModel : ObservableObject
                 $"{name}(#{id})", null, new RelayCommand(() => _services.OpenItemGameData(id))));
         }
 
-        // Shop — one link to the shop record as a whole.
+        // Shop — one link that opens the interactive room-detail popup for this room (the
+        // stock menu with buy/sell prices + charm picker), the same popup the Shops browser
+        // tab double-click opens — not a Game Data Browser jump.
         if (room.Shop > 0)
         {
             int shop = room.Shop;
             string shopName = _services.GameData.FindNameByNumber("Shops", shop) ?? $"Shop #{shop}";
+            RoomKey roomKey = key;
             ShopLink = new RoomDetailLink(
-                $"{shopName}(#{shop})", null, new RelayCommand(() => _services.OpenShopGameData(shop)));
+                $"{shopName}(#{shop})", null, new RelayCommand(() => RoomDetailPopup.Show(_services.Dialogs, roomKey)));
         }
 
         // Room spell — the cast-on-enter effect. Opens the spell record DIALOG (Message /

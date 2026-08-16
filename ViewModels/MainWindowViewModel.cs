@@ -564,8 +564,6 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetMonsterGameDataOpener(OpenMonsterGameData);
         AppServices.Current.SetMonstersAccuracyOpener(OpenMonstersWithAccuracy);
         AppServices.Current.SetRoomGameDataOpener(OpenRoomGameData);
-        // Navigation Room Info panel: the shop link jumps to the shop's browser record.
-        AppServices.Current.SetShopGameDataOpener(OpenShopGameData);
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
@@ -3567,15 +3565,6 @@ public partial class MainWindowViewModel : ObservableObject
         ShowGameDataBrowser("rooms",
             row => string.Equals(row.Get("Map Number"),  mapStr,  StringComparison.Ordinal)
                 && string.Equals(row.Get("Room Number"), roomStr, StringComparison.Ordinal));
-    }
-
-    // Registered on AppServices so the Navigation Room Info panel's shop link
-    // jumps straight to the shop's Game Data record.
-    private void OpenShopGameData(int shopNumber)
-    {
-        string numStr = shopNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        ShowGameDataBrowser("shops",
-            row => string.Equals(row.Get("Number"), numStr, StringComparison.Ordinal));
     }
 
     // Game Data menu → "Modify Blacklist…". Staged editor over the
