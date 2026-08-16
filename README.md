@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.18**
-> - Quest guides: a single-quoted `'command'` in a step is now a clickable green link — clicking it types that command at the game exactly as if you'd entered it in the terminal, alongside the existing clickable `(map/room)` walk links
-> - Quest eligibility: three Evil / Neutral / Good checkboxes at the top of the Quest Status tab (saved per character, off by default) declare which alignment chain(s) you're on, so alignment-gated quests only show as available when their box is ticked
-> - Quest eligibility: the Quest editor's "Restrict to classes" control is a checkable class dropdown for the genuinely class-locked quests the crawler can't detect on its own (Magebane, Tarl)
-> - Quest journal: quests this character can't complete are hidden by default — tick "Show in quest journal" in the editor to keep one visible (saved per character)
+> **Version 3.19.0**
+> - Navigation: new **ROOM INFO** rail section — left-click any room on the map to list clickable links to everything attached to it (the room, each monster, each floor item, the shop, and the room spell). Monster and room-spell links open their full record dialog, the shop opens the room-detail popup (its stock menu), and the room / item links open the record in the Game Data Browser
+> - Game Data Browser: double-clicking a **Shops** row opens the room-detail popup for the shop's room directly; a multi-room shop lists its other rooms as clickable siblings in the popup title
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

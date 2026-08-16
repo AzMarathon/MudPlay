@@ -61,6 +61,16 @@ public sealed class AppServices
     public void SetMonsterGameDataOpener(Action<int> opener) => _monsterGameDataOpener = opener;
     public void OpenMonsterGameData(int monsterNumber) => _monsterGameDataOpener?.Invoke(monsterNumber);
 
+    // Opens the monster record DIALOG (not the browser) by Number — the Navigation Room
+    // Info panel's monster links, so a click lands on the full record like the item link.
+    public System.Threading.Tasks.Task OpenMonsterRecordAsync(int monsterNumber)
+        => MonsterRecord.OpenAsync(monsterNumber);
+
+    // Opens the spell record DIALOG (Message / Game-Data tabs) by Number — the Room Info
+    // room-spell link, so a click lands on the full record like the item / monster links.
+    public System.Threading.Tasks.Task OpenSpellRecordAsync(int spellNumber)
+        => SpellRecord.OpenAsync(spellNumber);
+
     // Opens (or re-focuses) the Monsters section with an "Acc ≥ minAcc" filter
     // applied — the Hit Calculator's "Show me the Monsters" jumps here with the
     // accuracy that hits the player at the picked hit-%.
@@ -1233,6 +1243,10 @@ public sealed class AppServices
     // ActiveSetChanged subscription).
     public ItemSourceIndex ItemSources { get; private set; } = null!;
 
+    // Room→floor-item index (TBInfo `roomitem` placements) backing the Navigation
+    // Room Info panel. Lazy + self-invalidating like ItemSources.
+    public RoomFloorItemIndex RoomFloorItems { get; private set; } = null!;
+
     // Active fulfiller for NeedKind.PathItem needs an NPC / room hands over for
     // free: on a one-shot walk-to that needs an uncarried item a deterministic
     // textblock `giveitem` supplies, detours to the fewest-added-steps giver,
@@ -1354,6 +1368,14 @@ public sealed class AppServices
     // Opens the item record (edit) dialog by Number from any surface — the Item
     // Finder double-click. Constructed once; single-instance dialog across callers.
     public ItemRecordDialogService ItemRecord { get; private set; } = null!;
+
+    // Opens the monster record (edit) dialog by Number from any surface — the
+    // Navigation Room Info panel's monster links. Single-instance across callers.
+    public MonsterRecordDialogService MonsterRecord { get; private set; } = null!;
+
+    // Opens the spell record (Message / Game-Data) dialog by Number from any surface —
+    // the Navigation Room Info panel's room-spell link. Single-instance across callers.
+    public SpellRecordDialogService SpellRecord { get; private set; } = null!;
 
     // Background audit comparing player-facing spells in the active
     // set against the Messages catalogue's Links field — surfaces a
@@ -2397,6 +2419,11 @@ public sealed class AppServices
         // self-invalidating, so there's no ActiveSetChanged subscription to wire.
         ItemSources = new ItemSourceIndex(GameData, TBInfo, Log);
 
+        // RoomFloorItemIndex — the room→floor-item (`roomitem`) mapping for the
+        // Navigation Room Info panel. Reads TBInfo's typed entries like ItemSources;
+        // lazy and self-invalidating, so no ActiveSetChanged subscription.
+        RoomFloorItems = new RoomFloorItemIndex(GameData, TBInfo, Log);
+
         // Shared item-record opener — opens the item edit dialog by Number from any
         // surface (the Item Finder's double-click), reusing the browser's read-only
         // view assembly. Deps all constructed above; charm read live off PlayerStats.
@@ -3413,6 +3440,18 @@ public sealed class AppServices
         // override in place of the global Combat-tab cast-code slot.
         SpellShort = new Game.Combat.SpellShortIndex(GameData);
         Combat.SetSpellShortResolver(SpellShort.ShortByNumber, SpellShort.NumberByShort);
+
+        // Shared monster-record opener — opens the monster edit dialog by Number from any
+        // surface (the Navigation Room Info panel), reusing the browser's read-only "Other
+        // Info" assembly (MonsterMdbInfoBuilder). Constructed here so RoomGraph + SpellShort
+        // (both above) are ready.
+        MonsterRecord = new MonsterRecordDialogService(
+            GameData, Resolver, Dialogs, MonsterOverlaySeed, RoomGraph, TBInfo, SpellShort);
+
+        // Shared spell-record opener — opens the spell's Message / Game-Data dialog by Number
+        // (the Room Info room-spell link), reusing the Spells tab's message-link flow + the
+        // shared SpellInfoRowsBuilder. Messages (2366) is ready.
+        SpellRecord = new SpellRecordDialogService(GameData, Messages, Dialogs);
 
         // Light catalogue + live carried illumination. The snapshot provider is
         // deferred (Inventory is assigned later in this method), so reading
