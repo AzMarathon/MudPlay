@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using MudPlay.Game;
 using MudPlay.Services;
 using Xunit;
@@ -243,6 +244,69 @@ public sealed class GameDataCacheTests : IDisposable
         Assert.Equal("not-yet-imported", cache.ActiveSet);
         Assert.Single(fired);
         Assert.Null(cache.GetRawTable("Monsters"));
+    }
+
+    // ----- PrewarmAsync (startup head-start) --------------------------------
+
+    [Fact]
+    public async Task PrewarmAsync_ThenSwitchSet_ClaimsPrewarmedDoc()
+    {
+        SeedSet("alpha", ("Monsters", "[{\"Name\":\"Goblin\"}]"));
+        GameDataCache cache = NewCache();
+
+        await cache.PrewarmAsync("alpha", new[] { "Monsters" });
+        cache.SwitchSet("alpha");
+
+        Assert.NotNull(cache.GetRawTable("Monsters"));
+        // Claimed into the live cache, not left sitting in the prewarm bucket —
+        // a second read must not re-parse the file.
+        Assert.Contains("Monsters", cache.LoadedTables);
+    }
+
+    [Fact]
+    public async Task PrewarmAsync_WrongGuess_NeverActivated_LeavesRealCacheUntouched()
+    {
+        SeedSet("alpha", ("Monsters", "[]"));
+        SeedSet("beta",  ("Monsters", "[]"));
+        GameDataCache cache = NewCache();
+
+        // Guessed "alpha" would load, but "beta" actually became active — the
+        // wasted prewarm must not leak into beta's table cache.
+        await cache.PrewarmAsync("alpha", new[] { "Monsters" });
+        cache.SwitchSet("beta");
+
+        Assert.Empty(cache.LoadedTables);
+    }
+
+    [Fact]
+    public async Task PrewarmAsync_MissingTable_NoOp()
+    {
+        SeedSet("alpha");
+        GameDataCache cache = NewCache();
+
+        await cache.PrewarmAsync("alpha", new[] { "DefinitelyNotATable" });
+        cache.SwitchSet("alpha");
+
+        Assert.Null(cache.GetRawTable("DefinitelyNotATable"));
+    }
+
+    // Re-importing over the active set must not re-hand a stale prewarmed doc that
+    // was parsed at startup but never claimed (see ReloadActiveSet).
+    [Fact]
+    public async Task ReloadActiveSet_DiscardsUnclaimedPrewarmForThatSet()
+    {
+        string dir = SeedSet("alpha", ("Monsters", "[{\"Number\":1,\"Name\":\"Goblin\"}]"));
+        GameDataCache cache = NewCache();
+
+        await cache.PrewarmAsync("alpha", new[] { "Monsters" });   // parsed, never claimed
+        cache.SwitchSet("alpha");
+
+        // Re-import rewrites the file; the stale prewarm must be dropped so the read
+        // re-parses the fresh JSON rather than claiming the pre-import doc.
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), "[{\"Number\":1,\"Name\":\"Orc\"}]");
+        cache.ReloadActiveSet();
+
+        Assert.Equal("Orc", cache.GetRawTable("Monsters")!.RootElement[0].GetProperty("Name").GetString());
     }
 
     // ----- ActiveRealm (Info.Legit derivation, MMUD Explorer parity) -------
