@@ -484,6 +484,29 @@ public sealed class RoomEntityClassifierTests
         Assert.Equal(EntityKind.Unknown, h.Observations[0].Entities[0].Kind);
     }
 
+    // A greet-only NPC ("old man") whose MonsterMessageRecord carries no Monsters link still
+    // resolves to its Monsters-table row by name — so downstream (the combat gate) can read its
+    // relationship / KillOnSight overlay instead of getting a numberless Monster and defaulting
+    // it to a fightable enemy. Regression: the neutral-NPC on-sight-attack bug.
+    [Fact]
+    public void MessageRecordWithoutLink_ResolvesToMonstersTableRowByName()
+    {
+        (GameDataCache cache, string dir) = MonstersTable(
+            """[ { "Number": 499, "Name": "old man" } ]""");
+        try
+        {
+            using Harness h = new(cache);
+            h.Monsters.Messages.Add(new MonsterMessageRecord(Id: "OM", Name: "old man", Links: null));
+
+            h.Feed("Also here: old man.");
+
+            RoomEntity ent = h.Observations[0].Entities[0];
+            Assert.Equal(EntityKind.Monster, ent.Kind);
+            Assert.Equal(499, ent.MonsterNumber);
+        }
+        finally { try { Directory.Delete(dir, true); } catch { /* best-effort */ } }
+    }
+
     // ----- full-name Monsters-table match ----------------------------
 
     // A monster whose Monsters-table row exists under its full multi-word name

@@ -308,6 +308,23 @@ public sealed class CombatStateTrackerTests
     }
 
     [Fact]
+    public void UnresolvableMonster_NoRecordNumber_NotEngaged()
+    {
+        // A name that matches a message record with no Monsters link (a greet-only NPC like an
+        // "old man" quest-giver), with no Monsters table to fall back to, resolves to no Number.
+        // The engine must NOT proactively attack something it can't identify — fail closed —
+        // rather than defaulting the unresolved entity to a fightable enemy. Regression: the
+        // neutral-NPC on-sight-attack bug.
+        using Harness h = new();
+        h.Monsters.Messages.Add(new MonsterMessageRecord(Id: "OM", Name: "old man", Links: null));
+
+        h.Feed("Also here: old man.");
+
+        Assert.False(h.Tracker.HasEngageableHostiles);
+        Assert.False(h.CombatGateHeld);
+    }
+
+    [Fact]
     public void HasHostileMonster_ClearsWhenRoomCleared()
     {
         using Harness h = new();

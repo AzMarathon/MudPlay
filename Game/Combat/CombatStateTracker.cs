@@ -602,15 +602,21 @@ public sealed class CombatStateTracker : IDisposable
         return targetable >= min && targetable <= max;
     }
 
-    // Engageable = Enemy (the default for un-tagged monsters) OR a Neutral flagged
-    // KillOnSight — see MonsterEngagement. Shopkeepers / quest-givers / friendly NPCs
-    // are marked Friend / Neutral / Hangup in the overlay seed; un-tagged monsters
-    // are treated as fightable so the engine doesn't sit through a respawn just
-    // because the data table is missing a DeathLine (152 of 1100 monsters in stock
-    // data ship with empty DeathLine — acid slime, etc.).
+    // Engageable = Enemy (the default for a resolved-but-untagged monster) OR a Neutral
+    // flagged KillOnSight — see MonsterEngagement. Shopkeepers / quest-givers / friendly NPCs
+    // are marked Friend / Neutral / Hangup in the overlay seed; a monster whose Number resolves
+    // but whose overlay is missing is treated as fightable so the engine doesn't sit through a
+    // respawn just because the data table is missing a DeathLine (152 of 1100 stock monsters
+    // ship with empty DeathLine — acid slime, etc.).
+    //
+    // A monster the classifier CANNOT resolve to a Number is NOT engaged — we never proactively
+    // hit something we can't identify, so a friendly / neutral NPC whose name didn't pin to its
+    // record (a greet-only "old man") is left alone rather than defaulting to a fightable enemy.
+    // This is a fail-CLOSED distinct from the resolved-but-untagged fail-open above; the
+    // reactive InCombat path still fights back if such a mob actually attacks us.
     private bool IsEngageable(RoomEntity e)
     {
-        if (e.MonsterNumber is not int n) return true;
+        if (e.MonsterNumber is not int n) return false;
         if (_resolveOverlay is null) return true;        // legacy ctor — engage everything
         MonsterOverlay overlay;
         try { overlay = _resolveOverlay(n) ?? new MonsterOverlay(); }

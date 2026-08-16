@@ -450,19 +450,20 @@ public sealed class RoomEntityClassifier : IDisposable
         return false;
     }
 
-    // The MonsterMessageRecord carries a back-reference to the Monsters-table row
-    // via its Links; typically a single (Monsters, N) entry. Returns the first
-    // such number, or null when the record has none (a user-curated entry not
-    // bound to a specific monster row).
-    private static int? ResolveMonsterNumber(MonsterMessageRecord m)
+    // The MonsterMessageRecord carries a back-reference to the Monsters-table row via its
+    // Links; typically a single (Monsters, N) entry. When it has none — a user-curated entry,
+    // or a greet/flavor record that was never bound to a specific row — fall back to matching
+    // the record's own Name against the Monsters table. Without this fallback the classifier
+    // hands back a numberless Monster, and the combat gate then can't read its relationship /
+    // KillOnSight overlay, so it defaults a friendly NPC (a greet-only "old man" quest-giver)
+    // to a fightable enemy. Returns null only when neither a link nor a name match resolves.
+    private int? ResolveMonsterNumber(MonsterMessageRecord m)
     {
-        if (m.Links is null) return null;
-        foreach (GameDataLink link in m.Links)
-        {
-            if (string.Equals(link.Table, "Monsters", StringComparison.OrdinalIgnoreCase))
-                return link.Number;
-        }
-        return null;
+        if (m.Links is { } links)
+            foreach (GameDataLink link in links)
+                if (string.Equals(link.Table, "Monsters", StringComparison.OrdinalIgnoreCase))
+                    return link.Number;
+        return TryMatchMonstersTable(m.Name, out int number) ? number : null;
     }
 
     private bool TryMatchPlayer(string givenName, out PlayerRecord? hit)
