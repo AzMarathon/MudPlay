@@ -19,20 +19,6 @@
     ]
   },
   {
-    "Id": "4e172b4de3233db0",
-    "Name": "Afraid",
-    "Action": "Ignore",
-    "Flags": "Confused, LastActionFailed",
-    "RawFlagsHex": 8194,
-    "Response": "",
-    "CasterMessage": "You are too afraid to do that!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "1f3aaca48995b72c",
     "Name": "amber sceptre",
     "Action": "Ignore",
@@ -107,20 +93,6 @@
         "Number": 833
       }
     ]
-  },
-  {
-    "Id": "3dd3d32e6ba204ee",
-    "Name": "Azrandinom transformation",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "The withered tree erupts into a pillar of flame, and a figure appears!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
   },
   {
     "Id": "873c147d2dff1733",
@@ -218,34 +190,6 @@
     ]
   },
   {
-    "Id": "6d865375800eac34",
-    "Name": "bleeding main gauche",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "{source} wears bleeding main-gauche!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "da2f233582794a32",
-    "Name": "bleeding main gauche",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "{source} removes bleeding main-gauche!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "14c9b1bf216d0010",
     "Name": "blinding light",
     "Action": "Ignore",
@@ -317,34 +261,6 @@
     ]
   },
   {
-    "Id": "0a501f466f2464b9",
-    "Name": "boulder fail",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "The boulder is suddenly surrounded by an aura of flame!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "16e0c9cc9ef5c839",
-    "Name": "boulder open",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "The massive boulder rolls out of the way",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "531f44cd4264c133",
     "Name": "breath attack",
     "Action": "WaitForEnd",
@@ -378,20 +294,6 @@
     ]
   },
   {
-    "Id": "1e349530fc47e1f5",
-    "Name": "buccaneer entrance",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A buccaneer walks into the room.",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "18f0afc98f50f88e",
     "Name": "burning staff",
     "Action": "Ignore",
@@ -409,34 +311,6 @@
         "Number": 1073
       }
     ]
-  },
-  {
-    "Id": "41b284c231b58b3d",
-    "Name": "clear passage",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "Sufficient rock is cleared away, opening a passage",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "c969f976eb76c2e7",
-    "Name": "cold flame",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "{target} are seared by cold flame for {dmg} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
   },
   {
     "Id": "84db39e5608ba487",
@@ -515,34 +389,6 @@
     ]
   },
   {
-    "Id": "d3b1320ee43bce3a",
-    "Name": "damn",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are damned!",
-    "AppliedEndsWith": "The malaise of your soul has lifted",
-    "Links": []
-  },
-  {
-    "Id": "9eb81ac821e9f7c9",
-    "Name": "dark beam",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A dark beam shoots forth and drains you for {dmg} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "5a755ae09071bdfc",
     "Name": "Darkbane",
     "Action": "Ignore",
@@ -579,95 +425,6 @@
         "Number": 1449
       }
     ]
-  },
-  {
-    "Id": "7c71cfdc9d326462",
-    "Name": "darkwood forest sounds",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "The leaves begin to rustle, as if some beast were about to spring forth!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "6034f768633f8349",
-    "Name": "darkwood forest sounds",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A dry twig snaps loudly behind you.",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "fbf66cb3e12a904d",
-    "Name": "death chicken",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A deathly shriek announces an evil prescence!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Monsters",
-        "Number": 843
-      }
-    ]
-  },
-  {
-    "Id": "146d22376217d571",
-    "Name": "death message",
-    "Action": "Ignore",
-    "Flags": "EndsCombat",
-    "RawFlagsHex": 4096,
-    "Response": "",
-    "CasterMessage": "You hear an evil cackle, and the illusion vanishes!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "df4fb4e6ff1f4a11",
-    "Name": "deaths shadow",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You throw a small knife at {target} for {dmg} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "988d79d4b76ceef7",
-    "Name": "deaths shadow",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A small throwing knife hits {target} for {dmg} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
   },
   {
     "Id": "74725153e36bb245",
@@ -795,20 +552,6 @@
     "WitnessMessage": "",
     "AppliedMessage": "You struggle to reach the surface!",
     "AppliedEndsWith": "You break free, reaching the surface.",
-    "Links": []
-  },
-  {
-    "Id": "ecf5fa5255809f14",
-    "Name": "dragonblades",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A blazing firestorm burns through {target} for {dmg} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
     "Links": []
   },
   {
@@ -1144,20 +887,6 @@
     ]
   },
   {
-    "Id": "603ee2b59fdc85a5",
-    "Name": "fall into pit",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A gaping pit suddenly opens, and you fall into the depths!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "bfd3e0cdfb59a552",
     "Name": "Feyr",
     "Action": "Ignore",
@@ -1175,20 +904,6 @@
         "Number": 1802
       }
     ]
-  },
-  {
-    "Id": "494a879516693f68",
-    "Name": "fire elemental message",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A fire elemental appears and scorches you for {dmg} damage, then vanishes!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
   },
   {
     "Id": "60a6545895336eac",
@@ -1343,48 +1058,6 @@
     ]
   },
   {
-    "Id": "53fb50e907cb417d",
-    "Name": "freezing blizzard",
-    "Action": "Ignore",
-    "Flags": "LosingHp",
-    "RawFlagsHex": 8,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel oblivious!",
-    "AppliedEndsWith": "Your awareness returns to normal.",
-    "Links": []
-  },
-  {
-    "Id": "ec246b01836d172d",
-    "Name": "freezing blizzard",
-    "Action": "Ignore",
-    "Flags": "LosingHp",
-    "RawFlagsHex": 8,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Icy hail pelts {target}, freezing your bones!",
-    "AppliedEndsWith": "Your awareness returns to normal.",
-    "Links": []
-  },
-  {
-    "Id": "1f20135445757afb",
-    "Name": "freezing blizzard",
-    "Action": "Ignore",
-    "Flags": "LosingHp",
-    "RawFlagsHex": 8,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Icy hail pelts everyone in the room",
-    "AppliedEndsWith": "Your awareness returns to normal.",
-    "Links": []
-  },
-  {
     "Id": "404ebecbeeb935c4",
     "Name": "frost sceptre",
     "Action": "Ignore",
@@ -1437,20 +1110,6 @@
     "Links": []
   },
   {
-    "Id": "faa02e134b4ad445",
-    "Name": "galleon transport",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You suddenly find your self aboard an ancient sea vessel!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "e360016928ba996a",
     "Name": "gauntlets of power",
     "Action": "Ignore",
@@ -1468,20 +1127,6 @@
         "Number": 430
       }
     ]
-  },
-  {
-    "Id": "97994d76e71aacef",
-    "Name": "Gazmuldduhaz",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A concealed stone door swings open!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
   },
   {
     "Id": "3906aa5ce1c3d2dc",
@@ -1520,20 +1165,6 @@
         "Number": 597
       }
     ]
-  },
-  {
-    "Id": "92cf6f2317214e40",
-    "Name": "go hatch",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You climb through the hole in the ceiling.",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
   },
   {
     "Id": "41224279f1440afd",
@@ -1721,20 +1352,6 @@
     ]
   },
   {
-    "Id": "31acd60a41263a91",
-    "Name": "ice elemental message",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "An ice elemental appears and freezes you for {dmg} damage, then vanishes!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "3b0c20bb253af1d2",
     "Name": "icehammer",
     "Action": "Ignore",
@@ -1773,8 +1390,8 @@
     ]
   },
   {
-    "Id": "1ccae5e908e8e548",
-    "Name": "ivory scepter",
+    "Id": "da59cc8f554bc93a",
+    "Name": "ivory sceptre",
     "Action": "Ignore",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -1784,7 +1401,12 @@
     "WitnessMessage": "",
     "AppliedMessage": "You are protected by divine power",
     "AppliedEndsWith": "You feel vulnerable",
-    "Links": []
+    "Links": [
+      {
+        "Table": "Items",
+        "Number": 1515
+      }
+    ]
   },
   {
     "Id": "4360c6051fc7bb2c",
@@ -2053,20 +1675,6 @@
     ]
   },
   {
-    "Id": "177696f7b76f8a55",
-    "Name": "lightning elemental",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A lightning elemental appears and fries you for {dmg} damage, then vanishes!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "b5df22befa6c4ad3",
     "Name": "lightning whip",
     "Action": "Ignore",
@@ -2190,34 +1798,6 @@
     ]
   },
   {
-    "Id": "585283a3f6fb2719",
-    "Name": "move boulder",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "The massive boulder rolls out of the way, revealing an exit to the {1}",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "91492197030e12ef",
-    "Name": "move boulder",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "The massive boulder rolls out of the way, revealing an exit",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "fc15226a11b53250",
     "Name": "net hold",
     "Action": "WaitForEnd",
@@ -2289,20 +1869,6 @@
     ]
   },
   {
-    "Id": "5678c36f756fb306",
-    "Name": "obsidian statue death",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "The obisidan statue shatters into a thousand pieces.",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "a7002796ba77f7d1",
     "Name": "opalescent mist",
     "Action": "Ignore",
@@ -2314,34 +1880,6 @@
     "WitnessMessage": "",
     "AppliedMessage": "Your mind is muddled",
     "AppliedEndsWith": "Your mind clears",
-    "Links": []
-  },
-  {
-    "Id": "b8ceb4b3fcc52eef",
-    "Name": "open passage",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "With a loud grinding noise, a concealed passage opens in the ceiling!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "26220f907404fd70",
-    "Name": "pure energy attack",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "Pure energy rips through you, ravaging you for {DMG} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
     "Links": []
   },
   {
@@ -2383,20 +1921,6 @@
     ]
   },
   {
-    "Id": "6a88436617668a10",
-    "Name": "panel transport",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "Your sucked through a hole and find yourself somewhere else",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "a52e8cfe7a142025",
     "Name": "platinum sceptre",
     "Action": "Ignore",
@@ -2433,76 +1957,6 @@
         "Number": 3351
       }
     ]
-  },
-  {
-    "Id": "345f810a71633202",
-    "Name": "portcullis",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You get a good grip on the portcullis, and heave with all your might!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "092da94b3d68083b",
-    "Name": "protection from good",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel safe from good",
-    "AppliedEndsWith": "The effects of protection from good wear off",
-    "Links": []
-  },
-  {
-    "Id": "1ac3e33de0c7bbb3",
-    "Name": "pyramid doors",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "Doors on this level creak and thump!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "2a0f327a5683725d",
-    "Name": "Retch",
-    "Action": "Ignore",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
-    "Response": "",
-    "CasterMessage": "You retch uncontrollably!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "79ca4a4fdc85323a",
-    "Name": "rotting beholder nausea",
-    "Action": "WaitForEnd",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel nauseous!",
-    "AppliedEndsWith": "You feel less sick.",
-    "Links": []
   },
   {
     "Id": "8a13bbc02a035183",
@@ -2577,53 +2031,6 @@
       {
         "Table": "Items",
         "Number": 457
-      }
-    ]
-  },
-  {
-    "Id": "0a50181b1bbf9988",
-    "Name": "severed heads",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A horde of severed heads descend upon you!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "36ee8e0c3474700c",
-    "Name": "shake and shiver",
-    "Action": "Ignore",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
-    "Response": "",
-    "CasterMessage": "You shake and shiver!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "c74f2987a3b379d5",
-    "Name": "shapeshifter",
-    "Action": "Ignore",
-    "Flags": "EndsCombat",
-    "RawFlagsHex": 4096,
-    "Response": "",
-    "CasterMessage": "and changes into an amorphous beast!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Monsters",
-        "Number": 460
       }
     ]
   },
@@ -2817,20 +2224,6 @@
     ]
   },
   {
-    "Id": "1bd66bf1d1914898",
-    "Name": "song of deflection",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are protected from attack",
-    "AppliedEndsWith": "Your shield of deflection wears off",
-    "Links": []
-  },
-  {
     "Id": "72d3d877468cfccc",
     "Name": "soulblighter",
     "Action": "Ignore",
@@ -2983,20 +2376,6 @@
     ]
   },
   {
-    "Id": "5f681a0e337d884d",
-    "Name": "starfall hammer",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A brilliant beam of starlight strikes [target] for [dmg] damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "61bbcefadf9742c0",
     "Name": "starhammer",
     "Action": "Ignore",
@@ -3014,34 +2393,6 @@
         "Number": 1245
       }
     ]
-  },
-  {
-    "Id": "fd35551f5de29c44",
-    "Name": "Statue death",
-    "Action": "RecheckRoom",
-    "Flags": "EndsCombat",
-    "RawFlagsHex": 4096,
-    "Response": "",
-    "CasterMessage": "The obisidan statue shatters into a thousand pieces",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "4ce419d044441406",
-    "Name": "stone elemental message",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A stone elemental appears and crushes you for {dmg} damage,",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
   },
   {
     "Id": "9cc4ab6d1d52911e",
@@ -3139,34 +2490,6 @@
     ]
   },
   {
-    "Id": "2ff56ac17c7d56a9",
-    "Name": "stylus",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "A blast of dark energy jolts you for {dmg} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "8f013c490e559595",
-    "Name": "swamp damage",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You take {dmg} from the poisonous swamp",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "0c4decc1c899a246",
     "Name": "Sword of Ozrinom",
     "Action": "Ignore",
@@ -3257,62 +2580,6 @@
     ]
   },
   {
-    "Id": "e87edb9321c51b2a",
-    "Name": "touch altar",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You touch the altar and are transported into another location!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "fa2172c5b9efb00f",
-    "Name": "transport",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You feel dizzy and weak!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "82d340ba725b24ea",
-    "Name": "trap disarmed",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "The trap is already disarmed.",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "a1d4ba284765524d",
-    "Name": "trap is already disarmed.",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "The trap is already disarmed.",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "601ac5cca0c242e9",
     "Name": "titanfist",
     "Action": "Ignore",
@@ -3370,34 +2637,6 @@
     ]
   },
   {
-    "Id": "ef49b9740aa0abb9",
-    "Name": "vortex entry",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You step into the swirling vortex, and find yourself... elsewhere.",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "ea87dbc382f788d5",
-    "Name": "warehouse door",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "You force your crowbar between the chains, and heave mightily!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "be17ce765dea4263",
     "Name": "white gold flail",
     "Action": "Ignore",
@@ -3415,20 +2654,6 @@
         "Number": 1501
       }
     ]
-  },
-  {
-    "Id": "bffff4bdc9f9cc3e",
-    "Name": "Winch failed",
-    "Action": "Ignore",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
-    "Response": "",
-    "CasterMessage": "You heave mightily on the winch, but it does not budge.",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
   },
   {
     "Id": "9701fa4f1d6b6efc",
@@ -3488,34 +2713,6 @@
     ]
   },
   {
-    "Id": "027c04b71a71faf9",
-    "Name": "word",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "{1} springs from your fingers and burns {target} for {dmg} damage",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "5d69b6128fbbe82a",
-    "Name": "word",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "{1} springs forth and burns {target} for {dmg} damage",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "e8ed94b8fd1efa7f",
     "Name": "spits",
     "Action": "Ignore",
@@ -3527,20 +2724,6 @@
     "WitnessMessage": "",
     "AppliedMessage": "You feel dizzy and weak",
     "AppliedEndsWith": "You are no longer dizzy and weak",
-    "Links": []
-  },
-  {
-    "Id": "8a54b4928386dbe5",
-    "Name": "your spell has no effect",
-    "Action": "RecheckRoom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "Your spell has no effect in this room!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
     "Links": []
   },
   {

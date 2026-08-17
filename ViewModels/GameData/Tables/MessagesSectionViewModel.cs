@@ -89,10 +89,17 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         // it actually lives. A message whose Spells link is orphaned (the spell isn't in
         // this set) stays visible, so it isn't stranded with no editor to reach it.
         HashSet<int> spellNumbers = _cache?.RowNumbers("Spells") ?? new HashSet<int>();
+        HashSet<int> itemNumbers = _cache?.RowNumbers("Items") ?? new HashSet<int>();
 
         foreach (MessageRecord m in _store.Messages)
         {
             if (IsClaimedByExistingSpell(m, spellNumbers)) continue;
+            // An item-claimed message (its "use <item>" buff line or weapon-proc line)
+            // is edited from the item's dialog Message section, so hide it here — same
+            // rule as spell-claimed records. An orphaned Items link (item not in this
+            // set) does NOT claim it, so it stays visible with the Messages tab as its
+            // only reachable editor.
+            if (IsClaimedByExistingItem(m, itemNumbers)) continue;
             // Lines column = compact tag string showing which perspective
             // slots are populated, e.g. "C T W A•" (Caster+Target+Witness
             // + Applied pair). Preview column = first non-empty line for
@@ -124,6 +131,20 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         foreach (GameDataLink link in m.Links)
             if (string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase)
                 && spellNumbers.Contains(link.Number))
+                return true;
+        return false;
+    }
+
+    // True when the record is claimed by an item present in the active set — a Links
+    // back-reference to an Items row whose Number exists. Such records (on-use buffs,
+    // weapon procs) are edited from the item dialog's Message section, so the Messages
+    // tab hides them. An orphaned Items link (item not in this set) does NOT claim it.
+    internal static bool IsClaimedByExistingItem(MessageRecord m, HashSet<int> itemNumbers)
+    {
+        if (m.Links is null) return false;
+        foreach (GameDataLink link in m.Links)
+            if (string.Equals(link.Table, "Items", StringComparison.OrdinalIgnoreCase)
+                && itemNumbers.Contains(link.Number))
                 return true;
         return false;
     }

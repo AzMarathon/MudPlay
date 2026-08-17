@@ -1378,6 +1378,11 @@ public sealed class AppServices
     // the Navigation Room Info panel's room-spell link. Single-instance across callers.
     public SpellRecordDialogService SpellRecord { get; private set; } = null!;
 
+    // Opens an item's on-use / proc message editor from the item dialog's Message
+    // section — the Items-side mirror of SpellRecord. Item-claimed message records are
+    // authored here rather than the Messages tab. Single-instance across callers.
+    public ItemMessageDialogService ItemMessage { get; private set; } = null!;
+
     // Background audit comparing player-facing spells in the active
     // set against the Messages catalogue's Links field — surfaces a
     // summary LogEntry per audit run so users know which spells
@@ -3495,6 +3500,10 @@ public sealed class AppServices
         // (the Room Info room-spell link), reusing the Spells tab's message-link flow + the
         // shared SpellInfoRowsBuilder. Messages (2366) is ready.
         SpellRecord = new SpellRecordDialogService(GameData, Messages, Dialogs);
+
+        // Item-side mirror of SpellRecord — opens an item's on-use / proc message
+        // editor from the item dialog's Message section.
+        ItemMessage = new ItemMessageDialogService(GameData, Messages, Dialogs);
 
         // Light catalogue + live carried illumination. The snapshot provider is
         // deferred (Inventory is assigned later in this method), so reading
