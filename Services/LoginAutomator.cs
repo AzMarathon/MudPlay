@@ -132,15 +132,30 @@ public sealed class LoginAutomator : IDisposable
     }
 
     // Begin the automation.
+    // The substring the current (not-yet-matched) step is waiting for, or null
+    // when every step has matched / the automator is done. Surfaced so a
+    // diagnostic caller can log WHAT the automator is stalled on when a reconnect
+    // leaves it incomplete (a carrier-lost relog whose final menu prompt differs
+    // from a fresh login never matches its last step).
+    public string? PendingWaitPattern
+    {
+        get { lock (_lock) { return _stepIndex < _steps.Count ? _steps[_stepIndex].WaitForPattern : null; } }
+    }
+
     public void Start()
     {
         bool done;
+        string? firstPattern = null;
         lock (_lock)
         {
             if (_started || _disposed) return;
             _started = true;
             done = _steps.Count == 0;
+            if (!done) firstPattern = _steps[0].WaitForPattern;
         }
+        _log?.Invoke(done
+            ? "LoginAutomator: started with 0 menu-nav steps (nothing to navigate)"
+            : $"LoginAutomator: started — {_steps.Count} step(s); awaiting step 1/{_steps.Count} (waiting for: \"{firstPattern}\")");
         if (done) FireDone();
     }
 
@@ -287,14 +302,20 @@ public sealed class LoginAutomator : IDisposable
         if (_disposed) return;
 
         bool done;
+        string? nextPattern = null;
         lock (_lock)
         {
             if (_disposed) return;
-            _log?.Invoke($"LoginAutomator: matched step {indexAtDispatch + 1}/{_steps.Count}");
             _stepIndex++;
             _resolving = false;
             done = _stepIndex >= _steps.Count;
+            if (!done) nextPattern = _steps[_stepIndex].WaitForPattern;
         }
+        // Log the step just sent AND what the next step now waits for, so a
+        // capture pins exactly which prompt a stalled reconnect never received.
+        _log?.Invoke(done
+            ? $"LoginAutomator: matched step {indexAtDispatch + 1}/{_steps.Count} — final step sent"
+            : $"LoginAutomator: matched step {indexAtDispatch + 1}/{_steps.Count}; awaiting step {_stepIndex + 1}/{_steps.Count} (waiting for: \"{nextPattern}\")");
 
         if (done) { FireDone(); return; }
         TryAdvance();

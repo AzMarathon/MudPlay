@@ -78,6 +78,13 @@ public sealed partial class CombatManager : IDisposable
     // current room so a display name shared across zones picks this room's variant.
     // Null (tests / legacy ctor) → the name→Number step keeps its first-match scan.
     private readonly Func<string, int?>? _roomAwareResolve;
+    // Resolves a debuff slot's cast-code to its catalog row so the between-round
+    // debuff dispatch can reject a mis-slotted spell (an attack spell with
+    // non-zero energy, or a targeting scope that doesn't fit single vs area).
+    private readonly Func<string, Game.Spells.KnownSpell?>? _resolveSpellByCode;
+    // Cast-codes already warned about as invalid debuff-slot configs, so the
+    // program log gets one line per bad slot rather than one per round.
+    private readonly HashSet<string> _warnedInvalidDebuffSlots = new(StringComparer.OrdinalIgnoreCase);
     private readonly PartyState _party;
     private readonly Func<CombatSettings> _readSettings;
     private readonly Func<PartySettings>? _readPartySettings;
@@ -560,7 +567,8 @@ public sealed partial class CombatManager : IDisposable
         Action<Action> post,
         LogService? log = null,
         Func<PartySettings>? readPartySettings = null,
-        Func<string, int?>? roomAwareResolve = null)
+        Func<string, int?>? roomAwareResolve = null,
+        Func<string, Game.Spells.KnownSpell?>? resolveSpellByCode = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(classifier);
@@ -576,6 +584,7 @@ public sealed partial class CombatManager : IDisposable
         _monsters     = monsters;
         _resolveOverlay = resolveOverlay;
         _roomAwareResolve = roomAwareResolve;
+        _resolveSpellByCode = resolveSpellByCode;
         _party        = party;
         _readSettings = readSettings;
         _isEnabled    = isEnabled;

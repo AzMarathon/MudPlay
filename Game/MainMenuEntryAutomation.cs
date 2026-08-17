@@ -153,6 +153,11 @@ public sealed class MainMenuEntryAutomation : IDisposable
             return;
         }
         _armedUntilUtc = NowProvider() + ArmWindow;
+        // Log the arm so a reconnect capture shows auto-entry was actually
+        // primed. Its ABSENCE is the tell that the login automator never
+        // completed (LoggedIntoGame never fired, so Arm was never called).
+        _log?.Log(LogSeverity.Info, "MainMenuEntry",
+            $"Armed auto-entry (window {ArmWindow.TotalSeconds:0}s) — will send '{_commands.EntryCommand}' on the next main-menu line.");
     }
 
     public void Dispose()

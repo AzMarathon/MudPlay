@@ -1974,11 +1974,18 @@ public partial class MainWindowViewModel : ObservableObject
             if (a is null) { DetachLoginKillSwitch(); return; }
             int stepsRun = a.CurrentStepIndex;
             int stepsTotal = a.StepCount;
+            string? pending = a.PendingWaitPattern;
             a.Dispose();
             _automator = null;
             DetachLoginKillSwitch();
+            // When the automator was still MID-sequence at this point (common on a
+            // carrier-lost relog whose final menu prompt differs from a fresh
+            // login), name the step it stalled on and the prompt it never saw — so
+            // a capture explains why auto-entry didn't fire, instead of just "5/6".
             AppServices.Current.Log.Info("LoginAuto",
-                $"In-game prompt observed — force-disposed automator for '{bbsName}' after {stepsRun}/{stepsTotal} step(s).");
+                stepsRun >= stepsTotal
+                    ? $"In-game prompt observed — force-disposed automator for '{bbsName}' after {stepsRun}/{stepsTotal} step(s) (all steps had matched)."
+                    : $"In-game prompt observed — force-disposed automator for '{bbsName}' after {stepsRun}/{stepsTotal} step(s); it was still awaiting step {stepsRun + 1}/{stepsTotal} (waiting for: \"{pending}\") — that menu prompt never arrived on this connect, so auto-entry never armed.");
         };
         scanner.PromptObserved += handler;
         _loginKillSwitch = handler;

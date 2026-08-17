@@ -1,10 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.20.6**
+> **Version 3.20.8**
 > - Spell records now list **Negated by** — the items that cancel a spell while carried (the inverse of the item side's *Negates*), shown in the Game Data Browser Spells record and the Room Info room-spell dialog
 > - Spell records: the **Summons / Casts / Casted By / Negated by** (plus Learned From, Requires/Avoided carrying) record references are now clickable blue links that open the monster / spell / item record
 > - Remote commands: an @-word matching no command is now ignored silently — a stray "@because" in gang chat no longer draws an "invalid command" reply; the warn-on-invalid setting now governs only recognized-but-denied commands
+> - Combat: single-target debuff spells now actually fire — they were wrongly gated by Auto-Nuke (single-target debuff is now gated by **Auto-Combat**, the AoE debuff by **Auto-Nuke**); the debuff-cast path was also brought up to parity with the attack cascade (corpse-cast guard + one-between-round-cast-per-round slot)
+> - Combat: a debuff slot now rejects a mis-configured spell — it must be a 0-energy between-round spell with slot-appropriate targeting (single-target vs AoE); enforced at cast time and flagged live in Settings → Combat
+> - Reconnect: richer login-automation diagnostics — the log names the exact login step that stalls and the menu prompt it never received, so a carrier-lost reconnect that doesn't re-enter the realm can be pinned
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

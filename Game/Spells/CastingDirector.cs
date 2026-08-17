@@ -514,6 +514,17 @@ public sealed class CastingDirector : IDisposable
     // room it would re-open the slot several times a round and let the storm back in.
     public void NotifyRoundComplete() => _betweenRoundSlotUsed = false;
 
+    // An external between-round cast — the combat engine's pre-attack debuff,
+    // which fires directly rather than through Evaluate — just went out. Spend
+    // this round's single between-round slot so Evaluate won't queue a second one
+    // and draw "You have already cast a spell this round!". Cleared on the round
+    // tick by NotifyRoundComplete; no-op out of combat, where no per-round cap
+    // applies.
+    public void MarkBetweenRoundSlotUsed()
+    {
+        if (_state.InCombat) _betweenRoundSlotUsed = true;
+    }
+
     // Read-only snapshot of the live buff-duration timers for the Buff Watchdog
     // window — a copy so the caller never holds the live dictionary. Read on the UI
     // thread (same thread every _activeUntil write runs on), so no lock is needed.

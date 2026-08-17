@@ -2956,7 +2956,10 @@ public sealed class AppServices
             log: Log,
             readPartySettings: () =>
                 ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
-            roomAwareResolve: RoomAwareMonster.ResolveInCurrentRoom);
+            roomAwareResolve: RoomAwareMonster.ResolveInCurrentRoom,
+            // Resolve a debuff slot's cast-code to its catalog row (energy cost +
+            // targeting scope) so a mis-slotted spell is rejected before it casts.
+            resolveSpellByCode: code => Spellbook.FindByCastCode(code));
 
         // Dark-room combat. A room too dark to show "Also here:" hides any
         // hostile sharing it — the only evidence is the mob's dark-cyan attack
@@ -3353,6 +3356,7 @@ public sealed class AppServices
         // the attack spell" ordering). Only exercised when a debuff is actually
         // due, so a normal engage is untouched.
         Combat.SetInBetweenEvaluator(CastDirector.Evaluate);
+        Combat.SetBetweenRoundSlotMarker(CastDirector.MarkBetweenRoundSlotUsed);
         // A between-round survival cast stops our auto-attack; let the combat
         // engine resume the weapon attack on the resulting *Combat Off*
         // instead of idling until the next round.
