@@ -2621,6 +2621,15 @@ glass jug               5               2 gold crowns
   instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
   (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
   the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
+- **[user 2026-08-17] Party-buff slots are party-only, and a superseding party buff covers self.**
+  The party-bless slots are cast **only while in a party** (`PartyState.IsInParty`); solo, none fire —
+  self-buffs come from the self-bless slots. A **single-target** party buff is cast per class-matched
+  member and **never targets self** (self uses the self-slots); only a **party-wide** buff (`Spells.Targets`
+  = Full/Divided Party Area, scope 13/10) lands on self. **Supersession:** a spell that carries **RemovesSpell
+  (Abil 122)** removes the named spell (the Spell Book renders it "Removes <spell>"). So when a configured
+  **party-wide** party buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop
+  self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff
+  "covered by <party buff>". Only party-wide covers count (a single-target party buff can't cover self).
 
 ## Guarded monsters redirect attacks *([CONFIRMED] 2026-07-14, user + wire capture)*
 

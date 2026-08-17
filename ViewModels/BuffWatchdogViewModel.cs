@@ -108,13 +108,18 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         // then keeps the on-screen remaining continuous across the gap.
         DateTime now = _castDirector.PausedAtUtc ?? DateTime.UtcNow;
 
+        // In a party, a self-buff a configured party-wide buff removes shows "covered by"
+        // that buff instead of a timer (the director suppresses self-casting it).
+        IReadOnlyDictionary<string, string> coverage = _castDirector.CurrentSelfBuffCoverage();
+
         foreach (BuffWatchdogRowViewModel row in SelfBuffs)
         {
             ActiveBuffTimer? entry = null;
             foreach (ActiveBuffTimer t in snap)
                 if (t.Target.Length == 0 && string.Equals(t.Short, row.CastCode, StringComparison.OrdinalIgnoreCase))
                 { entry = t; break; }
-            row.Update(entry, now);
+            coverage.TryGetValue(row.CastCode, out string? coveredBy);
+            row.Update(entry, now, coveredBy: coveredBy);
         }
 
         foreach (BuffWatchdogRowViewModel row in PartyBuffs)

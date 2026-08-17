@@ -61,4 +61,16 @@ public sealed class BuffWatchdogRowViewModelTests
         Assert.False(row.ShowRecastMarker);
         Assert.Equal("not up", row.TimeText);
     }
+
+    [Fact]
+    public void Update_CoveredByPartyBuff_ShowsCoveredLabel_EmptyBar()
+    {
+        BuffWatchdogRowViewModel row = NewRow();
+        row.Update(null, T0, coveredBy: "chan");
+        Assert.True(row.IsCovered);
+        Assert.Equal("covered by chan", row.TimeText);
+        Assert.Equal(0.0, row.FillStar.Value, 3);
+        Assert.False(row.IsActive);
+        Assert.False(row.ShowRecastMarker);
+    }
 }

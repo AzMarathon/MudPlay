@@ -1442,6 +1442,40 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void SelfBuff_CoveredByPartyBuff_IsNotCast()
+    {
+        // In a party, a party-wide buff (chan) that removes bless supersedes the self-cast:
+        // the director skips self-casting bles and lets the party buff cover us.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        // Coverage set BEFORE the state changes, so the setup's auto-eval already skips bles.
+        h.Director.SetSelfBuffCoverage(() => new Dictionary<string, string> { ["bles"] = "chan" });
+        h.State.MaxMa = 100; h.State.Ma = 100; h.State.InCombat = false;
+
+        h.Director.Evaluate();
+
+        Assert.DoesNotContain("bles", h.CastsSent);
+        Assert.Equal("chan", h.Director.CurrentSelfBuffCoverage()["bles"]);
+    }
+
+    [Fact]
+    public void SelfBuff_NotCovered_IsCastNormally()
+    {
+        // No coverage (solo, or nothing removes it) ⇒ the self-buff casts as usual.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100; h.State.Ma = 100; h.State.InCombat = false;
+
+        h.Director.Evaluate();
+
+        Assert.Contains("bles", h.CastsSent);
+    }
+
+    [Fact]
     public void Buff_BlessIfAboveMa_AbsoluteMode_UsesRawMa()
     {
         // In Absolute mode BlessIfAboveMa is a raw kai count, not a percent —
@@ -2206,6 +2240,7 @@ public sealed class CastingDirectorTests
                 MpPercent = 100,
             };
             Party.Members.Add(m);
+            Party.IsInParty = true;   // a member present ⇒ in a party (party-buff slots apply)
             return m;
         }
 
@@ -2247,6 +2282,25 @@ public sealed class CastingDirectorTests
 
         Assert.Single(h.CastsSent);
         Assert.Equal("bles Raijin", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyBless_NotInParty_DoesNotCast()
+    {
+        // Solo (IsInParty false) ⇒ the party-buff slots never fire, even with a lingering
+        // member row — party buffs are used only alongside self buffs while in a party.
+        using PartyBlessHarness h = new();
+        h.Classes[1] = "Mage";
+        h.Health.BlessIfAboveMa = 0;
+        h.PartySettings.BlessSlots[0].Spell = "bles";
+        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin", "Mage");
+        h.Party.IsInParty = false;        // now solo
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
     }
 
     [Fact]

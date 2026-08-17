@@ -11,6 +11,8 @@
 > - Buff tracking: Paradigm's `stat` "You feel X! (Ns)" status readout is ignored — it no longer gets mistaken for a fresh cast (which falsely marked buffs active on login and then suppressed the real cast's confirm)
 > - Buff tracking: any disconnect now freezes the buff timers (display included) and reconnecting resumes them with the same remaining, instead of clearing and recasting from full; switching characters or a gap longer than the buff could last starts fresh with no buffs assumed
 > - Buff Watchdog: taller, full-width timer bars with a larger label — a light-green outline over a flat darker-green fill (name left-aligned inside, remaining time after it); the fill and recast marker stretch to the bar's real width so the outline bounds exactly the actual bar (no dead space at the ends)
+> - Party buffs: the party-buff slots are cast only while you're actually in a party — solo, none of them fire (your self-buff slots still do)
+> - Party buffs: a party-wide buff that supersedes a self-buff (RemovesSpell — e.g. chant removes bless) now suppresses that self-cast while in a party, and the Buff Watchdog shows the self-buff "covered by" the party buff instead of a timer
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

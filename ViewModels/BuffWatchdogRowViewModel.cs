@@ -34,6 +34,9 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     [ObservableProperty] private GridLength _markerStar = Empty;
     [ObservableProperty] private GridLength _markerRestStar = Full;
     [ObservableProperty] private string _timeText = "not up";
+    // When set, a configured party buff supersedes this self-buff (RemovesSpell) while
+    // in a party, so we don't self-cast it — the row shows "covered by <code>".
+    [ObservableProperty] private bool _isCovered;
 
     private static GridLength Empty => new(0, GridUnitType.Star);
     private static GridLength Full => new(1, GridUnitType.Star);
@@ -49,9 +52,27 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     }
 
     // Recompute the bar from a live timer (null ⇒ the buff isn't up). now is UTC to
-    // match CastingDirector's clock. A memberName (party rows) overrides TargetText.
-    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null)
+    // match CastingDirector's clock. A memberName (party rows) overrides TargetText;
+    // coveredBy (self rows) names a party buff that supersedes this self-buff.
+    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null)
     {
+        if (coveredBy is { Length: > 0 })
+        {
+            // Superseded by a party-wide party buff — we don't self-cast it; the party
+            // buff covers us. Show an empty bar labelled with the covering cast code.
+            IsActive = false;
+            IsCovered = true;
+            InRecastWindow = false;
+            FillStar = Empty;
+            FillRestStar = Full;
+            ShowRecastMarker = false;
+            MarkerStar = Empty;
+            MarkerRestStar = Full;
+            TimeText = $"covered by {coveredBy}";
+            return;
+        }
+        IsCovered = false;
+
         if (entry is not { TotalSec: > 0 } e)
         {
             IsActive = false;

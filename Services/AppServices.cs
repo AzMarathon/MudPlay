@@ -3263,6 +3263,10 @@ public sealed class AppServices
         // cast once for the whole party; the picker checks this to skip the
         // per-member loop.
         CastDirector.SetPartyWideBuffCheck(IsPartyWideBuff);
+        // Self-buff supersession: in a party, a configured party-wide buff that removes a
+        // self-buff (RemovesSpell) covers us, so the director stops self-casting the
+        // removed one — the Buff Watchdog shows that slot "covered by" the party buff.
+        CastDirector.SetSelfBuffCoverage(SelfBuffCoverage);
         // Downed-ally rescue heal. A dropped ally leaves `par`, so PickPartyHeal's
         // roster walk can't see them — the AllyDroppedHandler feeds each aided
         // downed ally back in here as the top-priority name-targeted heal until
@@ -5306,6 +5310,62 @@ public sealed class AppServices
             if (string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase))
                 return s.Targets is 10 or 13;
         return false;
+    }
+
+    // Self-buff cast code → the configured PARTY-WIDE party-buff cast code that removes
+    // (supersedes) it via RemovesSpell (Abil 122), while in a party. Empty when solo. In
+    // a party we let a party-wide buff that removes a self-buff cover us instead of self-
+    // casting the removed one — chant removes bless, so once chant is a party buff we stop
+    // self-casting bless. Only PARTY-WIDE covers count: a single-target party buff never
+    // lands on self, so it can't cover our self-cast. Drives the director's self-buff
+    // suppression and the Buff Watchdog "covered by" label.
+    public IReadOnlyDictionary<string, string> SelfBuffCoverage()
+    {
+        Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
+        if (!PartyState.IsInParty) return map;
+
+        Models.Profile.SpellsSettings spells = Resolver.Resolve<Models.Profile.SpellsSettings>("Spells");
+        Models.Profile.PartySettings party = Resolver.Resolve<Models.Profile.PartySettings>("Party");
+
+        // Configured self-buffs → (cast code, spell number). #item-cast tokens resolve to
+        // no spell and are skipped (an item buff isn't a RemovesSpell target).
+        List<(string Code, int Number)> selfBuffs = new();
+        void AddSelf(string? code)
+        {
+            if (string.IsNullOrWhiteSpace(code)) return;
+            if (Spellbook.FindByCastCode(code.Trim()) is { } s)
+                selfBuffs.Add((s.Short, s.Number));
+        }
+        foreach (string code in spells.BlessSlots.Values) AddSelf(code);
+        AddSelf(spells.HpRegenSpell);
+        AddSelf(spells.MaRegenSpell);
+        AddSelf(spells.WhenHpFullSpell);
+        AddSelf(spells.WhenMaFullSpell);
+        if (selfBuffs.Count == 0) return map;
+
+        foreach (Models.Profile.PartyBlessSlot pslot in party.BlessSlots)
+        {
+            if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
+            if (!IsPartyWideBuff(pslot.Spell)) continue;   // a single-target party buff never covers self
+            HashSet<int> removed = RemovedSpellNumbers(pslot.Spell);
+            if (removed.Count == 0) continue;
+            foreach ((string code, int number) in selfBuffs)
+                if (removed.Contains(number) && !map.ContainsKey(code))
+                    map[code] = pslot.Spell.Trim();
+        }
+        return map;
+    }
+
+    // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
+    // effect the Spell Book renders as "Removes <spell>").
+    private HashSet<int> RemovedSpellNumbers(string castCode)
+    {
+        const int RemovesSpellAbil = 122;
+        HashSet<int> nums = new();
+        if (Spellbook.FindByCastCode(castCode.Trim()) is { } s)
+            foreach (Game.Spells.SpellAbility a in s.Formula.Abilities)
+                if (a.Code == RemovesSpellAbil) nums.Add(a.Value);
+        return nums;
     }
 
     // Build the cure-confirmation matchers

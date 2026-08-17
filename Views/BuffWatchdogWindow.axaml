@@ -57,6 +57,14 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
         </Style>
+        <!-- Superseded (covered-by-a-party-buff) self-buff rows read deemphasised, so an
+             empty bar labelled "covered by chan" reads as intentional, not missing. -->
+        <Style Selector="TextBlock.BarName.covered">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.BarTime.covered">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
 
         <!-- "unlearned" chip on a configured buff the character hasn't learned. -->
         <Style Selector="Border.UnlearnedChip">
@@ -122,11 +130,13 @@
                                         </Grid>
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
                                                     VerticalAlignment="Center" Margin="6,0,0,0">
-                                            <TextBlock Classes="BarName" Text="{Binding Name}"/>
+                                            <TextBlock Classes="BarName" Classes.covered="{Binding IsCovered}"
+                                                       Text="{Binding Name}"/>
                                             <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
                                                 <TextBlock Text="unlearned"/>
                                             </Border>
-                                            <TextBlock Classes="BarTime" Text="{Binding TimeText}"/>
+                                            <TextBlock Classes="BarTime" Classes.covered="{Binding IsCovered}"
+                                                       Text="{Binding TimeText}"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>

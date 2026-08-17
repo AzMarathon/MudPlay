@@ -1313,6 +1313,10 @@ Settings → Party.
 **What it does:** Up to 10 beneficial spells you want auto-cast on party members, each restricted to specific classes (e.g. cast a warrior buff only on Warriors and Barbarians). Row order is cast priority.
 **How the options work:** The first time you type a spell into an empty slot, every currently-known class gets auto-checked as a convenience — untick the ones you don't want it cast on. Each row also has its own **recast within (s)** — how early before the buff's tracked expiry to recast it; it defaults to **15**, and `0` waits for the buff to actually wear off.
 
+**Party-only, and targeting:** the party-bless slots are cast **only while you're actually in a party** — solo, none of them fire (your self-bless slots still do). A **party-wide** spell (chant and the like — one cast blankets the whole party, including you) is sent once with no target. A **single-target** spell is cast on each class-matched member individually with its own recast timer per person, and it is **not** cast on your own character — self comes from the self-bless slots.
+
+**Supersession:** if a party-wide party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
+
 ### Bless party while resting / Bless party during combat
 
 **Default:** both Off

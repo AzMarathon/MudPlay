@@ -142,6 +142,9 @@ public sealed class CastingDirector : IDisposable
     private Func<MessageRecord, string?>? _shortFromAppliedRecord;
     private Func<int, string?>? _classNameByNumber;
     private Func<string, bool>? _isPartyWideBuff;
+    // Self-buff cast code → the party-wide party buff that removes (supersedes) it while
+    // in a party. PickSelfBuff skips a covered slot; the Buff Watchdog labels it.
+    private Func<IReadOnlyDictionary<string, string>>? _selfBuffCoverage;
     private Action<string>? _selfBuffLandedSink;
     private Func<DateTime> _now = () => DateTime.UtcNow;
     private LineExtractor? _lines;
@@ -394,6 +397,24 @@ public sealed class CastingDirector : IDisposable
         ArgumentNullException.ThrowIfNull(isPartyWideBuff);
         _isPartyWideBuff = isPartyWideBuff;
     }
+
+    // Wire the self-buff coverage source: self-buff cast code → the party-wide party buff
+    // that removes (supersedes) it while in a party. PickSelfBuff skips a covered slot so
+    // we let the party buff cover us instead of self-casting the removed spell.
+    public void SetSelfBuffCoverage(Func<IReadOnlyDictionary<string, string>> coverage)
+    {
+        ArgumentNullException.ThrowIfNull(coverage);
+        _selfBuffCoverage = coverage;
+    }
+
+    // The current self-buff coverage map (self code → covering party-buff code) — the
+    // Buff Watchdog reads this to label a superseded self-buff "covered by". Empty when
+    // solo or unwired.
+    public IReadOnlyDictionary<string, string> CurrentSelfBuffCoverage()
+        => _selfBuffCoverage?.Invoke() ?? _emptyCoverage;
+
+    private static readonly IReadOnlyDictionary<string, string> _emptyCoverage =
+        new Dictionary<string, string>();
 
     // Wire a sink notified with the 4-letter cast code every time one of OUR
     // self-buffs is confirmed to have landed (via the ConditionTracker AppliedMessage
@@ -1222,10 +1243,15 @@ public sealed class CastingDirector : IDisposable
                     (spells.WhenMaFullSpell,  _state.MaxMa > 0 && _state.Ma >= _state.MaxMa, DefaultRecastMarginSec),
                 });
 
+        // In a party, a self-buff a configured party-wide buff removes (e.g. chant removes
+        // bless) is left to that party buff — skip self-casting the superseded spell.
+        IReadOnlyDictionary<string, string>? covered = _selfBuffCoverage?.Invoke();
+
         foreach ((string? slot, bool eligible, int margin) in slots)
         {
             if (!eligible) continue;
             if (string.IsNullOrWhiteSpace(slot)) continue;
+            if (covered is not null && covered.ContainsKey(slot)) continue;
             if (!IsBuffAffordable(slot, manaBuffsAllowed)) continue;
             if (!IsRecastDue("", slot)) continue;
             return new CastCandidate(slot, Target: null, margin);
@@ -1251,7 +1277,8 @@ public sealed class CastingDirector : IDisposable
     {
         if (_party is null) return null;
         if (party is null) return null;
-        if (_party.Members.Count == 0) return null;
+        // Solo → the party-buff slots don't apply; only cast them once actually in a party.
+        if (!_party.IsInParty) return null;
 
         bool whileResting  = party.BlessWhileResting;
         bool duringCombat  = party.BlessDuringCombat;
