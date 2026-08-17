@@ -13,6 +13,7 @@
 > - Buff Watchdog: taller, full-width timer bars with a larger label — a light-green outline over a flat darker-green fill (name left-aligned inside, remaining time after it); the fill and recast marker stretch to the bar's real width so the outline bounds exactly the actual bar (no dead space at the ends)
 > - Party buffs: the party-buff slots are cast only while you're actually in a party — solo, none of them fire (your self-buff slots still do)
 > - Party buffs: a party-wide buff that supersedes a self-buff (RemovesSpell — e.g. chant removes bless) now suppresses that self-cast while in a party, and the Buff Watchdog shows the self-buff "covered by" the party buff instead of a timer
+> - Game Data Browser: a message claimed by a spell in the set no longer appears on the Messages tab (you edit it by double-clicking the spell) — no more seeing the same record listed twice; an orphan-linked message whose spell isn't in the set stays listed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

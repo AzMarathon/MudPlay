@@ -83,8 +83,16 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
 
     protected override void PopulateRows(IList<GameDataRow> rows)
     {
+        // A message claimed by a spell that EXISTS in this set is edited from the Spells
+        // section (double-click opens its linked message), so hide it here — listing the
+        // same record under both tabs is confusing even though the Messages store is where
+        // it actually lives. A message whose Spells link is orphaned (the spell isn't in
+        // this set) stays visible, so it isn't stranded with no editor to reach it.
+        HashSet<int> spellNumbers = _cache?.RowNumbers("Spells") ?? new HashSet<int>();
+
         foreach (MessageRecord m in _store.Messages)
         {
+            if (IsClaimedByExistingSpell(m, spellNumbers)) continue;
             // Lines column = compact tag string showing which perspective
             // slots are populated, e.g. "C T W A•" (Caster+Target+Witness
             // + Applied pair). Preview column = first non-empty line for
@@ -104,6 +112,20 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
                 row.SourceTier = _resolver.GetGameDataSourceTier("Messages", m.Id);
             rows.Add(row);
         }
+    }
+
+    // True when the record is claimed by a spell present in the active set — a Links
+    // back-reference to a Spells row whose Number exists. Such records are edited from
+    // the Spells section, so the Messages tab hides them. An orphaned Spells link (spell
+    // not in this set) does NOT claim it, so it stays listed here (its only reachable editor).
+    internal static bool IsClaimedByExistingSpell(MessageRecord m, HashSet<int> spellNumbers)
+    {
+        if (m.Links is null) return false;
+        foreach (GameDataLink link in m.Links)
+            if (string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase)
+                && spellNumbers.Contains(link.Number))
+                return true;
+        return false;
     }
 
     private static string BuildLineTags(MessageRecord m)
