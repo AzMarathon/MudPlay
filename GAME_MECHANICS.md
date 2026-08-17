@@ -25,6 +25,12 @@ it isn't here and you're unsure, ask.
   duration of `N` rounds lasts `N × 3` seconds. A debuff falls off on the same 3s cadence.
 - A spell record's `Dur` field is therefore **spell rounds**: real seconds = `Dur × 3`.
   Boat-voyage length is the sum of the transit spells' `Dur` along the disembark chain, × 3s.
+- **[OBSERVED, report paradigm-20260816-222917]** The **real** spell round runs slightly LONG,
+  like the combat round is ~5.04s not 5.0 — a 50-round buff (`prev`, protection from evil) was
+  observed lasting **~151-152s**, i.e. ~**3.04s/round**, not the nominal 150s. So a "recast within
+  N s" slot, which is measured against the buff's **real** remaining seconds, must time off ~3.04s
+  or it recasts ~1-2s early. The client keeps the nominal 3s for spell-data displays but uses
+  `SpellCalculator.SpellRoundSecondsWallClock` (3.04) for the live recast clock + Buff Watchdog.
 - If a specific duration's unit is ever ambiguous, **ask the user** — they can give the correct
   value rather than us guessing.
 
@@ -2565,6 +2571,65 @@ glass jug               5               2 gold crowns
   shriek that wore off left the co-latched `fumble` still holding `Confused`, keeping the nav
   ConfusionGate stuck. **Client encoding:** `ConditionTracker` clears every active `Confused` record when
   a `Confused`-carrying record's wear-off matches.
+
+## One BETWEEN-ROUND spell per combat round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
+
+- **You may cast only ONE 0-energy "between-round" spell per combat round — total, across heals, buffs,
+  debuffs, and use-item buffs.** These are the `EnergyCost = 0` spells (mageshield / holy armour, cures,
+  regen HoTs, etc.); they ride *between* the round's main action, so one is free each round on top of your
+  attack. A **second** between-round spell attempted the same round is rejected with **`You have already
+  cast a spell this round!`**, and **the spell you just sent does NOT fire** — success or failure of the
+  first doesn't matter, the round's single between-round slot is spent. **This line never appears for combat
+  spells** (lbol / mmis / deathtouch / fireball are 500–1000 energy — the round's main action, not
+  between-round), so it is purely the between-round coordinator's signal.
+  - **Client encoding:** the between-round coordinator (`CastingDirector`) casts at most one between-round
+    spell per round, gated on a latch cleared by the **combat round tick** — `TickEngine.CombatTickElapsed`
+    (`NotifyRoundComplete`), the 5s combat heartbeat refreshed by damage lines. It must NOT clear on
+    **`*Combat Off*`**: that fires per *kill*, so in a multi-mob room it lands several times a round and would
+    re-open the slot mid-round (the recast storm's door). The bug that produced the "4 mageshields in a short
+    span" storm was the coordinator's own one-per-round cooldown being cleared on every per-hit tick, letting
+    it send several between-round spells a round. On the rejection the just-sent spell didn't fire, so its
+    optimistic recast timer is dropped (it re-attempts next round) and the round's slot is latched spent
+    (`CastingDirector.OnCastFailed`).
+- **A self-buff's active/recast state is keyed to its own 4-letter cast code**, resolved from game data: the
+  success line (`Spells` → *user definitions* → CasterMessage / AppliedMessage) starts the duration timer,
+  and the buff's OWN wear-off (`AppliedEndsWith`) clears it. **Distinct buffs that merely share an applied /
+  onset line must NOT cross-clear.** Unlike confusion (one shared state, many sources — a group clear is
+  correct there), the five shields that all emit **`You feel protected!`** (mageshield #132, ethereal shield
+  #4, holy/unholy armour #148/#149, heros tabard #859) are *separate* effects with their *own* distinct
+  wear-offs. So a wear-off fires `ConditionTracker.ConditionEnded` only for the record whose own end-text
+  matched — a sibling sharing the applied line is dropped from the active set (keeping flags honest) but
+  does not fire the event, so it can't clear a different buff we actually cast.
+- **[CONFIRMED, user 2026-08-16 + report `paradigm-20260816-232454`] The `stat` screen's buff readout is
+  NEVER a fresh cast — ignore it for buff tracking.** On Paradigm, `stat` lists each active effect as
+  **`You feel <effect>! (<remaining>s)`** (e.g. `You feel lucky! (411s)`, `You feel safe from evil! (12s)`).
+  The effect text is *shared* across many records — one `You feel lucky!` line matched **11** catalogue
+  records (bless + chant + several weapons/items) — so a readout can neither identify **which** buff is up
+  nor legitimately "apply" one. Treating it as a cast falsely marked buffs active on **login** (the post-entry
+  `stat` refresh), and because the tracker only fires on a not-active→active transition, that stale "active"
+  state then **suppressed the confirm on the real manual cast** (a repeat applied line is no transition). The
+  client keys off the trailing **`(<remaining>s)`** parenthetical to skip these readouts entirely
+  (`ConditionTracker`); a genuine fresh-cast effect line has no parenthetical.
+- **A hand-typed buff is confirmed by the CAST CODE, not the shared success text.** You type the 4-letter
+  code (`bles`) → the client arms/refreshes that buff's timer anchored on the code (`CastingDirector.NoteManualBuffCast`,
+  fed by the `OutboundCastObserver`), exactly as an engine cast does. The following success line just
+  confirms it landed; identity comes from the code, never the ambiguous applied message.
+- **[user 2026-08-16] Session vs drop for buff timers.** **Any** disconnect — manual, hangup, or an unexpected
+  drop — **freezes** the buff timers (the buffs persist server-side through link-death); the Buff Watchdog
+  display freezes at the drop instant too (its 1s heartbeat is a wall clock that keeps ticking offline). The
+  first in-game prompt after reconnect **resumes** them shifted forward by the offline gap (same remaining),
+  instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
+  (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
+  the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
+- **[user 2026-08-17] Party-buff slots are party-only, and a superseding party buff covers self.**
+  The party-bless slots are cast **only while in a party** (`PartyState.IsInParty`); solo, none fire —
+  self-buffs come from the self-bless slots. A **single-target** party buff is cast per class-matched
+  member and **never targets self** (self uses the self-slots); only a **party-wide** buff (`Spells.Targets`
+  = Full/Divided Party Area, scope 13/10) lands on self. **Supersession:** a spell that carries **RemovesSpell
+  (Abil 122)** removes the named spell (the Spell Book renders it "Removes <spell>"). So when a configured
+  **party-wide** party buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop
+  self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff
+  "covered by <party buff>". Only party-wide covers count (a single-target party buff can't cover self).
 
 ## Guarded monsters redirect attacks *([CONFIRMED] 2026-07-14, user + wire capture)*
 

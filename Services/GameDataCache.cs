@@ -300,6 +300,22 @@ public sealed class GameDataCache
         return null;
     }
 
+    // The set of Number values present in tableName for the active set (empty when the
+    // table isn't loadable). Lets a caller test row existence in O(1) without an O(rows)
+    // scan per lookup — e.g. the Messages tab hiding records claimed by a real spell.
+    public HashSet<int> RowNumbers(string tableName)
+    {
+        HashSet<int> nums = new();
+        JsonDocument? doc = GetRawTable(tableName);
+        if (doc is null) return nums;
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            if (row.TryGetProperty("Number", out JsonElement numEl)
+                && numEl.ValueKind == JsonValueKind.Number
+                && numEl.TryGetInt32(out int v))
+                nums.Add(v);
+        return nums;
+    }
+
     // Return the full row in tableName whose Number field equals number, or
     // null when the table isn't in the active set or no row matches. Mirrors
     // FindNameByNumber but hands back the whole JsonElement so a caller can

@@ -44,6 +44,15 @@ public static class SpellCalculator
     // way (the display formatters and the recast clock).
     public const int SpellRoundSeconds = 3;
 
+    // Wall-clock seconds per spell round for LIVE buff timers (the recast clock and
+    // the Buff Watchdog). Server rounds run slightly long — the combat round is
+    // ~5.04 s, not 5.0 — so a buff's real countdown is a touch more than Dur×3. A
+    // "recast within N s" slot is measured against the buff's REAL remaining time, so
+    // timing it off the nominal 3 s under-estimates the duration and recasts ~1-2 s
+    // early. Report paradigm-20260816-222917: a 50-round buff (prev) lasts ~151-152 s,
+    // i.e. ~3.04 s/round. Displays / game-data views keep the nominal SpellRoundSeconds.
+    public const double SpellRoundSecondsWallClock = 3.04;
+
     // Effect duration at level, in spell rounds (one round = SpellRoundSeconds s
     // — multiply for wall-clock seconds). No override, no energy multiplier —
     // straight base + per-level slope.

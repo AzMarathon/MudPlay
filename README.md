@@ -1,8 +1,20 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.19.4**
-> - Navigation: the Warped Asylum teleport-maze solver now stops the per-room position-checking once it lands in a solvable room — the initial landing still relocalizes to confirm the room, but from there the unhindered route to the goal is driven straight through with no `look`-sweep (stock) or `rm` (Paradigm) spam per step
+> **Version 3.20.0**
+> - New **Buff Watchdog** window (View menu, after Party): lists every buff you have configured — self-bless slots, HP/MA-regen, when-full, `#item`-cast, and party-bless slots — each with a live timer bar and a marker showing where its recast window opens, so you can see which buffs are up, which are due, and which aren't up at all
+> - Combat buffing: the between-round spell coordinator (heals / buffs / debuffs / item buffs) now casts at most ONE per combat round, matching the game's one-between-round-cast-per-round rule — fixes a self-buff (e.g. mageshield) re-casting every round during a fight and spamming "already cast this round"
+> - Combat buffing: a buff's recast timer is now cleared only by its OWN wear-off line — spells that merely share an "applied" message (the five "you feel protected" shields) can no longer clear each other's timers
+> - Combat buffing: program logging for the buff manager — timer armed, confirmed active, worn off, and dropped when a cast didn't fire — so a log read explains what it's doing and why
+> - Combat buffing: buff recast timers now measure the buff's REAL remaining seconds (server spell rounds run slightly long, ~3.04s not 3.0s), so a "recast within N seconds" slot fires at N seconds left instead of ~1-2 seconds early
+> - Buff tracking: a manually-cast buff is now caught — armed by the 4-letter cast code you typed (like an engine cast), so the Buff Watchdog and recast engine track hand-casts
+> - Buff tracking: Paradigm's `stat` "You feel X! (Ns)" status readout is ignored — it no longer gets mistaken for a fresh cast (which falsely marked buffs active on login and then suppressed the real cast's confirm)
+> - Buff tracking: any disconnect now freezes the buff timers (display included) and reconnecting resumes them with the same remaining, instead of clearing and recasting from full; switching characters or a gap longer than the buff could last starts fresh with no buffs assumed
+> - Buff Watchdog: taller, full-width timer bars with a larger label — a light-green outline over a flat darker-green fill (name left-aligned inside, remaining time after it); the fill and recast marker stretch to the bar's real width so the outline bounds exactly the actual bar (no dead space at the ends)
+> - Party buffs: the party-buff slots are cast only while you're actually in a party — solo, none of them fire (your self-buff slots still do)
+> - Party buffs: a party-wide buff that supersedes a self-buff (RemovesSpell — e.g. chant removes bless) now suppresses that self-cast while in a party, and the Buff Watchdog shows the self-buff "covered by" the party buff instead of a timer
+> - Game Data Browser: a message claimed by a spell in the set no longer appears on the Messages tab (you edit it by double-clicking the spell) — no more seeing the same record listed twice; an orphan-linked message whose spell isn't in the set stays listed
+> - Messages seed: pruned inert MegaMUD carry-over entries the engine never reads — every `monster entry` and `trap disarm` record (monster arrivals are recognized directly off the wire) and the standalone "you are shockshielded" shockshield record (the spell-linked shockshield is kept)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

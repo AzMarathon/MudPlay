@@ -139,6 +139,7 @@
                 <Separator/>
                 <MenuItem Header="Conversation"  InputGesture="{Binding ConversationGesture}"  Command="{Binding OpenConversationCommand}"/>
                 <MenuItem Header="Party"         InputGesture="{Binding PartyGesture}"  Command="{Binding OpenPartyCommand}"/>
+                <MenuItem Header="Buff Watchdog" InputGesture="{Binding BuffWatchdogGesture}" Command="{Binding OpenBuffWatchdogCommand}"/>
                 <MenuItem Header="Player Workshop" InputGesture="{Binding WorkshopGesture}" Command="{Binding OpenWorkshopCommand}"/>
                 <MenuItem Header="Navigation"      InputGesture="{Binding NavigationGesture}" Command="{Binding OpenNavigationCommand}"/>
                 <MenuItem Header="Spell Book"    InputGesture="{Binding SpellBookGesture}"  Command="{Binding OpenSpellBookCommand}"/>

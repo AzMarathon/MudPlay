@@ -1147,7 +1147,8 @@ public sealed class CastingDirectorTests
         Assert.Equal("swan", h.CastsSent[0]);
 
         h.Cast.OnCombatTick();                 // wipe cooldown (root-cause window)
-        h.Director.Evaluate();                 // unchanged pool → suppressed
+        h.Director.NotifyRoundComplete();      // new round → between-round slot free
+        h.Director.Evaluate();                 // unchanged pool → stale-guard suppresses
         Assert.Single(h.CastsSent);
 
         // Once HP actually drops, the pool moved → a fresh heal is free to fire.
@@ -1247,6 +1248,231 @@ public sealed class CastingDirectorTests
         h.Cast.OnCombatTick();
         h.Director.Evaluate();
         Assert.Empty(h.CastsSent);             // still active → no recast
+    }
+
+    [Fact]
+    public void BetweenRound_OneCastPerRound_SuppressesSecondUntilRoundBoundary()
+    {
+        // The game allows a single 0-energy between-round cast per combat round, so
+        // once we've cast one, further between-round casts THIS round are suppressed
+        // (sending them just draws "already cast this round" and they don't fire — the
+        // mageshield storm's root, report paradigm-20260816-101702). The slot frees at
+        // the round boundary (NotifyRoundComplete), letting the next buff fire.
+        using CureHarness h = new();
+        h.Spells.SelfBlessDuringCombat = true;   // opt in to blessing mid-fight
+        h.Spells.BlessSlots[1] = "mshi";
+        h.Spells.BlessSlots[2] = "armr";
+        h.BuffInfo["mshi"] = (string.Empty, 300);
+        h.BuffInfo["armr"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = true;
+
+        // Setup's state-change evaluations fired a buff or two out of combat; reset to
+        // a clean, in-combat starting point so the controlled round sequence is exact.
+        h.Director.ResetBuffTracking();
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+
+        h.Director.Evaluate();                 // round 1 — first between-round cast (mshi)
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mshi", h.CastsSent[0]);
+
+        // Same round: armr is due but the round's single slot is spent → suppressed
+        // (OnCombatTick clears the coordinator cooldown, so only the round gate holds).
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+
+        // Round boundary frees the slot → the next between-round cast (armr) fires.
+        h.Director.NotifyRoundComplete();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Equal(2, h.CastsSent.Count);
+        Assert.Equal("armr", h.CastsSent[1]);
+    }
+
+    [Fact]
+    public void SelfBuff_AlreadyCastThisRound_DropsOptimisticTimer_ReAttempts()
+    {
+        // "You have already cast a spell this round!" means the round's between-round
+        // slot was already spent, so the buff we just sent did NOT cast. Its optimistic
+        // recast timer must be dropped (like a fizzle) so it re-attempts next round,
+        // rather than sitting "active" un-cast for its whole assumed duration.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "mshi";
+        h.BuffInfo["mshi"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = false;   // out of combat: isolate the failure handling from the round gate
+        h.RecordCondition("mshi", MessageFlags.None,
+            applied: "You feel protected!", endsWith: "Your mageshield shimmers and fades.");
+
+        h.Director.Evaluate();                 // cast — optimistic 300s timer arms
+        Assert.Single(h.CastsSent);
+
+        // Server: the slot was already used → this cast did NOT fire.
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You have already cast a spell this round!", Array.Empty<CellAttributes>(),
+            DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        // Timer dropped → it re-attempts rather than sitting phantom-active for 300s.
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mshi", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void SnapshotActiveBuffs_ReflectsArmedTimers_ClearedByReset()
+    {
+        // The Buff Watchdog reads live timers through this snapshot — each armed
+        // buff surfaces as (Target="" self, Short, Until, MarginSec, TotalSec).
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = false;
+
+        h.Director.Evaluate();                 // casts bles → arms a 300s optimistic timer
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal(string.Empty, e.Target);
+        Assert.Equal("bles", e.Short);
+        Assert.Equal(300, e.TotalSec);
+
+        h.Director.ResetBuffTracking();        // disconnect/death clears all timers
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    [Fact]
+    public void NoteManualBuffCast_ArmsTimerByCastCode_WithSlotMargin()
+    {
+        // A hand-typed buff cast code arms its recast timer anchored on the code — so the
+        // Buff Watchdog + recast engine track a manual cast the same as an engine one.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.Spells.BlessSlotRecastMargins[1] = 20;   // the slot's configured recast lead
+        h.BuffInfo["bles"] = (string.Empty, 300);
+
+        h.Director.NoteManualBuffCast("bles");
+
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("bles", e.Short);
+        Assert.Equal(300, e.TotalSec);
+        Assert.Equal(20, e.MarginSec);
+        Assert.Equal(h.Now.AddSeconds(300), e.Until);
+    }
+
+    [Fact]
+    public void NoteManualBuffCast_NonBuffCode_DoesNotArm()
+    {
+        // A combat / instant cast code (no resolved duration) must not get a recast timer.
+        using CureHarness h = new();
+        h.Director.NoteManualBuffCast("lbol");     // not in BuffInfo → no duration
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    [Fact]
+    public void PauseResume_ShiftsTimerByOfflineGap_PreservingRemaining()
+    {
+        // An unexpected drop freezes the timers; reconnect shifts each Until forward by
+        // the offline gap so the remaining at the drop is preserved (not counted down).
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Director.NoteManualBuffCast("bles");     // Until = Now + 300
+        DateTime armedUntil = Assert.Single(h.Director.SnapshotActiveBuffs()).Until;
+
+        h.Director.PauseBuffTimers();              // drop
+        h.Now = h.Now.AddSeconds(45);              // 45s offline
+        h.Director.ResumeBuffTimers();             // reconnect
+
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal(armedUntil.AddSeconds(45), e.Until);   // shifted forward by the gap
+    }
+
+    [Fact]
+    public void Resume_OfflineLongerThanLongestBuff_ClearsStaleTimers()
+    {
+        // Gone longer than any buff could possibly last ⇒ the buffs are surely off
+        // server-side now, so resume clears rather than resurrecting stale timers.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Director.NoteManualBuffCast("bles");
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(301);             // > 300s total
+        h.Director.ResumeBuffTimers();
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    [Fact]
+    public void PausedAtUtc_ReflectsFreezeState()
+    {
+        // The Buff Watchdog reads PausedAtUtc to freeze its display at the drop instant
+        // (its heartbeat is a wall clock that keeps ticking while disconnected).
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Director.NoteManualBuffCast("bles");
+        Assert.Null(h.Director.PausedAtUtc);          // running
+
+        h.Director.PauseBuffTimers();
+        Assert.Equal(h.Now, h.Director.PausedAtUtc);  // frozen at the drop instant
+
+        h.Now = h.Now.AddSeconds(20);
+        h.Director.ResumeBuffTimers();
+        Assert.Null(h.Director.PausedAtUtc);           // running again
+    }
+
+    [Fact]
+    public void PauseBuffTimers_NoTimers_StaysUnfrozen()
+    {
+        // Nothing armed ⇒ nothing to freeze, so the watchdog display keeps live time.
+        using CureHarness h = new();
+        h.Director.PauseBuffTimers();
+        Assert.Null(h.Director.PausedAtUtc);
+    }
+
+    [Fact]
+    public void SelfBuff_CoveredByPartyBuff_IsNotCast()
+    {
+        // In a party, a party-wide buff (chan) that removes bless supersedes the self-cast:
+        // the director skips self-casting bles and lets the party buff cover us.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        // Coverage set BEFORE the state changes, so the setup's auto-eval already skips bles.
+        h.Director.SetSelfBuffCoverage(() => new Dictionary<string, string> { ["bles"] = "chan" });
+        h.State.MaxMa = 100; h.State.Ma = 100; h.State.InCombat = false;
+
+        h.Director.Evaluate();
+
+        Assert.DoesNotContain("bles", h.CastsSent);
+        Assert.Equal("chan", h.Director.CurrentSelfBuffCoverage()["bles"]);
+    }
+
+    [Fact]
+    public void SelfBuff_NotCovered_IsCastNormally()
+    {
+        // No coverage (solo, or nothing removes it) ⇒ the self-buff casts as usual.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100; h.State.Ma = 100; h.State.InCombat = false;
+
+        h.Director.Evaluate();
+
+        Assert.Contains("bles", h.CastsSent);
     }
 
     [Fact]
@@ -1589,6 +1815,7 @@ public sealed class CastingDirectorTests
         h.FeedLine("You begin to regenerate.");
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();      // new round → between-round slot free
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
@@ -2013,6 +2240,7 @@ public sealed class CastingDirectorTests
                 MpPercent = 100,
             };
             Party.Members.Add(m);
+            Party.IsInParty = true;   // a member present ⇒ in a party (party-buff slots apply)
             return m;
         }
 
@@ -2054,6 +2282,25 @@ public sealed class CastingDirectorTests
 
         Assert.Single(h.CastsSent);
         Assert.Equal("bles Raijin", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyBless_NotInParty_DoesNotCast()
+    {
+        // Solo (IsInParty false) ⇒ the party-buff slots never fire, even with a lingering
+        // member row — party buffs are used only alongside self buffs while in a party.
+        using PartyBlessHarness h = new();
+        h.Classes[1] = "Mage";
+        h.Health.BlessIfAboveMa = 0;
+        h.PartySettings.BlessSlots[0].Spell = "bles";
+        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin", "Mage");
+        h.Party.IsInParty = false;        // now solo
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
     }
 
     [Fact]

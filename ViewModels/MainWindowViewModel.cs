@@ -2607,13 +2607,12 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.PartyPoller.NotifyDisconnected();
                 AppServices.Current.PartyProbe.NotifyDisconnected();
 
-                // Drop per-session condition + buff-duration state so a
-                // fresh login starts clean: any non-auto-clearing
-                // condition (no AppliedEndsWith) and any live buff timer
-                // must not survive the disconnect and suppress a recast
-                // on the next session.
+                // Drop per-session condition state so a fresh login starts clean: any
+                // non-auto-clearing condition (no AppliedEndsWith) must not survive the
+                // disconnect. Buff-duration timers are handled below, AFTER the cause is
+                // known — an unexpected drop freezes them (resume on reconnect) rather
+                // than clearing, so a brief drop doesn't lose the recast clock.
                 AppServices.Current.Conditions.ClearAll("disconnect");
-                AppServices.Current.CastDirector.ResetBuffTracking();
                 AppServices.Current.ManaRegen.Reset();
 
                 // Categorise: if the user clicked Disconnect, the flag was
@@ -2649,6 +2648,13 @@ public partial class MainWindowViewModel : ObservableObject
                     if (_lastDisconnectCause is DisconnectCause.CarrierLost or DisconnectCause.NoResponse)
                         AppServices.Current.HangupSignal.AllowNextEntry();
                 }
+
+                // Buff timers: ANY disconnect freezes them (the buffs persist server-side
+                // through link-death) — the first in-game prompt after reconnect resumes
+                // them with the same remaining. A fresh character clears via ProfileLoaded,
+                // and a resume gap longer than the longest buff clears them then; so a
+                // brief manual disconnect keeps the recast clock instead of restarting it.
+                AppServices.Current.CastDirector.PauseBuffTimers();
 
                 // A remote @relog forces the dial-back unconditionally —
                 // the sender explicitly asked to relog, so we bypass the
@@ -3136,6 +3142,26 @@ public partial class MainWindowViewModel : ObservableObject
         };
         window.Closed += (_, _) => _partyWindow = null;
         _partyWindow = window;
+        window.Show(main);
+    }
+
+    // Singleton handle for the live Buff Watchdog window — re-press toggles closed.
+    private BuffWatchdogWindow? _buffWatchdog;
+
+    [RelayCommand]
+    private void OpenBuffWatchdog()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_buffWatchdog is { } existing) { existing.Close(); return; }
+
+        BuffWatchdogWindow window = new()
+        {
+            DataContext = new BuffWatchdogViewModel(),
+        };
+        window.Closed += (_, _) => _buffWatchdog = null;
+        _buffWatchdog = window;
         window.Show(main);
     }
 
@@ -4362,6 +4388,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     public string ConversationGesture     => GetGesture(Models.Profile.BuiltInAction.OpenConversation);
     public string PartyGesture            => GetGesture(Models.Profile.BuiltInAction.OpenParty);
+    public string BuffWatchdogGesture     => GetGesture(Models.Profile.BuiltInAction.OpenBuffWatchdog);
     public string WorkshopGesture         => GetGesture(Models.Profile.BuiltInAction.OpenWorkshop);
     public string NavigationGesture       => GetGesture(Models.Profile.BuiltInAction.OpenNavigation);
     public string SpellBookGesture        => GetGesture(Models.Profile.BuiltInAction.OpenSpellBook);
@@ -4385,6 +4412,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ConversationGesture));
         OnPropertyChanged(nameof(PartyGesture));
+        OnPropertyChanged(nameof(BuffWatchdogGesture));
         OnPropertyChanged(nameof(WorkshopGesture));
         OnPropertyChanged(nameof(NavigationGesture));
         OnPropertyChanged(nameof(SpellBookGesture));

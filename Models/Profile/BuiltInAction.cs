@@ -9,6 +9,7 @@ public enum BuiltInAction
     // ---- Window toggles (View menu + toolbar) ----
     OpenConversation,
     OpenParty,
+    OpenBuffWatchdog,
     OpenWorkshop,
     OpenNavigation,
     OpenSpellBook,

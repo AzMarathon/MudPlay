@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
@@ -206,24 +207,29 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         {
             if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
             if (!_active.Remove(r.Id)) continue;
-            endedThisLine.Add(r);
+            endedThisLine.Add(r);   // PRIMARY: its OWN wear-off line fired
 
-            // Group clear: records that share r's exact applied line are
-            // indistinguishable aliases latched together on that shared line
-            // (e.g. every confusion source emits "You are confused!"). A wear-off
-            // for any of them ends the whole group — otherwise a sibling that
-            // carries its own specific wear-off (a monster confusion vs. the
-            // generic spell) is stranded active when the shared generic wear-off
-            // fires, leaving the flag — and the nav pause it drives — stuck.
+            // Collateral clears below drop co-latched siblings from _active so the
+            // recomputed flags (and the nav pause they drive) stay honest — but they
+            // are NOT added to endedThisLine, so ConditionEnded does NOT fire for them.
+            // That event's only consumer is the self-buff recast timers, which anchor
+            // on each buff's OWN 4-letter cast code: a sibling that merely shares an
+            // applied line (the 5 spells that all emit "You feel protected!") wearing
+            // off must not tear down the timer of a DIFFERENT buff we actually cast.
+            // Flags/ailments key off _active, never this event (a confusion record maps
+            // to no cast code), so clearing _active without the event keeps confusion
+            // and every other flag behaving exactly as before.
+
+            // Group clear: records that share r's exact applied line were latched
+            // together on that shared line, so a wear-off for any of them ends the
+            // whole group — otherwise a sibling carrying its own specific wear-off is
+            // stranded active when the shared generic wear-off fires (the confusion
+            // flag / nav pause sticking).
             if (!string.IsNullOrEmpty(r.AppliedMessage)
                 && _appliedAliases.TryGetValue(r.AppliedMessage, out List<MessageRecord>? group))
             {
                 foreach (MessageRecord alias in group)
-                {
-                    if (alias.Id == r.Id) continue;
-                    if (_active.Remove(alias.Id))
-                        endedThisLine.Add(alias);
-                }
+                    if (alias.Id != r.Id) _active.Remove(alias.Id);
             }
 
             // Confusion is a single state: any confusion wear-off clears EVERY
@@ -237,27 +243,30 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             if (r.Flags.HasFlag(MessageFlags.Confused))
             {
                 foreach (MessageRecord other in _messages.Messages)
-                {
-                    if (!other.Flags.HasFlag(MessageFlags.Confused)) continue;
-                    if (_active.Remove(other.Id))
-                        endedThisLine.Add(other);
-                }
+                    if (other.Flags.HasFlag(MessageFlags.Confused)) _active.Remove(other.Id);
             }
         }
 
+        // A "You feel X! (Ns)" line is Paradigm's `stat` status readout of an ALREADY-up
+        // effect (trailing remaining-time), NOT a fresh cast. Its effect text is shared
+        // across many records (one line names 11), so it can neither identify which buff
+        // is up nor legitimately "apply" one — matching it falsely latched buffs on login
+        // and suppressed the real cast's confirm. Buff timers anchor on the typed cast
+        // code instead; a genuine fresh-cast effect line carries no parenthetical.
         MessageRecord? actionFailed = null;
-        foreach ((string pattern, MessageRecord r) in _appliedIndex)
-        {
-            if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
-            // Capture a LastActionFailed match BEFORE the active-set dedup below —
-            // the fumble line re-fires while confusion persists but the record is
-            // only "applied" once, so ActionFailed must ride the raw line. First
-            // match only; alias records sharing the line must not double the retry.
-            if (actionFailed is null && r.Flags.HasFlag(MessageFlags.LastActionFailed))
-                actionFailed = r;
-            if (!_active.Add(r.Id)) continue;
-            appliedThisLine.Add(r);
-        }
+        if (!StatusEffectReadout().IsMatch(text))
+            foreach ((string pattern, MessageRecord r) in _appliedIndex)
+            {
+                if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
+                // Capture a LastActionFailed match BEFORE the active-set dedup below —
+                // the fumble line re-fires while confusion persists but the record is
+                // only "applied" once, so ActionFailed must ride the raw line. First
+                // match only; alias records sharing the line must not double the retry.
+                if (actionFailed is null && r.Flags.HasFlag(MessageFlags.LastActionFailed))
+                    actionFailed = r;
+                if (!_active.Add(r.Id)) continue;
+                appliedThisLine.Add(r);
+            }
 
         if (endedThisLine.Count > 0 || appliedThisLine.Count > 0)
             RecomputeFlags();
@@ -276,6 +285,12 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         if (actionFailed is { } af)
             ActionFailed?.Invoke(af);
     }
+
+    // Matches a trailing remaining-time parenthetical — "(411s)", "(6m 51s)", "(1h)" —
+    // the tell of a `stat` status readout of an already-active effect. A fresh-cast
+    // effect line ("You feel lucky!") has none, so this never suppresses a real cast.
+    [GeneratedRegex(@"\(\d+[dhms]( \d+[dhms])*\)\s*$", RegexOptions.CultureInvariant)]
+    private static partial Regex StatusEffectReadout();
 
     // A single game line can match many catalogue records that share the same
     // effect text — every bless-proc item plus the bless spell all emit "You feel

@@ -3251,6 +3251,11 @@ public sealed class AppServices
         // ShortFromAppliedRecord maps a fired AppliedMessage record back
         // to the cast code so a confirmed self-buff starts its timer.
         CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord);
+        // A fresh character starts with no buffs assumed — clear any timers carried over
+        // (e.g. paused from a prior character's disconnect) so a character switch doesn't
+        // resurrect the old character's buffs. A same-character reconnect does NOT reload
+        // the profile, so its paused timers survive to be resumed.
+        Profile.ProfileLoaded += _ => CastDirector.ResetBuffTracking();
         // Party-bless slots store class numbers; PartyMember.Class is a
         // class name — resolve via the active set's Classes table.
         CastDirector.SetClassResolver(SpellCatalog.ResolveClassName);
@@ -3258,11 +3263,22 @@ public sealed class AppServices
         // cast once for the whole party; the picker checks this to skip the
         // per-member loop.
         CastDirector.SetPartyWideBuffCheck(IsPartyWideBuff);
+        // Self-buff supersession: in a party, a configured party-wide buff that removes a
+        // self-buff (RemovesSpell) covers us, so the director stops self-casting the
+        // removed one — the Buff Watchdog shows that slot "covered by" the party buff.
+        CastDirector.SetSelfBuffCoverage(SelfBuffCoverage);
         // Downed-ally rescue heal. A dropped ally leaves `par`, so PickPartyHeal's
         // roster walk can't see them — the AllyDroppedHandler feeds each aided
         // downed ally back in here as the top-priority name-targeted heal until
         // they recover / rejoin.
         CastDirector.SetDownedAllyProvider(() => AllyDropped.AidedDownedGivenNames());
+        // Free the once-per-round between-round cast slot on the combat ROUND TICK —
+        // TickEngine's 5s heartbeat (refreshed by damage lines), NOT *Combat Off*.
+        // *Combat Off* fires per kill, so in a multi-mob room it lands several times a
+        // round and would re-open the slot mid-round; the combat tick is the actual
+        // round cadence. Subscribed BEFORE CastDirector.OnCombatTick below so the slot
+        // is freed before this round's between-round evaluation runs.
+        Tick.CombatTickElapsed += CastDirector.NotifyRoundComplete;
         Tick.CombatTickElapsed += CastDirector.OnCombatTick;
 
         // Mana-regen roll-spell reroll (Paradigm only). AbilBreakdown parses
@@ -3335,7 +3351,10 @@ public sealed class AppServices
         // class's available list.
         OutboundCast = new Game.Combat.OutboundCastObserver(
             isCastCode: c => Spellbook.FindByCastCode(c) is not null,
-            onManualCast: Combat.OnManualCastObserved);
+            // A hand-typed cast feeds BOTH the combat resume signal and the buff-recast
+            // clock: NoteManualBuffCast arms the timer (by cast code) for a hand-cast buff
+            // so the Buff Watchdog + recast engine track it the same as an engine cast.
+            onManualCast: c => { Combat.OnManualCastObserved(c); CastDirector.NoteManualBuffCast(c); });
         // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
         // taking the round's attack — a user override — while an in-between spell (heal
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
@@ -3609,6 +3628,11 @@ public sealed class AppServices
         // suspended on the drop so nothing leaks into the login-menu nav.
         PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
         PromptScanner.PromptObserved += _ => PartyProbe.NotifyEnteredRealm();
+        // Same in-game gate resumes frozen buff timers after an unexpected drop: the
+        // disconnect handler paused them (kept the remaining), and this shifts each
+        // forward by the offline gap so the recast clock picks up where it left off.
+        // Idempotent — no-op unless a drop paused the timers.
+        PromptScanner.PromptObserved += _ => CastDirector.ResumeBuffTimers();
         // A fresh character starts disarmed: zero the counters, then Suspend so
         // accrual waits for that character's first in-game prompt. (Disconnect
         // disarms via MainWindowVM; @reset / the window button keep counting.)
@@ -5215,9 +5239,13 @@ public sealed class AppServices
         if (SpellCatalog.GetFormulaByNumber(item.SpellNumber) is not { } formula)
             return null;
         // Duration is in spell rounds — convert to wall-clock seconds for the
-        // recast clock (CastingDirector treats the returned value as seconds).
+        // recast clock (CastingDirector treats the returned value as seconds). Uses
+        // the wall-clock per-round length so the recast window matches the buff's REAL
+        // remaining time, not the nominal Dur×3 (which recasts ~1-2 s early).
         long rounds = Game.Spells.SpellCalculator.Duration(formula, Spellbook.Level);
-        return rounds > 0 ? rounds * Game.Spells.SpellCalculator.SpellRoundSeconds : null;
+        return rounds > 0
+            ? (long)System.Math.Round(rounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock)
+            : null;
     }
 
     // Mana the item-cast buff named by token draws on use —
@@ -5257,8 +5285,11 @@ public sealed class AppServices
             Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
             if (rec is null || string.IsNullOrWhiteSpace(rec.CasterMessage)) return null;
             // Duration is in spell rounds; the recast clock wants wall-clock seconds.
-            long durSec = Game.Spells.SpellCalculator.Duration(s.Formula, Spellbook.Level)
-                          * Game.Spells.SpellCalculator.SpellRoundSeconds;
+            // Uses the wall-clock per-round length so "recast within N s" fires at the
+            // buff's REAL remaining time, not ~1-2 s early off the nominal Dur×3.
+            long durSec = (long)System.Math.Round(
+                Game.Spells.SpellCalculator.Duration(s.Formula, Spellbook.Level)
+                * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock);
             return (rec.CasterMessage, durSec);
         }
         return null;
@@ -5279,6 +5310,62 @@ public sealed class AppServices
             if (string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase))
                 return s.Targets is 10 or 13;
         return false;
+    }
+
+    // Self-buff cast code → the configured PARTY-WIDE party-buff cast code that removes
+    // (supersedes) it via RemovesSpell (Abil 122), while in a party. Empty when solo. In
+    // a party we let a party-wide buff that removes a self-buff cover us instead of self-
+    // casting the removed one — chant removes bless, so once chant is a party buff we stop
+    // self-casting bless. Only PARTY-WIDE covers count: a single-target party buff never
+    // lands on self, so it can't cover our self-cast. Drives the director's self-buff
+    // suppression and the Buff Watchdog "covered by" label.
+    public IReadOnlyDictionary<string, string> SelfBuffCoverage()
+    {
+        Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
+        if (!PartyState.IsInParty) return map;
+
+        Models.Profile.SpellsSettings spells = Resolver.Resolve<Models.Profile.SpellsSettings>("Spells");
+        Models.Profile.PartySettings party = Resolver.Resolve<Models.Profile.PartySettings>("Party");
+
+        // Configured self-buffs → (cast code, spell number). #item-cast tokens resolve to
+        // no spell and are skipped (an item buff isn't a RemovesSpell target).
+        List<(string Code, int Number)> selfBuffs = new();
+        void AddSelf(string? code)
+        {
+            if (string.IsNullOrWhiteSpace(code)) return;
+            if (Spellbook.FindByCastCode(code.Trim()) is { } s)
+                selfBuffs.Add((s.Short, s.Number));
+        }
+        foreach (string code in spells.BlessSlots.Values) AddSelf(code);
+        AddSelf(spells.HpRegenSpell);
+        AddSelf(spells.MaRegenSpell);
+        AddSelf(spells.WhenHpFullSpell);
+        AddSelf(spells.WhenMaFullSpell);
+        if (selfBuffs.Count == 0) return map;
+
+        foreach (Models.Profile.PartyBlessSlot pslot in party.BlessSlots)
+        {
+            if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
+            if (!IsPartyWideBuff(pslot.Spell)) continue;   // a single-target party buff never covers self
+            HashSet<int> removed = RemovedSpellNumbers(pslot.Spell);
+            if (removed.Count == 0) continue;
+            foreach ((string code, int number) in selfBuffs)
+                if (removed.Contains(number) && !map.ContainsKey(code))
+                    map[code] = pslot.Spell.Trim();
+        }
+        return map;
+    }
+
+    // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
+    // effect the Spell Book renders as "Removes <spell>").
+    private HashSet<int> RemovedSpellNumbers(string castCode)
+    {
+        const int RemovesSpellAbil = 122;
+        HashSet<int> nums = new();
+        if (Spellbook.FindByCastCode(castCode.Trim()) is { } s)
+            foreach (Game.Spells.SpellAbility a in s.Formula.Abilities)
+                if (a.Code == RemovesSpellAbil) nums.Add(a.Value);
+        return nums;
     }
 
     // Build the cure-confirmation matchers
