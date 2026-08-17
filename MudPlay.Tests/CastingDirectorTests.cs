@@ -1327,6 +1327,29 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void SnapshotActiveBuffs_ReflectsArmedTimers_ClearedByReset()
+    {
+        // The Buff Watchdog reads live timers through this snapshot — each armed
+        // buff surfaces as (Target="" self, Short, Until, MarginSec, TotalSec).
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = false;
+
+        h.Director.Evaluate();                 // casts bles → arms a 300s optimistic timer
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal(string.Empty, e.Target);
+        Assert.Equal("bles", e.Short);
+        Assert.Equal(300, e.TotalSec);
+
+        h.Director.ResetBuffTracking();        // disconnect/death clears all timers
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    [Fact]
     public void Buff_BlessIfAboveMa_AbsoluteMode_UsesRawMa()
     {
         // In Absolute mode BlessIfAboveMa is a raw kai count, not a percent —

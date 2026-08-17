@@ -538,6 +538,17 @@ Open **Session Stats** from the **View** menu or its toolbar button (it has no d
 - **Reset session** zeroes every counter and restarts the clocks; individual panels have their own **Reset** too. (These don't ask for confirmation.)
 - **Transaction history** and **Players Seen** open the detailed ledgers — coin banked and stashed this session, and every player you've encountered. In the transaction ledger, **stash** entries are tinted faint gold (the map's stash-marker colour) so they stand out from bank deposits, and **double-clicking any entry** opens the Navigation map centred on the room where that deposit or stash happened. Each row has a **Keep** checkbox: check the entries you want to hold onto, and **Clear history** wipes everything *except* those — a way to prune a full ledger without losing the rows that matter (with nothing checked it clears the whole thing, as before). The clear updates the on-disk log too, so kept rows survive a reconnect and cleared ones don't come back.
 
+## Buff Watchdog
+
+Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. It lists the buffs you've **configured** (never the whole spellbook) — your **self-bless slots**, the **HP/MA-regen** and **when-HP/MA-full** utility buffs, any `#item`-cast buffs, and your **party-bless slots** — each on its own row with a live timer bar:
+
+- The **bar fills as the buff ages** (empty just after it lands, full at wear-off), and a **vertical amber marker** shows where its **recast window** opens — the "recast within (seconds)" lead you set per slot. When the fill crosses the marker the bar turns amber: the buff is now due to be recast.
+- A buff that **isn't up** (worn off, or never cast) shows an empty bar labelled **not up**, so you can see at a glance which configured buffs are missing.
+- A configured buff your character **hasn't learned** is flagged **unlearned**.
+- Party-buff rows show the **soonest-expiring** member's timer (the next one due) and that member's name.
+
+The window is a live view — it refreshes about once a second while open — and re-selecting the menu item (or toolbar button) toggles it closed. It's read-only: configure the buffs themselves on the Player Workshop (self-bless slots, regen, when-full) and Settings → Party (party-bless).
+
 ## Wire Inspector (F5)
 
 Press **F5** to open the **Wire Inspector** — a troubleshooting view of the data the server sends, in up to three panes you toggle with the **Raw / Stripped / Classified** checkboxes: **Raw** (control codes made visible, e.g. `^[` for escape), **Stripped** (the same stream with the ANSI escape sequences removed), and **Classified** (each combat-window line tagged with how the combat engine read it — e.g. `[Combat: Monster Miss (you)]`, `[Combat: You Hit]`, `[Combat: Armor Block (you)]`). The Classified pane also marks each **recognized monster death** with `[Monster Death: <name>]` — and an exp-inferred death whose message *wasn't* recognized shows as `[Monster Death: inferred from exp — message not recognized]`, so an unrecognized death line stands out. **Raw and Classified are on by default** (Stripped off); unchecking a pane collapses its column so the others fill, and your choice sticks. It shows inbound server output only, and keeps the most recent 64 KB.

@@ -110,7 +110,7 @@ public sealed class CastingDirector : IDisposable
     // recast lead (seconds before Until we re-cast). targetKey "" = self;
     // otherwise the member's given name lower-cased. The lead travels with the
     // timer so IsRecastDue and the "recast in Xs" logs use the slot's own value.
-    private readonly Dictionary<(string Target, string Short), (DateTime Until, int MarginSec)> _activeUntil = new();
+    private readonly Dictionary<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> _activeUntil = new();
     // The one outstanding party-buff cast awaiting CasterMessage
     // confirmation. CastCoordinator's cooldown guarantees ≤1 in flight.
     private (string Short, string Target, long DurationSec, int MarginSec, CasterMessageMatcher Matcher)? _pendingPartyCast;
@@ -440,13 +440,24 @@ public sealed class CastingDirector : IDisposable
     // room it would re-open the slot several times a round and let the storm back in.
     public void NotifyRoundComplete() => _betweenRoundSlotUsed = false;
 
+    // Read-only snapshot of the live buff-duration timers for the Buff Watchdog
+    // window — a copy so the caller never holds the live dictionary. Read on the UI
+    // thread (same thread every _activeUntil write runs on), so no lock is needed.
+    public IReadOnlyList<ActiveBuffTimer> SnapshotActiveBuffs()
+    {
+        List<ActiveBuffTimer> list = new(_activeUntil.Count);
+        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
+            list.Add(new ActiveBuffTimer(kv.Key.Target, kv.Key.Short, kv.Value.Until, kv.Value.MarginSec, kv.Value.TotalSec));
+        return list;
+    }
+
     // True when a buff on targetKey ("" = self) is due to be (re)cast: either never
     // confirmed-active, or within the slot's recast lead of expiry. The lead is the
     // one stored with the timer when it was armed (0 ⇒ only once the buff has
     // actually expired).
     private bool IsRecastDue(string targetKey, string spellShort)
     {
-        if (!_activeUntil.TryGetValue((targetKey, spellShort), out (DateTime Until, int MarginSec) t))
+        if (!_activeUntil.TryGetValue((targetKey, spellShort), out (DateTime Until, int MarginSec, int TotalSec) t))
             return true;
         return (t.Until - _now()).TotalSeconds <= t.MarginSec;
     }
@@ -473,7 +484,7 @@ public sealed class CastingDirector : IDisposable
         (string Caster, long DurationSec)? info = _buffInfoByShort?.Invoke(spellShort);
         bool resolved = info is { DurationSec: > 0 };
         long seconds = resolved ? info!.Value.DurationSec : UnknownBuffRecastFallbackSec;
-        _activeUntil[("", spellShort)] = (_now().AddSeconds(seconds), marginSec);
+        _activeUntil[("", spellShort)] = (_now().AddSeconds(seconds), marginSec, (int)seconds);
         _pendingSelfBuffShort = spellShort;   // awaiting land / fail — cleared by either
         _log?.Combat(LogCategory,
             $"self-buff {spellShort} sent — optimistic timer {seconds}s"
@@ -515,10 +526,10 @@ public sealed class CastingDirector : IDisposable
                 // Preserve the recast lead armed on send (StartSelfBuffTimer ran
                 // first for a bless-slot cast); default it for anything confirmed
                 // without a prior optimistic timer (e.g. the HP-regen HoT).
-                int margin = _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec) prev)
+                int margin = _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec, int TotalSec) prev)
                     ? prev.MarginSec
                     : DefaultRecastMarginSec;
-                _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin);
+                _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin, (int)info.DurationSec);
                 _log?.Combat(LogCategory,
                     $"self-buff {shortCode} confirmed active (applied line) — "
                     + $"duration {info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - margin)}s");
@@ -551,7 +562,7 @@ public sealed class CastingDirector : IDisposable
         if (!p.Matcher.ConfirmsTarget(line.Text, p.Target)) return;
 
         string key = p.Target.Trim().ToLowerInvariant();
-        _activeUntil[(key, p.Short)] = (_now().AddSeconds(p.DurationSec), p.MarginSec);
+        _activeUntil[(key, p.Short)] = (_now().AddSeconds(p.DurationSec), p.MarginSec, (int)p.DurationSec);
         // Info, not Combat: the user wants to confirm the recast timer actually
         // armed and see when it will re-fire, and the combat-diagnostics channel is
         // off in normal play. Surface both the effect duration and the recast lead
@@ -747,7 +758,7 @@ public sealed class CastingDirector : IDisposable
         if (!_executeItemCast(token)) return false;
 
         _cast.NotifyExternalCastSent();
-        _activeUntil[("", token)] = (_now().AddSeconds(durationSec), marginSec);
+        _activeUntil[("", token)] = (_now().AddSeconds(durationSec), marginSec, (int)durationSec);
         // Same reasoning as the party-buff confirm: surface the armed recast timer
         // on the always-on Info channel, not combat diagnostics.
         long recastInSec = Math.Max(0L, durationSec - marginSec);

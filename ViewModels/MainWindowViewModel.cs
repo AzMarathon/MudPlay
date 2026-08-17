@@ -3139,6 +3139,26 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
+    // Singleton handle for the live Buff Watchdog window — re-press toggles closed.
+    private BuffWatchdogWindow? _buffWatchdog;
+
+    [RelayCommand]
+    private void OpenBuffWatchdog()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_buffWatchdog is { } existing) { existing.Close(); return; }
+
+        BuffWatchdogWindow window = new()
+        {
+            DataContext = new BuffWatchdogViewModel(),
+        };
+        window.Closed += (_, _) => _buffWatchdog = null;
+        _buffWatchdog = window;
+        window.Show(main);
+    }
+
     private SettingsWindow? _settings;
 
     // ----- Profile file management ----------------------------------------
@@ -4362,6 +4382,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     public string ConversationGesture     => GetGesture(Models.Profile.BuiltInAction.OpenConversation);
     public string PartyGesture            => GetGesture(Models.Profile.BuiltInAction.OpenParty);
+    public string BuffWatchdogGesture     => GetGesture(Models.Profile.BuiltInAction.OpenBuffWatchdog);
     public string WorkshopGesture         => GetGesture(Models.Profile.BuiltInAction.OpenWorkshop);
     public string NavigationGesture       => GetGesture(Models.Profile.BuiltInAction.OpenNavigation);
     public string SpellBookGesture        => GetGesture(Models.Profile.BuiltInAction.OpenSpellBook);
@@ -4385,6 +4406,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ConversationGesture));
         OnPropertyChanged(nameof(PartyGesture));
+        OnPropertyChanged(nameof(BuffWatchdogGesture));
         OnPropertyChanged(nameof(WorkshopGesture));
         OnPropertyChanged(nameof(NavigationGesture));
         OnPropertyChanged(nameof(SpellBookGesture));

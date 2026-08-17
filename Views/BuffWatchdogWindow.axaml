@@ -1,0 +1,168 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="480" d:DesignHeight="420"
+        x:Class="MudPlay.Views.BuffWatchdogWindow"
+        x:DataType="vm:BuffWatchdogViewModel"
+        Title="Buff Watchdog"
+        Width="480" Height="440"
+        MinWidth="380" MinHeight="120"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <!-- Section header (Self buffs / Party buffs). -->
+        <Style Selector="TextBlock.SectionHeader">
+            <Setter Property="Margin" Value="10,10,10,4"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+        </Style>
+
+        <!-- Buff active-timer bar: fills with elapsed time; green normally, amber
+             once the fill has crossed the recast marker (in the recast window). -->
+        <Style Selector="ProgressBar.BuffBar">
+            <Setter Property="Height" Value="10"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="Background" Value="{StaticResource ChromeBgSunkenBrush}"/>
+        </Style>
+        <Style Selector="ProgressBar.BuffBar.recast">
+            <Setter Property="Foreground" Value="{StaticResource AccentYellowBrush}"/>
+        </Style>
+
+        <!-- "unlearned" chip on a configured buff the character hasn't learned. -->
+        <Style Selector="Border.UnlearnedChip">
+            <Setter Property="Padding" Value="3,0"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="CornerRadius" Value="2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <DockPanel LastChildFill="True">
+
+        <TextBlock DockPanel.Dock="Top"
+                   Margin="10,12,10,10"
+                   Text="No buffs configured. Set up bless slots / regen / party buffs in the Player Workshop and Party windows."
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding IsEmpty}"/>
+
+        <ScrollViewer>
+            <StackPanel>
+
+                <!-- ===== Self buffs ===== -->
+                <TextBlock Classes="SectionHeader" Text="Self buffs" IsVisible="{Binding HasSelfBuffs}"/>
+                <ItemsControl ItemsSource="{Binding SelfBuffs}"
+                              Background="{StaticResource ChromeBgSunkenBrush}"
+                              Margin="6,0"
+                              Padding="2"
+                              IsVisible="{Binding HasSelfBuffs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:BuffWatchdogRowViewModel">
+                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="6,4">
+                                <Grid ColumnDefinitions="150,10,220,10,*" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                                        <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
+                                            <TextBlock Text="unlearned" FontSize="8"
+                                                       Foreground="{StaticResource AccentRedBrush}"/>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- Fixed-width bar area (220px) so the recast marker
+                                         margin (fraction × 220, computed in the row VM)
+                                         lands exactly. -->
+                                    <Grid Grid.Column="2" Width="220" Height="10" VerticalAlignment="Center">
+                                        <ProgressBar Classes="BuffBar"
+                                                     Classes.recast="{Binding InRecastWindow}"
+                                                     Value="{Binding FillPercent}"
+                                                     Maximum="100"/>
+                                        <Rectangle Width="2"
+                                                   Fill="{StaticResource AccentYellowBrush}"
+                                                   HorizontalAlignment="Left"
+                                                   VerticalAlignment="Stretch"
+                                                   Margin="{Binding RecastMarkerMargin}"
+                                                   IsVisible="{Binding ShowRecastMarker}"/>
+                                    </Grid>
+
+                                    <TextBlock Grid.Column="4"
+                                               Text="{Binding TimeText}"
+                                               VerticalAlignment="Center"
+                                               FontFamily="{StaticResource FontMono}"
+                                               FontSize="10"
+                                               Foreground="{StaticResource ChromeFgSecBrush}"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- ===== Party buffs ===== -->
+                <TextBlock Classes="SectionHeader" Text="Party buffs" IsVisible="{Binding HasPartyBuffs}"/>
+                <ItemsControl ItemsSource="{Binding PartyBuffs}"
+                              Background="{StaticResource ChromeBgSunkenBrush}"
+                              Margin="6,0,6,8"
+                              Padding="2"
+                              IsVisible="{Binding HasPartyBuffs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:BuffWatchdogRowViewModel">
+                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="6,4">
+                                <Grid ColumnDefinitions="150,10,220,10,*" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}"
+                                                       VerticalAlignment="Center"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource ChromeFgBrush}"/>
+                                            <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
+                                                <TextBlock Text="unlearned" FontSize="8"
+                                                           Foreground="{StaticResource AccentRedBrush}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding TargetText}"
+                                                   FontSize="9"
+                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                    </StackPanel>
+
+                                    <Grid Grid.Column="2" Width="220" Height="10" VerticalAlignment="Center">
+                                        <ProgressBar Classes="BuffBar"
+                                                     Classes.recast="{Binding InRecastWindow}"
+                                                     Value="{Binding FillPercent}"
+                                                     Maximum="100"/>
+                                        <Rectangle Width="2"
+                                                   Fill="{StaticResource AccentYellowBrush}"
+                                                   HorizontalAlignment="Left"
+                                                   VerticalAlignment="Stretch"
+                                                   Margin="{Binding RecastMarkerMargin}"
+                                                   IsVisible="{Binding ShowRecastMarker}"/>
+                                    </Grid>
+
+                                    <TextBlock Grid.Column="4"
+                                               Text="{Binding TimeText}"
+                                               VerticalAlignment="Center"
+                                               FontFamily="{StaticResource FontMono}"
+                                               FontSize="10"
+                                               Foreground="{StaticResource ChromeFgSecBrush}"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

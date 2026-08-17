@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.19.6**
+> **Version 3.20.0**
+> - New **Buff Watchdog** window (View menu, after Party): lists every buff you have configured — self-bless slots, HP/MA-regen, when-full, `#item`-cast, and party-bless slots — each with a live timer bar and a marker showing where its recast window opens, so you can see which buffs are up, which are due, and which aren't up at all
 > - Combat buffing: the between-round spell coordinator (heals / buffs / debuffs / item buffs) now casts at most ONE per combat round, matching the game's one-between-round-cast-per-round rule — fixes a self-buff (e.g. mageshield) re-casting every round during a fight and spamming "already cast this round"
 > - Combat buffing: a buff's recast timer is now cleared only by its OWN wear-off line — spells that merely share an "applied" message (the five "you feel protected" shields) can no longer clear each other's timers
 > - Combat buffing: program logging for the buff manager — timer armed, confirmed active, worn off, and dropped when a cast didn't fire — so a log read explains what it's doing and why
