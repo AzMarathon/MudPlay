@@ -5,9 +5,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// The Buff Watchdog row's bar math: elapsed-fill 0..100, the recast marker at
-// (TotalSec - MarginSec)/TotalSec × bar width, and the in-recast-window flag once
-// remaining ≤ margin. Pure given a timer snapshot + a clock.
+// The Buff Watchdog row's bar math: elapsed-fill as a star weight (fraction of the
+// bar), the recast marker at (TotalSec - MarginSec)/TotalSec, and the in-recast-window
+// flag once remaining ≤ margin. Pure given a timer snapshot + a clock.
 public sealed class BuffWatchdogRowViewModelTests
 {
     private static readonly DateTime T0 = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -24,11 +24,13 @@ public sealed class BuffWatchdogRowViewModelTests
         row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(150), 20, 200), T0);
 
         Assert.True(row.IsActive);
-        Assert.Equal(25.0, row.FillPercent, 3);
+        Assert.Equal(0.25, row.FillStar.Value, 3);       // 25% elapsed = 0.25 star
+        Assert.Equal(0.75, row.FillRestStar.Value, 3);
         Assert.False(row.InRecastWindow);
         Assert.True(row.ShowRecastMarker);
-        // Marker at (200-20)/200 = 0.9 of the fixed bar width.
-        Assert.Equal(0.9 * BuffWatchdogRowViewModel.BarWidthPx, row.RecastMarkerMargin.Left, 3);
+        // Marker at (200-20)/200 = 0.9 of the bar width (star boundary).
+        Assert.Equal(0.9, row.MarkerStar.Value, 3);
+        Assert.Equal(0.1, row.MarkerRestStar.Value, 3);
     }
 
     [Fact]
@@ -55,7 +57,7 @@ public sealed class BuffWatchdogRowViewModelTests
         BuffWatchdogRowViewModel row = NewRow();
         row.Update(null, T0);
         Assert.False(row.IsActive);
-        Assert.Equal(0.0, row.FillPercent, 3);
+        Assert.Equal(0.0, row.FillStar.Value, 3);
         Assert.False(row.ShowRecastMarker);
         Assert.Equal("not up", row.TimeText);
     }

@@ -10,7 +10,7 @@
 > - Buff tracking: a manually-cast buff is now caught — armed by the 4-letter cast code you typed (like an engine cast), so the Buff Watchdog and recast engine track hand-casts
 > - Buff tracking: Paradigm's `stat` "You feel X! (Ns)" status readout is ignored — it no longer gets mistaken for a fresh cast (which falsely marked buffs active on login and then suppressed the real cast's confirm)
 > - Buff tracking: any disconnect now freezes the buff timers (display included) and reconnecting resumes them with the same remaining, instead of clearing and recasting from full; switching characters or a gap longer than the buff could last starts fresh with no buffs assumed
-> - Buff Watchdog: the buff name now sits left-aligned inside the timer bar with the remaining time just after it; the fill grows edge-to-edge to match the outline and recast marker, and the label sits on a dark scrim so it reads over the fill
+> - Buff Watchdog: taller, full-width timer bars with a larger label — a light-green outline over a flat darker-green fill (name left-aligned inside, remaining time after it); the fill and recast marker stretch to the bar's real width so the outline bounds exactly the actual bar (no dead space at the ends)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -1,4 +1,4 @@
-using Avalonia;
+using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game.Spells;
 
@@ -9,12 +9,12 @@ namespace MudPlay.ViewModels;
 // marker at (TotalSec - MarginSec) shows where the recast window opens. The row
 // object is built once from config (Name / target / learned); Update recomputes
 // the bar each heartbeat from the CastingDirector timer snapshot (null = not up).
+//
+// Fill + marker are expressed as STAR weights on a 2-column grid, so the bar
+// stretches to whatever width the window gives it — no fixed pixel width and no
+// runtime bounds probe; the outline always bounds exactly the real bar.
 public sealed partial class BuffWatchdogRowViewModel : ObservableObject
 {
-    // Fixed bar width in px — the marker margin is fraction × this, so no runtime
-    // bounds observation is needed (the window fixes the bar column to this width).
-    public const double BarWidthPx = 220;
-
     // Identity used to match a timer snapshot entry: the 4-letter cast code (or the
     // #item-cast token). Self rows match a snapshot whose Target is ""; party rows
     // match any member timer for this code (the soonest is chosen by the parent VM).
@@ -26,11 +26,18 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     [ObservableProperty] private bool _isLearned;
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private bool _inRecastWindow;
-    [ObservableProperty] private double _fillPercent;
-    [ObservableProperty] private double _fillWidthPx;
+    // Elapsed fill as a fraction of the bar (left column) and the remainder (right).
+    [ObservableProperty] private GridLength _fillStar = Empty;
+    [ObservableProperty] private GridLength _fillRestStar = Full;
     [ObservableProperty] private bool _showRecastMarker;
-    [ObservableProperty] private Thickness _recastMarkerMargin;
+    // Recast marker sits on the boundary between these two columns.
+    [ObservableProperty] private GridLength _markerStar = Empty;
+    [ObservableProperty] private GridLength _markerRestStar = Full;
     [ObservableProperty] private string _timeText = "not up";
+
+    private static GridLength Empty => new(0, GridUnitType.Star);
+    private static GridLength Full => new(1, GridUnitType.Star);
+    private static GridLength Star(double weight) => new(weight, GridUnitType.Star);
 
     public BuffWatchdogRowViewModel(string castCode, bool isParty, string name, string targetText, bool isLearned)
     {
@@ -49,10 +56,11 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
         {
             IsActive = false;
             InRecastWindow = false;
-            FillPercent = 0;
-            FillWidthPx = 0;
+            FillStar = Empty;
+            FillRestStar = Full;
             ShowRecastMarker = false;
-            RecastMarkerMargin = default;
+            MarkerStar = Empty;
+            MarkerRestStar = Full;
             TimeText = "not up";
             return;
         }
@@ -62,14 +70,15 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
 
         IsActive = true;
         double fillFraction = elapsed / e.TotalSec;
-        FillPercent = fillFraction * 100.0;
-        FillWidthPx = fillFraction * BarWidthPx;   // exact px so fill edge meets the marker
+        FillStar = Star(fillFraction);
+        FillRestStar = Star(1.0 - fillFraction);
         InRecastWindow = remaining <= e.MarginSec;   // fill has crossed the recast marker
         // Marker only meaningful for a real lead inside the bar (margin 0 = recast at
         // expiry, i.e. at the far right — redundant with a full bar, so hide it).
         ShowRecastMarker = e.MarginSec > 0 && e.MarginSec < e.TotalSec;
         double markerFraction = (double)(e.TotalSec - e.MarginSec) / e.TotalSec;
-        RecastMarkerMargin = new Thickness(markerFraction * BarWidthPx, 0, 0, 0);
+        MarkerStar = Star(markerFraction);
+        MarkerRestStar = Star(1.0 - markerFraction);
         TimeText = FormatRemaining(remaining);
         if (memberName is { Length: > 0 }) TargetText = memberName;
     }
