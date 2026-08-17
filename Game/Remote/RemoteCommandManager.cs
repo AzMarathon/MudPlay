@@ -352,11 +352,15 @@ public sealed class RemoteCommandManager : IDisposable
             }
             else
             {
-                // Unknown @-command — no handler registered. Surface back to
-                // sender per Settings.Talk → Warn on invalid remote command.
+                // Unknown @-command — no handler registered. Stay SILENT: an
+                // @-token that matches no command is almost always ordinary chat
+                // that merely starts with '@' (someone said "@because" in gang
+                // chat), so a reply would bounce noise at the channel and advertise
+                // the client. WarnOnInvalidRemoteCommand still governs the denial
+                // reply for a KNOWN command the sender lacks permission for (just
+                // below) — a real command attempt, not a stray word.
                 _log?.Log(LogSeverity.Debug, "RemoteCmd",
-                    $"Unknown command {command} from {entry.Speaker}.");
-                SendDenialReply(channel.Value, entry.Speaker);
+                    $"Ignoring unknown command {command} from {entry.Speaker} (no reply).");
                 return;
             }
         }

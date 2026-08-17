@@ -330,7 +330,14 @@ public sealed record TierOption(SettingsTier Value, string Label);
 
 // One row on the dialog's read-only Game Data tab — a field label and its rendered value
 // from the source game-data row.
-public sealed record GameDataInfoRow(string Label, string Value);
+// One row of a spell/item's read-only Game Data tab: a Label and its Value text.
+// Links, when present, are the clickable record references rendered in place of
+// the plain Value (Value still holds the same names as text — the fallback the
+// template shows when there are no links, and what tests read).
+public sealed record GameDataInfoRow(string Label, string Value, IReadOnlyList<GameDataRecordLink>? Links = null)
+{
+    public bool HasLinks => Links is { Count: > 0 };
+}
 
 // One row in MessageEditDialogViewModel.LinkRows — pairs the back-reference's raw
 // (Table, Number) with the game-data row's display Name resolved at dialog-open time.

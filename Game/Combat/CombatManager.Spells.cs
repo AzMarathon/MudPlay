@@ -70,6 +70,10 @@ public sealed partial class CombatManager
     // Spells+Ailments priority. Returns the spell cast this pass, or null. Until
     // wired, the pre-attack pass no-ops and engage dispatches the attack as before.
     private Func<string?>? _inBetweenEvaluator;
+    // Spends the CastingDirector's one-between-round-cast slot when the pre-attack
+    // debuff fires directly (bypassing Evaluate), so the director can't queue a
+    // second between-round cast the same round. Optional — no-ops until set.
+    private Action? _markBetweenRoundSlotUsed;
 
     // ----- Deterministic magic eligibility (game-data gated) ----------
     // Optional, like the spell caster. Until SetMagicEligibility runs, the
@@ -198,6 +202,16 @@ public sealed partial class CombatManager
     {
         ArgumentNullException.ThrowIfNull(evaluate);
         _inBetweenEvaluator = evaluate;
+    }
+
+    // Wire the callback that spends the CastingDirector's one-between-round-cast
+    // slot when the pre-attack debuff fires directly (bypassing Evaluate).
+    // Optional — the pre-attack debuff still fires without it, but the director
+    // won't know the slot is used.
+    public void SetBetweenRoundSlotMarker(Action marker)
+    {
+        ArgumentNullException.ThrowIfNull(marker);
+        _markBetweenRoundSlotUsed = marker;
     }
 
     // True once SetCombatSpellCaster has wired both the coordinator and the mana
@@ -731,11 +745,17 @@ public sealed partial class CombatManager
     private bool TryPreAttackInBetween(
         CombatSettings settings, EngageableCandidate picked, RoomEntitiesObservation obs)
     {
-        if (!CombatSpellsWired || _cast is null) return false;
+        // Auto-Combat gate — mirrors PickInBetweenDebuff's own !_isEnabled() check.
+        // The single-target debuff is gated by Auto-Combat (see CombatSpellChooser
+        // .TryDebuffing); without this, the see-hidden force-clear override — which
+        // engages hostiles with Auto-Combat OFF and reaches here — would leak the
+        // debuff now that the Auto-Nuke gate no longer blocks the single rung.
+        if (!CombatSpellsWired || _cast is null || !_isEnabled()) return false;
 
         CombatSpellContext ctx = BuildContext(
             settings, obs, picked.RawName, CountEngageable(obs), picked.MonsterNumber);
         if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return false;
+        if (!DebuffDecisionAllowed(decision, ctx)) return false;
 
         // A debuff is due. Let the director's in-between window fire a
         // higher-priority survival cast first (it can't fire the debuff itself
@@ -776,6 +796,11 @@ public sealed partial class CombatManager
         // action through the combat-off resume path — mirroring the director's own
         // debuff, whose CastFired arms this same signal.
         NoteBetweenRoundCast();
+        // Spend the round's between-round slot in the director too — this cast
+        // fired directly (not via Evaluate), so without this the director could
+        // queue a SECOND between-round cast this round and draw the "already cast
+        // this round" rejection.
+        _markBetweenRoundSlotUsed?.Invoke();
         _log?.Combat(LogCategory,
             $"pre-attack debuff {decision.Spell} at {picked.RawName} — " +
             "attack resumes after its *Combat Off*");
@@ -800,10 +825,21 @@ public sealed partial class CombatManager
         if (_classifier.Current is not { } obs) return null;
         if (!TargetPresent(obs, target)) return null;
 
+        // Corpse-cast guard, mirroring the attack heartbeat's death window
+        // (CombatManager.cs, _lastDeathAt / _attackSentSinceDeath): the recurring
+        // debuff is evaluated on the killing damage-line tick — before the exp
+        // line nulls _currentTarget and before the death line drops the roster —
+        // so within the death-interrupt window after an inferred kill, and before
+        // an attack has confirmed a live survivor, _currentTarget may be a corpse
+        // the roster hasn't dropped yet. Hold rather than dispatch a debuff at it.
+        if (DateTimeOffset.Now - _lastDeathAt < DeathInterruptWindow && !_attackSentSinceDeath)
+            return null;
+
         CombatSettings settings = _readSettings();
         CombatSpellContext ctx = BuildContext(
             settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
         if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return null;
+        if (!DebuffDecisionAllowed(decision, ctx)) return null;
 
         // An area debuff (e.g. stinking cloud) blankets the room and MUST be cast
         // bare — `stnk`, never `stnk <mob>`. A single-target debuff keeps its mob.
@@ -813,6 +849,51 @@ public sealed partial class CombatManager
         _pendingDebuffTarget = target;
         return (decision.Spell!,
             decision.Action == CombatSpellAction.AreaDebuff ? null : target);
+    }
+
+    // Guard the Settings → Combat debuff slots: the chosen spell must be a
+    // between-round (0-energy) spell — that's what separates a debuff from an
+    // attack spell (lbol/mmis cost 500-1000 energy) — AND its targeting scope must
+    // fit the slot (single-enemy for the single-target slot, an area/room scope
+    // for the AoE slot). Blocks a mis-slotted spell before it reaches the wire
+    // (an attack spell as a debuff, or a targeted spell as an AoE / vice-versa)
+    // rather than letting the server reject a malformed cast and the engine churn.
+    // Fails OPEN when the cast-code can't be resolved (unknown / no catalog yet) —
+    // the guard is about a resolvable mismatch, not a resolution gap. The
+    // per-monster pre-attack OVERRIDE is exempt: it's the user's explicit per-mob
+    // choice and already bypasses the level gate.
+    private bool DebuffDecisionAllowed(CombatSpellDecision decision, in CombatSpellContext ctx)
+    {
+        if (decision.Spell is not { } code) return false;
+        if (ctx.OverridePreAttackSpell is { } ov
+            && decision.Action == CombatSpellAction.SingleDebuff
+            && string.Equals(code, ov, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (_resolveSpellByCode?.Invoke(code) is not { } spell) return true;
+
+        int energy = spell.Formula.EnergyCost;
+        int targets = spell.Targets;
+        bool ok = decision.Action switch
+        {
+            CombatSpellAction.SingleDebuff =>
+                DebuffTargeting.IsBetweenRound(energy) && DebuffTargeting.IsSingleTargetEnemy(targets),
+            CombatSpellAction.AreaDebuff =>
+                DebuffTargeting.IsBetweenRound(energy) && DebuffTargeting.IsAreaEnemy(targets),
+            _ => true,
+        };
+        if (!ok) WarnInvalidDebuffSlot(code, decision.Action, energy, targets);
+        return ok;
+    }
+
+    private void WarnInvalidDebuffSlot(string code, CombatSpellAction action, int energy, int targets)
+    {
+        if (!_warnedInvalidDebuffSlots.Add(code)) return;   // one line per bad slot, not per round
+        string slot = action == CombatSpellAction.AreaDebuff ? "AoE" : "single-target";
+        string why = !DebuffTargeting.IsBetweenRound(energy)
+            ? $"it costs {energy} energy — a debuff slot needs a 0-energy between-round spell (an attack spell can't be a debuff)"
+            : $"its targeting scope ({targets}) doesn't fit the {slot} slot";
+        _log?.Warn(LogCategory,
+            $"debuff slot misconfigured: '{code}' won't cast as the {slot} debuff — {why}. Fix it in Settings → Combat.");
     }
 
     // Confirm the in-between debuff the director just sent. Marks the stashed

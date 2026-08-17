@@ -206,14 +206,17 @@ public sealed class CombatSpellChooser
     private CombatSpellDecision? TryDebuffing(
         CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode)
     {
-        // Auto-Nuke gate: debuffs are nukes — when the auto-engine is off
-        // we never offer them.
-        if (!ctx.AllowNukes) return null;
-
+        // The two debuff rungs answer to DIFFERENT toggles: the AREA debuff is an
+        // AoE offensive spell gated by Auto-Nuke (ctx.AllowNukes); the
+        // single-target debuff below is a pre-attack debuff gated by Auto-Combat
+        // alone — the engine only evaluates this whole path while Auto-Combat is
+        // on, so no explicit flag is needed for it. (Area still takes precedence
+        // and excludes single when configured, matching the historical model.)
         CombatSpellSlot area = settings.AreaDebuffSpell;
         if (IsConfigured(area))
         {
-            if (!_areaDebuffCast
+            if (ctx.AllowNukes
+                && !_areaDebuffCast
                 && ctx.EnemyCount >= area.MinEnemies
                 && ManaOk(area, ctx, mode))
                 return new CombatSpellDecision(CombatSpellAction.AreaDebuff, area.SpellName!);

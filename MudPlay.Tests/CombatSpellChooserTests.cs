@@ -28,8 +28,8 @@ public sealed class CombatSpellChooserTests
 
     private static CombatSpellContext Ctx(
         int enemies = 1, string target = "a rat", int mana = 100, int maxMana = 100,
-        bool backstabPending = false) =>
-        new(enemies, target, mana, maxMana, backstabPending);
+        bool backstabPending = false, bool allowNukes = true) =>
+        new(enemies, target, mana, maxMana, backstabPending, AllowNukes: allowNukes);
 
     // ----- 1. Backstab gate ---------------------------------------------
 
@@ -302,6 +302,39 @@ public sealed class CombatSpellChooserTests
         };
 
         Assert.Null(sut.ChooseDebuff(settings, Ctx(target: "a rat")));
+    }
+
+    [Fact]
+    public void ChooseDebuff_Single_FiresWithNukesOff()
+    {
+        // The single-target debuff is gated by Auto-Combat, NOT Auto-Nuke, so it
+        // still fires with nukes off (report paradigm-20260817-135739: the debuff
+        // never fired at all because it was wrongly under the Auto-Nuke gate).
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            SingleTargetDebuffSpell = Slot("weaken"),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        CombatSpellDecision? d = sut.ChooseDebuff(settings, Ctx(target: "a rat", allowNukes: false));
+        Assert.Equal(CombatSpellAction.SingleDebuff, d?.Action);
+    }
+
+    [Fact]
+    public void ChooseDebuff_Area_RequiresNukesOn()
+    {
+        // The AoE debuff stays gated by Auto-Nuke — off means it never offers.
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("blindall", minEnemies: 2),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, allowNukes: false)));
+        Assert.Equal(CombatSpellAction.AreaDebuff,
+            sut.ChooseDebuff(settings, Ctx(enemies: 3, allowNukes: true))?.Action);
     }
 
     [Fact]

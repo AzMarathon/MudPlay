@@ -2956,7 +2956,10 @@ public sealed class AppServices
             log: Log,
             readPartySettings: () =>
                 ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
-            roomAwareResolve: RoomAwareMonster.ResolveInCurrentRoom);
+            roomAwareResolve: RoomAwareMonster.ResolveInCurrentRoom,
+            // Resolve a debuff slot's cast-code to its catalog row (energy cost +
+            // targeting scope) so a mis-slotted spell is rejected before it casts.
+            resolveSpellByCode: code => Spellbook.FindByCastCode(code));
 
         // Dark-room combat. A room too dark to show "Also here:" hides any
         // hostile sharing it — the only evidence is the mob's dark-cyan attack
@@ -3301,10 +3304,12 @@ public sealed class AppServices
         // Mana-regen roll-spell reroll (Paradigm only). AbilBreakdown parses
         // `abil 145`; ManaRegen reads its rolled `spells:` slice after each
         // nature-tap / mana-flux landing and recasts a below-threshold roll up
-        // to the cap, hard-stopping at the buff mana floor. The abil query + the
-        // deliberate cooldown-bypassing recast go out on the raw engine sender
-        // (bound in the main VM); the recast still notifies Cast so the
-        // one-cast-per-round cooldown bookkeeping stays honest.
+        // to the cap, hard-stopping at the buff mana floor. The abil query goes
+        // out on the raw engine sender (bound in the main VM); the RECAST is
+        // staged on CastDirector so it runs through the same between-round
+        // priority pass as every other 0-energy cast — it competes by
+        // PriorityBuffing against a due heal/cure and spends the one-cast-per-round
+        // slot, rather than firing directly on the wire and bypassing both.
         AbilBreakdown = new Game.AbilBreakdownParser(Log);
         ManaRegen = new Game.Spells.ManaRegenReroller(
             AbilBreakdown,
@@ -3317,12 +3322,7 @@ public sealed class AppServices
             },
             sendAbilQuery: () =>
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
-            recast: shortCode =>
-            {
-                _engineWireSend?.Invoke(
-                    System.Text.Encoding.Latin1.GetBytes(shortCode.Trim() + "\r"));
-                Cast.NotifyExternalCastSent();
-            },
+            recast: shortCode => CastDirector.RequestManaRegenReroll(shortCode),
             canAffordReroll: CanAffordManaRegenReroll,
             log: Log);
         CastDirector.SetSelfBuffLandedSink(OnSelfBuffLandedForReroll);
@@ -3353,6 +3353,7 @@ public sealed class AppServices
         // the attack spell" ordering). Only exercised when a debuff is actually
         // due, so a normal engage is untouched.
         Combat.SetInBetweenEvaluator(CastDirector.Evaluate);
+        Combat.SetBetweenRoundSlotMarker(CastDirector.MarkBetweenRoundSlotUsed);
         // A between-round survival cast stops our auto-attack; let the combat
         // engine resume the weapon attack on the resulting *Combat Off*
         // instead of idling until the next round.

@@ -132,6 +132,13 @@ public sealed class CastingDirector : IDisposable
     // multi-mob fight). Never consulted out of combat, where no per-round cap applies.
     private bool _betweenRoundSlotUsed;
 
+    // A mana-regen roll-spell reroll the reroller staged (last roll below its
+    // threshold). It's offered by PickSelfBuff at PriorityBuffing and cast through
+    // the normal between-round pass — so it competes with a due heal/cure and
+    // spends the one-per-round slot, instead of firing on the raw wire — then
+    // cleared once it goes out. Null when no reroll is pending.
+    private string? _pendingManaRegenReroll;
+
     // Set when the live buff timers are frozen on an unexpected drop (carrier lost /
     // keep-alive timeout). While set, a reconnect shifts every Until forward by the
     // offline gap so each buff keeps the remaining it had at the drop instead of the
@@ -457,6 +464,7 @@ public sealed class CastingDirector : IDisposable
         _activeUntil.Clear();
         _pendingPartyCast = null;
         _pendingSelfBuffShort = null;
+        _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
         _betweenRoundSlotUsed = false;
         _pausedAt = null;
@@ -513,6 +521,31 @@ public sealed class CastingDirector : IDisposable
     // round cadence, NOT *Combat Off*: *Combat Off* fires per kill, so in a multi-mob
     // room it would re-open the slot several times a round and let the storm back in.
     public void NotifyRoundComplete() => _betweenRoundSlotUsed = false;
+
+    // An external between-round cast — the combat engine's pre-attack debuff,
+    // which fires directly rather than through Evaluate — just went out. Spend
+    // this round's single between-round slot so Evaluate won't queue a second one
+    // and draw "You have already cast a spell this round!". Cleared on the round
+    // tick by NotifyRoundComplete; no-op out of combat, where no per-round cap
+    // applies.
+    public void MarkBetweenRoundSlotUsed()
+    {
+        if (_state.InCombat) _betweenRoundSlotUsed = true;
+    }
+
+    // The mana-regen roll-spell reroller staged a reroll (its last roll came in
+    // below the configured threshold). Instead of firing it on the raw wire, stash
+    // it and run the between-round pass now: PickSelfBuff offers it at
+    // PriorityBuffing (bypassing the slot's recast timer — the point is to recast
+    // immediately), so a due heal/cure still wins and, in combat, it spends the
+    // one-cast-per-round slot like every other between-round cast. Cleared in
+    // RunDecisionPass when the reroll actually goes out.
+    public void RequestManaRegenReroll(string castCode)
+    {
+        if (string.IsNullOrWhiteSpace(castCode)) return;
+        _pendingManaRegenReroll = castCode.Trim();
+        Evaluate();
+    }
 
     // Read-only snapshot of the live buff-duration timers for the Buff Watchdog
     // window — a copy so the caller never holds the live dictionary. Read on the UI
@@ -827,6 +860,11 @@ public sealed class CastingDirector : IDisposable
             {
                 if (cand.Target is { } tgt) ArmPartyBuffConfirm(cand.Spell, tgt, cand.RecastMarginSec);
                 else StartSelfBuffTimer(cand.Spell, cand.RecastMarginSec);
+                // A staged mana-regen reroll just went out through the priority
+                // loop — consume it so it isn't re-offered next pass (the reroller
+                // re-stages one if the fresh roll is still below threshold).
+                if (string.Equals(cand.Spell, _pendingManaRegenReroll, StringComparison.OrdinalIgnoreCase))
+                    _pendingManaRegenReroll = null;
             }
 
             _log?.Combat(LogCategory,
@@ -1227,6 +1265,19 @@ public sealed class CastingDirector : IDisposable
         // resting. So the normal cadence buffs while moving and idle, and holds
         // only during an active recovery unless the user opts in.
         if ((_isTriggeredRest?.Invoke() ?? false) && !spells.SelfBlessWhileResting) return null;
+
+        // A staged mana-regen reroll takes the front of the self-buff queue — it's
+        // an immediate recast (below-threshold roll), so it bypasses the slot's
+        // recast timer, but still honours the in-combat / resting gates above and
+        // the buff mana floor. Offered here at PriorityBuffing so a due heal/cure
+        // wins; if it can't be paid for right now, drop it (the reroller re-stages
+        // on the next landing if still below threshold) rather than stall the walk.
+        if (_pendingManaRegenReroll is { } reroll)
+        {
+            if (IsBuffAffordable(reroll, manaBuffsAllowed))
+                return new CastCandidate(reroll, Target: null, DefaultRecastMarginSec);
+            _pendingManaRegenReroll = null;
+        }
 
         // Bless slots first (in priority = slot-index order), each carrying its
         // per-slot recast lead; then the mana-regen / "when full" downtime buffs,

@@ -2643,6 +2643,31 @@ glass jug               5               2 gold crowns
   self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff
   "covered by <party buff>". Only party-wide covers count (a single-target party buff can't cover self).
 
+## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
+
+The Settings → Combat **debuff slots** (single-target debuff + AoE debuff) hold *between-round*
+spells, not combat attacks. Two hard rules distinguish a valid debuff from a misconfiguration:
+
+- **0 energy = between-round.** A debuff slot spell **must have `EnergyCost == 0`**. That's what
+  separates a debuff from a combat attack spell: attacks cost energy (Paradigm `lbol`/`mmis` = 500,
+  `fbal`/`dtch` = 1000), between-round spells cost 0 (`blin`/`frai`/`stnk`/`corr`-flesh = 0). Energy —
+  not targeting — is the discriminator: `blin` (debuff, 0) and `lbol` (attack, 500) share the SAME
+  `Targets` scope (8). A non-zero-energy spell in a debuff slot is an attack spell mis-slotted.
+- **Targeting must fit the slot** (`Spells.Targets` scope):
+  - **Single-target debuff** → a single-enemy scope: **Monster (4)** or **Monster or User (8)**
+    (e.g. `blin`/`frai`/`corr`-flesh are 8).
+  - **AoE debuff** → an area/room scope: **Divided Area not-self (3)**, **Divided Area incl-self (5)**,
+    **Divided Attack Area (9)**, **Full Area (11)**, **Full Attack Area (12)** (e.g. `stnk`/`fbal` are 12).
+  - The **party-area** scopes (Divided Party Area 10 / Full Party Area 13) are buffs/heals aimed at the
+    party, **never** enemy debuffs.
+
+  So a targeted spell can't be slotted as an AoE, nor an AoE as single-target (e.g. `stnk`, Targets 12,
+  belongs in the AoE slot, not single-target). The client rejects a mis-slotted debuff before it casts
+  and warns once in the program log.
+
+**Gating:** the **single-target** debuff is gated by **Auto-Combat** (it's a pre-attack debuff, part of
+the attack rotation); the **AoE** debuff is gated by **Auto-Nuke**.
+
 ## Guarded monsters redirect attacks *([CONFIRMED] 2026-07-14, user + wire capture)*
 
 - Some monsters are **guarded** by others in the same room (e.g. a *brigand chief*

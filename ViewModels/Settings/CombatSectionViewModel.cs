@@ -211,6 +211,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AreaDebuffSpellUnlearned))]
+    [NotifyPropertyChangedFor(nameof(AreaDebuffSpellMisSlotWarning))]
     private string? _areaDebuffSpellName;
     [ObservableProperty] private int _areaDebuffMinEnemies;
     [ObservableProperty] private int? _areaDebuffMaxCastsPerRoom;
@@ -218,6 +219,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SingleTargetDebuffSpellUnlearned))]
+    [NotifyPropertyChangedFor(nameof(SingleTargetDebuffSpellMisSlotWarning))]
     private string? _singleTargetDebuffSpellName;
     [ObservableProperty] private int? _singleTargetDebuffMaxCastsPerRoom;
     [ObservableProperty] private int _singleTargetDebuffMinManaPerCast;
@@ -254,6 +256,32 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     public bool AlternateAttackSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, AlternateAttackSpellName);
     public bool DrainSpellUnlearned              => IsSpellUnlearned(SpellSuggestions, DrainSpellName);
     [ObservableProperty] private bool _drainsOverrideAoe;
+
+    // Amber-warning text when a debuff slot points at a spell that resolves but
+    // doesn't fit the slot: a non-0-energy attack spell, or a targeting scope
+    // that's AoE in the single-target slot (or single in the AoE slot). Null when
+    // OK / blank / unresolved (the red unlearned flag covers unresolved). Mirrors
+    // the runtime guard in CombatManager — see DebuffTargeting and GAME_MECHANICS.md
+    // "Debuff slot spells". Re-raised on the name change (NotifyPropertyChangedFor)
+    // and on a spellbook change (OnSpellbookChanged).
+    public string? AreaDebuffSpellMisSlotWarning         => DebuffSlotWarning(AreaDebuffSpellName, isArea: true);
+    public string? SingleTargetDebuffSpellMisSlotWarning => DebuffSlotWarning(SingleTargetDebuffSpellName, isArea: false);
+
+    private string? DebuffSlotWarning(string? castCode, bool isArea)
+    {
+        if (string.IsNullOrWhiteSpace(castCode)) return null;
+        if (_spellbook.FindByCastCode(castCode) is not { } spell) return null; // unresolved — unlearned flag covers it
+        if (!Game.Combat.DebuffTargeting.IsBetweenRound(spell.Formula.EnergyCost))
+            return $"⚠ costs {spell.Formula.EnergyCost} energy — a debuff needs a 0-energy spell (this is an attack spell)";
+        bool targetingOk = isArea
+            ? Game.Combat.DebuffTargeting.IsAreaEnemy(spell.Targets)
+            : Game.Combat.DebuffTargeting.IsSingleTargetEnemy(spell.Targets);
+        if (!targetingOk)
+            return isArea
+                ? "⚠ not an area spell — belongs in the single-target slot"
+                : "⚠ not a single-target spell — belongs in the AoE slot";
+        return null;
+    }
 
     // ----- Min-mana-per-cast conversion (mirrors the Health tab) -----
 
@@ -483,6 +511,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(NormalAttackSpellUnlearned));
         OnPropertyChanged(nameof(AlternateAttackSpellUnlearned));
         OnPropertyChanged(nameof(DrainSpellUnlearned));
+        // The resolved energy/targeting behind each debuff slot may have changed too.
+        OnPropertyChanged(nameof(AreaDebuffSpellMisSlotWarning));
+        OnPropertyChanged(nameof(SingleTargetDebuffSpellMisSlotWarning));
     }
 
     private void ReloadAfterProfileSwap()

@@ -337,6 +337,10 @@
                     <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding AreaDebuffMinManaPerCastConverted}"/>
                 </Grid>
+                <TextBlock Text="{Binding AreaDebuffSpellMisSlotWarning}"
+                           IsVisible="{Binding AreaDebuffSpellMisSlotWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                           Foreground="{StaticResource SeverityWarnBrush}"
+                           FontSize="11" Margin="160,0,0,2" TextWrapping="Wrap"/>
 
                 <!-- Debuff (single target — no Min enemies). -->
                 <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
@@ -365,6 +369,10 @@
                     <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding SingleTargetDebuffMinManaPerCastConverted}"/>
                 </Grid>
+                <TextBlock Text="{Binding SingleTargetDebuffSpellMisSlotWarning}"
+                           IsVisible="{Binding SingleTargetDebuffSpellMisSlotWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                           Foreground="{StaticResource SeverityWarnBrush}"
+                           FontSize="11" Margin="160,0,0,2" TextWrapping="Wrap"/>
 
                 <!-- Normal attack spell (single-target — no Min enemies). -->
                 <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">

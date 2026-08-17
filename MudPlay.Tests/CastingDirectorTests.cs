@@ -2539,4 +2539,39 @@ public sealed class CastingDirectorTests
         Assert.Single(h.CastsSent);
         Assert.Equal("bles Raijin", h.CastsSent[0]);
     }
+
+    // ----- Mana-regen reroll routes through the priority pass ----------
+
+    [Fact]
+    public void ManaRegenReroll_Staged_FiresThroughBuffPass()
+    {
+        // The reroller stages a reroll on the director; it casts through the
+        // between-round pass (as a Buffing candidate), not on the raw wire.
+        using Harness h = new();
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);   // full, out of combat, nothing due
+        Assert.Empty(h.CastsSent);
+
+        h.Director.RequestManaRegenReroll("mreg");
+
+        Assert.Equal(new[] { "mreg" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void ManaRegenReroll_RespectsOnePerRoundSlot_InCombat()
+    {
+        // In combat, a due heal spends the round's one between-round slot; a staged
+        // reroll must then yield (not double-cast the same round) — the exact race
+        // the old raw-wire reroll could lose.
+        using Harness h = new();
+        h.Spells.SelfBlessDuringCombat = true;   // allow a buff (the reroll) in combat
+        h.Spells.MinorHealSpell = "heal";
+        h.Health.MinorHealCombatTrigger = 70;
+        h.SetPrompt(hp: 50, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);   // 50% < 70% → heal fires, spends slot
+        Assert.Contains("heal", h.CastsSent);
+        h.CastsSent.Clear();
+
+        h.Director.RequestManaRegenReroll("mreg");
+
+        Assert.DoesNotContain("mreg", h.CastsSent);
+    }
 }
