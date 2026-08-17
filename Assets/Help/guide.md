@@ -1158,7 +1158,7 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 ### Reroll if roll below / Max rerolls
 
 **Default:** Threshold unset (off); Cap `3`
-**What it does:** After the Mana Regen roll spell lands, if the roll came in below this threshold, MudPlay recasts to try for a better one, up to the cap.
+**What it does:** After the Mana Regen roll spell lands, if the roll came in below this threshold, MudPlay recasts to try for a better one, up to the cap. Each recast runs through the normal between-round priority (like every other automated cast), so a due heal or cure fires ahead of a reroll and only one between-round cast goes out per combat round.
 **Important notes:** Only works on realms that expose a way to read the actual roll value back — inert on realms that don't. Leave the threshold blank to disable rerolling entirely.
 
 ### When HP full / When Mana full
