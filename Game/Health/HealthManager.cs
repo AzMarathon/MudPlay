@@ -112,6 +112,7 @@ public sealed class HealthManager : IDisposable
     private bool _maGateAsserted;
     private bool _restInFlight;          // sent rest, awaiting recovery
     private bool _restConfirmedByPrompt; // observed (Resting) since the last rest emit
+    private bool _wasPoisoned;           // poison state last Evaluate — for the poison-cleared re-rest edge
     // The idle-stall watchdog force-clears combat OPTIMISTICALLY and sends a resync
     // CR; the re-display that re-confirms a still-present monster lands a beat later.
     // Resting the instant InCombat flips false fires in that gap — a blinded / slow
@@ -477,6 +478,7 @@ public sealed class HealthManager : IDisposable
             }
             _restInFlight = false;
             _restConfirmedByPrompt = false;
+            _wasPoisoned = false;
             _fledThisCombat = false;
 
             // All-off carve-out: even with the engine disabled, honour the
@@ -742,6 +744,22 @@ public sealed class HealthManager : IDisposable
         // opportunistic paths — a poisoned character below its own rest floor still
         // rests through the anyGate branch, since it needs the recovery to survive.
         bool selfPoisoned = _isSelfPoisoned?.Invoke() ?? false;
+
+        // Poison-cleared re-rest. A rest sent while poisoned never reaches the (Resting)
+        // state (poison refuses / breaks it), so it latches _restInFlight but the two-step
+        // interruption latch above never clears it (that path needs _restConfirmedByPrompt,
+        // which only flips once we're actually Resting). The stale _restInFlight then blocks
+        // the re-send once poison wears off — the reported "sat standing below the rest floor
+        // after the poison cleared" bug. On the poison falling edge, drop an unconfirmed rest
+        // latch so THIS tick's rest-out branch re-sends a fresh rest now that resting will take.
+        if (_wasPoisoned && !selfPoisoned && _restInFlight && !_restConfirmedByPrompt)
+        {
+            _restInFlight = false;
+            _log?.Combat(LogCategory,
+                $"poison cleared — dropping unconfirmed rest latch to re-rest " +
+                $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
+        }
+        _wasPoisoned = selfPoisoned;
 
         // Opportunistic follower rest: the leader has stopped to rest /
         // meditate, so we use the downtime to top off too — even above our

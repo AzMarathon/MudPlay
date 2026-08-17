@@ -2545,6 +2545,18 @@ glass jug               5               2 gold crowns
   flag whenever a sibling with a specific wear-off never sees its matching line. (See
   `ConditionTracker`'s applied-line alias group-clear.)
 
+## Poison prevents resting *([CONFIRMED] 2026-08-17, user + report `paradigm-20260817-092945`)*
+
+- **While poisoned you cannot rest** — a `rest` (or meditate) issued while poisoned does
+  **not** put you into the `(Resting)` state (poison refuses / breaks it), so the position
+  never becomes Resting and the recovery you'd get from resting doesn't happen; you only
+  get the slow standing regen.
+- **Consequence for the auto-rest engine:** an optimistic "resting" latch armed on the send
+  (`HealthManager._restInFlight`) never confirms while poisoned, and the interruption latch
+  can't clear it (it needs a confirmed Resting first). So the client must **re-attempt the
+  rest once poison clears** (the poison falling edge drops the stale latch) — otherwise it
+  sits standing below the rest floor forever, which is what report 092945 hit.
+
 ## Confusion fumbles — actions fail and must be re-sent *([CONFIRMED] 2026-07-14, user)*
 
 - Confusion does **not** block attacking (or acting) outright. Instead each action
