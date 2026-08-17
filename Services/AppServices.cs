@@ -5222,9 +5222,13 @@ public sealed class AppServices
         if (SpellCatalog.GetFormulaByNumber(item.SpellNumber) is not { } formula)
             return null;
         // Duration is in spell rounds — convert to wall-clock seconds for the
-        // recast clock (CastingDirector treats the returned value as seconds).
+        // recast clock (CastingDirector treats the returned value as seconds). Uses
+        // the wall-clock per-round length so the recast window matches the buff's REAL
+        // remaining time, not the nominal Dur×3 (which recasts ~1-2 s early).
         long rounds = Game.Spells.SpellCalculator.Duration(formula, Spellbook.Level);
-        return rounds > 0 ? rounds * Game.Spells.SpellCalculator.SpellRoundSeconds : null;
+        return rounds > 0
+            ? (long)System.Math.Round(rounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock)
+            : null;
     }
 
     // Mana the item-cast buff named by token draws on use —
@@ -5264,8 +5268,11 @@ public sealed class AppServices
             Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
             if (rec is null || string.IsNullOrWhiteSpace(rec.CasterMessage)) return null;
             // Duration is in spell rounds; the recast clock wants wall-clock seconds.
-            long durSec = Game.Spells.SpellCalculator.Duration(s.Formula, Spellbook.Level)
-                          * Game.Spells.SpellCalculator.SpellRoundSeconds;
+            // Uses the wall-clock per-round length so "recast within N s" fires at the
+            // buff's REAL remaining time, not ~1-2 s early off the nominal Dur×3.
+            long durSec = (long)System.Math.Round(
+                Game.Spells.SpellCalculator.Duration(s.Formula, Spellbook.Level)
+                * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock);
             return (rec.CasterMessage, durSec);
         }
         return null;

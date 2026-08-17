@@ -233,6 +233,25 @@ public sealed class SpellCalculatorTests
         // conflating them is what made the recast clock fire 3× too early.
         => Assert.Equal(3, SpellCalculator.SpellRoundSeconds);
 
+    [Fact]
+    public void WallClockRound_RunsSlightlyLongerThanNominal()
+        // Live buff timers use the wall-clock round (~3.04s) because server rounds
+        // run long (report paradigm-20260816-222917); it must exceed the nominal 3s
+        // or the recast clock under-estimates the duration and fires early.
+        => Assert.True(SpellCalculator.SpellRoundSecondsWallClock > SpellCalculator.SpellRoundSeconds);
+
+    [Fact]
+    public void WallClockRound_50RoundBuff_IsAbout152Seconds()
+    {
+        // prev (protection from evil): Dur=50 flat → 50 rounds. The recast clock arms
+        // ~152s (not the nominal 150s), so "recast within 15s" fires at ~137s in — the
+        // buff's REAL remaining time — instead of ~1-2s early off 150s.
+        SpellFormulaInput prev = new() { Dur = 50 };
+        long durSec = (long)System.Math.Round(
+            SpellCalculator.Duration(prev, 50) * SpellCalculator.SpellRoundSecondsWallClock);
+        Assert.Equal(152, durSec);
+    }
+
     [Theory]
     [InlineData(100, 0, 0, 50, 300)]  // nature tap: Dur=100 flat → 100 rounds → 5:00
     [InlineData(7, 1, 4, 50, 57)]     // regeneration: 7 + Fix(50/4)=19 rounds → 57 s

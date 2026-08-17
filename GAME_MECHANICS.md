@@ -25,6 +25,12 @@ it isn't here and you're unsure, ask.
   duration of `N` rounds lasts `N × 3` seconds. A debuff falls off on the same 3s cadence.
 - A spell record's `Dur` field is therefore **spell rounds**: real seconds = `Dur × 3`.
   Boat-voyage length is the sum of the transit spells' `Dur` along the disembark chain, × 3s.
+- **[OBSERVED, report paradigm-20260816-222917]** The **real** spell round runs slightly LONG,
+  like the combat round is ~5.04s not 5.0 — a 50-round buff (`prev`, protection from evil) was
+  observed lasting **~151-152s**, i.e. ~**3.04s/round**, not the nominal 150s. So a "recast within
+  N s" slot, which is measured against the buff's **real** remaining seconds, must time off ~3.04s
+  or it recasts ~1-2s early. The client keeps the nominal 3s for spell-data displays but uses
+  `SpellCalculator.SpellRoundSecondsWallClock` (3.04) for the live recast clock + Buff Watchdog.
 - If a specific duration's unit is ever ambiguous, **ask the user** — they can give the correct
   value rather than us guessing.
 
