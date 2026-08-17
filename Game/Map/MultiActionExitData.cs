@@ -20,6 +20,15 @@ public sealed partial record MultiActionExitData(
     bool RequiresSpecificOrder,
     IReadOnlyList<ExitAction> Actions)
 {
+    // True when the imported action data can actually open the exit — there are
+    // at least as many action steps as the modifier's "Needs N" count. When it's
+    // short (or the whole MultiAction is absent, so this object doesn't exist),
+    // the opener can't be performed, so crossing the exit is a guaranteed runtime
+    // failure; the router treats such an exit as non-routable. Some MegaMUD
+    // exports annotate a fork/lever passage's opener on only ONE side, leaving the
+    // reciprocal exit reading as a hidden action exit with no action data.
+    public bool IsSatisfiable => Actions.Count >= RequiredActionCount;
+
     // True when at least one action is remote (different room).
     public bool HasRemoteActions
     {
