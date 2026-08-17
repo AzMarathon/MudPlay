@@ -23,8 +23,11 @@ namespace MudPlay.Game.Inventory;
 // LIGHT items are excluded upstream (Auto-light owns them) and a LoyalItem is
 // never a sell target — both decided by the injected resolver.
 //
-// Master switch: AutoActionDefaults.AutoSell. Runs UI-thread only (MessageRouter
-// marshals upstream), so the pump state needs no lock.
+// Gated by two things: the Auto-Get Items auto-mode toggle (the master — the
+// engine only pumps while it's on, wired to ReadAutoModeFlag(AutoGetItems)) and
+// the per-item ItemOverlay.AutoSell flag (which carried items to sell), resolved
+// by the injected resolver. Runs UI-thread only (MessageRouter marshals
+// upstream), so the pump state needs no lock.
 public sealed class AutoSellManager : IDisposable
 {
     // LogService category — [AutoSell] rows per queued / sold item.

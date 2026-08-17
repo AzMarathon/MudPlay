@@ -1192,8 +1192,9 @@ public sealed class AppServices
     // Auto-sell engine. When a shop `list` readout surfaces, sells each carried
     // item flagged Models.GameData.ItemOverlay.AutoSell down to its keep floor at
     // the merchant standing in — one sell <name> per unit, advancing off the live
-    // sold / can't-sell-here result. Gated by the AutoSell master toggle; a
-    // LoyalItem and LIGHT items are never sold.
+    // sold / can't-sell-here result. Gated by the Auto-Get Items auto-mode toggle
+    // (master) plus the per-item ItemOverlay.AutoSell flag; a LoyalItem and LIGHT
+    // items are never sold.
     public Game.Inventory.AutoSellManager AutoSell { get; private set; } = null!;
 
     // Auto-open engine. On every inventory change, sends open <name> once for
