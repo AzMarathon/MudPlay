@@ -3221,12 +3221,6 @@ public sealed class AppServices
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             isEnabled: () => ReadAutoModeFlag(d => d.AutoHealRest),
             log: Log);
-        // True combat-round boundary → free the once-per-round between-round cast
-        // slot. The per-hit combat tick fires 2-3× a round, so it can't gate
-        // one-per-round; RoundDamageTracker closes exactly one round per 5s window
-        // (and on *Combat Off*), which is the boundary the between-round coordinator
-        // needs.
-        RoundDamage.RoundComplete += _ => CastDirector.NotifyRoundComplete();
         // Stealth gate — buff casts suppressed while
         // sneaking or hidden so we don't break the backstab window.
         CastDirector.SetStealthGate(() => Stealth.IsStealthed);
@@ -3269,6 +3263,13 @@ public sealed class AppServices
         // downed ally back in here as the top-priority name-targeted heal until
         // they recover / rejoin.
         CastDirector.SetDownedAllyProvider(() => AllyDropped.AidedDownedGivenNames());
+        // Free the once-per-round between-round cast slot on the combat ROUND TICK —
+        // TickEngine's 5s heartbeat (refreshed by damage lines), NOT *Combat Off*.
+        // *Combat Off* fires per kill, so in a multi-mob room it lands several times a
+        // round and would re-open the slot mid-round; the combat tick is the actual
+        // round cadence. Subscribed BEFORE CastDirector.OnCombatTick below so the slot
+        // is freed before this round's between-round evaluation runs.
+        Tick.CombatTickElapsed += CastDirector.NotifyRoundComplete;
         Tick.CombatTickElapsed += CastDirector.OnCombatTick;
 
         // Mana-regen roll-spell reroll (Paradigm only). AbilBreakdown parses

@@ -2577,12 +2577,12 @@ glass jug               5               2 gold crowns
   spells** (lbol / mmis / deathtouch / fireball are 500–1000 energy — the round's main action, not
   between-round), so it is purely the between-round coordinator's signal.
   - **Client encoding:** the between-round coordinator (`CastingDirector`) casts at most one between-round
-    spell per round, gated on the **true round boundary** — `RoundDamageTracker.RoundComplete`
-    (`NotifyRoundComplete`), which closes exactly one round per 5s window and on *Combat Off*. It must NOT
-    gate on the per-hit combat tick: that fires 2-3× a round, and clearing the coordinator's one-per-round
-    cooldown on it let the engine send several between-round spells a round — every extra one drawing "already
-    cast this round" and, because the reactive timer-clear then tore down the buff it kept re-sending, the
-    "4 mageshields in a short span" recast storm. On the rejection the just-sent spell didn't fire, so its
+    spell per round, gated on a latch cleared by the **combat round tick** — `TickEngine.CombatTickElapsed`
+    (`NotifyRoundComplete`), the 5s combat heartbeat refreshed by damage lines. It must NOT clear on
+    **`*Combat Off*`**: that fires per *kill*, so in a multi-mob room it lands several times a round and would
+    re-open the slot mid-round (the recast storm's door). The bug that produced the "4 mageshields in a short
+    span" storm was the coordinator's own one-per-round cooldown being cleared on every per-hit tick, letting
+    it send several between-round spells a round. On the rejection the just-sent spell didn't fire, so its
     optimistic recast timer is dropped (it re-attempts next round) and the round's slot is latched spent
     (`CastingDirector.OnCastFailed`).
 - **A self-buff's active/recast state is keyed to its own 4-letter cast code**, resolved from game data: the

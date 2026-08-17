@@ -126,9 +126,10 @@ public sealed class CastingDirector : IDisposable
     // item) THIS combat round. The game allows only ONE 0-energy between-round cast
     // per round across all of them — a second draws "You have already cast a spell
     // this round!" and does NOT fire. So while this is set we suppress further
-    // between-round casts (in combat) rather than send doomed ones. Cleared at the
-    // true round boundary (NotifyRoundComplete, wired to RoundDamageTracker) and
-    // never consulted out of combat, where no per-round cap applies.
+    // between-round casts (in combat) rather than send doomed ones. Cleared on the
+    // combat ROUND TICK (NotifyRoundComplete, wired to TickEngine.CombatTickElapsed —
+    // NOT *Combat Off*, which fires per kill and would re-open the slot mid-round in a
+    // multi-mob fight). Never consulted out of combat, where no per-round cap applies.
     private bool _betweenRoundSlotUsed;
 
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
@@ -433,11 +434,10 @@ public sealed class CastingDirector : IDisposable
         _betweenRoundSlotUsed = false;
     }
 
-    // The combat round closed (wired to RoundDamageTracker.RoundComplete) — the
-    // between-round cast slot is free again, so a new round can cast once. This is
-    // the TRUE round boundary; the per-hit combat tick fires 2-3× a round and can't
-    // gate one-per-round on its own (it's what let the buff engine send several
-    // between-round spells in a round and draw "already cast this round").
+    // A combat round tick elapsed (wired to TickEngine.CombatTickElapsed) — free the
+    // between-round cast slot so the new round can cast once. Keyed to the combat
+    // round cadence, NOT *Combat Off*: *Combat Off* fires per kill, so in a multi-mob
+    // room it would re-open the slot several times a round and let the storm back in.
     public void NotifyRoundComplete() => _betweenRoundSlotUsed = false;
 
     // True when a buff on targetKey ("" = self) is due to be (re)cast: either never
