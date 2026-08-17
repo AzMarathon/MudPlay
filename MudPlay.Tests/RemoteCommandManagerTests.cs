@@ -149,10 +149,13 @@ public sealed class RemoteCommandManagerTests
     [Fact]
     public void PrefixHandler_NotMatchedWithoutRemainder()
     {
-        // "@equip-" exactly (no suffix) needs a strict prefix to match, so
-        // it falls through to the unknown-command denial path.
+        // "@equip-" exactly (no suffix) matches no complete command, so it falls
+        // through to the unknown-command path — which stays SILENT even with the
+        // warn setting on (an @-token that matches nothing is treated as chat
+        // noise, never a command to bounce a reply at).
         var (engine, _, players) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.ExecuteCommands);
+        engine.WarnOnDenial = true;
         engine.FailureMessage = "denied";
 
         bool fired = false;
@@ -162,8 +165,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Friend", "@equip-"));
 
         Assert.False(fired);
-        byte[] sent = Assert.Single(engine.LastSentForTests);
-        Assert.Equal("/Friend {denied}\r", Encoding.Latin1.GetString(sent));
+        Assert.Empty(engine.LastSentForTests);
     }
 
     [Fact]
@@ -247,7 +249,6 @@ public sealed class RemoteCommandManagerTests
         Assert.True(engine.UnregisterPrefixHandler("@equip-"));
         Assert.False(engine.UnregisterPrefixHandler("@equip-"));
 
-        engine.WarnOnDenial = false; // suppress the now-unknown-command reply
         engine.DispatchForTests(Telepath("Friend", "@equip-fighting"));
         Assert.Equal(0, fired);
     }
@@ -938,20 +939,22 @@ public sealed class RemoteCommandManagerTests
     }
 
     [Fact]
-    public void UnregisteredToken_StillReplies_ProvingIgnoreIsTargeted()
+    public void NonIgnoredCommand_StillDispatches_ProvingIgnoreIsTargeted()
     {
-        // Sanity companion: an @-command that ISN'T reserved still hits the
-        // unknown-command denial path — proves the swallow is scoped to the
-        // registered token, not a blanket mute.
-        var (engine, _, _) = Setup();
-        engine.WarnOnDenial = true;
-        engine.FailureMessage = "denied";
+        // Sanity companion: registering an ignored token doesn't blanket-mute the
+        // engine — a DIFFERENT, registered command still dispatches normally.
+        // (An unknown non-ignored @-token is silently ignored too now, so prove
+        // the scope with a handler that fires rather than a denial reply.)
+        var (engine, _, players) = Setup();
         engine.RegisterIgnored("@poisoned");
+        SeedPlayer(players, "Buddy", PlayerRemoteControls.QueryHealthStatus);
 
-        engine.DispatchForTests(Telepath("Buddy", "@blind"));
+        bool fired = false;
+        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus, _ => fired = true);
 
-        byte[] sent = Assert.Single(engine.LastSentForTests);
-        Assert.Equal("/Buddy {denied}\r", Encoding.Latin1.GetString(sent));
+        engine.DispatchForTests(Telepath("Buddy", "@health"));
+
+        Assert.True(fired);
     }
 
     // ===== Settings.Talk knobs =====
@@ -1012,16 +1015,20 @@ public sealed class RemoteCommandManagerTests
     }
 
     [Fact]
-    public void WarnOnDenial_SendsFailureMessageOnUnknownCommand()
+    public void WarnOnDenial_StaysSilentOnUnknownCommand()
     {
+        // An @-token matching no registered command is almost always ordinary
+        // chat that merely starts with '@' (someone said "@because" in gang
+        // chat), so it must NEVER draw a reply — not even with warn-on-invalid
+        // on. Unlike the per-player / party-whitelist denials below, an unknown
+        // token isn't a real command attempt. WarnOnDenial governs those, not this.
         var (engine, _, _) = Setup();
-        // FailureMessage is bare text — engine wraps in { } at send.
+        engine.WarnOnDenial = true;
         engine.FailureMessage = "nope";
 
-        engine.DispatchForTests(Telepath("Stranger", "@unknown"));
+        engine.DispatchForTests(Telepath("Chatter", "@because it was funny"));
 
-        byte[] sent = Assert.Single(engine.LastSentForTests);
-        Assert.Equal("/Stranger {nope}\r", Encoding.Latin1.GetString(sent));
+        Assert.Empty(engine.LastSentForTests);
     }
 
     [Fact]

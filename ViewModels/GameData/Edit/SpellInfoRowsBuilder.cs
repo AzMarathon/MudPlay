@@ -200,7 +200,42 @@ public sealed class SpellInfoRowsBuilder
                 rows.Add(new GameDataInfoRow(field, rendered));
         }
 
+        AppendNegatedByRow(rows, spellNumber);
         return rows;
+    }
+
+    // Reverse cross-reference: the items that negate this spell. The Items table
+    // carries a NegateSpell-0..9 column family (10 slots, each a Spells.Number) —
+    // the game's item→spell negation relation, the inverse of the item record's
+    // own "Negates" rows — so carrying such an item negates this spell against the
+    // bearer. Surfacing it on the spell's own record answers "what counters this?"
+    // at a glance. Read directly like the Rooms / TBInfo scans above rather than
+    // reusing RoomHazardIndex's hazard-scoped copy, which isn't a reusable
+    // accessor and would couple this dialog to the hazard service. Omitted when no
+    // item negates the spell; one scan per dialog open (not a hot path).
+    private void AppendNegatedByRow(List<GameDataInfoRow> rows, int spellNumber)
+    {
+        if (spellNumber <= 0) return;
+        JsonDocument? doc = _cache.GetRawTable("Items");
+        if (doc is null) return;
+
+        var names = new List<string>();
+        foreach (JsonElement item in doc.RootElement.EnumerateArray())
+        {
+            bool negates = false;
+            for (int i = 0; i < 10 && !negates; i++)
+                negates = ReadInt(item, $"NegateSpell-{i}") == spellNumber;
+            if (!negates) continue;
+
+            string? name = item.TryGetProperty("Name", out JsonElement e) && e.ValueKind == JsonValueKind.String
+                ? CleanString(e.GetString())
+                : null;
+            if (name is { Length: > 0 } && !names.Contains(name, StringComparer.OrdinalIgnoreCase))
+                names.Add(name);
+        }
+
+        if (names.Count > 0)
+            rows.Add(new GameDataInfoRow("Negated by", string.Join(", ", names)));
     }
 
     // "Mage-1" / "Priest" — the spell's casting school with its magery-level suffix folded in
