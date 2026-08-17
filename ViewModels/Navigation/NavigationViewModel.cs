@@ -2038,6 +2038,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ContextIsAvoided));
         OnPropertyChanged(nameof(ContextIsStash));
         OnPropertyChanged(nameof(ContextIsFavorite));
+        OnPropertyChanged(nameof(ContextHasGhLabel));
         RebuildContextTeleports(value);
         RebuildContextFloorMoves(value);
     }
@@ -2045,6 +2046,33 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public bool ContextIsAvoided => ContextRoomKey is { } k && _services.Movement.IsAvoided(k);
     public bool ContextIsStash   => ContextRoomKey is { } k && _services.Movement.IsStash(k);
     public bool ContextIsFavorite => ContextRoomKey is { } k && _services.Favorites.IsFavorite(k);
+
+    // True when the context room already has a Roomba Mode GH label.
+    public bool ContextHasGhLabel =>
+        ContextRoomKey is { } k && _services.GhRoomLabels.TryGetLabel(k, out _);
+
+    // Right-click → "Label as GH room…". Opens the ItemType (+ optional
+    // subtype) picker and writes the result through GhRoomLabelStore.
+    [RelayCommand]
+    private async Task OpenGhRoomLabelPickerAsync()
+    {
+        if (ContextRoomKey is not { } k) return;
+        _services.GhRoomLabels.TryGetLabel(k, out Models.Profile.GhRoomLabel existing);
+        GhRoomLabelPickerDialogViewModel vm = new(ContextRoomName, k.Map, k.Room, existing);
+        Models.Profile.GhRoomLabel? result = await _services.Dialogs
+            .OpenWindowAsync<GhRoomLabelPickerDialogViewModel, Models.Profile.GhRoomLabel?>(vm);
+        if (result is null) return;   // cancelled
+        _services.GhRoomLabels.SetLabel(k, result.Rules, result.IsCatchAll);
+        OnPropertyChanged(nameof(ContextHasGhLabel));
+    }
+
+    [RelayCommand]
+    private void ClearContextGhLabel()
+    {
+        if (ContextRoomKey is not { } k) return;
+        _services.GhRoomLabels.ClearLabel(k);
+        OnPropertyChanged(nameof(ContextHasGhLabel));
+    }
 
     // ----- "Use Teleport" (right-click a CMD/teleport room) ----------
     // A CMD room's TBInfo Action chain teleports to one room (the common

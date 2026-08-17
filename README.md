@@ -1,11 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.18.18**
-> - Quest guides: a single-quoted `'command'` in a step is now a clickable green link — clicking it types that command at the game exactly as if you'd entered it in the terminal, alongside the existing clickable `(map/room)` walk links
-> - Quest eligibility: three Evil / Neutral / Good checkboxes at the top of the Quest Status tab (saved per character, off by default) declare which alignment chain(s) you're on, so alignment-gated quests only show as available when their box is ticked
-> - Quest eligibility: the Quest editor's "Restrict to classes" control is a checkable class dropdown for the genuinely class-locked quests the crawler can't detect on its own (Magebane, Tarl)
-> - Quest journal: quests this character can't complete are hidden by default — tick "Show in quest journal" in the editor to keep one visible (saved per character)
+> **Version 3.19.0**
+> - New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: configurable silent recon laps (default 2) search every room traversed by the circuit, then misfiled items are carried to their labeled destination. Built on the same loop engine every saved Loop runs on
+> - GH room labels support multiple rules per room (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail), including equip-slot rules (Neck / Wrist / Off-Hand / etc.) for jewelry-style rooms that aren't classified by material or weapon type, and an optional catch-all room for anything matching no explicit rule
+> - Item name resolution now also exposes WeaponType / ArmourType / Worn subtype, letting a GH room label narrow past the top-level category (e.g. "Weapons > 1H Blunt") or match by equip slot alone
+> - Roomba Mode never sweeps up a gang-house guard emblem as clutter, and only ever acts on items found on a GH room floor during its own recon — never anything already in your pack
+> - Fixed Roomba losing the room title in very large wrapped floor lists, repeatedly falling into `rm` recovery, and attributing a newly-entered room's visible items to the room just left
+> - Roomba sorting now re-searches a source immediately before pickup, waits for get/drop confirmations, requests a fresh `i` inventory, and only resumes movement after that authoritative inventory verifies the transaction; failed pickups stay queued for a searched retry without double-moving delivered items
+> - bug reports addressed: paradigm-20260816-172828, paradigm-20260816-175656, paradigm-20260816-191039, paradigm-20260816-193418
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

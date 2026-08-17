@@ -172,6 +172,16 @@ public sealed class CharacterProfile
     // null or empty = no stash rooms flagged.
     public List<RoomRef>? StashRooms { get; set; }
 
+    // Gang-house room labels for Roomba Mode. Per-character only, one active
+    // layout at a time — re-labeling a room overwrites its entry. null or
+    // empty = GH not set up yet.
+    public List<GhRoomLabel>? GhRoomLabels { get; set; }
+
+    // Roomba Mode's recon tuning — null = use GhRoomLabelStore's defaults
+    // (2 laps, 3 searches per room). Adjustable from the GH Management tab.
+    public int? GhReconLaps { get; set; }
+    public int? GhSearchesPerRoom { get; set; }
+
     // Recent walk-to destinations, newest first, capped at 10. Each entry is a
     // "map/room" coordinate string. Maintained by GotoHistoryStore; drives the
     // Navigation goto-button dropdown. null or empty = no history yet.

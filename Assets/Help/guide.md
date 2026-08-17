@@ -1755,6 +1755,26 @@ Not a Settings tab — these four toggles live in the **Program Log** window (de
 
 ---
 
+## GH Management / Roomba Mode (Player Workshop)
+
+Not a Settings-window tab. An automated gang-house (GH) item sorter, built on the same loop engine every saved Loop runs on rather than a separate navigation system.
+
+**Setup:** on the Navigation map, right-click each room in your gang house and choose **Label as GH room…**. A room's label is one or more **rules**, OR'd together, so a single room can sort for several categories at once (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail). Each rule is either:
+- an **item category** — Weapon, Armour, Food, etc. (the same categories the imported item data already carries), optionally narrowed to a specific weapon or armour subtype; or
+- an **equip slot** — Neck, Wrist, Finger, Off-Hand, etc. — for jewelry-style rooms that aren't classified by material or weapon type at all (a necklace has no "armour type"). A slot rule matches any item worn there regardless of its category.
+
+Use **+ Add rule** to add another rule to the room, and the ✕ on a rule row to remove it. One room per gang house may be flagged **"Make this the gang house's catch-all room"** — anything matching no explicit rule anywhere gets swept there automatically instead of being left in place; checking it on one room un-checks it on any other (only one catch-all at a time). **Clear GH label** removes a room's label entirely. At least two labeled rooms are required to start a sweep.
+
+**Running a sweep:** open the **Player Workshop → GH Management** tab to review your labeled destinations (each row summarizes its rules, with "[catch-all]" flagging the fallback room) and click **Start Sweep**. Recon laps and searches per room are configurable in this tab (defaults: 2 laps and 3 searches). The sweep runs in two phases:
+- **Recon:** the expanded circuit searches every room it traverses, including unlabeled rooms between destinations, purely observing — nothing is picked up or moved yet. Visible floor items and hidden search results are combined without counting the same rediscovered stack more than once.
+- **Sorting:** the circuit replays until the queue is delivered or a full lap makes no progress. At a destination, carried items belonging there are dropped. At a source, Roomba searches again immediately before `get`, waits for the game's get/drop confirmations, then requests a fresh `i` and verifies the inventory before movement resumes. An item matching no rule anywhere goes to the catch-all room if one is designated; otherwise it's left in place rather than guessed at.
+
+The tab's status line shows the live phase and lap count; the Moved / Left in place panels update as the sweep progresses. **Stop** ends a sweep early.
+
+**Important notes:** Roomba Mode refuses to start while another movement engine (a manual walk, a Loop, or Auto-Lair) is already active, and while running it behaves like any other Loop for the toolbar Pause/Stop buttons and the manual-move-pauses-navigation rule. A pickup that would push you into the Heavy carry bracket is deferred and retried after deliveries free capacity; a full no-progress lap reports what remains. Failed or unverified hidden-item pickups are re-searched on a later lap. Gang-house guard emblems (items named like "Gold Emblem" — the ones that keep that house's guards from attacking you) are never swept as clutter, and a sweep only ever acts on items it found on a circuit-room floor during its own recon — never anything already in your pack.
+
+---
+
 ## Equipment Sets (Player Workshop)
 
 Not a Settings-window tab. Your character's gear loadouts — the four fixed sets **Default**, **Backstab**, **Pre-rest HP**, and **Pre-rest Mana** — are configured in the **Player Workshop**'s Equipment Manager, not in Settings. They're mentioned here because the Combat tab's weapon fields (Normal/Alternate/Backstab weapon) are actually populated from the Default and Backstab sets rather than being typed in directly — see the note under the Combat tab's weapon slots above. See the **Player Workshop** section for how to build and enable a set.

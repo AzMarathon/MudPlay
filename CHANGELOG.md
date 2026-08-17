@@ -2,6 +2,16 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.19.0
+
+- New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: configurable silent recon laps (default 2) search every room traversed by the circuit, then misfiled items are carried to their labeled destination. Built on the same loop engine every saved Loop runs on
+- GH room labels support multiple rules per room (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail), including equip-slot rules (Neck / Wrist / Off-Hand / etc.) for jewelry-style rooms that aren't classified by material or weapon type, and an optional catch-all room for anything matching no explicit rule
+- Item name resolution now also exposes WeaponType / ArmourType / Worn subtype, letting a GH room label narrow past the top-level category (e.g. "Weapons > 1H Blunt") or match by equip slot alone
+- Roomba Mode never sweeps up a gang-house guard emblem as clutter, and only ever acts on items found on a GH room floor during its own recon — never anything already in your pack
+- Fixed Roomba losing the room title in very large wrapped floor lists, repeatedly falling into `rm` recovery, and attributing a newly-entered room's visible items to the room just left
+- Roomba sorting now re-searches a source immediately before pickup, waits for get/drop confirmations, requests a fresh `i` inventory, and only resumes movement after that authoritative inventory verifies the transaction; failed pickups stay queued for a searched retry without double-moving delivered items
+- bug reports addressed: paradigm-20260816-172828, paradigm-20260816-175656, paradigm-20260816-191039, paradigm-20260816-193418
+
 ## 3.18.18
 
 - Quest guides: a single-quoted `'command'` in a step is now a clickable green link — clicking it types that command at the game exactly as if you'd entered it in the terminal (macro/alias expansion included), alongside the existing clickable `(map/room)` walk links

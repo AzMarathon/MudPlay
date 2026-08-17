@@ -697,6 +697,11 @@
                                   Command="{Binding ToggleContextRoomAvoidedCommand}"/>
                         <MenuItem Header="Toggle: Stash room"
                                   Command="{Binding ToggleContextRoomStashCommand}"/>
+                        <MenuItem Header="Label as GH room…"
+                                  Command="{Binding OpenGhRoomLabelPickerCommand}"/>
+                        <MenuItem Header="Clear GH label"
+                                  Command="{Binding ClearContextGhLabelCommand}"
+                                  IsVisible="{Binding ContextHasGhLabel}"/>
                         <!-- Auto-lair marking moved into the top-right
                              "Lair mode" toggle: enter the mode, click
                              rooms on the map to add / remove markers,

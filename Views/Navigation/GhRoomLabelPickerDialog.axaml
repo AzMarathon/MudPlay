@@ -1,0 +1,124 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.Navigation"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="360"
+        x:Class="MudPlay.Views.Navigation.GhRoomLabelPickerDialog"
+        x:DataType="vm:GhRoomLabelPickerDialogViewModel"
+        Title="Label as GH room"
+        Width="440"
+        SizeToContent="Height"
+        MaxHeight="600"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
+        <StackPanel Spacing="8">
+            <TextBlock Text="Label as GH room"
+                       Foreground="{StaticResource ChromeFgBrush}"
+                       FontSize="{StaticResource FontSizeLg}"
+                       FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding RoomLabel}"
+                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                       FontSize="11"
+                       TextWrapping="Wrap"/>
+
+            <CheckBox Content="Make this the gang house's catch-all room"
+                      IsChecked="{Binding IsCatchAll, Mode=TwoWay}"
+                      Margin="0,4,0,0"
+                      ToolTip.Tip="Anything that doesn't match any room's rules anywhere in the gang house gets swept here instead of being left in place. Only one room can be the catch-all — checking this here un-checks it elsewhere."/>
+
+            <TextBlock Text="Sort rules (any one matching sends an item here)"
+                       Foreground="{StaticResource ChromeFgSecBrush}" Margin="0,6,0,0"/>
+
+            <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Rules}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:GhRuleEditRowViewModel">
+                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                                    BorderThickness="1" CornerRadius="{StaticResource CornerSm}"
+                                    Padding="8" Margin="0,3">
+                                <StackPanel Spacing="4">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <ComboBox Grid.Column="0"
+                                                  ItemsSource="{Binding RuleKindOptions}"
+                                                  SelectedItem="{Binding SelectedKind, Mode=TwoWay}"
+                                                  HorizontalAlignment="Stretch">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate DataType="vm:GhRuleKindOption">
+                                                    <TextBlock Text="{Binding Name}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <Button Grid.Column="1" Content="✕" Margin="6,0,0,0"
+                                                Command="{Binding RemoveCommand}"
+                                                ToolTip.Tip="Remove this rule"/>
+                                    </Grid>
+
+                                    <StackPanel IsVisible="{Binding !IsWornSlotKind}" Spacing="4">
+                                        <ComboBox ItemsSource="{Binding ItemTypeOptions}"
+                                                  SelectedItem="{Binding SelectedItemType, Mode=TwoWay}"
+                                                  HorizontalAlignment="Stretch">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate DataType="vm:GhCategoryOption">
+                                                    <TextBlock Text="{Binding Name}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <ComboBox IsVisible="{Binding ShowWeaponType}"
+                                                  ItemsSource="{Binding WeaponTypeOptions}"
+                                                  SelectedItem="{Binding SelectedWeaponType, Mode=TwoWay}"
+                                                  PlaceholderText="Weapon subtype (optional — any weapon if unset)"
+                                                  HorizontalAlignment="Stretch">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate DataType="vm:GhCategoryOption">
+                                                    <TextBlock Text="{Binding Name}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <ComboBox IsVisible="{Binding ShowArmourType}"
+                                                  ItemsSource="{Binding ArmourTypeOptions}"
+                                                  SelectedItem="{Binding SelectedArmourType, Mode=TwoWay}"
+                                                  PlaceholderText="Armour subtype (optional — any armour if unset)"
+                                                  HorizontalAlignment="Stretch">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate DataType="vm:GhCategoryOption">
+                                                    <TextBlock Text="{Binding Name}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                    </StackPanel>
+
+                                    <ComboBox IsVisible="{Binding IsWornSlotKind}"
+                                              ItemsSource="{Binding WornSlotOptions}"
+                                              SelectedItem="{Binding SelectedWornSlot, Mode=TwoWay}"
+                                              HorizontalAlignment="Stretch">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate DataType="vm:GhCategoryOption">
+                                                <TextBlock Text="{Binding Name}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Button Content="+ Add rule" HorizontalAlignment="Left"
+                    Command="{Binding AddRuleCommand}"/>
+
+            <StackPanel Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Center" Margin="0,12,0,0">
+                <Button Content="Save" Width="100"
+                        Command="{Binding SaveCommand}"
+                        IsDefault="True"/>
+                <Button Content="Cancel" Width="100"
+                        Command="{Binding CancelCommand}"
+                        IsCancel="True"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

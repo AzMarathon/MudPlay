@@ -1047,6 +1047,9 @@ public partial class MainWindowViewModel : ObservableObject
         // StashRoomManager's `hide N <coin>` commands ride the same
         // gate-wrapped pipeline.
         AppServices.Current.Stash.SetWireSender(engineSend);
+        // Roomba Mode's `get`/`drop` sort-phase commands ride the same
+        // gate-wrapped pipeline.
+        AppServices.Current.GhSweep.SetWireSender(engineSend);
         // Auto-deposit reroute's bank `dep` command rides the same
         // gate-wrapped pipeline.
         AppServices.Current.AutoDeposit.SetWireSender(engineSend);

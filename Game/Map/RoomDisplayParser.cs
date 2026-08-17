@@ -33,6 +33,11 @@ public sealed partial class RoomDisplayParser : IDisposable
     private readonly LogService? _log;
     private readonly List<LineExtractor.EmittedLine> _buffer = new(BufferCapacity);
 
+    // Crowded rooms can emit far more than BufferCapacity wrapped item rows
+    // between their cyan title and the closing exits line. Preserve that
+    // colour-anchored title independently of the rolling text buffer.
+    private string? _brightCyanRoomName;
+
     // Fires for every fully-parsed room display, BEFORE the tracker decides what
     // to do with it — and crucially, regardless of the tracker's peek-suppression
     // window. A `look <dir>` peek is dropped at the tracker (so it doesn't desync
@@ -85,6 +90,7 @@ public sealed partial class RoomDisplayParser : IDisposable
             // "Darkwood Forest") desynced the tracker to Suspect and froze the
             // walker until a manual locate.
             _buffer.Clear();
+            _brightCyanRoomName = null;
             return;
         }
         HandleLine(line);
@@ -97,7 +103,7 @@ public sealed partial class RoomDisplayParser : IDisposable
         {
             HashSet<Direction> dirs = ParseExits(exits.Groups["list"].Value,
                 out HashSet<Direction> openDoors);
-            string? name = FindRoomNameInBuffer();
+            string? name = _brightCyanRoomName ?? FindRoomNameInBuffer();
             if (name is not null)
             {
                 var observation = new RoomObservation(name, dirs,
@@ -114,8 +120,17 @@ public sealed partial class RoomDisplayParser : IDisposable
                     "saw 'Obvious exits:' but couldn't recover a room name from the buffer.");
             }
             _buffer.Clear();
+            _brightCyanRoomName = null;
             return;
         }
+
+        // Keep the retained title scoped to the same output block as the
+        // rolling buffer. A boundary belongs to the old block; the first cyan
+        // line after it can then become the next room title.
+        if (IsBlockBoundary(line.Text))
+            _brightCyanRoomName = null;
+        else if (_brightCyanRoomName is null && IsLineDominantlyBrightCyan(line))
+            _brightCyanRoomName = line.Text.Trim();
 
         if (_buffer.Count >= BufferCapacity) _buffer.RemoveAt(0);
         _buffer.Add(line);
@@ -157,6 +172,12 @@ public sealed partial class RoomDisplayParser : IDisposable
 
         return null;
     }
+
+    private static bool IsBlockBoundary(string text) =>
+        string.IsNullOrWhiteSpace(text)
+        || MovementTransitionPattern().IsMatch(text)
+        || PromptLikePattern().IsMatch(text)
+        || PartyChatterBoundaryPattern().IsMatch(text);
 
     private static bool IsLineDominantlyBrightCyan(LineExtractor.EmittedLine line)
     {

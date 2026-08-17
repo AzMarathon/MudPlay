@@ -457,6 +457,18 @@ public static class BugReportBuilder
         Kv(sb, "Travel per-hop estimate",
             $"{svc.AutoLair.TravelCostModel.EstimateTravel(1).TotalSeconds:0.00} s");
         Kv(sb, "Auto-deposit reroute", svc.AutoDeposit.RerouteStatus);
+        // Roomba Mode (GhSweepManager) — a "sweep won't start / got stuck"
+        // report needs the phase, lap count, and how much of the sort queue
+        // is still outstanding.
+        Kv(sb, "Roomba sweep phase", svc.GhSweep.Phase.ToString());
+        Kv(sb, "Roomba recon laps",
+            $"{svc.GhSweep.CompletedReconLaps}/{svc.GhRoomLabels.ReconLaps}");
+        Kv(sb, "Roomba searches per room", svc.GhRoomLabels.SearchesPerRoom.ToString());
+        Kv(sb, "Roomba labeled destinations / circuit rooms",
+            $"{svc.GhRoomLabels.Labels.Count} / {svc.GhSweep.CircuitRoomCount}");
+        Kv(sb, "Roomba moved / left / pending / carried",
+            $"{svc.GhSweep.MovedSoFar.Count} / {svc.GhSweep.LeftInPlace.Count} / "
+            + $"{svc.GhSweep.PendingMoveCount} / {svc.GhSweep.CarriedPendingCount}");
 
         // Default-task startup state — a "my loop / Auto-Lair didn't start on
         // login" report needs to know whether the runner deferred the start

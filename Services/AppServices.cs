@@ -1486,6 +1486,10 @@ public sealed class AppServices
     // it into Bfs without further wiring.
     public MovementFilter Movement { get; private set; } = null!;
 
+    // Per-character gang-house room labels for Roomba Mode (right-click map
+    // labeling + the GH Management workshop tab read/write through this).
+    public Game.Map.GhRoomLabelStore GhRoomLabels { get; private set; } = null!;
+
     // Per-character favourite-room bookmarks. Wires Navigation's
     // GOTO pane + the map's "Add to favorites" context menu;
     // persisted via ProfileService.
@@ -1675,6 +1679,10 @@ public sealed class AppServices
     // coalesces their run-state and routes Pause / Resume / Stop to the
     // right engine. Backs the toolbar movement-flow buttons.
     public Game.Map.MovementController MovementControl { get; private set; } = null!;
+
+    // Roomba Mode: sorts labeled gang-house rooms by building a Loop from
+    // GhRoomLabels and driving it through LoopRunner — see GhSweepManager.
+    public Game.Map.GhSweepManager GhSweep { get; private set; } = null!;
 
 
     // Construct and register the singleton. Idempotent — repeated calls return
@@ -2610,6 +2618,7 @@ public sealed class AppServices
         // Constructor subscribes ProfileLoaded / ProfileClosed and
         // hydrates from the currently-loaded profile if there is one.
         Movement = new MovementFilter(Profile, Log);
+        GhRoomLabels = new Game.Map.GhRoomLabelStore(Profile, Log);
         // Feed the player's level into Form-A exit level-gate evaluation.
         // null until a stat screen parses — IsExitBlocked never gates on
         // an unknown level, so an unparsed character walks unrestricted.
@@ -4077,6 +4086,10 @@ public sealed class AppServices
         // defers past a fight and holds the walker via the Search gate until the
         // room clears (see AutoSearchManager). Wire-sender bound by
         // MainWindowViewModel after connect.
+        // GhSweep (Roomba Mode) does NOT feed this demand gate — recon drives its
+        // own `sea` sends directly (BeginRoomSearches), the same way Sorting
+        // drives get/drop directly, rather than piggybacking on AutoSearchManager's
+        // single-fire-per-arrival demand mechanism.
         AutoSearch = new Game.Map.AutoSearchManager(
             isEnabled: () => ReadAutoModeFlag(d => d.AutoSearch),
             isDemandActive: () =>
@@ -4092,6 +4105,22 @@ public sealed class AppServices
         RoomClassifier.EntitiesObserved += _ => AutoSearch.OnRoomObserved();
 
         // Drop the stale queue / ground snapshot when we actually change rooms.
+        //
+        // Registered here — before LoopRunner exists (constructed further below) —
+        // specifically so these reactors get first crack at the SAME RoomTransition
+        // LoopRunner's own OnTrackerStateChanged also subscribes to. Multicast
+        // delegates fire in registration order: anything that needs to assert a
+        // MovementCoordinator gate in reaction to a room arrival (AutoSearch's
+        // Search gate, GhSweep's GhSort gate) MUST be registered before LoopRunner's
+        // subscription, or LoopRunner's own confirm-and-advance-to-the-next-step
+        // path always wins the race and sends the next move before the reactor
+        // gets a turn — this is what let a Roomba sweep leave a room before
+        // picking anything up. GhSweep is assigned later in this constructor (it
+        // needs the LoopRunner instance), but the property is read lazily inside
+        // the lambda body rather than captured at registration time — safe, since
+        // this lambda only ever runs long after the constructor finishes and
+        // GhSweep is assigned, the same forward-reference pattern AutoSearch /
+        // AutoGetItems / GroundItems / Cash above already rely on.
         RoomTracker.StateChanged += t =>
         {
             if (t.NewRoom is null) return;
@@ -4101,6 +4130,7 @@ public sealed class AppServices
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();
             Cash.OnRoomChanged();
+            GhSweep.OnRoomChanged(t);
         };
 
         Walker = new Game.Map.AutoWalkManager(RoomGraph, Bfs, RoomTracker,
@@ -4582,6 +4612,18 @@ public sealed class AppServices
         // the Nav window because both act on the same engine primitives.
         MovementControl = new Game.Map.MovementController(
             Walker, LoopRunner, AutoLair, MovementCoordinator, Log);
+
+        // Roomba Mode — see GhSweepManager. Built on the same LoopRunner
+        // rather than its own navigation engine; refuses to start while
+        // MovementControl shows another engine (walk / loop / auto-lair)
+        // active.
+        GhSweep = new Game.Map.GhSweepManager(
+            GhRoomLabels, LoopRunner, RoomTracker, Bfs, GroundItems, ItemNames, Router, MovementCoordinator,
+            isOtherEngineBusy: () => MovementControl.IsActive,
+            encumbrance: () => Inventory.Snapshot.Encumbrance,
+            log: Log,
+            isParadigm: onParadigm,
+            inventory: Inventory);
 
         // A manually-typed movement step (one the walker / loop / auto-lair didn't
         // send — RoomTracker's echo-claim tells them apart) pauses the active nav

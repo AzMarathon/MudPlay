@@ -123,6 +123,20 @@ public sealed class InventoryManagerTests
     }
 
     [Fact]
+    public void FullInventoryParsed_FiresOnlyForAuthoritativeDump()
+    {
+        using Harness h = new();
+        int fullParseCount = 0;
+        h.Inv.FullInventoryParsed += () => fullParseCount++;
+
+        h.Feed("You took war hammer.");
+        Assert.Equal(0, fullParseCount);
+
+        FeedFullInventory(h);
+        Assert.Equal(1, fullParseCount);
+    }
+
+    [Fact]
     public void FullParse_ReadiedLight_ParsedAsLitLightNotCarried()
     {
         using Harness h = new();

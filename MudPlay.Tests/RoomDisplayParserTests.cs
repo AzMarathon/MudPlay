@@ -433,6 +433,26 @@ public sealed class RoomDisplayParserTests : IDisposable
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
     }
 
+    [Fact]
+    public void ColorAnchor_CrowdedRoom_TitleSurvivesRollingBufferEviction()
+    {
+        // Live GH rooms can list hundreds of wrapped floor items. The title is
+        // long gone from the 12-line rolling buffer when the exits line arrives.
+        (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
+        var lines = new List<LineExtractor.EmittedLine>
+        {
+            ColoredLine("Town Gates", BrightCyanSgr96),
+        };
+        for (int i = 0; i < 30; i++)
+            lines.Add(ColoredLine($"wrapped floor item row {i}", DefaultAttr));
+        lines.Add(ColoredLine("Obvious exits: north.", DefaultAttr));
+
+        parser.FeedTestEmittedLines(lines);
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
     // ----- open-door modifier capture (commit 8 fix) -----------------
 
     [Fact]
