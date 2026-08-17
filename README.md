@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.20.5**
+> **Version 3.20.6**
 > - Spell records now list **Negated by** — the items that cancel a spell while carried (the inverse of the item side's *Negates*), shown in the Game Data Browser Spells record and the Room Info room-spell dialog
+> - Spell records: the **Summons / Casts / Casted By / Negated by** (plus Learned From, Requires/Avoided carrying) record references are now clickable blue links that open the monster / spell / item record
 > - Remote commands: an @-word matching no command is now ignored silently — a stray "@because" in gang chat no longer draws an "invalid command" reply; the warn-on-invalid setting now governs only recognized-but-denied commands
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

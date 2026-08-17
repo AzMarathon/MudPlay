@@ -2,9 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.20.5
+## 3.20.6
 
 - Spell records now list **Negated by** — the items that cancel a spell while carried (the inverse of the item side's *Negates*), shown in the Game Data Browser Spells record and the Room Info room-spell dialog
+- Spell records: the **Summons / Casts / Casted By / Negated by** (plus Learned From, Requires/Avoided carrying) record references are now clickable blue links that open the monster / spell / item record
 - Remote commands: an @-word matching no command is now ignored silently — a stray "@because" in gang chat no longer draws an "invalid command" reply; the warn-on-invalid setting now governs only recognized-but-denied commands
 
 ## 3.20.3

@@ -9,9 +9,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// Pins the "Negated by" reverse-lookup row SpellInfoRowsBuilder adds to a spell's
-// Game Data tab: the items whose NegateSpell-0..9 columns list this spell's
-// Number. Uses the same synthetic-table shape as the other GameDataCache tests.
+// Pins the derived cross-reference rows SpellInfoRowsBuilder adds to a spell's
+// Game Data tab: the "Negated by" reverse lookup (items whose NegateSpell-0..9
+// list the spell) and the clickable record links (name text + a link per
+// resolved record). Uses the same synthetic-table shape as the other
+// GameDataCache tests.
 public sealed class SpellInfoRowsBuilderTests : IDisposable
 {
     private readonly string _root;
@@ -28,18 +30,22 @@ public sealed class SpellInfoRowsBuilderTests : IDisposable
         catch { /* best-effort cleanup */ }
     }
 
-    private GameDataCache NewCache(object[] spells, object[] items)
+    private GameDataCache NewCache(object[] spells, object[]? items = null, object[]? monsters = null)
     {
         string dir = Path.Combine(_root, "set");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "Spells.json"), JsonSerializer.Serialize(spells));
-        File.WriteAllText(Path.Combine(dir, "Items.json"), JsonSerializer.Serialize(items));
+        if (items is not null) File.WriteAllText(Path.Combine(dir, "Items.json"), JsonSerializer.Serialize(items));
+        if (monsters is not null) File.WriteAllText(Path.Combine(dir, "Monsters.json"), JsonSerializer.Serialize(monsters));
         GameDataCache cache = new(_root);
         cache.SwitchSet("set");
         return cache;
     }
 
     private static Dictionary<string, object> SpellRow(int number, string name)
+        => new() { ["Number"] = number, ["Name"] = name };
+
+    private static Dictionary<string, object> NamedRow(int number, string name)
         => new() { ["Number"] = number, ["Name"] = name };
 
     private static Dictionary<string, object> ItemRow(int number, string name, params int[] negates)
@@ -50,7 +56,7 @@ public sealed class SpellInfoRowsBuilderTests : IDisposable
     }
 
     [Fact]
-    public void Build_ListsItemsThatNegateTheSpell()
+    public void Build_ListsItemsThatNegateTheSpell_AsLinks()
     {
         GameDataCache cache = NewCache(
             spells: [SpellRow(50, "hold person"), SpellRow(51, "blindness")],
@@ -61,12 +67,20 @@ public sealed class SpellInfoRowsBuilderTests : IDisposable
                 ItemRow(102, "Plain Dagger"),              // negates nothing
             ]);
 
-        IReadOnlyList<GameDataInfoRow> rows = new SpellInfoRowsBuilder(cache).Build(50);
+        GameDataInfoRow negated = Assert.Single(
+            new SpellInfoRowsBuilder(cache).Build(50).Where(r => r.Label == "Negated by"));
 
-        GameDataInfoRow negated = Assert.Single(rows.Where(r => r.Label == "Negated by"));
+        // Value keeps the plain names (text fallback + what a reader scans).
         Assert.Contains("Ring of Free Action", negated.Value);
         Assert.Contains("Amulet of Clarity", negated.Value);
         Assert.DoesNotContain("Plain Dagger", negated.Value);
+
+        // …and each item is a clickable link.
+        Assert.True(negated.HasLinks);
+        Assert.Equal(
+            new[] { "Ring of Free Action", "Amulet of Clarity" },
+            negated.Links!.Select(l => l.Name));
+        Assert.All(negated.Links!, l => Assert.True(l.IsLinked));
     }
 
     [Fact]
@@ -76,8 +90,23 @@ public sealed class SpellInfoRowsBuilderTests : IDisposable
             spells: [SpellRow(50, "hold person")],
             items: [ItemRow(102, "Plain Dagger")]);
 
-        IReadOnlyList<GameDataInfoRow> rows = new SpellInfoRowsBuilder(cache).Build(50);
+        Assert.DoesNotContain(new SpellInfoRowsBuilder(cache).Build(50), r => r.Label == "Negated by");
+    }
 
-        Assert.DoesNotContain(rows, r => r.Label == "Negated by");
+    [Fact]
+    public void Build_CastedBySourceList_ResolvesMonsterLinks()
+    {
+        var spell = SpellRow(50, "vampire kill");
+        spell["Casted By"] = "Monster #200, Monster #201";
+        GameDataCache cache = NewCache(
+            spells: [spell],
+            monsters: [NamedRow(200, "vampire magus"), NamedRow(201, "vampire acolyte")]);
+
+        GameDataInfoRow row = Assert.Single(
+            new SpellInfoRowsBuilder(cache).Build(50).Where(r => r.Label == "Casted By"));
+
+        Assert.True(row.HasLinks);
+        Assert.Equal(new[] { "vampire magus", "vampire acolyte" }, row.Links!.Select(l => l.Name));
+        Assert.All(row.Links!, l => Assert.True(l.IsLinked));
     }
 }

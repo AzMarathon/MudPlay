@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Windows.Input;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Spells;
 using MudPlay.Services;
@@ -156,8 +158,10 @@ public sealed class SpellInfoRowsBuilder
                 // NegateAbility (124) — its value is the negated spell.
                 if (code == 124)
                 {
-                    string? sp = _cache.FindNameByNumber("Spells", val);
-                    rows.Add(new GameDataInfoRow("Negate", sp ?? val.ToString(CultureInfo.InvariantCulture)));
+                    if (_cache.FindNameByNumber("Spells", val) is { } sp)
+                        rows.Add(BuildLinkRow("Negate", "Spells", new[] { val }));
+                    else if (val > 0)
+                        rows.Add(new GameDataInfoRow("Negate", val.ToString(CultureInfo.InvariantCulture)));
                     continue;
                 }
 
@@ -177,13 +181,13 @@ public sealed class SpellInfoRowsBuilder
                     if (fx.HasEffect)
                     {
                         if (fx.Summons.Count > 0)
-                            rows.Add(new GameDataInfoRow("Summons", JoinNames("Monsters", fx.Summons)));
+                            rows.Add(BuildLinkRow("Summons", "Monsters", fx.Summons));
                         if (fx.Casts.Count > 0)
-                            rows.Add(new GameDataInfoRow("Casts", JoinNames("Spells", fx.Casts)));
+                            rows.Add(BuildLinkRow("Casts", "Spells", fx.Casts));
                         if (fx.Required.Count > 0)
-                            rows.Add(new GameDataInfoRow("Requires carrying", JoinNames("Items", fx.Required)));
+                            rows.Add(BuildLinkRow("Requires carrying", "Items", fx.Required));
                         if (fx.Avoided.Count > 0)
-                            rows.Add(new GameDataInfoRow("Avoided by carrying", JoinNames("Items", fx.Avoided)));
+                            rows.Add(BuildLinkRow("Avoided by carrying", "Items", fx.Avoided));
                     }
                     continue;
                 }
@@ -196,12 +200,118 @@ public sealed class SpellInfoRowsBuilder
                 continue;
             }
 
+            // "Casted By" / "Learned From" — a comma-joined list of "<Kind> #N"
+            // source tokens. Render each source as a clickable link to its record
+            // instead of plain text.
+            if (IsSourceListField(field))
+            {
+                if (BuildSourceListLinkRow(field, prop.Value) is { } srcRow) rows.Add(srcRow);
+                continue;
+            }
+
             if (RenderField(field, prop.Value) is { } rendered)
                 rows.Add(new GameDataInfoRow(field, rendered));
         }
 
         AppendNegatedByRow(rows, spellNumber);
         return rows;
+    }
+
+    private static bool IsSourceListField(string field) =>
+        string.Equals(field, "Casted By", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(field, "Learned From", StringComparison.OrdinalIgnoreCase);
+
+    // The blue MdbLink Open command for a record in table (Monsters / Items /
+    // Spells), routed through the same AppServices openers the item record's
+    // DroppedByRow / ItemLink use. Only the lambda touches AppServices.Current —
+    // deferred until a click — so building rows stays free of it.
+    private static ICommand OpenCommand(string table, int number) => table switch
+    {
+        "Monsters" => new RelayCommand(() => AppServices.Current.OpenMonsterGameData(number)),
+        "Items"    => new RelayCommand(() => AppServices.Current.OpenItemGameData(number)),
+        "Spells"   => new AsyncRelayCommand(() => AppServices.Current.OpenSpellRecordAsync(number)),
+        _          => new RelayCommand(() => { }),
+    };
+
+    // A row whose value is a list of record references (ids in table), each a
+    // clickable link. Value keeps the plain comma-joined names as the text
+    // fallback; Links carries the clickable segments with their inline "," gaps.
+    private GameDataInfoRow BuildLinkRow(string label, string table, IReadOnlyList<int> ids)
+    {
+        var names = new List<string>(ids.Count);
+        var links = new List<GameDataRecordLink>(ids.Count);
+        for (int i = 0; i < ids.Count; i++)
+        {
+            string name = _cache.FindNameByNumber(table, ids[i]) ?? $"{table.TrimEnd('s')} #{ids[i]}";
+            names.Add(name);
+            string trailing = i < ids.Count - 1 ? ", " : string.Empty;
+            links.Add(new GameDataRecordLink(name, trailing, OpenCommand(table, ids[i])));
+        }
+        return new GameDataInfoRow(label, string.Join(", ", names), links);
+    }
+
+    // Link-rendering variant of the source-list cell: resolve each "<Kind> #N"
+    // token to its record name, rendering Monsters / Items / Spells as clickable
+    // links and other kinds (Room / TextBlock / Class) or unresolvable tokens as
+    // inert text. Keeps the MDB's trailing "+" cap marker as a "+ more" tail.
+    // Returns null when the cell is empty.
+    private GameDataInfoRow? BuildSourceListLinkRow(string field, JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.String || CleanString(value.GetString()) is not { } raw)
+            return null;
+
+        string[] parts = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var names = new List<string>();
+        var links = new List<GameDataRecordLink>();
+        bool cappedInData = false;
+        foreach (string part in parts)
+        {
+            if (part.Contains('+')) { cappedInData = true; continue; }   // MDB list-cap marker
+            (string display, ICommand open, bool linked) = ResolveSource(part);
+            if (names.Contains(display, StringComparer.OrdinalIgnoreCase)) continue;
+            names.Add(display);
+            links.Add(new GameDataRecordLink(display, ", ", open, linked));
+        }
+        if (links.Count == 0) return cappedInData ? new GameDataInfoRow(field, "+ more") : null;
+
+        // Trim the last real link's separator, then append the cap marker as text.
+        GameDataRecordLink last = links[^1];
+        links[^1] = new GameDataRecordLink(last.Name, cappedInData ? ", " : string.Empty, last.Open, last.IsLinked);
+        if (cappedInData) links.Add(new GameDataRecordLink("+ more", string.Empty, NoOpCommand, isLinked: false));
+
+        string text = string.Join(", ", names) + (cappedInData ? ", + more" : string.Empty);
+        return new GameDataInfoRow(field, text, links);
+    }
+
+    private static readonly ICommand NoOpCommand = new RelayCommand(() => { });
+
+    // Resolve a "<Kind> #N" source token to its display name and open command:
+    // clickable for Monsters / Items / Spells, an inert no-op for other kinds
+    // (Room / TextBlock / Class) or a token that doesn't resolve (kept as text so
+    // nothing is dropped).
+    private (string Display, ICommand Open, bool Linked) ResolveSource(string token)
+    {
+        Match m = SourceToken.Match(token);
+        if (m.Success
+            && int.TryParse(m.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number))
+        {
+            string? table = m.Groups[1].Value.ToLowerInvariant() switch
+            {
+                "item"      => "Items",
+                "monster"   => "Monsters",
+                "spell"     => "Spells",
+                "room"      => "Rooms",
+                "textblock" => "TextBlocks",
+                "class"     => "Classes",
+                _           => null,
+            };
+            if (table is not null && _cache.FindNameByNumber(table, number) is { } name)
+            {
+                bool linked = table is "Monsters" or "Items" or "Spells";
+                return (name, linked ? OpenCommand(table, number) : NoOpCommand, linked);
+            }
+        }
+        return (token, NoOpCommand, false);
     }
 
     // Reverse cross-reference: the items that negate this spell. The Items table
@@ -219,7 +329,7 @@ public sealed class SpellInfoRowsBuilder
         JsonDocument? doc = _cache.GetRawTable("Items");
         if (doc is null) return;
 
-        var names = new List<string>();
+        var itemNumbers = new List<int>();
         foreach (JsonElement item in doc.RootElement.EnumerateArray())
         {
             bool negates = false;
@@ -227,15 +337,12 @@ public sealed class SpellInfoRowsBuilder
                 negates = ReadInt(item, $"NegateSpell-{i}") == spellNumber;
             if (!negates) continue;
 
-            string? name = item.TryGetProperty("Name", out JsonElement e) && e.ValueKind == JsonValueKind.String
-                ? CleanString(e.GetString())
-                : null;
-            if (name is { Length: > 0 } && !names.Contains(name, StringComparer.OrdinalIgnoreCase))
-                names.Add(name);
+            int number = ReadInt(item, "Number");
+            if (number > 0 && !itemNumbers.Contains(number)) itemNumbers.Add(number);
         }
 
-        if (names.Count > 0)
-            rows.Add(new GameDataInfoRow("Negated by", string.Join(", ", names)));
+        if (itemNumbers.Count > 0)
+            rows.Add(BuildLinkRow("Negated by", "Items", itemNumbers));
     }
 
     // "Mage-1" / "Priest" — the spell's casting school with its magery-level suffix folded in
@@ -318,14 +425,7 @@ public sealed class SpellInfoRowsBuilder
         }
 
         if (value.ValueKind == JsonValueKind.Number) return value.GetRawText();
-        if (value.ValueKind == JsonValueKind.String)
-        {
-            if (CleanString(value.GetString()) is not { } s) return null;
-            bool isSourceList =
-                string.Equals(field, "Casted By", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(field, "Learned From", StringComparison.OrdinalIgnoreCase);
-            return isSourceList ? ResolveSourceList(s) : s;
-        }
+        if (value.ValueKind == JsonValueKind.String) return CleanString(value.GetString());
         return null;
     }
 
@@ -345,49 +445,6 @@ public sealed class SpellInfoRowsBuilder
             _ => null,
         };
         return table is null ? null : _cache.FindNameByNumber(table, val);
-    }
-
-    // A "Learned From" / "Casted By" cell is a comma-joined list of "<Kind> #<number>" source
-    // tokens (e.g. "Item #328, Monster #198"). Resolve each to the real name, dedupe, list them
-    // all (the tab scrolls). A trailing "+" token is the MDB's own cap — surface as "+ more".
-    private string ResolveSourceList(string raw)
-    {
-        string[] parts = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var names = new List<string>();
-        bool cappedInData = false;
-        foreach (string part in parts)
-        {
-            // The MDB caps the list with a trailing "+" marker; depending on where the field
-            // length fell it can arrive clean (", +") or glued onto a half-written token
-            // (", Ro+"). No real source token contains '+', so any '+' marks the cap.
-            if (part.Contains('+')) { cappedInData = true; continue; }
-            string name = ResolveSourceToken(part);
-            if (!names.Contains(name, StringComparer.OrdinalIgnoreCase)) names.Add(name);
-        }
-        string joined = string.Join(", ", names);
-        return cappedInData ? $"{joined}, + more" : joined;
-    }
-
-    // Translate one "<Kind> #<number>" source token to the referenced row's name. Falls back to
-    // the raw token when the kind is unknown or the number has no matching row.
-    private string ResolveSourceToken(string token)
-    {
-        Match m = SourceToken.Match(token);
-        if (!m.Success
-            || !int.TryParse(m.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number))
-            return token;
-        string? table = m.Groups[1].Value.ToLowerInvariant() switch
-        {
-            "item"      => "Items",
-            "monster"   => "Monsters",
-            "spell"     => "Spells",
-            "room"      => "Rooms",
-            "textblock" => "TextBlocks",
-            "class"     => "Classes",
-            _           => null,
-        };
-        if (table is null) return token;
-        return _cache.FindNameByNumber(table, number) ?? token;
     }
 
     // Effects collected from walking a spell's TBInfo textblock chain.
@@ -460,15 +517,6 @@ public sealed class SpellInfoRowsBuilder
         // Item gates are only meaningful when the chain produced an active effect.
         if (!fx.HasEffect) { fx.Avoided.Clear(); fx.Required.Clear(); }
         return fx;
-    }
-
-    // Resolve ids in table to their Name (falling back to "<Table> #N"), comma-joined.
-    private string JoinNames(string table, IReadOnlyList<int> ids)
-    {
-        var names = new List<string>(ids.Count);
-        foreach (int id in ids)
-            names.Add(_cache.FindNameByNumber(table, id) ?? $"{table.TrimEnd('s')} #{id}");
-        return string.Join(", ", names);
     }
 
     // "<Kind> #<number>" with any trailing chance / qualifier ("(50%)") ignored.
