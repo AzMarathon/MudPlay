@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.19.6
+
+- Combat buffing: a self-buff (e.g. mageshield) no longer re-casts every round during combat — the server's "already cast this round" rejection belongs to the same-round auto-attack, not the buff, so it no longer tears down the buff's own recast timer
+- Combat buffing: a buff's recast timer is now cleared only by its OWN wear-off line — spells that merely share an "applied" message (the five "you feel protected" shields) can no longer clear each other's timers
+- Combat buffing: program logging for the buff manager — timer armed (duration + recast-in), confirmed active, worn off, and kept on a same-round attack rejection — so a log read explains what it's doing and why
+- bug reports addressed: paradigm-20260816-101702
+
 ## 3.19.4
 
 - Navigation: the Warped Asylum teleport-maze solver now stops the per-room position-checking once it lands in a solvable room — the initial landing still relocalizes to confirm the room, but from there the unhindered route to the goal is driven straight through with no `look`-sweep (stock) or `rm` (Paradigm) spam per step

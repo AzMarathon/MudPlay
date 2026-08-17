@@ -452,22 +452,42 @@ public sealed class CastingDirector : IDisposable
     // the true duration once the buff confirms.
     private void StartSelfBuffTimer(string spellShort, int marginSec)
     {
-        long seconds = _buffInfoByShort?.Invoke(spellShort) is { DurationSec: > 0 } info
-            ? info.DurationSec
-            : UnknownBuffRecastFallbackSec;
+        (string Caster, long DurationSec)? info = _buffInfoByShort?.Invoke(spellShort);
+        bool resolved = info is { DurationSec: > 0 };
+        long seconds = resolved ? info!.Value.DurationSec : UnknownBuffRecastFallbackSec;
         _activeUntil[("", spellShort)] = (_now().AddSeconds(seconds), marginSec);
         _pendingSelfBuffShort = spellShort;   // awaiting land / fail — cleared by either
+        _log?.Combat(LogCategory,
+            $"self-buff {spellShort} sent — optimistic timer {seconds}s"
+            + (resolved ? "" : " (fallback — no resolved duration)")
+            + $", recast in {Math.Max(0L, seconds - marginSec)}s; awaiting applied-line confirm");
     }
 
-    // A cast the server rejected after it reached the wire (fizzle, interrupt,
-    // no-mana, already-cast-this-round) means an optimistically-timed self-buff never
-    // landed. Drop its phantom recast timer so the next tick re-attempts and the buff
-    // isn't left "active" for its whole assumed duration. Local Blocked rejections are
-    // ignored: they fire before the send / inside the same-round cooldown, so clearing
-    // on them would defeat the optimistic double-cast guard the timer exists for.
+    // A cast the server rejected after the BUFF ITSELF reached the wire (fizzle,
+    // interrupt, no-mana) means the optimistically-timed self-buff never landed. Drop
+    // its phantom recast timer so the next tick re-attempts and the buff isn't left
+    // "active" for its whole assumed duration. Two rejections are NOT the buff's own
+    // failure and must not clear its timer — anchoring the timer to the buff's cast
+    // code, not to any failure that happens to arrive while one is pending:
+    //   - Blocked: a LOCAL rejection that fires before the send / inside the same-round
+    //     cooldown, so the buff never went out — clearing would defeat the optimistic
+    //     double-cast guard the timer exists for.
+    //   - AlreadyCastThisRound: an anonymous SERVER rejection (the line names no spell).
+    //     A pending self-buff means the buff's own TryCast already succeeded — it
+    //     reached the wire first, as a between-round cast — so this rejection belongs to
+    //     the auto-repeating ATTACK the combat engine resumes the same round, not the
+    //     buff. Clearing the landed buff's timer on it re-fired the buff every round it
+    //     lost to the attack: the mageshield recast storm (report paradigm-20260816-101702).
     private void OnCastFailed(CastFailureReason reason, string detail)
     {
-        if (reason == CastFailureReason.Blocked) return;
+        if (reason is CastFailureReason.Blocked or CastFailureReason.AlreadyCastThisRound)
+        {
+            if (reason == CastFailureReason.AlreadyCastThisRound && _pendingSelfBuffShort is { } pending)
+                _log?.Combat(LogCategory,
+                    $"self-buff {pending} timer kept — '{detail}' is a same-round attack rejection, "
+                    + "not the buff's own failure (the buff already reached the wire this round)");
+            return;
+        }
         if (_pendingSelfBuffShort is not { } shortCode) return;
         _activeUntil.Remove(("", shortCode));
         _pendingSelfBuffShort = null;
@@ -492,6 +512,9 @@ public sealed class CastingDirector : IDisposable
                     ? prev.MarginSec
                     : DefaultRecastMarginSec;
                 _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin);
+                _log?.Combat(LogCategory,
+                    $"self-buff {shortCode} confirmed active (applied line) — "
+                    + $"duration {info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - margin)}s");
             }
             // Landed — the real duration timer is now authoritative, so the pending
             // optimistic marker mustn't later be treated as an unlanded cast.
@@ -508,8 +531,10 @@ public sealed class CastingDirector : IDisposable
     {
         // Server-confirmed early wear-off — drop the self timer so the next
         // pass re-attempts immediately rather than waiting out a stale clock.
-        if (_shortFromAppliedRecord?.Invoke(r) is { } shortCode)
-            _activeUntil.Remove(("", shortCode));
+        if (_shortFromAppliedRecord?.Invoke(r) is { } shortCode
+            && _activeUntil.Remove(("", shortCode)))
+            _log?.Combat(LogCategory,
+                $"self-buff {shortCode} wore off (wear-off line) — recast timer cleared");
         Evaluate();
     }
 

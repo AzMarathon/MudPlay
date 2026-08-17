@@ -416,6 +416,34 @@ public sealed class CombatSpellChooserTests
     }
 
     [Fact]
+    public void Choose_ManaGatedNormal_DoesNotBurnCount_PrefersNormalWhenManaRecovers()
+    {
+        // A mana-gated normal attack (lbol, MinMana 70%, MaxCasts 1) must not burn its
+        // per-target cast count while the alternate covers the round — so the moment
+        // mana recovers above the gate, the normal is re-preferred (count still 0 of
+        // 1). This is why a fight that momentarily "opened on MMIS" (mana a hair under
+        // the floor) self-corrects to LBOL the next round once mana regenerates
+        // (reports paradigm-20260816-103418 / -103515).
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("lbol", maxCasts: 1, minMana: 70),
+            AlternateAttackSpell = Slot("mmis", maxCasts: 99, minMana: 0),
+        };
+
+        // Round 1 — mana 68 (< 70% floor): the normal is gated, the alternate fires.
+        CombatSpellDecision r1 = sut.Choose(settings, Ctx(mana: 68, maxMana: 100));
+        Assert.Equal(CombatSpellAction.AlternateAttackSpell, r1.Action);
+        Assert.Equal("mmis", r1.Spell);
+        sut.MarkCast(r1, "a rat");   // only the ALTERNATE's count advances
+
+        // Round 2 — mana recovered to 84: the normal (count still 0 of 1) is preferred.
+        CombatSpellDecision r2 = sut.Choose(settings, Ctx(mana: 84, maxMana: 100));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, r2.Action);
+        Assert.Equal("lbol", r2.Spell);
+    }
+
+    [Fact]
     public void Choose_NoSpellsConfigured_AlwaysWeapon()
     {
         CombatSpellChooser sut = new();

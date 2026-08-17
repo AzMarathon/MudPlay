@@ -2566,6 +2566,27 @@ glass jug               5               2 gold crowns
   ConfusionGate stuck. **Client encoding:** `ConditionTracker` clears every active `Confused` record when
   a `Confused`-carrying record's wear-off matches.
 
+## One cast per server round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
+
+- **You may cast only ONE spell per server round.** A second cast sent the same round is rejected with
+  **`You have already cast a spell this round!`** — an *anonymous* line that names no spell. During combat a
+  between-round self-buff (cast in a brief *Combat Off* window) and the auto-repeating attack spell contend
+  for the round: the buff is sent first and wins, so the attack draws that rejection. The client must NOT
+  treat that rejection as the *buff's* failure — doing so tore down the (landed) buff's recast timer and
+  re-fired it every round (the "4 mageshields in a short span" storm). Encoded: `CastingDirector.OnCastFailed`
+  ignores `AlreadyCastThisRound` (like a local `Blocked`) — a pending self-buff already reached the wire, so
+  the rejection is the attack's, not the buff's. Genuine buff-apply failures (fizzle / no-mana / interrupt)
+  still clear the optimistic timer and retry.
+- **A self-buff's active/recast state is keyed to its own 4-letter cast code**, resolved from game data: the
+  success line (`Spells` → *user definitions* → CasterMessage / AppliedMessage) starts the duration timer,
+  and the buff's OWN wear-off (`AppliedEndsWith`) clears it. **Distinct buffs that merely share an applied /
+  onset line must NOT cross-clear.** Unlike confusion (one shared state, many sources — a group clear is
+  correct there), the five shields that all emit **`You feel protected!`** (mageshield #132, ethereal shield
+  #4, holy/unholy armour #148/#149, heros tabard #859) are *separate* effects with their *own* distinct
+  wear-offs. So a wear-off fires `ConditionTracker.ConditionEnded` only for the record whose own end-text
+  matched — a sibling sharing the applied line is dropped from the active set (keeping flags honest) but
+  does not fire the event, so it can't clear a different buff we actually cast.
+
 ## Guarded monsters redirect attacks *([CONFIRMED] 2026-07-14, user + wire capture)*
 
 - Some monsters are **guarded** by others in the same room (e.g. a *brigand chief*

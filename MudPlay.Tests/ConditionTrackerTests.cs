@@ -160,6 +160,32 @@ public sealed class ConditionTrackerTests
     }
 
     [Fact]
+    public void SharedAppliedLine_WearOff_FiresEndedForPrimaryOnly()
+    {
+        // Two DISTINCT buffs that share an applied line ("You feel protected!") but
+        // carry their OWN wear-off lines (the mageshield / holy-armour family). When
+        // one wears off, ConditionEnded must fire for THAT record only, not the
+        // sibling — its sole consumer is the self-buff recast timers, which anchor on
+        // each buff's own cast code, so a shared line must not clear a different buff
+        // we cast. The sibling is still dropped from _active (it was co-latched on the
+        // shared applied line), so flags stay honest.
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("mageshield", MessageFlags.None,
+            applied: "You feel protected!", endsWith: "Your mageshield shimmers and fades."));
+        h.Messages.Messages.Add(MakeRecord("holy armour", MessageFlags.None,
+            applied: "You feel protected!", endsWith: "Your holy armour fades."));
+
+        h.Feed("You feel protected!");        // both latch on the shared applied line
+        Assert.Equal(2, h.Applied.Count);
+        h.Ended.Clear();
+
+        h.Feed("Your holy armour fades.");    // only holy armour's OWN wear-off fires
+
+        Assert.Single(h.Ended);
+        Assert.Equal("holy armour", h.Ended[0].Name);
+    }
+
+    [Fact]
     public void ConfusionWearOff_ClearsAllConfusedSources_IncludingCoLatchedFumble()
     {
         // A monster confuse with its own wear-off, plus the generic "you fumble in

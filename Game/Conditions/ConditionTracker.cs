@@ -206,24 +206,29 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         {
             if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
             if (!_active.Remove(r.Id)) continue;
-            endedThisLine.Add(r);
+            endedThisLine.Add(r);   // PRIMARY: its OWN wear-off line fired
 
-            // Group clear: records that share r's exact applied line are
-            // indistinguishable aliases latched together on that shared line
-            // (e.g. every confusion source emits "You are confused!"). A wear-off
-            // for any of them ends the whole group — otherwise a sibling that
-            // carries its own specific wear-off (a monster confusion vs. the
-            // generic spell) is stranded active when the shared generic wear-off
-            // fires, leaving the flag — and the nav pause it drives — stuck.
+            // Collateral clears below drop co-latched siblings from _active so the
+            // recomputed flags (and the nav pause they drive) stay honest — but they
+            // are NOT added to endedThisLine, so ConditionEnded does NOT fire for them.
+            // That event's only consumer is the self-buff recast timers, which anchor
+            // on each buff's OWN 4-letter cast code: a sibling that merely shares an
+            // applied line (the 5 spells that all emit "You feel protected!") wearing
+            // off must not tear down the timer of a DIFFERENT buff we actually cast.
+            // Flags/ailments key off _active, never this event (a confusion record maps
+            // to no cast code), so clearing _active without the event keeps confusion
+            // and every other flag behaving exactly as before.
+
+            // Group clear: records that share r's exact applied line were latched
+            // together on that shared line, so a wear-off for any of them ends the
+            // whole group — otherwise a sibling carrying its own specific wear-off is
+            // stranded active when the shared generic wear-off fires (the confusion
+            // flag / nav pause sticking).
             if (!string.IsNullOrEmpty(r.AppliedMessage)
                 && _appliedAliases.TryGetValue(r.AppliedMessage, out List<MessageRecord>? group))
             {
                 foreach (MessageRecord alias in group)
-                {
-                    if (alias.Id == r.Id) continue;
-                    if (_active.Remove(alias.Id))
-                        endedThisLine.Add(alias);
-                }
+                    if (alias.Id != r.Id) _active.Remove(alias.Id);
             }
 
             // Confusion is a single state: any confusion wear-off clears EVERY
@@ -237,11 +242,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             if (r.Flags.HasFlag(MessageFlags.Confused))
             {
                 foreach (MessageRecord other in _messages.Messages)
-                {
-                    if (!other.Flags.HasFlag(MessageFlags.Confused)) continue;
-                    if (_active.Remove(other.Id))
-                        endedThisLine.Add(other);
-                }
+                    if (other.Flags.HasFlag(MessageFlags.Confused)) _active.Remove(other.Id);
             }
         }
 

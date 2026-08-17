@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.19.4**
-> - Navigation: the Warped Asylum teleport-maze solver now stops the per-room position-checking once it lands in a solvable room — the initial landing still relocalizes to confirm the room, but from there the unhindered route to the goal is driven straight through with no `look`-sweep (stock) or `rm` (Paradigm) spam per step
+> **Version 3.19.6**
+> - Combat buffing: a self-buff (e.g. mageshield) no longer re-casts every round during combat — the server's "already cast this round" rejection belongs to the same-round auto-attack, not the buff, so it no longer tears down the buff's own recast timer
+> - Combat buffing: a buff's recast timer is now cleared only by its OWN wear-off line — spells that merely share an "applied" message (the five "you feel protected" shields) can no longer clear each other's timers
+> - Combat buffing: program logging for the buff manager — timer armed, confirmed active, worn off, and kept on a same-round attack rejection — so a log read explains what it's doing and why
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

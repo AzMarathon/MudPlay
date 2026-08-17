@@ -1250,6 +1250,41 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void SelfBuff_AlreadyCastThisRound_KeepsTimer_NoRecastStorm()
+    {
+        // Report paradigm-20260816-101702: a self-buff cast during combat reaches the
+        // wire first, then the auto-repeating ATTACK loses the same server round and
+        // draws "You have already cast a spell this round!". That anonymous rejection
+        // is NOT the buff's own failure — clearing the buff's optimistic timer on it
+        // re-fired the buff every round it lost to the attack (the "4 MSHIs in a short
+        // span" storm). Unlike a fizzle, this must NOT clear the timer.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "mshi";
+        h.BuffInfo["mshi"] = (string.Empty, 300);   // long duration → phantom recast if cleared
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.RecordCondition("mshi", MessageFlags.None,
+            applied: "You feel protected!", endsWith: "Your mageshield shimmers and fades.");
+
+        h.Director.Evaluate();                 // cast — optimistic 300s timer arms
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mshi", h.CastsSent[0]);
+
+        // The same-round attack is rejected by the server (not the buff).
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You have already cast a spell this round!", Array.Empty<CellAttributes>(),
+            DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        // Next round: the buff's timer is intact, so it does NOT re-fire.
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
     public void Buff_BlessIfAboveMa_AbsoluteMode_UsesRawMa()
     {
         // In Absolute mode BlessIfAboveMa is a raw kai count, not a percent —
