@@ -408,6 +408,9 @@ public sealed partial class CombatManager
         // engine's re-send only for the round it landed in.
         ClearUserAttackOverrideForNewRound();
 
+        // New round — reset the per-round exp-line tally the AoE-wipe path reads.
+        _expGainsThisRound = 0;
+
         // New round — re-arm the once-per-round attack-immunity handler so the next
         // round's "no effect" burst can drive the next cascade step.
         _immunityHandledThisRound = false;

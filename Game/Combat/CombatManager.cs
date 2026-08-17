@@ -455,6 +455,11 @@ public sealed partial class CombatManager : IDisposable
     private DateTimeOffset _lastExpGainAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ExpKillWindow = TimeSpan.FromSeconds(3);
 
+    // Exp lines seen this combat round. ≥2 means an AoE (ours or a hand-cast one) killed
+    // several mobs at once — the multi-kill signal the roster-wipe path keys on. Reset at
+    // the round boundary (OnCombatTick).
+    private int _expGainsThisRound;
+
     // The target a prompt exp-inferred kill just dropped, remembered so the kill's
     // *Combat Off* can still drop it from the live roster. The exp line lands BEFORE
     // *Combat Off* and nulls _currentTarget (so the round's alternate can't corpse-cast)
@@ -2171,6 +2176,30 @@ public sealed partial class CombatManager : IDisposable
         if (!_isEnabled()) return;
         if (_wireSender is null) return;
 
+        // AoE room-wipe: ≥2 exp lines this round means an AoE (ours or a hand-cast one)
+        // killed several mobs at once. Peeling them off the roster one-by-one re-fires the
+        // re-pick against the still-cached survivors — which are ALSO dying this round — so
+        // the engine re-engages one and corpse-casts a single-target spell at it (report
+        // paradigm-20260817-105650: a manual `fbal` wiped 5 goblins, then `mmis dark goblin
+        // archer` went out at a corpse → "You don't see dark goblin archer here!"). Instead,
+        // drop all combat state and force ONE CR re-parse so the next observation is the
+        // TRUE roster — we re-pick from what's actually left (usually nothing) rather than a
+        // survivor the kills haven't cleared yet.
+        if (_expGainsThisRound >= 2)
+        {
+            _lastDeathAt = DateTimeOffset.Now;
+            _attackSentSinceDeath = false;
+            _currentTarget = null;
+            _castingSpellTarget = null;
+            _inferredKillPendingRemoval = null;
+            ClearBackstabResolution();
+            if (TrySendRoomRefresh("AoE multi-kill"))
+                _log?.Combat(LogCategory,
+                    $"AoE multi-kill ({_expGainsThisRound} exp this round) — re-parsing room with "
+                    + "CR to re-pick from the true roster instead of corpse-casting a survivor");
+            return;
+        }
+
         // Normally the corpse's identity is the still-set _currentTarget. But a prompt
         // exp-inferred kill (OnUserGainExperience) fires BEFORE this Off and already
         // nulled _currentTarget — fall back to the target it stashed so the roster
@@ -2397,6 +2426,7 @@ public sealed partial class CombatManager : IDisposable
     private void OnUserGainExperience(MatchResult _)
     {
         _lastExpGainAt = DateTimeOffset.Now;
+        _expGainsThisRound++;
         if (_currentTarget is not null
             && _attackSentSinceDeath
             && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)

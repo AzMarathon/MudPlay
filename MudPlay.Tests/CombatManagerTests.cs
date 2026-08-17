@@ -202,6 +202,39 @@ public sealed class CombatManagerTests
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
     }
 
+    [Fact]
+    public void AoeMultiKill_ReParsesWithCr_NoCorpseCast()
+    {
+        // report paradigm-20260817-105650: a manual AoE (fbal) wiped a whole room, then the
+        // engine re-picked a survivor off the STALE roster and corpse-cast `mmis` at it
+        // ("You don't see dark goblin archer here!"). On a multi-exp-line round the death
+        // path must force ONE CR re-parse and re-pick from the true roster — not peel mobs
+        // off one-by-one, which re-fires the re-pick against still-dying survivors.
+        using Harness h = new();
+        h.AddMonster(1, "dark goblin", killable: true);
+        h.AddMonster(2, "dark goblin archer", killable: true);
+        h.AddMonster(3, "angry dark goblin", killable: true);
+
+        h.Feed("Also here: dark goblin, dark goblin archer, angry dark goblin.");
+        int sentAfterEngage = h.Sent.Count;
+        Assert.True(sentAfterEngage >= 1);   // engaged + swung
+
+        // AoE wipe: several exp lines this round, then *Combat Off*.
+        h.Feed("You gain 150 experience.");
+        h.Feed("You gain 80 experience.");
+        h.Feed("You gain 150 experience.");
+        h.Feed("*Combat Off*");
+
+        // The death event (AppServices wires MonsterDied → NoteUnattributedDeath).
+        h.Combat.NoteUnattributedDeath();
+
+        var after = h.Sent.Skip(sentAfterEngage)
+            .Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'))
+            .ToList();
+        Assert.Contains("", after);                    // a CR re-parse went out
+        Assert.All(after, s => Assert.Equal("", s));   // and ONLY CRs — no attack sent at a corpse
+    }
+
     // ----- confusion-fumble retry (OnActionFailed) ----------------------
 
     [Fact]

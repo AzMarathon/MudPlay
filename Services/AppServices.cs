@@ -2040,8 +2040,25 @@ public sealed class AppServices
         // no-profile case alike. The obtained set is restored separately in
         // the ProfileLoaded handler below (after this seeds the class list),
         // so the learned checkmarks survive across sessions.
-        void SeedSpellbook(Models.Profile.LastKnownStats? snap) =>
-            Spellbook.Refresh(snap is null ? 0 : SpellCatalog.ResolveClassNumber(snap.Class) ?? 0, snap?.Level ?? 0);
+        void SeedSpellbook(Models.Profile.LastKnownStats? snap, bool reseed = false)
+        {
+            int classNumber = snap is null ? 0 : SpellCatalog.ResolveClassNumber(snap.Class) ?? 0;
+            int level = snap?.Level ?? 0;
+            // reseed = the active game-data set changed under us: force a rebuild
+            // even when the class number is unchanged, since the Spells table
+            // itself was replaced. Refresh alone skips the rebuild on an
+            // unchanged class number and would leave Available stale.
+            if (reseed) Spellbook.Reseed(classNumber, level);
+            else Spellbook.Refresh(classNumber, level);
+        }
+
+        // A game-data set swap replaces the Spells / Classes tables under the
+        // live character. Re-resolve the class number from the persisted class
+        // NAME (a set may renumber classes) and reseed the Spell Book so
+        // Available and the learned checkmarks re-resolve against the new set
+        // instead of blanking. The obtained set is name-backed, so it survives
+        // the renumber — no need to re-apply the profile's persisted names here.
+        GameData.ActiveSetChanged += _ => SeedSpellbook(Profile.Current?.LastKnownStats, reseed: true);
 
         // Persist the learned-spell set with the rest of the profile. Snapshot
         // only when the book has a resolved class — with no class the obtained
