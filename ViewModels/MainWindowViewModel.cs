@@ -2607,13 +2607,12 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.PartyPoller.NotifyDisconnected();
                 AppServices.Current.PartyProbe.NotifyDisconnected();
 
-                // Drop per-session condition + buff-duration state so a
-                // fresh login starts clean: any non-auto-clearing
-                // condition (no AppliedEndsWith) and any live buff timer
-                // must not survive the disconnect and suppress a recast
-                // on the next session.
+                // Drop per-session condition state so a fresh login starts clean: any
+                // non-auto-clearing condition (no AppliedEndsWith) must not survive the
+                // disconnect. Buff-duration timers are handled below, AFTER the cause is
+                // known — an unexpected drop freezes them (resume on reconnect) rather
+                // than clearing, so a brief drop doesn't lose the recast clock.
                 AppServices.Current.Conditions.ClearAll("disconnect");
-                AppServices.Current.CastDirector.ResetBuffTracking();
                 AppServices.Current.ManaRegen.Reset();
 
                 // Categorise: if the user clicked Disconnect, the flag was
@@ -2649,6 +2648,16 @@ public partial class MainWindowViewModel : ObservableObject
                     if (_lastDisconnectCause is DisconnectCause.CarrierLost or DisconnectCause.NoResponse)
                         AppServices.Current.HangupSignal.AllowNextEntry();
                 }
+
+                // Buff timers: an unexpected host-side drop (carrier lost / no-response)
+                // keeps the buffs alive server-side through link-death, and an auto-reconnect
+                // is coming — FREEZE them so the first in-game prompt after reconnect resumes
+                // them with the same remaining. Every deliberate exit (user / hangup / relog,
+                // or never-connected) starts the next session clean, so clear (assume no buffs).
+                if (_lastDisconnectCause is DisconnectCause.CarrierLost or DisconnectCause.NoResponse)
+                    AppServices.Current.CastDirector.PauseBuffTimers();
+                else
+                    AppServices.Current.CastDirector.ResetBuffTracking();
 
                 // A remote @relog forces the dial-back unconditionally —
                 // the sender explicitly asked to relog, so we bypass the

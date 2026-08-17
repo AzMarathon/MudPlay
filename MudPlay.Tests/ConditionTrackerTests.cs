@@ -92,6 +92,30 @@ public sealed class ConditionTrackerTests
         Assert.Single(h.Applied);
     }
 
+    [Theory]
+    [InlineData("You feel lucky! (411s)")]     // seconds readout (from report 232454)
+    [InlineData("You feel lucky! (6m 51s)")]    // longer buff, minutes+seconds form
+    public void StatReadout_WithRemainingTime_DoesNotApply(string readout)
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("Bless",
+            MessageFlags.None,
+            applied: "You feel lucky!",
+            endsWith: "You no longer feel lucky!"));
+
+        // A `stat` status readout of an already-up buff (trailing "(Ns)") is NOT a fresh
+        // cast — its shared effect text can't identify which buff is up, and matching it
+        // falsely latched buffs on login and suppressed the real cast's confirm.
+        h.Feed(readout);
+        Assert.Empty(h.Applied);
+        Assert.False(h.Tracker.IsActive(h.Messages.Messages[0]));
+
+        // The bare effect line — a genuine fresh cast, no parenthetical — still applies.
+        h.Feed("You feel lucky!");
+        Assert.Single(h.Applied);
+        Assert.True(h.Tracker.IsActive(h.Messages.Messages[0]));
+    }
+
     // ----- LastActionFailed (confusion fumble) ------------------------
 
     [Fact]

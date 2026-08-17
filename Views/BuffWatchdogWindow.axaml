@@ -48,11 +48,12 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
         </Style>
 
-        <!-- 4-letter buff code / #item label. -->
-        <Style Selector="TextBlock.BuffCode">
+        <!-- 4-letter buff code / #item label, rendered left-aligned INSIDE the bar. -->
+        <Style Selector="TextBlock.BarName">
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
         </Style>
 
@@ -96,33 +97,34 @@
                             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                     BorderThickness="0,0,0,1"
                                     Padding="6,4">
-                                <Grid ColumnDefinitions="72,10,Auto" VerticalAlignment="Center">
-                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                        <TextBlock Classes="BuffCode" Text="{Binding Name}"/>
-                                        <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
-                                            <TextBlock Text="unlearned"/>
-                                        </Border>
-                                    </StackPanel>
-
-                                    <!-- Fixed-width bar area (220px) so the recast marker
-                                         margin (fraction × 220, from the row VM) lands
-                                         exactly; the frame Border draws the outline. -->
-                                    <Border Grid.Column="2" Classes="BuffBarFrame">
-                                        <Grid Width="220" Height="16">
-                                            <ProgressBar Classes="BuffBar"
-                                                         Classes.recast="{Binding InRecastWindow}"
-                                                         Value="{Binding FillPercent}"
-                                                         Maximum="100"/>
-                                            <Rectangle Width="2"
-                                                       Fill="{StaticResource AccentYellowBrush}"
-                                                       HorizontalAlignment="Left"
-                                                       VerticalAlignment="Stretch"
-                                                       Margin="{Binding RecastMarkerMargin}"
-                                                       IsVisible="{Binding ShowRecastMarker}"/>
-                                            <TextBlock Classes="BarTime" Text="{Binding TimeText}"/>
-                                        </Grid>
-                                    </Border>
-                                </Grid>
+                                <!-- Fixed-width bar area (220px) so the recast marker
+                                     margin (fraction × 220, from the row VM) lands exactly;
+                                     the frame Border draws the outline. Name sits left-
+                                     aligned inside the bar, remaining time offset after it. -->
+                                <Border Classes="BuffBarFrame">
+                                    <Grid Width="220" Height="16">
+                                        <ProgressBar Classes="BuffBar"
+                                                     Classes.recast="{Binding InRecastWindow}"
+                                                     Value="{Binding FillPercent}"
+                                                     Maximum="100"/>
+                                        <Rectangle Width="2"
+                                                   Fill="{StaticResource AccentYellowBrush}"
+                                                   HorizontalAlignment="Left"
+                                                   VerticalAlignment="Stretch"
+                                                   Margin="{Binding RecastMarkerMargin}"
+                                                   IsVisible="{Binding ShowRecastMarker}"/>
+                                        <StackPanel Orientation="Horizontal"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center"
+                                                    Margin="5,0,0,0">
+                                            <TextBlock Classes="BarName" Text="{Binding Name}"/>
+                                            <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
+                                                <TextBlock Text="unlearned"/>
+                                            </Border>
+                                            <TextBlock Classes="BarTime" Text="{Binding TimeText}" Margin="10,0,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -140,21 +142,8 @@
                             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                     BorderThickness="0,0,0,1"
                                     Padding="6,4">
-                                <Grid ColumnDefinitions="72,10,Auto" VerticalAlignment="Center">
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Classes="BuffCode" Text="{Binding Name}"/>
-                                            <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
-                                                <TextBlock Text="unlearned"/>
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Text="{Binding TargetText}"
-                                                   FontSize="9"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                    </StackPanel>
-
-                                    <Border Grid.Column="2" Classes="BuffBarFrame">
+                                <StackPanel VerticalAlignment="Center">
+                                    <Border Classes="BuffBarFrame">
                                         <Grid Width="220" Height="16">
                                             <ProgressBar Classes="BuffBar"
                                                          Classes.recast="{Binding InRecastWindow}"
@@ -166,10 +155,25 @@
                                                        VerticalAlignment="Stretch"
                                                        Margin="{Binding RecastMarkerMargin}"
                                                        IsVisible="{Binding ShowRecastMarker}"/>
-                                            <TextBlock Classes="BarTime" Text="{Binding TimeText}"/>
+                                            <StackPanel Orientation="Horizontal"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Center"
+                                                        Margin="5,0,0,0">
+                                                <TextBlock Classes="BarName" Text="{Binding Name}"/>
+                                                <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
+                                                    <TextBlock Text="unlearned"/>
+                                                </Border>
+                                                <TextBlock Classes="BarTime" Text="{Binding TimeText}" Margin="10,0,0,0"/>
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
-                                </Grid>
+                                    <!-- Party target (member / class) as a caption under the bar. -->
+                                    <TextBlock Text="{Binding TargetText}"
+                                               FontSize="9"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="2,1,0,0"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                </StackPanel>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

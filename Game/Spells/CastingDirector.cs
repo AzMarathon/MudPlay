@@ -132,6 +132,12 @@ public sealed class CastingDirector : IDisposable
     // multi-mob fight). Never consulted out of combat, where no per-round cap applies.
     private bool _betweenRoundSlotUsed;
 
+    // Set when the live buff timers are frozen on an unexpected drop (carrier lost /
+    // keep-alive timeout). While set, a reconnect shifts every Until forward by the
+    // offline gap so each buff keeps the remaining it had at the drop instead of the
+    // clock counting down (server-side link-death holds the buffs). null = running.
+    private DateTime? _pausedAt;
+
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
     private Func<MessageRecord, string?>? _shortFromAppliedRecord;
     private Func<int, string?>? _classNameByNumber;
@@ -432,6 +438,47 @@ public sealed class CastingDirector : IDisposable
         _pendingSelfBuffShort = null;
         _lastSelfHealCast = null;
         _betweenRoundSlotUsed = false;
+        _pausedAt = null;
+    }
+
+    // Freeze the live buff timers on an unexpected drop — record when so a reconnect can
+    // resume them with the same remaining. Used INSTEAD of ResetBuffTracking when the
+    // disconnect is a carrier loss / timeout (an auto-reconnect is coming and the buffs
+    // persist server-side through link-death); a deliberate disconnect still clears.
+    public void PauseBuffTimers()
+    {
+        _pausedAt = _activeUntil.Count > 0 ? _now() : null;
+        if (_pausedAt is not null)
+            _log?.Info(LogCategory, $"buff timers paused (drop) — {_activeUntil.Count} armed, frozen until reconnect");
+    }
+
+    // Resume after a reconnect: shift every armed Until forward by the offline gap so
+    // each buff keeps the remaining it had at the drop. If we were gone longer than the
+    // longest buff could possibly last, the buffs are certainly off server-side now —
+    // clear instead of resurrecting stale timers.
+    public void ResumeBuffTimers()
+    {
+        if (_pausedAt is not { } pausedAt) return;
+        _pausedAt = null;
+        System.TimeSpan gap = _now() - pausedAt;
+        if (gap <= System.TimeSpan.Zero || _activeUntil.Count == 0) return;
+
+        long maxTotal = 0;
+        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
+            maxTotal = System.Math.Max(maxTotal, kv.Value.TotalSec);
+        if (gap.TotalSeconds > maxTotal)
+        {
+            _log?.Info(LogCategory, $"buff timers cleared on resume — offline {(int)gap.TotalSeconds}s exceeds longest buff {maxTotal}s");
+            _activeUntil.Clear();
+            return;
+        }
+
+        foreach ((string Target, string Short) key in new List<(string, string)>(_activeUntil.Keys))
+        {
+            (DateTime Until, int MarginSec, int TotalSec) v = _activeUntil[key];
+            _activeUntil[key] = (v.Until + gap, v.MarginSec, v.TotalSec);
+        }
+        _log?.Info(LogCategory, $"buff timers resumed — shifted {_activeUntil.Count} by offline {(int)gap.TotalSeconds}s");
     }
 
     // A combat round tick elapsed (wired to TickEngine.CombatTickElapsed) — free the
@@ -490,6 +537,32 @@ public sealed class CastingDirector : IDisposable
             $"self-buff {spellShort} sent — optimistic timer {seconds}s"
             + (resolved ? "" : " (fallback — no resolved duration)")
             + $", recast in {Math.Max(0L, seconds - marginSec)}s; awaiting applied-line confirm");
+    }
+
+    // A manually-typed self-buff cast (the user entered its 4-letter cast code) — arm /
+    // refresh its recast timer exactly as an engine cast does, anchored on the cast code.
+    // The typed code is the reliable identity; we never infer WHICH buff landed from the
+    // shared applied message (one Paradigm line names 11 records — bless / chant / …), so
+    // a hand-cast is caught here rather than left for the ambiguous applied-line path.
+    // A non-buff code (a combat / instant spell with no resolved duration) is inert.
+    public void NoteManualBuffCast(string castCode)
+    {
+        if (string.IsNullOrWhiteSpace(castCode)) return;
+        string code = castCode.Trim();
+        if (_buffInfoByShort?.Invoke(code) is not { DurationSec: > 0 }) return;
+        StartSelfBuffTimer(code, SelfBuffMargin(code));
+    }
+
+    // The configured recast lead for a self-buff cast code: its bless-slot override when
+    // the code occupies a slot, else the shared default (covers the regen / when-full
+    // buffs and any hand-cast buff that isn't in a slot).
+    private int SelfBuffMargin(string castCode)
+    {
+        SpellsSettings spells = _readSpells();
+        foreach (KeyValuePair<int, string> slot in spells.BlessSlots)
+            if (string.Equals(slot.Value?.Trim(), castCode, StringComparison.OrdinalIgnoreCase))
+                return BlessSlotMargin(spells, slot.Key);
+        return DefaultRecastMarginSec;
     }
 
     // A server rejection of a between-round cast we just sent. "You have already cast

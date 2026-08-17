@@ -3342,7 +3342,10 @@ public sealed class AppServices
         // class's available list.
         OutboundCast = new Game.Combat.OutboundCastObserver(
             isCastCode: c => Spellbook.FindByCastCode(c) is not null,
-            onManualCast: Combat.OnManualCastObserved);
+            // A hand-typed cast feeds BOTH the combat resume signal and the buff-recast
+            // clock: NoteManualBuffCast arms the timer (by cast code) for a hand-cast buff
+            // so the Buff Watchdog + recast engine track it the same as an engine cast.
+            onManualCast: c => { Combat.OnManualCastObserved(c); CastDirector.NoteManualBuffCast(c); });
         // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
         // taking the round's attack — a user override — while an in-between spell (heal
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
@@ -3616,6 +3619,11 @@ public sealed class AppServices
         // suspended on the drop so nothing leaks into the login-menu nav.
         PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
         PromptScanner.PromptObserved += _ => PartyProbe.NotifyEnteredRealm();
+        // Same in-game gate resumes frozen buff timers after an unexpected drop: the
+        // disconnect handler paused them (kept the remaining), and this shifts each
+        // forward by the offline gap so the recast clock picks up where it left off.
+        // Idempotent — no-op unless a drop paused the timers.
+        PromptScanner.PromptObserved += _ => CastDirector.ResumeBuffTimers();
         // A fresh character starts disarmed: zero the counters, then Suspend so
         // accrual waits for that character's first in-game prompt. (Disconnect
         // disarms via MainWindowVM; @reset / the window button keep counting.)

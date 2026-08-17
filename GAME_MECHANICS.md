@@ -2600,6 +2600,25 @@ glass jug               5               2 gold crowns
   wear-offs. So a wear-off fires `ConditionTracker.ConditionEnded` only for the record whose own end-text
   matched — a sibling sharing the applied line is dropped from the active set (keeping flags honest) but
   does not fire the event, so it can't clear a different buff we actually cast.
+- **[CONFIRMED, user 2026-08-16 + report `paradigm-20260816-232454`] The `stat` screen's buff readout is
+  NEVER a fresh cast — ignore it for buff tracking.** On Paradigm, `stat` lists each active effect as
+  **`You feel <effect>! (<remaining>s)`** (e.g. `You feel lucky! (411s)`, `You feel safe from evil! (12s)`).
+  The effect text is *shared* across many records — one `You feel lucky!` line matched **11** catalogue
+  records (bless + chant + several weapons/items) — so a readout can neither identify **which** buff is up
+  nor legitimately "apply" one. Treating it as a cast falsely marked buffs active on **login** (the post-entry
+  `stat` refresh), and because the tracker only fires on a not-active→active transition, that stale "active"
+  state then **suppressed the confirm on the real manual cast** (a repeat applied line is no transition). The
+  client keys off the trailing **`(<remaining>s)`** parenthetical to skip these readouts entirely
+  (`ConditionTracker`); a genuine fresh-cast effect line has no parenthetical.
+- **A hand-typed buff is confirmed by the CAST CODE, not the shared success text.** You type the 4-letter
+  code (`bles`) → the client arms/refreshes that buff's timer anchored on the code (`CastingDirector.NoteManualBuffCast`,
+  fed by the `OutboundCastObserver`), exactly as an engine cast does. The following success line just
+  confirms it landed; identity comes from the code, never the ambiguous applied message.
+- **[user 2026-08-16] Session vs drop for buff timers.** A fresh login / deliberate disconnect starts with
+  **no buffs assumed** (timers cleared — the engine re-establishes them). An **unexpected drop** (carrier lost /
+  no-response) instead **freezes** the timers; the buffs persist server-side through link-death, so the first
+  in-game prompt after reconnect **resumes** them shifted forward by the offline gap (same remaining). If the
+  gap exceeds the longest armed buff's full duration, they're surely gone and are cleared instead.
 
 ## Guarded monsters redirect attacks *([CONFIRMED] 2026-07-14, user + wire capture)*
 

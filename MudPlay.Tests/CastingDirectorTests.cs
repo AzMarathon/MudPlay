@@ -1350,6 +1350,70 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void NoteManualBuffCast_ArmsTimerByCastCode_WithSlotMargin()
+    {
+        // A hand-typed buff cast code arms its recast timer anchored on the code — so the
+        // Buff Watchdog + recast engine track a manual cast the same as an engine one.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.Spells.BlessSlotRecastMargins[1] = 20;   // the slot's configured recast lead
+        h.BuffInfo["bles"] = (string.Empty, 300);
+
+        h.Director.NoteManualBuffCast("bles");
+
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("bles", e.Short);
+        Assert.Equal(300, e.TotalSec);
+        Assert.Equal(20, e.MarginSec);
+        Assert.Equal(h.Now.AddSeconds(300), e.Until);
+    }
+
+    [Fact]
+    public void NoteManualBuffCast_NonBuffCode_DoesNotArm()
+    {
+        // A combat / instant cast code (no resolved duration) must not get a recast timer.
+        using CureHarness h = new();
+        h.Director.NoteManualBuffCast("lbol");     // not in BuffInfo → no duration
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    [Fact]
+    public void PauseResume_ShiftsTimerByOfflineGap_PreservingRemaining()
+    {
+        // An unexpected drop freezes the timers; reconnect shifts each Until forward by
+        // the offline gap so the remaining at the drop is preserved (not counted down).
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Director.NoteManualBuffCast("bles");     // Until = Now + 300
+        DateTime armedUntil = Assert.Single(h.Director.SnapshotActiveBuffs()).Until;
+
+        h.Director.PauseBuffTimers();              // drop
+        h.Now = h.Now.AddSeconds(45);              // 45s offline
+        h.Director.ResumeBuffTimers();             // reconnect
+
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal(armedUntil.AddSeconds(45), e.Until);   // shifted forward by the gap
+    }
+
+    [Fact]
+    public void Resume_OfflineLongerThanLongestBuff_ClearsStaleTimers()
+    {
+        // Gone longer than any buff could possibly last ⇒ the buffs are surely off
+        // server-side now, so resume clears rather than resurrecting stale timers.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Director.NoteManualBuffCast("bles");
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(301);             // > 300s total
+        h.Director.ResumeBuffTimers();
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    [Fact]
     public void Buff_BlessIfAboveMa_AbsoluteMode_UsesRawMa()
     {
         // In Absolute mode BlessIfAboveMa is a raw kai count, not a percent —
