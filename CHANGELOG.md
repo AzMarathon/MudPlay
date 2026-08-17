@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.19.4
+
+- Navigation: the Warped Asylum teleport-maze solver now stops the per-room position-checking once it lands in a solvable room — the initial landing still relocalizes to confirm the room, but from there the unhindered route to the goal is driven straight through with no `look`-sweep (stock) or `rm` (Paradigm) spam per step
+
 ## 3.19.3
 
 - Combat: **room-aware monster identification** — an observed monster name is now resolved against the monsters the current room actually places or summons here (its NPC + lair members + Summoned-By spawns + the monsters those summon) before any global name match, so a homonym pins to the variant in THIS room and per-monster overrides (spell overrides, relationship, Kill-on-sight) land on the right record
