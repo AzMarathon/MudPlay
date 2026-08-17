@@ -103,7 +103,10 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     private void UpdateTimers()
     {
         IReadOnlyList<ActiveBuffTimer> snap = _castDirector.SnapshotActiveBuffs();
-        DateTime now = DateTime.UtcNow;
+        // While a disconnect has the timers paused, freeze the display at the drop instant
+        // (the 1s heartbeat is a wall clock that keeps firing offline) — the resume shift
+        // then keeps the on-screen remaining continuous across the gap.
+        DateTime now = _castDirector.PausedAtUtc ?? DateTime.UtcNow;
 
         foreach (BuffWatchdogRowViewModel row in SelfBuffs)
         {

@@ -3251,6 +3251,11 @@ public sealed class AppServices
         // ShortFromAppliedRecord maps a fired AppliedMessage record back
         // to the cast code so a confirmed self-buff starts its timer.
         CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord);
+        // A fresh character starts with no buffs assumed — clear any timers carried over
+        // (e.g. paused from a prior character's disconnect) so a character switch doesn't
+        // resurrect the old character's buffs. A same-character reconnect does NOT reload
+        // the profile, so its paused timers survive to be resumed.
+        Profile.ProfileLoaded += _ => CastDirector.ResetBuffTracking();
         // Party-bless slots store class numbers; PartyMember.Class is a
         // class name — resolve via the active set's Classes table.
         CastDirector.SetClassResolver(SpellCatalog.ResolveClassName);

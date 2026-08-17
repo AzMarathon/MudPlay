@@ -1414,6 +1414,34 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PausedAtUtc_ReflectsFreezeState()
+    {
+        // The Buff Watchdog reads PausedAtUtc to freeze its display at the drop instant
+        // (its heartbeat is a wall clock that keeps ticking while disconnected).
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Director.NoteManualBuffCast("bles");
+        Assert.Null(h.Director.PausedAtUtc);          // running
+
+        h.Director.PauseBuffTimers();
+        Assert.Equal(h.Now, h.Director.PausedAtUtc);  // frozen at the drop instant
+
+        h.Now = h.Now.AddSeconds(20);
+        h.Director.ResumeBuffTimers();
+        Assert.Null(h.Director.PausedAtUtc);           // running again
+    }
+
+    [Fact]
+    public void PauseBuffTimers_NoTimers_StaysUnfrozen()
+    {
+        // Nothing armed ⇒ nothing to freeze, so the watchdog display keeps live time.
+        using CureHarness h = new();
+        h.Director.PauseBuffTimers();
+        Assert.Null(h.Director.PausedAtUtc);
+    }
+
+    [Fact]
     public void Buff_BlessIfAboveMa_AbsoluteMode_UsesRawMa()
     {
         // In Absolute mode BlessIfAboveMa is a raw kai count, not a percent —

@@ -441,10 +441,16 @@ public sealed class CastingDirector : IDisposable
         _pausedAt = null;
     }
 
-    // Freeze the live buff timers on an unexpected drop — record when so a reconnect can
-    // resume them with the same remaining. Used INSTEAD of ResetBuffTracking when the
-    // disconnect is a carrier loss / timeout (an auto-reconnect is coming and the buffs
-    // persist server-side through link-death); a deliberate disconnect still clears.
+    // The instant the timers were frozen on a disconnect, or null while running. The
+    // Buff Watchdog reads this so its display freezes at the drop (the heartbeat is a
+    // wall clock that keeps ticking while disconnected); the shift on resume then keeps
+    // the on-screen remaining continuous across the gap.
+    public DateTime? PausedAtUtc => _pausedAt;
+
+    // Freeze the live buff timers on a disconnect — record when so the reconnect can
+    // resume them with the same remaining. Used INSTEAD of clearing on ANY disconnect
+    // (the buffs persist server-side through link-death and an auto-reconnect is coming);
+    // a fresh character (ProfileLoaded) or a too-long gap on resume clears instead.
     public void PauseBuffTimers()
     {
         _pausedAt = _activeUntil.Count > 0 ? _now() : null;

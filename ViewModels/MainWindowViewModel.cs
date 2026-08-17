@@ -2649,15 +2649,12 @@ public partial class MainWindowViewModel : ObservableObject
                         AppServices.Current.HangupSignal.AllowNextEntry();
                 }
 
-                // Buff timers: an unexpected host-side drop (carrier lost / no-response)
-                // keeps the buffs alive server-side through link-death, and an auto-reconnect
-                // is coming — FREEZE them so the first in-game prompt after reconnect resumes
-                // them with the same remaining. Every deliberate exit (user / hangup / relog,
-                // or never-connected) starts the next session clean, so clear (assume no buffs).
-                if (_lastDisconnectCause is DisconnectCause.CarrierLost or DisconnectCause.NoResponse)
-                    AppServices.Current.CastDirector.PauseBuffTimers();
-                else
-                    AppServices.Current.CastDirector.ResetBuffTracking();
+                // Buff timers: ANY disconnect freezes them (the buffs persist server-side
+                // through link-death) — the first in-game prompt after reconnect resumes
+                // them with the same remaining. A fresh character clears via ProfileLoaded,
+                // and a resume gap longer than the longest buff clears them then; so a
+                // brief manual disconnect keeps the recast clock instead of restarting it.
+                AppServices.Current.CastDirector.PauseBuffTimers();
 
                 // A remote @relog forces the dial-back unconditionally —
                 // the sender explicitly asked to relog, so we bypass the

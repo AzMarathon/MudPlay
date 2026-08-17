@@ -21,31 +21,41 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
         </Style>
 
-        <!-- Outlined buff active-timer bar: fills with elapsed time; green normally,
-             amber once the fill crosses the recast marker (in the recast window). -->
+        <!-- Outlined buff active-timer bar frame (the sunken track sits inside it, the
+             elapsed fill grows edge-to-edge within, so the outline marks the true 0%/100%). -->
         <Style Selector="Border.BuffBarFrame">
             <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="2"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-        <Style Selector="ProgressBar.BuffBar">
-            <Setter Property="Height" Value="16"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
-            <Setter Property="Background" Value="{StaticResource ChromeBgSunkenBrush}"/>
+        <!-- The elapsed-time fill — an exact-width Border (FillWidthPx), so its right edge
+             meets the recast marker and the frame edge. Green normally, amber in-window. -->
+        <Style Selector="Border.BuffFill">
+            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
         </Style>
-        <Style Selector="ProgressBar.BuffBar.recast">
-            <Setter Property="Foreground" Value="{StaticResource AccentYellowBrush}"/>
+        <Style Selector="Border.BuffFill.recast">
+            <Setter Property="Background" Value="{StaticResource AccentYellowBrush}"/>
+        </Style>
+        <!-- Dark scrim behind the in-bar label so the text reads over any fill colour
+             (bright green would otherwise glare under white text). -->
+        <Style Selector="Border.BarScrim">
+            <Setter Property="Background" Value="#80101418"/>
+            <Setter Property="CornerRadius" Value="2"/>
+            <Setter Property="Padding" Value="3,0"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="3,0,0,0"/>
         </Style>
 
-        <!-- Time overlay centred on the bar. -->
+        <!-- Remaining-time label inside the bar, offset after the name. -->
         <Style Selector="TextBlock.BarTime">
-            <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
             <Setter Property="FontSize" Value="9"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
         </Style>
 
         <!-- 4-letter buff code / #item label, rendered left-aligned INSIDE the bar. -->
@@ -97,32 +107,34 @@
                             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                     BorderThickness="0,0,0,1"
                                     Padding="6,4">
-                                <!-- Fixed-width bar area (220px) so the recast marker
-                                     margin (fraction × 220, from the row VM) lands exactly;
-                                     the frame Border draws the outline. Name sits left-
-                                     aligned inside the bar, remaining time offset after it. -->
+                                <!-- Fixed-width bar area (220px): the sunken track fills the
+                                     frame, the elapsed fill (FillWidthPx) grows from the left
+                                     edge, and the recast marker (fraction × 220) lands exactly
+                                     where the fill will reach it. Name + time sit left-aligned
+                                     inside, on a dark scrim so they read over the fill. -->
                                 <Border Classes="BuffBarFrame">
-                                    <Grid Width="220" Height="16">
-                                        <ProgressBar Classes="BuffBar"
-                                                     Classes.recast="{Binding InRecastWindow}"
-                                                     Value="{Binding FillPercent}"
-                                                     Maximum="100"/>
+                                    <Grid Width="220" Height="16"
+                                          Background="{StaticResource ChromeBgSunkenBrush}"
+                                          ClipToBounds="True">
+                                        <Border Classes="BuffFill"
+                                                Classes.recast="{Binding InRecastWindow}"
+                                                HorizontalAlignment="Left"
+                                                Width="{Binding FillWidthPx}"/>
                                         <Rectangle Width="2"
                                                    Fill="{StaticResource AccentYellowBrush}"
                                                    HorizontalAlignment="Left"
                                                    VerticalAlignment="Stretch"
                                                    Margin="{Binding RecastMarkerMargin}"
                                                    IsVisible="{Binding ShowRecastMarker}"/>
-                                        <StackPanel Orientation="Horizontal"
-                                                    HorizontalAlignment="Left"
-                                                    VerticalAlignment="Center"
-                                                    Margin="5,0,0,0">
-                                            <TextBlock Classes="BarName" Text="{Binding Name}"/>
-                                            <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
-                                                <TextBlock Text="unlearned"/>
-                                            </Border>
-                                            <TextBlock Classes="BarTime" Text="{Binding TimeText}" Margin="10,0,0,0"/>
-                                        </StackPanel>
+                                        <Border Classes="BarScrim">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Classes="BarName" Text="{Binding Name}"/>
+                                                <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
+                                                    <TextBlock Text="unlearned"/>
+                                                </Border>
+                                                <TextBlock Classes="BarTime" Text="{Binding TimeText}"/>
+                                            </StackPanel>
+                                        </Border>
                                     </Grid>
                                 </Border>
                             </Border>
@@ -144,27 +156,28 @@
                                     Padding="6,4">
                                 <StackPanel VerticalAlignment="Center">
                                     <Border Classes="BuffBarFrame">
-                                        <Grid Width="220" Height="16">
-                                            <ProgressBar Classes="BuffBar"
-                                                         Classes.recast="{Binding InRecastWindow}"
-                                                         Value="{Binding FillPercent}"
-                                                         Maximum="100"/>
+                                        <Grid Width="220" Height="16"
+                                              Background="{StaticResource ChromeBgSunkenBrush}"
+                                              ClipToBounds="True">
+                                            <Border Classes="BuffFill"
+                                                    Classes.recast="{Binding InRecastWindow}"
+                                                    HorizontalAlignment="Left"
+                                                    Width="{Binding FillWidthPx}"/>
                                             <Rectangle Width="2"
                                                        Fill="{StaticResource AccentYellowBrush}"
                                                        HorizontalAlignment="Left"
                                                        VerticalAlignment="Stretch"
                                                        Margin="{Binding RecastMarkerMargin}"
                                                        IsVisible="{Binding ShowRecastMarker}"/>
-                                            <StackPanel Orientation="Horizontal"
-                                                        HorizontalAlignment="Left"
-                                                        VerticalAlignment="Center"
-                                                        Margin="5,0,0,0">
-                                                <TextBlock Classes="BarName" Text="{Binding Name}"/>
-                                                <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
-                                                    <TextBlock Text="unlearned"/>
-                                                </Border>
-                                                <TextBlock Classes="BarTime" Text="{Binding TimeText}" Margin="10,0,0,0"/>
-                                            </StackPanel>
+                                            <Border Classes="BarScrim">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Classes="BarName" Text="{Binding Name}"/>
+                                                    <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
+                                                        <TextBlock Text="unlearned"/>
+                                                    </Border>
+                                                    <TextBlock Classes="BarTime" Text="{Binding TimeText}"/>
+                                                </StackPanel>
+                                            </Border>
                                         </Grid>
                                     </Border>
                                     <!-- Party target (member / class) as a caption under the bar. -->

@@ -27,6 +27,7 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private bool _inRecastWindow;
     [ObservableProperty] private double _fillPercent;
+    [ObservableProperty] private double _fillWidthPx;
     [ObservableProperty] private bool _showRecastMarker;
     [ObservableProperty] private Thickness _recastMarkerMargin;
     [ObservableProperty] private string _timeText = "not up";
@@ -49,6 +50,7 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
             IsActive = false;
             InRecastWindow = false;
             FillPercent = 0;
+            FillWidthPx = 0;
             ShowRecastMarker = false;
             RecastMarkerMargin = default;
             TimeText = "not up";
@@ -59,7 +61,9 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
         double elapsed = System.Math.Clamp(e.TotalSec - remaining, 0.0, e.TotalSec);
 
         IsActive = true;
-        FillPercent = elapsed / e.TotalSec * 100.0;
+        double fillFraction = elapsed / e.TotalSec;
+        FillPercent = fillFraction * 100.0;
+        FillWidthPx = fillFraction * BarWidthPx;   // exact px so fill edge meets the marker
         InRecastWindow = remaining <= e.MarginSec;   // fill has crossed the recast marker
         // Marker only meaningful for a real lead inside the bar (margin 0 = recast at
         // expiry, i.e. at the far right — redundant with a full bar, so hide it).

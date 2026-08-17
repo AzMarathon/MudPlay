@@ -2614,11 +2614,13 @@ glass jug               5               2 gold crowns
   code (`bles`) → the client arms/refreshes that buff's timer anchored on the code (`CastingDirector.NoteManualBuffCast`,
   fed by the `OutboundCastObserver`), exactly as an engine cast does. The following success line just
   confirms it landed; identity comes from the code, never the ambiguous applied message.
-- **[user 2026-08-16] Session vs drop for buff timers.** A fresh login / deliberate disconnect starts with
-  **no buffs assumed** (timers cleared — the engine re-establishes them). An **unexpected drop** (carrier lost /
-  no-response) instead **freezes** the timers; the buffs persist server-side through link-death, so the first
-  in-game prompt after reconnect **resumes** them shifted forward by the offline gap (same remaining). If the
-  gap exceeds the longest armed buff's full duration, they're surely gone and are cleared instead.
+- **[user 2026-08-16] Session vs drop for buff timers.** **Any** disconnect — manual, hangup, or an unexpected
+  drop — **freezes** the buff timers (the buffs persist server-side through link-death); the Buff Watchdog
+  display freezes at the drop instant too (its 1s heartbeat is a wall clock that keeps ticking offline). The
+  first in-game prompt after reconnect **resumes** them shifted forward by the offline gap (same remaining),
+  instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
+  (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
+  the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
 
 ## Guarded monsters redirect attacks *([CONFIRMED] 2026-07-14, user + wire capture)*
 
