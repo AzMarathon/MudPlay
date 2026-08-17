@@ -16,6 +16,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Party buffs: the party-buff slots are cast only while you're actually in a party — solo, none of them fire (your self-buff slots still do)
 - Party buffs: a party-wide buff that supersedes a self-buff (RemovesSpell — e.g. chant removes bless) now suppresses that self-cast while in a party, and the Buff Watchdog shows the self-buff "covered by" the party buff instead of a timer
 - Game Data Browser: a message claimed by a spell in the set no longer appears on the Messages tab (you edit it by double-clicking the spell) — no more seeing the same record listed twice; an orphan-linked message whose spell isn't in the set stays listed
+- Messages seed: pruned inert MegaMUD carry-over entries the engine never reads — every `monster entry` and `trap disarm` record (monster arrivals are recognized directly off the wire) and the standalone "you are shockshielded" shockshield record (the spell-linked shockshield is kept); further pruning tracked in #349
 - bug reports addressed: paradigm-20260816-101702, paradigm-20260816-222917, paradigm-20260816-232454
 
 ## 3.19.4
