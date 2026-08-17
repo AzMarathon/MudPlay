@@ -14,12 +14,10 @@ namespace MudPlay.Game.Map;
 // same circuit engine every saved loop runs on — instead of rolling a
 // bespoke navigation state machine the way Auto-Lair did (the anti-pattern
 // this feature was explicitly designed not to repeat). GhSweepManager never
-// calls AutoWalkManager itself; every pickup source and drop destination is,
-// by construction, already a stop on the sweep's own circuit, so an item is
-// simply carried until the loop's own next lap arrives where it belongs.
+// calls AutoWalkManager or emits movement itself: LoopRunner owns the initial
+// recon circuit and every shortest-work shuttle used during sorting.
 //
-// Two phases share the one Loop, started once in Start() and left running
-// until the sweep finishes:
+// The two phases share the same LoopRunner, but Sorting can replace its route:
 //   - Reconning (GhRoomLabelStore.ReconLaps laps): pure observation. On
 //     arrival at every room in the expanded circuit this manager holds GhSortGate and
 //     sends `sea` directly SearchesPerRoom times (settling between each),
@@ -27,10 +25,11 @@ namespace MudPlay.Game.Map;
 //     another engine — the loop can't step out mid-search. Recorded via
 //     GroundItemTracker's room-aligned surveys, merging the visible floor list
 //     with repeated hidden-item search results.
-//   - Sorting: replays the same circuit. On arrival at a circuit room, drops
-//     anything carried that belongs there, then picks up anything queued
-//     that starts there — holding GhSortGate until the room's dispatch
-//     confirms so the loop can't step out mid-transaction.
+//   - Sorting: visible items dispatch immediately; only an item recon marked
+//     hidden repeats the configured searches before pickup. After each verified
+//     transaction the active Loop is replaced by a two-way shortest-work shuttle:
+//     nearest carried destination first, otherwise nearest remaining source.
+//     GhSortGate stays held until the replacement route is ready.
 //
 // The sort queue is built ONLY from items this manager itself observed on a
 // GH room floor during its own recon laps (_observedByRoom, sourced solely
@@ -73,6 +72,7 @@ public sealed class GhSweepManager : IDisposable
         public required RoomKey To { get; init; }
         public required string ItemName { get; init; }
         public required int Count { get; init; }
+        public required bool RequiresSearch { get; init; }
         public bool IsCarried { get; set; }
         public bool Delivered { get; set; }
     }
@@ -102,6 +102,7 @@ public sealed class GhSweepManager : IDisposable
     private Action<byte[]>? _wireSender;
     private bool _disposed;
     private bool _gateAsserted;
+    private bool _reroutingSortLoop;
 
     // The room a Sorting-phase dispatch is currently outstanding for, and
     // exactly which PendingMoves it dispatched there — DispatchSettleTimeout
@@ -129,9 +130,13 @@ public sealed class GhSweepManager : IDisposable
     // destinations; they are not the list of source rooms worth inspecting.
     private readonly HashSet<RoomKey> _sweepRooms = new();
 
-    // Per-room floor snapshot captured during recon. Visible and hidden surveys
-    // are unioned, with repeated stack counts maxed rather than summed.
+    // Per-room floor snapshots captured during recon. The combined ledger feeds
+    // classification, while the two origin ledgers preserve whether an item was
+    // visible on entry or only surfaced from our own `sea`. Sorting consults the
+    // hidden ledger so visible-only pickups never waste time searching again.
     private readonly Dictionary<RoomKey, List<string>> _observedByRoom = new();
+    private readonly Dictionary<RoomKey, List<string>> _visibleByRoom = new();
+    private readonly Dictionary<RoomKey, List<string>> _hiddenByRoom = new();
     private readonly List<PendingMove> _pending = new();
     private readonly List<GhSweepItemFound> _leftInPlace = new();
     private readonly List<GhSweepMove> _movedSoFar = new();
@@ -157,6 +162,7 @@ public sealed class GhSweepManager : IDisposable
     public int CircuitRoomCount => _sweepRooms.Count;
     public int PendingMoveCount => _pending.Count(p => !p.Delivered);
     public int CarriedPendingCount => _pending.Count(p => p.IsCarried && !p.Delivered);
+    public int HiddenPendingCount => _pending.Count(p => p.RequiresSearch && !p.Delivered);
 
     // Fires once, when a sweep finishes (queue exhausted or stopped early).
     public event Action<GhSweepReport>? SweepCompleted;
@@ -263,6 +269,8 @@ public sealed class GhSweepManager : IDisposable
         }
 
         _observedByRoom.Clear();
+        _visibleByRoom.Clear();
+        _hiddenByRoom.Clear();
         _pendingArrivalSurvey = null;
         _sweepRooms.Clear();
         _pending.Clear();
@@ -350,6 +358,8 @@ public sealed class GhSweepManager : IDisposable
 
             case LoopEventKind.Stopped:
             case LoopEventKind.Failed:
+                if (_reroutingSortLoop && e.Kind == LoopEventKind.Stopped)
+                    return; // expected supersede while replacing the sort shuttle
                 // The loop ended — either our own Stop()/FinishSweep() (which
                 // already reset Phase to Idle before touching LoopRunner, so
                 // the guard above already returned) or something external
@@ -479,13 +489,20 @@ public sealed class GhSweepManager : IDisposable
             GhSortQueueBuilder.Build(observed, _labels.Labels, _itemNames);
 
         foreach (GhPendingMove move in moves)
+        {
+            bool requiresSearch = WasObservedHidden(move.From, move.ItemName);
             _pending.Add(new PendingMove
             {
                 From = move.From,
                 To = move.To,
                 ItemName = move.ItemName,
                 Count = move.Count,
+                RequiresSearch = requiresSearch,
             });
+            _log?.Info(LogCategory,
+                $"queued {move.Count}x {move.ItemName}: {move.From} -> {move.To}"
+                + (requiresSearch ? " (hidden)" : string.Empty));
+        }
         _leftInPlace.AddRange(leftInPlace);
     }
 
@@ -509,6 +526,17 @@ public sealed class GhSweepManager : IDisposable
             || !_sweepRooms.Contains(current.Key)) return;
 
         GhSurveyMerger.Merge(_observedByRoom, current.Key, snapshot, _itemNames);
+        if (_reconSearchRoom is { } searchRoom && searchRoom.Equals(current.Key)
+            && _reconSearchesSent > 0)
+        {
+            GhSurveyMerger.Merge(_hiddenByRoom, current.Key, snapshot, _itemNames);
+            foreach (string item in snapshot)
+                _log?.Info(LogCategory, $"recon observed at {current.Key}: {item} (hidden)");
+        }
+        else
+        {
+            GhSurveyMerger.Merge(_visibleByRoom, current.Key, snapshot, _itemNames);
+        }
     }
 
     // Called from AppServices' early RoomTracker.StateChanged wrapper — see the
@@ -547,7 +575,10 @@ public sealed class GhSweepManager : IDisposable
         if (_pendingArrivalSurvey is { } arrivalSurvey)
         {
             if (_sweepRooms.Contains(here))
+            {
                 GhSurveyMerger.Merge(_observedByRoom, here, arrivalSurvey, _itemNames);
+                GhSurveyMerger.Merge(_visibleByRoom, here, arrivalSurvey, _itemNames);
+            }
             _pendingArrivalSurvey = null;
         }
 
@@ -617,13 +648,27 @@ public sealed class GhSweepManager : IDisposable
 
     private void DispatchAtRoom(RoomKey room)
     {
-        // A recon search only reveals hidden objects temporarily. Re-search the
-        // source immediately before every pickup attempt, while GhSortGate holds
-        // the loop in this room, so `get` resolves against the reveal that just
-        // happened rather than a stale earlier-lap observation.
-        bool hasPickup = _pending.Any(m =>
-            !m.Delivered && !m.IsCarried && m.From.Equals(room));
-        if (!hasPickup)
+        // A shortest-work delivery route is sacred: do not interrupt it with a
+        // new pickup (and especially not a hidden-item search delay) merely
+        // because its BFS path crosses another source room. Finish a carried
+        // drop first; once the pack has no Roomba-carried item, the scheduler
+        // will target the nearest remaining source deliberately.
+        bool carryingAnything = _pending.Any(m => m.IsCarried && !m.Delivered);
+        bool isCurrentDropDestination = _pending.Any(m =>
+            m.IsCarried && !m.Delivered && m.To.Equals(room));
+        if (carryingAnything && !isCurrentDropDestination)
+        {
+            _log?.Debug(LogCategory,
+                $"passing through {room} without pickup/search; prioritizing carried delivery");
+            return;
+        }
+
+        // Visible items remain directly gettable after recon and must not pay
+        // another SearchesPerRoom delay. Only a queue entry explicitly learned
+        // from a recon search needs to be revealed again before its pickup.
+        bool hasHiddenPickup = _pending.Any(m =>
+            !m.Delivered && !m.IsCarried && m.RequiresSearch && m.From.Equals(room));
+        if (!hasHiddenPickup)
         {
             DispatchAtRoomAfterSearch(room);
             return;
@@ -824,13 +869,7 @@ public sealed class GhSweepManager : IDisposable
         if (_inventory is null || !hasConfirmedTransaction)
         {
             _inventoryExpectations.Clear();
-            if (_pending.All(p => p.Delivered))
-            {
-                FinishSweep();
-                return;
-            }
-            ReleaseGate(dispatchResult);
-            MaybeFinish();
+            ContinueAfterTransaction(dispatchResult);
             return;
         }
 
@@ -883,13 +922,7 @@ public sealed class GhSweepManager : IDisposable
 
         _inventoryExpectations.Clear();
         PhaseChanged?.Invoke();
-        if (_pending.All(p => p.Delivered))
-        {
-            FinishSweep();
-            return;
-        }
-        ReleaseGate("inventory verification complete");
-        MaybeFinish();
+        ContinueAfterTransaction("inventory verification complete");
     }
 
     private void OnInventoryVerificationTimeout()
@@ -900,13 +933,85 @@ public sealed class GhSweepManager : IDisposable
         _inventoryExpectations.Clear();
         _log?.Warn(LogCategory,
             "full inventory verification timed out; retaining server-confirmed transaction state");
+        ContinueAfterTransaction("inventory verification timeout");
+    }
+
+    // Once the server and full inventory agree on a room transaction, do not
+    // blindly release the original one-way circuit. Carried destinations are
+    // urgent: rebuild the active loop as a two-room shuttle from here directly
+    // to the nearest drop. With nothing carried, target the nearest remaining
+    // pickup source. LoopRunner still owns every movement command and all its
+    // normal gating/recovery behavior; GhSweep only chooses the next waypoint.
+    private void ContinueAfterTransaction(string reason)
+    {
         if (_pending.All(p => p.Delivered))
         {
             FinishSweep();
             return;
         }
-        ReleaseGate("inventory verification timeout");
+
+        if (TryRerouteToNextWork())
+        {
+            ReleaseGate($"{reason}; shortest-work route ready");
+            return;
+        }
+
+        ReleaseGate(reason);
         MaybeFinish();
+    }
+
+    private bool TryRerouteToNextWork()
+    {
+        if (Phase != SweepPhase.Sorting || _tracker.State.CurrentRoom is not { } current)
+            return false;
+
+        List<RoomKey> carriedDestinations = _pending
+            .Where(p => p.IsCarried && !p.Delivered)
+            .Select(p => p.To)
+            .Distinct()
+            .ToList();
+        IEnumerable<RoomKey> candidates = carriedDestinations.Count > 0
+            ? carriedDestinations
+            : _pending.Where(p => !p.IsCarried && !p.Delivered)
+                .Select(p => p.From)
+                .Distinct();
+
+        RoomKey here = current.Key;
+        RoomKey? target = candidates
+            .Where(key => !key.Equals(here))
+            .Select(key => (Key: key, Distance: _bfs.DistanceBetween(here, key)))
+            .Where(x => x.Distance is > 0)
+            .OrderBy(x => x.Distance)
+            .ThenBy(x => x.Key.Map)
+            .ThenBy(x => x.Key.Room)
+            .Select(x => (RoomKey?)x.Key)
+            .FirstOrDefault();
+        if (target is not { } destination) return false;
+
+        var shuttle = new Loop(SweepLoopName, new[] { here, destination });
+        bool started;
+        _reroutingSortLoop = true;
+        try
+        {
+            started = _loopRunner.Start(shuttle);
+        }
+        finally
+        {
+            _reroutingSortLoop = false;
+        }
+
+        if (!started)
+        {
+            _log?.Warn(LogCategory,
+                $"shortest-work reroute failed: {here} -> {destination}; retaining current route");
+            return Phase != SweepPhase.Sorting; // a synchronous Failed event already ended the sweep
+        }
+
+        string targetKind = carriedDestinations.Count > 0 ? "drop" : "pickup";
+        _log?.Info(LogCategory,
+            $"shortest-work reroute: {here} -> {destination} ({targetKind}, "
+            + $"{_bfs.DistanceBetween(here, destination)} hop(s))");
+        return true;
     }
 
     private int CountInventoryItem(string target)
@@ -935,6 +1040,10 @@ public sealed class GhSweepManager : IDisposable
             return leftNumber.Value == rightNumber.Value;
         return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     }
+
+    private bool WasObservedHidden(RoomKey room, string itemName) =>
+        _hiddenByRoom.TryGetValue(room, out List<string>? hidden)
+        && hidden.Any(entry => SameItem(entry, itemName));
 
     private void MaybeFinish()
     {

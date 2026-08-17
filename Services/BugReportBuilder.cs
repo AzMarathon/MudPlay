@@ -466,9 +466,10 @@ public static class BugReportBuilder
         Kv(sb, "Roomba searches per room", svc.GhRoomLabels.SearchesPerRoom.ToString());
         Kv(sb, "Roomba labeled destinations / circuit rooms",
             $"{svc.GhRoomLabels.Labels.Count} / {svc.GhSweep.CircuitRoomCount}");
-        Kv(sb, "Roomba moved / left / pending / carried",
+        Kv(sb, "Roomba moved / left / pending / carried / hidden",
             $"{svc.GhSweep.MovedSoFar.Count} / {svc.GhSweep.LeftInPlace.Count} / "
-            + $"{svc.GhSweep.PendingMoveCount} / {svc.GhSweep.CarriedPendingCount}");
+            + $"{svc.GhSweep.PendingMoveCount} / {svc.GhSweep.CarriedPendingCount} / "
+            + $"{svc.GhSweep.HiddenPendingCount}");
 
         // Default-task startup state — a "my loop / Auto-Lair didn't start on
         // login" report needs to know whether the runner deferred the start

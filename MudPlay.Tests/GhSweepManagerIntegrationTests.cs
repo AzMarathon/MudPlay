@@ -25,7 +25,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void Sorting_ReSearchesBeforeGet_ThenWaitsForFullInventoryBeforeMoving()
+    public void Sorting_SkipsSearchForVisibleItem_RoutesBackwardToDrop_AndResearchesHiddenItem()
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), """
@@ -41,7 +41,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), """
             [
               { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 1 },
-              { "Number": 2, "Name": "chain shirt", "ItemType": 0, "Encum": 1 }
+              { "Number": 2, "Name": "chain shirt", "ItemType": 0, "Encum": 1 },
+              { "Number": 3, "Name": "mace", "ItemType": 1, "Encum": 1 }
             ]
             """);
 
@@ -112,6 +113,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
         Assert.Equal("sea", sent[^1]);
+        // This item only appears as the response to recon's own search, so its
+        // eventual PendingMove is explicitly tagged hidden.
+        FeedRouter(router, "You notice a mace here.");
         FireSearchSettle(sweep);
         Assert.Equal("s", sent[^1]);
 
@@ -127,12 +131,13 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         FireSearchSettle(sweep); // completes recon lap; sorting starts northbound
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
         Assert.Equal("n", sent[^1]);
+        int reconSearchCount = sent.Count(command => command == "sea");
 
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(5));
-        Assert.Equal("sea", sent[^1]); // sorting must reveal again before get
-        FireSearchSettle(sweep);
+        // war hammer was visible on entry during recon: no Sorting `sea` at all.
         Assert.Equal("get war hammer", sent[^1]);
+        Assert.Equal(reconSearchCount, sent.Count(command => command == "sea"));
 
         FeedRouter(router, "You took war hammer.");
         Assert.Equal("i", sent[^1]);
@@ -141,19 +146,39 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         FeedInventory(inventoryLines, "war hammer");
 
         Assert.True(sent.Count > sentBeforeInventory);
-        Assert.Equal("n", sent[^1]); // only moves after the authoritative dump
+        Assert.Equal("s", sent[^1]); // destination A is one room behind C
 
-        tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
+        tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
             DateTimeOffset.UtcNow.AddSeconds(6));
-        Assert.Equal("s", sent[^1]);
+        Assert.Equal("drop war hammer", sent[^1]);
+        FeedRouter(router, "You dropped war hammer.");
+        Assert.Equal("i", sent[^1]);
+        FeedInventory(inventoryLines, "nothing");
+        Assert.Equal("n", sent[^1]); // nearest remaining source is hidden mace at B
+
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(7));
+        Assert.Equal("n", sent[^1]);
+        tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
+            DateTimeOffset.UtcNow.AddSeconds(8));
+        Assert.Equal("sea", sent[^1]); // mace was tagged hidden during recon
+        Assert.Equal(reconSearchCount + 1, sent.Count(command => command == "sea"));
+        FireSearchSettle(sweep);
+        Assert.Equal("get mace", sent[^1]);
+
+        FeedRouter(router, "You took mace.");
+        Assert.Equal("i", sent[^1]);
+        FeedInventory(inventoryLines, "mace");
+        Assert.Equal("s", sent[^1]);
+
+        tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
+            DateTimeOffset.UtcNow.AddSeconds(9));
         Assert.Equal("s", sent[^1]);
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
-            DateTimeOffset.UtcNow.AddSeconds(8));
-        Assert.Equal("drop war hammer", sent[^1]);
+            DateTimeOffset.UtcNow.AddSeconds(10));
+        Assert.Equal("drop mace", sent[^1]);
 
-        FeedRouter(router, "You dropped war hammer.");
+        FeedRouter(router, "You dropped mace.");
         Assert.Equal("i", sent[^1]);
         int sentBeforeFinalInventory = sent.Count;
         FeedInventory(inventoryLines, "nothing");

@@ -21,7 +21,7 @@
         <!-- Header: instructions + live phase readout. -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,8">
             <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" TextWrapping="Wrap"
-                       Text="Right-click destination rooms on the map and choose 'Label as GH room…' to assign their sort rules, then Start here. Silent recon laps search every room along the resulting circuit; sorting re-searches before pickup and verifies inventory before moving on."/>
+                       Text="Right-click destination rooms on the map and choose 'Label as GH room…' to assign their sort rules, then Start here. Recon searches every circuit room; sorting re-searches only items logged as hidden, verifies inventory, then takes the shortest route to the next drop or pickup."/>
             <TextBlock Text="{Binding PhaseText}"
                        Foreground="{StaticResource ChromeFgBrush}"
                        FontWeight="SemiBold"/>

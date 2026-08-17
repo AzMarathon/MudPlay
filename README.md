@@ -7,7 +7,8 @@
 > - Item name resolution now also exposes WeaponType / ArmourType / Worn subtype, letting a GH room label narrow past the top-level category (e.g. "Weapons > 1H Blunt") or match by equip slot alone
 > - Roomba Mode never sweeps up a gang-house guard emblem as clutter, and only ever acts on items found on a GH room floor during its own recon — never anything already in your pack
 > - Fixed Roomba losing the room title in very large wrapped floor lists, repeatedly falling into `rm` recovery, and attributing a newly-entered room's visible items to the room just left
-> - Roomba sorting now re-searches a source immediately before pickup, waits for get/drop confirmations, requests a fresh `i` inventory, and only resumes movement after that authoritative inventory verifies the transaction; failed pickups stay queued for a searched retry without double-moving delivered items
+> - Roomba sorting tags items found only by recon search as `(hidden)` and re-searches only those sources before pickup; visible items are grabbed immediately with no post-recon search delay
+> - After inventory verifies a pickup or drop, Roomba routes directly to the nearest carried destination (then the nearest remaining source) instead of blindly completing the original one-way circuit; failed pickups stay queued without double-moving delivered items
 > - bug reports addressed: paradigm-20260816-172828, paradigm-20260816-175656, paradigm-20260816-191039, paradigm-20260816-193418
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
