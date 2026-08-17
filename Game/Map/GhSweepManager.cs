@@ -57,11 +57,6 @@ public sealed class GhSweepManager : IDisposable
     private static readonly TimeSpan DispatchSettleTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan InventoryVerificationTimeout = TimeSpan.FromSeconds(3);
 
-    // Safety ceiling on Sorting-phase laps — a backstop against an unexpected
-    // infinite-progress edge case, not the normal exit condition (that's the
-    // zero-progress-lap stall detector in OnSortingLapCompleted).
-    private const int MaxSortLaps = 20;
-
     private const string SweepLoopName = "Roomba sweep";
 
     public enum SweepPhase { Idle, Reconning, Sorting }
@@ -88,7 +83,6 @@ public sealed class GhSweepManager : IDisposable
     private readonly MessageRouter _router;
     private readonly MovementCoordinator _coordinator;
     private readonly Func<bool> _isOtherEngineBusy;
-    private readonly Func<EncumbranceReading> _encumbrance;
     private readonly Func<bool> _isParadigm;
     private readonly InventoryManager? _inventory;
     private readonly LogService? _log;
@@ -142,13 +136,11 @@ public sealed class GhSweepManager : IDisposable
     private readonly List<GhSweepMove> _movedSoFar = new();
     private readonly List<GhSweepStranded> _stranded = new();
 
-    // Sorting-phase lap-progress tracking (Bug 4 stall detection). A capacity-
-    // skipped pickup stays a live PendingMove rather than being finalized
-    // immediately — the circular loop retries it every lap, so it naturally
-    // gets picked up once earlier deliveries free up capacity. Only when a
-    // FULL lap passes with no new delivery and no new pickup is the sweep
-    // genuinely stuck (nothing left to retry usefully), and remaining items
-    // get finalized.
+    // Sorting-phase lap-progress tracking is diagnostic only. Queued work is
+    // never discarded because a lap made no progress or because an arbitrary
+    // lap count was reached: a normal sweep ends only after every PendingMove
+    // has a verified delivery. The user can still stop it manually, and a
+    // genuine LoopRunner failure remains an abnormal terminal condition.
     private int _sortLapCount;
     private int _progressSnapshotMoved;
     private int _progressSnapshotCarried;
@@ -163,6 +155,7 @@ public sealed class GhSweepManager : IDisposable
     public int PendingMoveCount => _pending.Count(p => !p.Delivered);
     public int CarriedPendingCount => _pending.Count(p => p.IsCarried && !p.Delivered);
     public int HiddenPendingCount => _pending.Count(p => p.RequiresSearch && !p.Delivered);
+    public int CompletedSortLaps => _sortLapCount;
 
     // Fires once, when a sweep finishes (queue exhausted or stopped early).
     public event Action<GhSweepReport>? SweepCompleted;
@@ -182,7 +175,6 @@ public sealed class GhSweepManager : IDisposable
         MessageRouter router,
         MovementCoordinator coordinator,
         Func<bool> isOtherEngineBusy,
-        Func<EncumbranceReading> encumbrance,
         LogService? log = null,
         Func<bool>? isParadigm = null,
         InventoryManager? inventory = null)
@@ -196,7 +188,6 @@ public sealed class GhSweepManager : IDisposable
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(isOtherEngineBusy);
-        ArgumentNullException.ThrowIfNull(encumbrance);
         _labels = labels;
         _loopRunner = loopRunner;
         _tracker = tracker;
@@ -206,7 +197,6 @@ public sealed class GhSweepManager : IDisposable
         _router = router;
         _coordinator = coordinator;
         _isOtherEngineBusy = isOtherEngineBusy;
-        _encumbrance = encumbrance;
         _isParadigm = isParadigm ?? (static () => false);
         _inventory = inventory;
         _log = log;
@@ -375,55 +365,31 @@ public sealed class GhSweepManager : IDisposable
         }
     }
 
-    // A lap of the Sorting circuit completed. Capacity-skipped pickups stay
-    // live in _pending (DispatchAtRoom leaves them uncarried, undelivered) so
-    // a later lap retries them once earlier deliveries free up room — this
-    // only finalizes the sweep once a FULL lap passes without any new
-    // delivery or pickup, meaning nothing left in the queue can currently be
-    // made progress on.
+    // A lap of the Sorting circuit completed. This records progress for
+    // diagnostics but never treats a quiet lap as completion: hidden items,
+    // transient pickup failures, and temporary full-pack failures must remain
+    // queued and be retried until their drops are actually verified.
     private void OnSortingLapCompleted()
     {
         _sortLapCount++;
         int movedNow = _movedSoFar.Count;
         int carriedNow = _pending.Count(p => p.IsCarried && !p.Delivered);
         bool progressed = movedNow != _progressSnapshotMoved || carriedNow != _progressSnapshotCarried;
+        int remaining = _pending.Count(p => !p.Delivered);
 
         if (!progressed)
         {
             _log?.Warn(LogCategory,
-                $"sort lap {_sortLapCount}: no progress (moved={movedNow} carrying={carriedNow}); finalizing remaining item(s)");
-            FinalizeStuckItems();
-            return;
+                $"sort lap {_sortLapCount}: no progress (moved={movedNow} carrying={carriedNow}); "
+                + $"{remaining} queued move(s) remain and will be retried");
         }
-        if (_sortLapCount >= MaxSortLaps)
+        else
         {
-            _log?.Warn(LogCategory,
-                $"sort phase hit the {MaxSortLaps}-lap safety cap while still progressing; finalizing remaining item(s)");
-            FinalizeStuckItems();
-            return;
+            _log?.Info(LogCategory,
+                $"sort lap {_sortLapCount} complete: moved={movedNow} carrying={carriedNow} remaining={remaining}");
         }
-
-        _log?.Info(LogCategory, $"sort lap {_sortLapCount} complete: moved={movedNow} carrying={carriedNow}");
         _progressSnapshotMoved = movedNow;
         _progressSnapshotCarried = carriedNow;
-    }
-
-    // Nothing left in _pending can currently be made progress on (a full lap
-    // produced neither a new pickup nor a new delivery, or the safety-cap lap
-    // count was hit). Whatever's left is either still on a GH floor somewhere
-    // (report as LeftInPlace, same as an unmatched item) or already in the
-    // player's pack (report as Stranded — a manual drop is needed).
-    private void FinalizeStuckItems()
-    {
-        foreach (PendingMove move in _pending.Where(p => !p.Delivered).ToList())
-        {
-            if (move.IsCarried)
-                _stranded.Add(new GhSweepStranded(move.From, move.To, move.ItemName));
-            else
-                _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName));
-            _pending.Remove(move);
-        }
-        FinishSweep();
     }
 
     // LoopRunner ended outside our own Stop()/FinishSweep() call (toolbar
@@ -717,40 +683,12 @@ public sealed class GhSweepManager : IDisposable
         List<PendingMove> gets = _pending
             .Where(m => !m.Delivered && !m.IsCarried && m.From.Equals(room)).ToList();
 
-        // Skip-Heavy capacity gate (reuses the same shared math AutoGetItemsManager
-        // / CashManager gate pickups against, the same skipHeavy=true option those
-        // engines expose) rather than riding all the way to 100% capacity — the
-        // Heavy bracket (67%+) roughly quadruples per-hop travel time, which widens
-        // the window for gate/recovery races elsewhere in the sweep. An unknown
-        // reading (never parsed) doesn't gate, same "don't refuse on what we can't
-        // evaluate" rule those engines use.
-        //
-        // A skipped pickup is NOT finalized as left-in-place here — it stays a live
-        // PendingMove (still !IsCarried, !Delivered) so a later lap of this circular
-        // loop retries it once earlier deliveries have freed up capacity. Only
-        // OnSortingLapCompleted's stall detector (a full lap with no progress at
-        // all) finalizes a pickup that genuinely can never be carried.
-        EncumbranceReading enc = _encumbrance();
-        long projected = enc.CurrentWeight;
-        long cap = enc.MaxWeight > 0
-            ? EncumbranceGate.ComputeCapWeight(false, false, true, enc)
-            : long.MaxValue;
-
-        List<PendingMove> pickable = new();
-        foreach (PendingMove move in gets)
-        {
-            long weight = (_itemNames.WeightOf(move.ItemName) ?? 0) * move.Count;
-            if (enc.MaxWeight > 0 && projected + weight > cap)
-            {
-                _log?.Info(LogCategory,
-                    $"deferred over-capacity pickup: {move.Count}x {move.ItemName} at {room} (retrying on a later lap)");
-                continue;
-            }
-            projected += weight;
-            pickable.Add(move);
-        }
-
-        if (drops.Count == 0 && pickable.Count == 0)
+        // Roomba deliberately does not pre-emptively skip pickups based on the
+        // Heavy bracket or an estimated capacity. Item weights and live pack
+        // state are not reliable enough to decide that queued work is impossible.
+        // Attempt every pickup; if the game refuses one, the unconfirmed move
+        // remains queued and is retried after carried items have been dropped.
+        if (drops.Count == 0 && gets.Count == 0)
         {
             ReleaseGate("nothing dispatchable after room search");
             MaybeFinish();
@@ -761,12 +699,12 @@ public sealed class GhSweepManager : IDisposable
         _dispatchRoom = room;
         _outstandingDispatch.Clear();
         _outstandingDispatch.AddRange(drops);
-        _outstandingDispatch.AddRange(pickable);
+        _outstandingDispatch.AddRange(gets);
         _inventoryExpectations.Clear();
         foreach (PendingMove move in drops)
             _inventoryExpectations.Add(new InventoryExpectation(
                 move, WasDrop: true, CountInventoryItem(move.ItemName)));
-        foreach (PendingMove move in pickable)
+        foreach (PendingMove move in gets)
             _inventoryExpectations.Add(new InventoryExpectation(
                 move, WasDrop: false, CountInventoryItem(move.ItemName)));
         _dispatchSettle.Stop();
@@ -774,7 +712,7 @@ public sealed class GhSweepManager : IDisposable
 
         foreach (PendingMove move in drops)
             CountedCommand.Emit(Send, "drop", move.Count, move.ItemName, _isParadigm());
-        foreach (PendingMove move in pickable)
+        foreach (PendingMove move in gets)
             CountedCommand.Emit(Send, "get", move.Count, move.ItemName, _isParadigm());
     }
 
@@ -1052,11 +990,9 @@ public sealed class GhSweepManager : IDisposable
 
     private void FinishSweep()
     {
-        // Normally nothing is still carried here (MaybeFinish only calls this
-        // once every PendingMove is Delivered); FinalizeStuckItems is the one
-        // caller that can still have carried-undelivered entries left over,
-        // which BuildFinalReport folds into Stranded the same as any other
-        // exit path.
+        // Normal completion reaches this only after every PendingMove is
+        // Delivered. Stop() and an external LoopRunner failure build their own
+        // abnormal report, including anything still carried as Stranded.
         GhSweepReport report = BuildFinalReport();
         _log?.Info(LogCategory,
             $"sweep complete: moved={_movedSoFar.Count} left-in-place={_leftInPlace.Count}"

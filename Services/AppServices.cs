@@ -4620,7 +4620,6 @@ public sealed class AppServices
         GhSweep = new Game.Map.GhSweepManager(
             GhRoomLabels, LoopRunner, RoomTracker, Bfs, GroundItems, ItemNames, Router, MovementCoordinator,
             isOtherEngineBusy: () => MovementControl.IsActive,
-            encumbrance: () => Inventory.Snapshot.Encumbrance,
             log: Log,
             isParadigm: onParadigm,
             inventory: Inventory);

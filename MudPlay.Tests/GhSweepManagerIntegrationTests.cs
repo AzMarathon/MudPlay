@@ -40,9 +40,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             """);
         File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), """
             [
-              { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 1 },
+              { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 100 },
               { "Number": 2, "Name": "chain shirt", "ItemType": 0, "Encum": 1 },
-              { "Number": 3, "Name": "mace", "ItemType": 1, "Encum": 1 }
+              { "Number": 3, "Name": "mace", "ItemType": 1, "Encum": 100 }
             ]
             """);
 
@@ -89,7 +89,6 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            encumbrance: () => inventory.Snapshot.Encumbrance,
             isParadigm: () => true, inventory: inventory);
 
         var sent = new List<string>();
@@ -132,6 +131,12 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
         Assert.Equal("n", sent[^1]);
         int reconSearchCount = sent.Count(command => command == "sea");
+
+        // A completed lap with zero pickup/drop progress must not discard the
+        // queue or end the sweep. Transient failures are retried indefinitely.
+        FireSortingLapCompleted(sweep);
+        Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
+        Assert.Equal(2, sweep.PendingMoveCount);
 
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(5));
@@ -193,6 +198,10 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
     private static void FireSearchSettle(GhSweepManager sweep) =>
         typeof(GhSweepManager).GetMethod("OnReconSearchSettleElapsed",
+            BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(sweep, null);
+
+    private static void FireSortingLapCompleted(GhSweepManager sweep) =>
+        typeof(GhSweepManager).GetMethod("OnSortingLapCompleted",
             BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(sweep, null);
 
     private static void FeedRouter(MessageRouter router, string text) =>

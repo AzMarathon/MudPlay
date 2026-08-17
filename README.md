@@ -9,6 +9,7 @@
 > - Fixed Roomba losing the room title in very large wrapped floor lists, repeatedly falling into `rm` recovery, and attributing a newly-entered room's visible items to the room just left
 > - Roomba sorting tags items found only by recon search as `(hidden)` and re-searches only those sources before pickup; visible items are grabbed immediately with no post-recon search delay
 > - After inventory verifies a pickup or drop, Roomba routes directly to the nearest carried destination (then the nearest remaining source) instead of blindly completing the original one-way circuit; failed pickups stay queued without double-moving delivered items
+> - Roomba no longer stops after a no-progress lap or a fixed number of sorting laps, and no longer defers pickups to avoid the Heavy bracket; queued work stays live until every item has a verified delivery (or the user stops the run)
 > - bug reports addressed: paradigm-20260816-172828, paradigm-20260816-175656, paradigm-20260816-191039, paradigm-20260816-193418
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
