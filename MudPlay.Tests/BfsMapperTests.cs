@@ -123,6 +123,60 @@ public sealed class BfsMapperTests : IDisposable
         Assert.Equal(new[] { Direction.N, Direction.N, Direction.E }, path);
     }
 
+    // A hidden action-gated exit with no imported opener (MultiAction null — the
+    // MegaMUD export annotated the fork/lever action on only the reciprocal side,
+    // as with Paradigm 9/1050 W) is un-openable, so BFS must not route through it.
+    private const string UnopenableActionExitJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "1/2", "S": "0", "E": "0", "W": "1/3 (Hidden/Needs 1 Actions, specific order)",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "1/1", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void FindPath_RoutesAroundUnopenableHiddenActionExit()
+    {
+        var (bfs, _) = NewMapper(UnopenableActionExitJson);
+
+        // Direct W (1 hop) is a hidden action exit the client can't open — BFS must
+        // route AROUND it via 1/2 (N then W) rather than take the doomed short hop.
+        var path = bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 3));
+
+        Assert.Equal(new[] { Direction.N, Direction.W }, path);
+    }
+
+    [Fact]
+    public void FindPath_UnopenableHiddenActionExit_NoAlternate_ReturnsNull()
+    {
+        // Same un-openable W exit, but now it's the ONLY way to 1/3 — the walk
+        // must fail cleanly at plan time (no route) instead of dooming a plain move.
+        const string json = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "A",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0", "E": "0", "W": "1/3 (Hidden/Needs 1 Actions, specific order)",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 3, "Name": "C",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0", "E": "1/1", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        var (bfs, _) = NewMapper(json);
+
+        Assert.Null(bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 3)));
+    }
+
     [Fact]
     public void FindPath_SameRoom_ReturnsNullByDefault()
     {

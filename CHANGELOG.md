@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.20.10
+
+- Navigation: the walker no longer plans a route through a hidden, action-gated exit it can't actually open — some game-data exports annotate a fork/lever passage's opener on only one side (e.g. Paradigm 9/1050's West exit), leaving the reciprocal exit with no action data. The router now routes **around** such an un-openable exit (or fails cleanly with "no route") instead of sending a doomed move that the server refuses and stranding the walker
+- bug reports addressed: paradigm-20260817-125209
+
 ## 3.20.9
 
 - Combat: the mana-regen roll-spell **reroll** now runs through the same between-round priority pass as every other 0-energy cast — it competes by your Settings → Spells priority (a due heal/cure wins) and spends the one-cast-per-round slot, instead of firing straight to the wire and bypassing both
