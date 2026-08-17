@@ -159,13 +159,19 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         SelfBuffs.Add(new BuffWatchdogRowViewModel(code.Trim(), isParty: false, name, "self", learned));
     }
 
+    // Display label + learned flag. Spells show their 4-letter cast code (not the
+    // full name); item-casts show '#' + a short prefix of the item name.
     private (string Name, bool Learned) ResolveName(string code)
     {
         string trimmed = code.Trim();
         if (ItemCastToken.IsToken(trimmed))
-            return (ItemCastToken.ItemName(trimmed) ?? trimmed, true);   // a carried buff item counts as available
+        {
+            string item = (ItemCastToken.ItemName(trimmed) ?? trimmed).Trim();
+            string shortItem = item.Length > 4 ? item[..4] : item;
+            return ("#" + shortItem, true);   // a carried buff item counts as available
+        }
         return _spellbook.FindByCastCode(trimmed) is { } s
-            ? (s.Name, _spellbook.IsObtained(s.Number))
+            ? (s.Short, _spellbook.IsObtained(s.Number))
             : (trimmed, false);   // unknown cast code — show it, flagged un-learned
     }
 
