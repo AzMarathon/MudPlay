@@ -14,9 +14,21 @@ namespace MudPlay.Game.Spells;
 // SetObtainedByNames) and the learn-scroll line (an incremental add via
 // MarkObtainedByName). Both report the spell's full Name, so resolution matches
 // against Available by name. Reroll clears it (ClearObtained).
+//
+// The authoritative obtained set is kept as spell NAMES (_obtainedNames), not
+// Spells.Number values: numbers are per-data-set, so swapping the active set (or
+// reimporting) renumbers the rows and a number-keyed set silently empties itself
+// the moment the set changes under it. _obtained is a number cache re-derived
+// from those names against the current class list on every list rebuild
+// (Reseed / a class change) — so obtained spells survive a data-set swap, which
+// previously only a full profile reload could repair.
 public sealed class SpellbookState
 {
     private readonly KnownSpellCatalog _catalog;
+    // Authoritative: obtained spells by canonical Name (survives data-set renumber).
+    private readonly HashSet<string> _obtainedNames = new(StringComparer.OrdinalIgnoreCase);
+    // Derived cache: the same spells' current Spells.Number values, re-resolved
+    // from _obtainedNames whenever the class list rebuilds. Backs IsObtained.
     private readonly HashSet<int> _obtained = new();
     private List<KnownSpell> _available = new();
     private SpellPick[] _availablePicks = Array.Empty<SpellPick>();
@@ -110,18 +122,23 @@ public sealed class SpellbookState
     // How many spells the character has obtained.
     public int ObtainedCount => _obtained.Count;
 
-    // The full names of every obtained spell — the persistence snapshot. Mapped
-    // back through the available list (obtained is always a subset of its
-    // numbers) so callers can store names, which re-resolve across data-set
-    // renumbering, rather than raw Spells.Number values. Empty when nothing is
-    // obtained or no class is set.
+    // The full names of every obtained spell — the persistence snapshot. Read
+    // from the authoritative name set (not the number cache) so a save taken
+    // while the active set can't currently resolve a spell — mid data-set swap —
+    // still persists it. Resolved names come first in the stable Available order;
+    // any the current set can't resolve are appended so persistence never drops a
+    // learned spell just because the "wrong" set is loaded. Empty when nothing is
+    // obtained.
     public IReadOnlyList<string> ObtainedNames
     {
         get
         {
-            List<string> names = new(_obtained.Count);
+            List<string> names = new(_obtainedNames.Count);
+            HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
             foreach (KnownSpell s in _available)
-                if (_obtained.Contains(s.Number)) names.Add(s.Name);
+                if (_obtainedNames.Contains(s.Name) && emitted.Add(s.Name)) names.Add(s.Name);
+            foreach (string n in _obtainedNames)
+                if (emitted.Add(n)) names.Add(n);
             return names;
         }
     }
@@ -129,8 +146,11 @@ public sealed class SpellbookState
     // Rebuild Available for a new class+level. The available list only depends on
     // class+alignment (the level gate is ignored), so it's recomputed only when
     // those change; a bare level change still fires Changed so formula displays
-    // rescale. Obtained numbers that fall outside the new class list (e.g. reroll
-    // into a different class) are dropped.
+    // rescale. On a class-list rebuild the obtained number cache is re-derived
+    // from the obtained NAMES against the new list, so obtained spells re-resolve
+    // to the current data-set's numbers; names the new class can't learn (a
+    // genuine reroll) simply don't resolve. Reroll clears the set outright via
+    // ClearObtained, so a shared spell name can't linger as obtained.
     public void Refresh(int classNumber, int level, int charAlign = 0)
     {
         bool classChanged = classNumber != ClassNumber || charAlign != CharAlign;
@@ -139,14 +159,40 @@ public sealed class SpellbookState
         Level = level;
         CharAlign = charAlign;
 
-        if (classChanged)
-        {
-            _available = new List<KnownSpell>(_catalog.Query(classNumber, level: 0, charAlign));
-            _obtained.RemoveWhere(n => !_available.Exists(s => s.Number == n));
-            RebuildAvailablePicks();
-        }
-
+        if (classChanged) RebuildAvailable();
         if (classChanged || levelChanged) Changed?.Invoke();
+    }
+
+    // The active game-data set changed under the current class: the Spells /
+    // Classes tables were replaced (and may have renumbered rows), so
+    // unconditionally re-query Available and re-resolve the obtained numbers by
+    // name even when the class number is unchanged. Without this a set swap
+    // leaves Available (and the obtained cache) holding the old set's rows — the
+    // Spell Book / Buff Watchdog blank until a stat re-parse or profile reload.
+    public void Reseed(int classNumber, int level, int charAlign = 0)
+    {
+        ClassNumber = classNumber;
+        Level = level;
+        CharAlign = charAlign;
+        RebuildAvailable();
+        Changed?.Invoke();
+    }
+
+    private void RebuildAvailable()
+    {
+        _available = new List<KnownSpell>(_catalog.Query(ClassNumber, level: 0, CharAlign));
+        ResolveObtainedFromNames();
+        RebuildAvailablePicks();
+    }
+
+    // Re-derive the obtained number cache from the authoritative obtained names
+    // against the current Available list — the step that lets obtained spells
+    // survive a data-set renumber (their names re-resolve to the new numbers).
+    private void ResolveObtainedFromNames()
+    {
+        _obtained.Clear();
+        foreach (string name in _obtainedNames)
+            if (FindAvailableByName(name) is { } s) _obtained.Add(s.Number);
     }
 
     // Rebuild the distinct-by-cast-code pick list, stamping each with whether the
@@ -171,17 +217,25 @@ public sealed class SpellbookState
     // Replace the obtained set with exactly the spells named in names (the
     // authoritative snapshot from a spells / pow block). Names that don't resolve
     // to an available spell are ignored. No-ops (no event) when the resolved set
-    // matches the current one.
+    // matches the current one. The canonical names are retained as the source of
+    // truth so the set survives a later data-set renumber (see Reseed).
     public void SetObtainedByNames(IEnumerable<string> names)
     {
         ArgumentNullException.ThrowIfNull(names);
-        HashSet<int> next = new();
+        HashSet<string> nextNames = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<int> nextNums = new();
         foreach (string name in names)
-            if (FindAvailableByName(name) is { } s) next.Add(s.Number);
+            if (FindAvailableByName(name) is { } s)
+            {
+                nextNames.Add(s.Name);
+                nextNums.Add(s.Number);
+            }
 
-        if (next.SetEquals(_obtained)) return;
+        if (nextNames.SetEquals(_obtainedNames)) return;
+        _obtainedNames.Clear();
+        _obtainedNames.UnionWith(nextNames);
         _obtained.Clear();
-        _obtained.UnionWith(next);
+        _obtained.UnionWith(nextNums);
         RebuildAvailablePicks();
         Changed?.Invoke();
     }
@@ -193,6 +247,7 @@ public sealed class SpellbookState
     public KnownSpell? MarkObtainedByName(string name)
     {
         if (FindAvailableByName(name) is not { } match) return null;
+        _obtainedNames.Add(match.Name);
         if (_obtained.Add(match.Number))
         {
             RebuildAvailablePicks();
@@ -201,10 +256,13 @@ public sealed class SpellbookState
         return match;
     }
 
-    // Drop every obtained spell (reroll / "you have no spells").
+    // Drop every obtained spell (reroll / "you have no spells"). Clears the
+    // authoritative name set too, so a later list rebuild can't re-resolve a
+    // stale spell back into the book.
     public void ClearObtained()
     {
-        if (_obtained.Count == 0) return;
+        if (_obtained.Count == 0 && _obtainedNames.Count == 0) return;
+        _obtainedNames.Clear();
         _obtained.Clear();
         RebuildAvailablePicks();
         Changed?.Invoke();

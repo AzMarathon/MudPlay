@@ -2,11 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.20.2
+## 3.20.3
 
 - Auto-rest: after poison wears off, the client now goes back to resting when still below the rest-HP floor — a rest sent while poisoned never took (poison blocks it) and left a stale "resting" latch that wrongly suppressed the re-rest, so the character stood there regenerating slowly instead of resting
 - Combat: an AoE that wipes a room in one round (several exp lines at once — e.g. a hand-cast fireball) no longer corpse-casts a single-target spell at a "survivor" the kills hadn't cleared yet; the engine now re-parses the room with a carriage return and re-picks from what's actually left
-- bug reports addressed: paradigm-20260817-092945, paradigm-20260817-105650
+- Spell book: learned spells now survive a game-data set swap — the obtained set is keyed by spell name instead of the set's row numbers, so switching sets (which renumbers rows) no longer blanks every configured spell to "unlearned" until you re-poll `spells` or reload the profile; the Buff Watchdog's learned flags stay correct across a swap
+- bug reports addressed: paradigm-20260817-092945, paradigm-20260817-105650, paradigm-20260817-114209
 
 ## 3.20.0
 
