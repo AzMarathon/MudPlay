@@ -3221,6 +3221,12 @@ public sealed class AppServices
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             isEnabled: () => ReadAutoModeFlag(d => d.AutoHealRest),
             log: Log);
+        // True combat-round boundary → free the once-per-round between-round cast
+        // slot. The per-hit combat tick fires 2-3× a round, so it can't gate
+        // one-per-round; RoundDamageTracker closes exactly one round per 5s window
+        // (and on *Combat Off*), which is the boundary the between-round coordinator
+        // needs.
+        RoundDamage.RoundComplete += _ => CastDirector.NotifyRoundComplete();
         // Stealth gate — buff casts suppressed while
         // sneaking or hidden so we don't break the backstab window.
         CastDirector.SetStealthGate(() => Stealth.IsStealthed);

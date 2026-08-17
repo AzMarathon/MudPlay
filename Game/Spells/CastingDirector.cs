@@ -121,6 +121,16 @@ public sealed class CastingDirector : IDisposable
     // dropped or the buff sits "active" for its whole assumed duration and never
     // re-attempts (an ~90s uptime hole after a single fizzle).
     private string? _pendingSelfBuffShort;
+
+    // True once we've cast a between-round spell (heal / cure / buff / debuff /
+    // item) THIS combat round. The game allows only ONE 0-energy between-round cast
+    // per round across all of them — a second draws "You have already cast a spell
+    // this round!" and does NOT fire. So while this is set we suppress further
+    // between-round casts (in combat) rather than send doomed ones. Cleared at the
+    // true round boundary (NotifyRoundComplete, wired to RoundDamageTracker) and
+    // never consulted out of combat, where no per-round cap applies.
+    private bool _betweenRoundSlotUsed;
+
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
     private Func<MessageRecord, string?>? _shortFromAppliedRecord;
     private Func<int, string?>? _classNameByNumber;
@@ -420,7 +430,15 @@ public sealed class CastingDirector : IDisposable
         _pendingPartyCast = null;
         _pendingSelfBuffShort = null;
         _lastSelfHealCast = null;
+        _betweenRoundSlotUsed = false;
     }
+
+    // The combat round closed (wired to RoundDamageTracker.RoundComplete) — the
+    // between-round cast slot is free again, so a new round can cast once. This is
+    // the TRUE round boundary; the per-hit combat tick fires 2-3× a round and can't
+    // gate one-per-round on its own (it's what let the buff engine send several
+    // between-round spells in a round and draw "already cast this round").
+    public void NotifyRoundComplete() => _betweenRoundSlotUsed = false;
 
     // True when a buff on targetKey ("" = self) is due to be (re)cast: either never
     // confirmed-active, or within the slot's recast lead of expiry. The lead is the
@@ -463,37 +481,26 @@ public sealed class CastingDirector : IDisposable
             + $", recast in {Math.Max(0L, seconds - marginSec)}s; awaiting applied-line confirm");
     }
 
-    // A cast the server rejected after the BUFF ITSELF reached the wire (fizzle,
-    // interrupt, no-mana) means the optimistically-timed self-buff never landed. Drop
-    // its phantom recast timer so the next tick re-attempts and the buff isn't left
-    // "active" for its whole assumed duration. Two rejections are NOT the buff's own
-    // failure and must not clear its timer — anchoring the timer to the buff's cast
-    // code, not to any failure that happens to arrive while one is pending:
-    //   - Blocked: a LOCAL rejection that fires before the send / inside the same-round
-    //     cooldown, so the buff never went out — clearing would defeat the optimistic
-    //     double-cast guard the timer exists for.
-    //   - AlreadyCastThisRound: an anonymous SERVER rejection (the line names no spell).
-    //     A pending self-buff means the buff's own TryCast already succeeded — it
-    //     reached the wire first, as a between-round cast — so this rejection belongs to
-    //     the auto-repeating ATTACK the combat engine resumes the same round, not the
-    //     buff. Clearing the landed buff's timer on it re-fired the buff every round it
-    //     lost to the attack: the mageshield recast storm (report paradigm-20260816-101702).
+    // A server rejection of a between-round cast we just sent. "You have already cast
+    // a spell this round!" (AlreadyCastThisRound) means the round's single 0-energy
+    // between-round slot was already spent, so the spell we JUST sent did NOT fire —
+    // latch the slot as spent (a backstop for the proactive one-per-round gate) so we
+    // stop retrying until the next round. Fizzle / no-mana / interrupt likewise mean
+    // the just-sent buff never landed. In every non-Blocked case drop the buff's
+    // optimistic recast timer so it re-attempts next round rather than sitting
+    // "active" un-cast. Local Blocked rejections fire before the send / inside the
+    // same-round cooldown (the buff never went out), so clearing on them would defeat
+    // the optimistic double-cast guard the timer exists for.
     private void OnCastFailed(CastFailureReason reason, string detail)
     {
-        if (reason is CastFailureReason.Blocked or CastFailureReason.AlreadyCastThisRound)
-        {
-            if (reason == CastFailureReason.AlreadyCastThisRound && _pendingSelfBuffShort is { } pending)
-                _log?.Combat(LogCategory,
-                    $"self-buff {pending} timer kept — '{detail}' is a same-round attack rejection, "
-                    + "not the buff's own failure (the buff already reached the wire this round)");
-            return;
-        }
+        if (reason == CastFailureReason.Blocked) return;
+        if (reason == CastFailureReason.AlreadyCastThisRound)
+            _betweenRoundSlotUsed = true;
         if (_pendingSelfBuffShort is not { } shortCode) return;
         _activeUntil.Remove(("", shortCode));
         _pendingSelfBuffShort = null;
         _log?.Combat(LogCategory,
-            $"self-buff {shortCode} did not land (reason={reason}) — cleared optimistic " +
-            "recast timer for immediate retry");
+            $"self-buff {shortCode} did not cast (reason={reason}) — dropped optimistic recast timer");
     }
 
     private void OnConditionApplied(MessageRecord r)
@@ -602,6 +609,29 @@ public sealed class CastingDirector : IDisposable
         // the fixed cadence regardless of how the fight is going.
         if (_attackOwed?.Invoke() == true) return null;
 
+        // One between-round spell (heal / cure / buff / debuff / item) per combat
+        // round: the game allows a single 0-energy cast per round, so a second draws
+        // "You have already cast a spell this round!" and does NOT fire. Once this
+        // round's slot is spent, suppress further between-round attempts in combat
+        // instead of sending doomed casts — the mageshield recast storm came from the
+        // engine firing several buffs a round because the per-hit combat tick kept
+        // clearing the coordinator's one-per-round cooldown (report
+        // paradigm-20260816-101702). The slot frees at the true round boundary
+        // (NotifyRoundComplete). Out of combat no per-round cap applies, so the gate
+        // is combat-only.
+        if (_state.InCombat && _betweenRoundSlotUsed) return null;
+
+        string? cast = RunDecisionPass(healRestEnabled, blessEnabled);
+        // Mark the round's single between-round slot spent so a second Evaluate this
+        // round doesn't send another (doomed) cast; cleared at the round boundary.
+        if (cast is not null && _state.InCombat) _betweenRoundSlotUsed = true;
+        return cast;
+    }
+
+    // Walk the priority list and fire the first ready candidate. Returns the spell
+    // that was cast (for diagnostics / tests), or null if nothing matched.
+    private string? RunDecisionPass(bool healRestEnabled, bool blessEnabled)
+    {
         SpellsSettings spells = _readSpells();
         HealthSettings health = _readHealth();
 

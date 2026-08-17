@@ -1147,7 +1147,8 @@ public sealed class CastingDirectorTests
         Assert.Equal("swan", h.CastsSent[0]);
 
         h.Cast.OnCombatTick();                 // wipe cooldown (root-cause window)
-        h.Director.Evaluate();                 // unchanged pool → suppressed
+        h.Director.NotifyRoundComplete();      // new round → between-round slot free
+        h.Director.Evaluate();                 // unchanged pool → stale-guard suppresses
         Assert.Single(h.CastsSent);
 
         // Once HP actually drops, the pool moved → a fresh heal is free to fire.
@@ -1250,38 +1251,79 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void SelfBuff_AlreadyCastThisRound_KeepsTimer_NoRecastStorm()
+    public void BetweenRound_OneCastPerRound_SuppressesSecondUntilRoundBoundary()
     {
-        // Report paradigm-20260816-101702: a self-buff cast during combat reaches the
-        // wire first, then the auto-repeating ATTACK loses the same server round and
-        // draws "You have already cast a spell this round!". That anonymous rejection
-        // is NOT the buff's own failure — clearing the buff's optimistic timer on it
-        // re-fired the buff every round it lost to the attack (the "4 MSHIs in a short
-        // span" storm). Unlike a fizzle, this must NOT clear the timer.
+        // The game allows a single 0-energy between-round cast per combat round, so
+        // once we've cast one, further between-round casts THIS round are suppressed
+        // (sending them just draws "already cast this round" and they don't fire — the
+        // mageshield storm's root, report paradigm-20260816-101702). The slot frees at
+        // the round boundary (NotifyRoundComplete), letting the next buff fire.
+        using CureHarness h = new();
+        h.Spells.SelfBlessDuringCombat = true;   // opt in to blessing mid-fight
+        h.Spells.BlessSlots[1] = "mshi";
+        h.Spells.BlessSlots[2] = "armr";
+        h.BuffInfo["mshi"] = (string.Empty, 300);
+        h.BuffInfo["armr"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = true;
+
+        // Setup's state-change evaluations fired a buff or two out of combat; reset to
+        // a clean, in-combat starting point so the controlled round sequence is exact.
+        h.Director.ResetBuffTracking();
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+
+        h.Director.Evaluate();                 // round 1 — first between-round cast (mshi)
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mshi", h.CastsSent[0]);
+
+        // Same round: armr is due but the round's single slot is spent → suppressed
+        // (OnCombatTick clears the coordinator cooldown, so only the round gate holds).
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+
+        // Round boundary frees the slot → the next between-round cast (armr) fires.
+        h.Director.NotifyRoundComplete();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Equal(2, h.CastsSent.Count);
+        Assert.Equal("armr", h.CastsSent[1]);
+    }
+
+    [Fact]
+    public void SelfBuff_AlreadyCastThisRound_DropsOptimisticTimer_ReAttempts()
+    {
+        // "You have already cast a spell this round!" means the round's between-round
+        // slot was already spent, so the buff we just sent did NOT cast. Its optimistic
+        // recast timer must be dropped (like a fizzle) so it re-attempts next round,
+        // rather than sitting "active" un-cast for its whole assumed duration.
         using CureHarness h = new();
         h.Spells.BlessSlots[1] = "mshi";
-        h.BuffInfo["mshi"] = (string.Empty, 300);   // long duration → phantom recast if cleared
-        h.Health.BlessIfAboveMa = 50;
+        h.BuffInfo["mshi"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
         h.State.MaxMa = 100;
-        h.State.Ma = 80;
-        h.State.InCombat = false;
+        h.State.Ma = 100;
+        h.State.InCombat = false;   // out of combat: isolate the failure handling from the round gate
         h.RecordCondition("mshi", MessageFlags.None,
             applied: "You feel protected!", endsWith: "Your mageshield shimmers and fades.");
 
         h.Director.Evaluate();                 // cast — optimistic 300s timer arms
         Assert.Single(h.CastsSent);
-        Assert.Equal("mshi", h.CastsSent[0]);
 
-        // The same-round attack is rejected by the server (not the buff).
+        // Server: the slot was already used → this cast did NOT fire.
         h.Router.Dispatch(new LineExtractor.EmittedLine(
             "You have already cast a spell this round!", Array.Empty<CellAttributes>(),
             DateTimeOffset.UtcNow, IsPromptLine: false));
 
-        // Next round: the buff's timer is intact, so it does NOT re-fire.
+        // Timer dropped → it re-attempts rather than sitting phantom-active for 300s.
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
         h.Director.Evaluate();
-        Assert.Empty(h.CastsSent);
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mshi", h.CastsSent[0]);
     }
 
     [Fact]
@@ -1624,6 +1666,7 @@ public sealed class CastingDirectorTests
         h.FeedLine("You begin to regenerate.");
         h.CastsSent.Clear();
         h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();      // new round → between-round slot free
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);

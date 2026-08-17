@@ -85,6 +85,11 @@ public sealed class CombatCastingDirectorContentionTests
                 line, Array.Empty<CellAttributes>(),
                 DateTimeOffset.UtcNow, IsPromptLine: false);
             Router.Dispatch(emitted);
+            // Mirror AppServices: RoundDamageTracker closes the round on *Combat Off*
+            // and fires RoundComplete → CastDirector.NotifyRoundComplete, freeing the
+            // once-per-round between-round cast slot. The harness has no
+            // RoundDamageTracker, so reproduce that boundary here.
+            if (line == "*Combat Off*") Director.NotifyRoundComplete();
         }
 
         // Mirrors AppServices' tick order: Cast.OnCombatTick, then

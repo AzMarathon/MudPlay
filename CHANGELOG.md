@@ -4,9 +4,9 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.19.6
 
-- Combat buffing: a self-buff (e.g. mageshield) no longer re-casts every round during combat — the server's "already cast this round" rejection belongs to the same-round auto-attack, not the buff, so it no longer tears down the buff's own recast timer
+- Combat buffing: the between-round spell coordinator (heals / buffs / debuffs / item buffs) now casts at most ONE per combat round, matching the game's one-between-round-cast-per-round rule — fixes a self-buff (e.g. mageshield) re-casting every round during a fight and spamming "already cast this round"
 - Combat buffing: a buff's recast timer is now cleared only by its OWN wear-off line — spells that merely share an "applied" message (the five "you feel protected" shields) can no longer clear each other's timers
-- Combat buffing: program logging for the buff manager — timer armed (duration + recast-in), confirmed active, worn off, and kept on a same-round attack rejection — so a log read explains what it's doing and why
+- Combat buffing: program logging for the buff manager — timer armed (duration + recast-in), confirmed active, worn off, and dropped when a cast didn't fire — so a log read explains what it's doing and why
 - bug reports addressed: paradigm-20260816-101702
 
 ## 3.19.4

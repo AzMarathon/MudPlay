@@ -2566,17 +2566,25 @@ glass jug               5               2 gold crowns
   ConfusionGate stuck. **Client encoding:** `ConditionTracker` clears every active `Confused` record when
   a `Confused`-carrying record's wear-off matches.
 
-## One cast per server round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
+## One BETWEEN-ROUND spell per combat round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
 
-- **You may cast only ONE spell per server round.** A second cast sent the same round is rejected with
-  **`You have already cast a spell this round!`** — an *anonymous* line that names no spell. During combat a
-  between-round self-buff (cast in a brief *Combat Off* window) and the auto-repeating attack spell contend
-  for the round: the buff is sent first and wins, so the attack draws that rejection. The client must NOT
-  treat that rejection as the *buff's* failure — doing so tore down the (landed) buff's recast timer and
-  re-fired it every round (the "4 mageshields in a short span" storm). Encoded: `CastingDirector.OnCastFailed`
-  ignores `AlreadyCastThisRound` (like a local `Blocked`) — a pending self-buff already reached the wire, so
-  the rejection is the attack's, not the buff's. Genuine buff-apply failures (fizzle / no-mana / interrupt)
-  still clear the optimistic timer and retry.
+- **You may cast only ONE 0-energy "between-round" spell per combat round — total, across heals, buffs,
+  debuffs, and use-item buffs.** These are the `EnergyCost = 0` spells (mageshield / holy armour, cures,
+  regen HoTs, etc.); they ride *between* the round's main action, so one is free each round on top of your
+  attack. A **second** between-round spell attempted the same round is rejected with **`You have already
+  cast a spell this round!`**, and **the spell you just sent does NOT fire** — success or failure of the
+  first doesn't matter, the round's single between-round slot is spent. **This line never appears for combat
+  spells** (lbol / mmis / deathtouch / fireball are 500–1000 energy — the round's main action, not
+  between-round), so it is purely the between-round coordinator's signal.
+  - **Client encoding:** the between-round coordinator (`CastingDirector`) casts at most one between-round
+    spell per round, gated on the **true round boundary** — `RoundDamageTracker.RoundComplete`
+    (`NotifyRoundComplete`), which closes exactly one round per 5s window and on *Combat Off*. It must NOT
+    gate on the per-hit combat tick: that fires 2-3× a round, and clearing the coordinator's one-per-round
+    cooldown on it let the engine send several between-round spells a round — every extra one drawing "already
+    cast this round" and, because the reactive timer-clear then tore down the buff it kept re-sending, the
+    "4 mageshields in a short span" recast storm. On the rejection the just-sent spell didn't fire, so its
+    optimistic recast timer is dropped (it re-attempts next round) and the round's slot is latched spent
+    (`CastingDirector.OnCastFailed`).
 - **A self-buff's active/recast state is keyed to its own 4-letter cast code**, resolved from game data: the
   success line (`Spells` → *user definitions* → CasterMessage / AppliedMessage) starts the duration timer,
   and the buff's OWN wear-off (`AppliedEndsWith`) clears it. **Distinct buffs that merely share an applied /
