@@ -252,6 +252,76 @@ public sealed class MainMenuEntryAutomationTests
         Assert.Single(engine.LastSentForTests);
     }
 
+    // ===== KeepArmed — arm-at-login-start + refresh-on-progress ==========
+
+    [Fact]
+    public void KeepArmed_RefreshesWindow_MenuAfterOriginalExpiryStillFires()
+    {
+        // The reported "did not re-enter" case: auto-entry is armed at login
+        // START, then a trailing holdover step stalls so LoggedIntoGame never
+        // comes. Each matched step calls KeepArmed, refreshing the window, so the
+        // realm-entry menu that renders AFTER the original arm window would have
+        // lapsed still fires the entry command.
+        var (engine, router, _, _) = Setup();
+        DateTime t0 = Now;
+        engine.NowProvider = () => t0;
+        engine.ArmWindow = TimeSpan.FromSeconds(15);
+        engine.Arm();                                 // login start → window t0+15
+
+        engine.NowProvider = () => t0.AddSeconds(14); // a step lands late in the window
+        engine.KeepArmed();                           // window now (t0+14)+15 = t0+29
+
+        engine.NowProvider = () => t0.AddSeconds(20);  // past the ORIGINAL t0+15
+        DispatchMenuLine(router);
+
+        Assert.Single(engine.LastSentForTests);        // still fires thanks to the refresh
+    }
+
+    [Fact]
+    public void KeepArmed_AfterHangupSuppressedArm_StaysClosed()
+    {
+        // KeepArmed must not defeat the hangup exclusion: an Arm that was
+        // suppressed (health/manual hangup preceded the connect) never authorizes
+        // entry, so no amount of step progress can re-open the latch.
+        var (engine, router, _, signal) = Setup();
+        signal.SignalHangup();
+
+        engine.Arm();          // suppressed → not authorized
+        engine.KeepArmed();    // must stay closed
+        engine.KeepArmed();
+        DispatchMenuLine(router);
+
+        Assert.Empty(engine.LastSentForTests);
+        Assert.False(engine.IsArmed);
+    }
+
+    [Fact]
+    public void KeepArmed_WithoutPriorArm_DoesNotOpenLatch()
+    {
+        // Authorization comes only from Arm(). KeepArmed alone (e.g. a stray step
+        // event with no login start) must never open the entry latch.
+        var (engine, router, _, _) = Setup();
+        engine.KeepArmed();
+        DispatchMenuLine(router);
+        Assert.Empty(engine.LastSentForTests);
+    }
+
+    [Fact]
+    public void KeepArmed_AfterEntryFired_DoesNotReArm()
+    {
+        // One auto-entry per login: once the entry command has gone out, a later
+        // KeepArmed (a trailing step advancing, or LoggedIntoGame) must not
+        // re-open the latch so a second menu-shaped line can't re-fire.
+        var (engine, router, _, _) = Setup();
+        engine.Arm();
+        DispatchMenuLine(router);
+        Assert.Single(engine.LastSentForTests);
+
+        engine.KeepArmed();          // post-entry step progress
+        DispatchMenuLine(router);
+        Assert.Single(engine.LastSentForTests);   // still just one
+    }
+
     // ===== Master auto-responses gate ===================================
 
     [Fact]

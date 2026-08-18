@@ -93,6 +93,10 @@ public sealed class CombatStateTracker : IDisposable
     private Func<bool>? _isAutoSneakEnabled;
     private Func<int, bool>? _hasSeeHidden;
     private Func<int, bool>? _canEngage;
+    // RawName → did the user hand-engage this passive neutral? Wired from CombatManager
+    // so the walker gate (HasEngageableHostiles) also holds while the user's manually-
+    // engaged neutral is still alive, matching CombatManager's attack takeover.
+    private Func<string, bool>? _isUserEngagedInstance;
     private bool _seeHiddenClearLatch;
 
     private Action<byte[]>? _wireSender;
@@ -272,6 +276,17 @@ public sealed class CombatStateTracker : IDisposable
     {
         ArgumentNullException.ThrowIfNull(canEngage);
         _canEngage = canEngage;
+    }
+
+    // Wire CombatManager's per-instance "user hand-engaged this passive neutral" set so
+    // the walker gate treats that neutral as an engageable hostile too. Without it the
+    // gate would release (the neutral is un-tagged, so not engageable on its own) and the
+    // walker could stroll off mid-fight while CombatManager is still killing it. Until
+    // set, no instance is user-engaged (fail-open — behaves exactly as before).
+    public void SetUserEngagedInstanceGate(Func<string, bool> isUserEngagedInstance)
+    {
+        ArgumentNullException.ThrowIfNull(isUserEngagedInstance);
+        _isUserEngagedInstance = isUserEngagedInstance;
     }
 
     // Wire the CombatSettings.MinMonstersInRoom / MaxMonstersInRoom reader so
@@ -619,11 +634,15 @@ public sealed class CombatStateTracker : IDisposable
     private bool IsEngageable(RoomEntity e)
     {
         if (e.MonsterNumber is not int n) return false;
+        // A passive neutral the user hand-engaged fights like a hostile until dead, so it
+        // holds the walker gate the same way an enemy does — even before its overlay says
+        // so, and regardless of the resolver being wired.
+        bool userEngaged = _isUserEngagedInstance?.Invoke(e.RawName) == true;
         if (_resolveOverlay is null) return true;        // legacy ctor — engage everything
         MonsterOverlay overlay;
         try { overlay = _resolveOverlay(n) ?? new MonsterOverlay(); }
         catch { return true; }
-        return MonsterEngagement.IsEngageable(overlay);
+        return MonsterEngagement.IsEngageable(overlay, userEngaged);
     }
 
     // On-sight attacker: an Enemy-relationship monster (the default for un-tagged

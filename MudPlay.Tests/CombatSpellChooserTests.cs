@@ -28,8 +28,10 @@ public sealed class CombatSpellChooserTests
 
     private static CombatSpellContext Ctx(
         int enemies = 1, string target = "a rat", int mana = 100, int maxMana = 100,
-        bool backstabPending = false, bool allowNukes = true) =>
-        new(enemies, target, mana, maxMana, backstabPending, AllowNukes: allowNukes);
+        bool backstabPending = false, bool allowNukes = true,
+        System.Collections.Generic.IReadOnlyList<string>? roomMobKeys = null) =>
+        new(enemies, target, mana, maxMana, backstabPending, AllowNukes: allowNukes,
+            RoomMobKeys: roomMobKeys);
 
     // ----- 1. Backstab gate ---------------------------------------------
 
@@ -269,6 +271,107 @@ public sealed class CombatSpellChooserTests
         sut.MarkCast(first!.Value, "A Rat");
 
         Assert.Null(sut.ChooseDebuff(settings, Ctx(target: "a rat")));
+    }
+
+    // ----- 2c. Debuff redesign: AoE covering vs single fall-through -----
+
+    [Fact]
+    public void ChooseDebuff_AreaConfigured_ButAutoNukeOff_FiresSingleTarget()
+    {
+        // report paradigm-20260817-205819: with the AoE debuff configured but Auto-Nuke
+        // OFF the AoE isn't "covering" the room, so the single-target rung takes over
+        // instead of being short-circuited by the configured-but-inactive AoE.
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 1),
+            SingleTargetDebuffSpell = Slot("vuln"),
+            NormalAttackSpell = Slot("lbol"),
+        };
+
+        CombatSpellDecision? d = sut.ChooseDebuff(settings, Ctx(enemies: 2, allowNukes: false));
+        Assert.Equal(CombatSpellAction.SingleDebuff, d?.Action);
+        Assert.Equal("vuln", d?.Spell);
+    }
+
+    [Fact]
+    public void ChooseDebuff_Area_CastsOnce_NoReFire_ForTheSameRoster()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 1, maxCasts: 3),
+            SingleTargetDebuffSpell = Slot("vuln"),
+        };
+        string[] roster = { "ant one", "ant two", "ant three" };
+
+        CombatSpellDecision? first = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: roster));
+        Assert.Equal(CombatSpellAction.AreaDebuff, first?.Action);
+        sut.MarkCast(first!.Value, "ant one", roster);
+
+        // Same mobs next round: all tagged → no re-fire (cap still has room), and the
+        // single rung must NOT fire while the AoE is covering.
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: roster)));
+    }
+
+    [Fact]
+    public void ChooseDebuff_Area_ReFires_ForANewArrival_UpToCap()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 1, maxCasts: 2),
+        };
+        string[] roster1 = { "ant one", "ant two" };
+        CombatSpellDecision? c1 = sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster1));
+        Assert.Equal(CombatSpellAction.AreaDebuff, c1?.Action);
+        sut.MarkCast(c1!.Value, "ant one", roster1);      // casts = 1
+
+        // A new mob arrives → re-fire (still under the cap of 2).
+        string[] roster2 = { "ant one", "ant two", "ant three" };
+        CombatSpellDecision? c2 = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: roster2));
+        Assert.Equal(CombatSpellAction.AreaDebuff, c2?.Action);
+        sut.MarkCast(c2!.Value, "ant one", roster2);      // casts = 2 = cap
+
+        // Yet another new mob, but the AoE is at its per-room cap → skip (not single).
+        string[] roster3 = { "ant one", "ant two", "ant three", "ant four" };
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 4, roomMobKeys: roster3)));
+    }
+
+    [Fact]
+    public void ChooseDebuff_RoomThinsBelowMinEnemies_SingleTakesOver()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 2, maxCasts: 1),
+            SingleTargetDebuffSpell = Slot("vuln"),
+        };
+        string[] roster = { "ant one", "ant two" };
+        CombatSpellDecision? aoe = sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster));
+        Assert.Equal(CombatSpellAction.AreaDebuff, aoe?.Action);
+        sut.MarkCast(aoe!.Value, "ant one", roster);
+
+        // Room thins to one mob (below the AoE MinEnemies 2) → single-target on the survivor.
+        CombatSpellDecision? single = sut.ChooseDebuff(
+            settings, Ctx(enemies: 1, target: "queen ant", roomMobKeys: new[] { "queen ant" }));
+        Assert.Equal(CombatSpellAction.SingleDebuff, single?.Action);
+        Assert.Equal("vuln", single?.Spell);
+    }
+
+    [Fact]
+    public void ChooseDebuff_Area_ManaShort_WhileCovering_Skips_NotSingle()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 1, minMana: 90),
+            SingleTargetDebuffSpell = Slot("vuln"),
+        };
+        // AoE covers (configured, nukes on, min met) but mana is below its floor → skip;
+        // the single rung must NOT fire while the AoE covers the room.
+        Assert.Null(sut.ChooseDebuff(
+            settings, Ctx(enemies: 3, mana: 50, roomMobKeys: new[] { "a", "b", "c" })));
     }
 
     [Fact]

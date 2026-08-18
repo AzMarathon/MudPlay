@@ -69,4 +69,35 @@ public sealed class ItemMdbViewBuilderTests : IDisposable
         Assert.Contains(new KeyValuePair<string, string>("Delete on Death", "Yes"), info);
         Assert.Contains(new KeyValuePair<string, string>("Negates", "magma heat"), info);
     }
+
+    // A shop that operates from more than one room must surface EVERY room as its own
+    // buy location, not just the first (report paradigm-20260818-080337: the silverbark
+    // canoe's Boat Launch runs from Arlysia City Docks AND the Pier; only the first showed).
+    [Fact]
+    public void MultiRoomShop_SurfacesEveryRoom_AsSeparateBuyLocation()
+    {
+        const string canoeItems =
+            "[{\"Number\":1,\"Name\":\"silverbark canoe\",\"ItemType\":10," +
+            "\"Obtained From\":\"Shop #86\"}]";
+        const string shops =
+            "[{\"Number\":86,\"Name\":\"Boat Launch\"," +
+            "\"Assigned To\":\"Room 17/580, Room 1/1813\",\"Markup%\":0}]";
+        const string rooms =
+            "[{\"Map Number\":17,\"Room Number\":580,\"Name\":\"Arlysia, City Docks\"}," +
+            " {\"Map Number\":1,\"Room Number\":1813,\"Name\":\"Pier\"}]";
+
+        string dir = Path.Combine(_root, "realm");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Items.json"), canoeItems);
+        File.WriteAllText(Path.Combine(dir, "Shops.json"), shops);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), rooms);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("realm");
+
+        IReadOnlyList<ShopSaleRow> soldAt = new ItemMdbViewBuilder(cache, playerCharm: 50).Build("1").Shops;
+
+        Assert.Equal(2, soldAt.Count);
+        Assert.Contains(soldAt, r => r.Location.Contains("Arlysia, City Docks") && r.Location.Contains("17/580"));
+        Assert.Contains(soldAt, r => r.Location.Contains("Pier") && r.Location.Contains("1/1813"));
+    }
 }

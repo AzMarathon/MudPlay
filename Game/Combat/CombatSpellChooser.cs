@@ -49,7 +49,7 @@ namespace MudPlay.Game.Combat;
 //     Magic Resist and poison are not deterministic; see MonsterResistIndex).
 public sealed class CombatSpellChooser
 {
-    private bool _areaDebuffCast;
+    private int _areaDebuffCasts;
     private int _singleDebuffCasts;
     private int _multiAttackCasts;
     private int _normalAttackCasts;
@@ -61,6 +61,13 @@ public sealed class CombatSpellChooser
     // (a re-announce + *Combat Off* every round). Per-target; reset on target change.
     private bool _drainEngaged;
     private readonly HashSet<string> _singleDebuffedTargets =
+        new(StringComparer.OrdinalIgnoreCase);
+    // RawName keys of the mobs present when each AoE debuff cast went out this room.
+    // The AoE debuff casts ONCE and "tags" the room; it re-fires (up to its per-room
+    // MaxCasts cap) only for a mob that wasn't tagged — a new arrival / summon — rather
+    // than repeatedly like an attack spell. Per-room, keyed like _singleDebuffedTargets;
+    // reset at room-clear.
+    private readonly HashSet<string> _areaDebuffedMobs =
         new(StringComparer.OrdinalIgnoreCase);
 
     // Per-target weapon latch. Once we've actually been casting a single-target
@@ -83,7 +90,8 @@ public sealed class CombatSpellChooser
     // starts a fresh engagement.
     public void ResetForNewRoom()
     {
-        _areaDebuffCast = false;
+        _areaDebuffCasts = 0;
+        _areaDebuffedMobs.Clear();
         _singleDebuffCasts = 0;
         _multiAttackCasts = 0;
         _normalAttackCasts = 0;
@@ -189,10 +197,12 @@ public sealed class CombatSpellChooser
     // applies. Debuffing is an in-between action (≤1/round) in the realm's round
     // model — NOT a combat action — so it's resolved here, separately from
     // Choose, and cast through the shared in-between window (CastingDirector)
-    // rather than the combat-action path. Area debuff takes precedence and
-    // excludes single (once per room when MinEnemies is met); otherwise the
-    // single-target debuff fires once on every new target. Pure — the caller
-    // commits via MarkCast only when the cast reaches the wire.
+    // rather than the combat-action path. While the AoE debuff is COVERING the room
+    // (configured + Auto-Nuke on + at/over MinEnemies) it owns the round: cast once,
+    // re-fire only for a new (untagged) mob up to its cap, else skip. When it isn't
+    // covering (unconfigured / Auto-Nuke off / below MinEnemies) the single-target
+    // debuff fires once per target. Pure — the caller commits via MarkCast only when
+    // the cast reaches the wire.
     public CombatSpellDecision? ChooseDebuff(CombatSettings settings, in CombatSpellContext ctx)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -206,23 +216,35 @@ public sealed class CombatSpellChooser
     private CombatSpellDecision? TryDebuffing(
         CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode)
     {
-        // The two debuff rungs answer to DIFFERENT toggles: the AREA debuff is an
-        // AoE offensive spell gated by Auto-Nuke (ctx.AllowNukes); the
-        // single-target debuff below is a pre-attack debuff gated by Auto-Combat
-        // alone — the engine only evaluates this whole path while Auto-Combat is
-        // on, so no explicit flag is needed for it. (Area still takes precedence
-        // and excludes single when configured, matching the historical model.)
+        // The AoE debuff "covers" the room this round only when it's configured, Auto-
+        // Nuke is on, and the room meets its minimum-enemy count. Those three are the
+        // exact complement of the cases the single-target rung takes over in: AoE
+        // unconfigured, Auto-Nuke off, or the room below MinEnemies. (report
+        // paradigm-20260817-205819: an AoE-configured user with Auto-Nuke off never got
+        // their single-target debuff because a configured-but-inactive AoE short-circuited
+        // it — the single block below used to be reachable only when the AoE was
+        // UNCONFIGURED.)
         CombatSpellSlot area = settings.AreaDebuffSpell;
-        if (IsConfigured(area))
+        bool areaCovering = IsConfigured(area)
+            && ctx.AllowNukes
+            && ctx.EnemyCount >= area.MinEnemies;
+
+        if (areaCovering)
         {
-            if (ctx.AllowNukes
-                && !_areaDebuffCast
-                && ctx.EnemyCount >= area.MinEnemies
-                && ManaOk(area, ctx, mode))
+            // The AoE owns the room. Cast it as FEW times as possible: fire only when a
+            // mob that wasn't present at the last AoE cast is here (the first cast, or a
+            // new arrival / summon), under the per-room cap and mana floor — NOT every
+            // round like an attack spell. Blanketed / at cap / mana-short → skip; the
+            // single-target rung must not fire while the AoE is covering the room.
+            if (ManaOk(area, ctx, mode)
+                && CastsOk(area, _areaDebuffCasts)
+                && AoeHasNewTarget(ctx))
                 return new CombatSpellDecision(CombatSpellAction.AreaDebuff, area.SpellName!);
             return null;
         }
 
+        // AoE not covering → the single-target debuff rung takes over, once per mob up to
+        // its per-room cap (this is the report-#1 fall-through).
         CombatSpellSlot single = settings.SingleTargetDebuffSpell;
         if (ctx.OverridePreAttackSpell is { } preAttackOverride)
         {
@@ -246,6 +268,18 @@ public sealed class CombatSpellChooser
             return new CombatSpellDecision(CombatSpellAction.SingleDebuff, single.SpellName!);
 
         return null;
+    }
+
+    // Is there a mob in the room this round the AoE debuff hasn't already tagged — the
+    // first cast (nothing tagged yet) or a new arrival / summon? When the roster isn't
+    // wired (unwired callers / tests supply no RoomMobKeys), degrade to once-per-room:
+    // fire only while no AoE debuff has gone out yet.
+    private bool AoeHasNewTarget(in CombatSpellContext ctx)
+    {
+        if (ctx.RoomMobKeys is not { } keys) return _areaDebuffCasts == 0;
+        foreach (string key in keys)
+            if (!_areaDebuffedMobs.Contains(key)) return true;
+        return false;
     }
 
     // Whether the drain spell should take this round. Fires only when configured,
@@ -354,12 +388,18 @@ public sealed class CombatSpellChooser
     // targetRawName. No-op for WeaponAttack. Keeps the per-room counters in step
     // with what actually went to the server, so a cast blocked by
     // CastCoordinator's cooldown isn't counted.
-    public void MarkCast(in CombatSpellDecision decision, string targetRawName)
+    public void MarkCast(in CombatSpellDecision decision, string targetRawName,
+                         IReadOnlyList<string>? roomMobKeys = null)
     {
         switch (decision.Action)
         {
             case CombatSpellAction.AreaDebuff:
-                _areaDebuffCast = true;
+                // Count the AoE cast toward its per-room cap and tag every mob present, so
+                // it re-fires only for a later NEW arrival rather than every round. A null
+                // roster (unwired callers / tests) still bumps the counter → once-per-room.
+                _areaDebuffCasts++;
+                if (roomMobKeys is not null)
+                    foreach (string key in roomMobKeys) _areaDebuffedMobs.Add(key);
                 break;
             case CombatSpellAction.SingleDebuff:
                 if (!string.IsNullOrEmpty(targetRawName))
@@ -546,4 +586,9 @@ public readonly record struct CombatSpellContext(
     // populates them — unwired callers / tests behave exactly as before.
     bool HpBelowDrainTrigger = false,
     bool DrainTargetEligible = false,
-    bool HpBelowDrainRelease = false);
+    bool HpBelowDrainRelease = false,
+    // RawNames of every engageable monster in the room this round — the roster the AoE
+    // debuff tags on cast and checks for new (untagged) arrivals to decide a re-fire.
+    // null when unwired (weapon-only context, tests), where the AoE degrades to
+    // once-per-room.
+    IReadOnlyList<string>? RoomMobKeys = null);

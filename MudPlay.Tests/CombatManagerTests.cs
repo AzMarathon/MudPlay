@@ -235,6 +235,34 @@ public sealed class CombatManagerTests
         Assert.All(after, s => Assert.Equal("", s));   // and ONLY CRs — no attack sent at a corpse
     }
 
+    [Fact]
+    public void AoeMultiKill_MidRound_NoCombatOff_StillReParsesWithCr()
+    {
+        // report paradigm-20260818-052120: an AoE (fbal) dropped most of a room but a mob
+        // survived and kept combat engaged, so NO *Combat Off* landed to trigger the
+        // roster re-parse — the stale enemy count kept the room spell auto-repeating at
+        // the lone survivor round after round ("FBAL keeps rooming despite only Queen Ant
+        // left"). A 2nd+ exp gain in one round must force the CR re-parse mid-round, with
+        // no Off, so the chooser re-picks the thinned roster and drops to single-target.
+        using Harness h = new();
+        h.AddMonster(1, "soldier ant", killable: true);
+        h.AddMonster(2, "soldier ant", killable: true);
+        h.AddMonster(3, "queen ant", killable: true);
+
+        h.Feed("Also here: soldier ant, soldier ant, queen ant.");
+        int sentAfterEngage = h.Sent.Count;
+
+        // The AoE drops the two soldiers this round (two exp lines); the queen survives
+        // and keeps combat, so no *Combat Off* / NoteUnattributedDeath ever comes.
+        h.Feed("You gain 80 experience.");
+        h.Feed("You gain 80 experience.");
+
+        var after = h.Sent.Skip(sentAfterEngage)
+            .Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'))
+            .ToList();
+        Assert.Contains("", after);   // a CR re-parse went out mid-round without an Off
+    }
+
     // ----- confusion-fumble retry (OnActionFailed) ----------------------
 
     [Fact]

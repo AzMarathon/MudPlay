@@ -53,6 +53,11 @@ public sealed class RoomTracker
     private readonly ConcurrentQueue<PendingMove> _pending = new();
     private readonly LinkedList<HistoryEntry> _history = new();
     private readonly List<DirectionDto> _recentSteps = new();
+    // The room the buffered replay trail is anchored at — where we stood when the FIRST
+    // still-buffered step was sent. TryReplayRecover projects _recentSteps from here, not
+    // from _history.First (the newest CONFIRMED room), which drifts several rooms ahead of
+    // the trail during a run of ambiguous non-strict confirms and makes replay abort.
+    private RoomKey? _stepsAnchor;
 
     // Profile the tracker is currently writing into. Set by Hydrate; cleared by
     // OnProfileClosed. When null, persistence operations are no-ops — the
@@ -218,6 +223,8 @@ public sealed class RoomTracker
 
         _recentSteps.Clear();
         if (profile.RecentSteps is { } steps) _recentSteps.AddRange(steps);
+        // The persisted steps project from the room we're hydrating as Confirmed.
+        _stepsAnchor = room.Key;
 
         // Set Confirmed without writing back to the profile (we just
         // read from it). Bypass the SetRoom persistence path so we
@@ -761,6 +768,7 @@ public sealed class RoomTracker
 
         while (_pending.TryDequeue(out _)) { /* drain */ }
         _recentSteps.Clear();
+        _stepsAnchor = null;
         PersistSteps();
         IsInDarkRoom = false;
         SetRoom(room: null, RoomConfidence.PendingRespawn, when, "death recorded");
@@ -1197,9 +1205,12 @@ public sealed class RoomTracker
         if (_history.First is null) return false;
         if (_recentSteps.Count == 0) return false;
 
-        // Walk forward from the newest confirmed room through the
-        // persisted steps.
-        RoomKey start = _history.First.Value.Room;
+        // Walk forward through the persisted steps from the room the trail is anchored
+        // at — where the first buffered step was sent — NOT _history.First (the newest
+        // confirmed room), which drifts ahead of the trail during ambiguous non-strict
+        // confirms and made the projection abort on step 0 (report paradigm-20260818-081025).
+        // Falls back to _history.First when no anchor was captured (legacy / just-hydrated).
+        RoomKey start = _stepsAnchor ?? _history.First.Value.Room;
         Room? cursor = _graph.GetRoom(start);
         if (cursor is null)
         {
@@ -1531,6 +1542,11 @@ public sealed class RoomTracker
 
     private void AppendStep(DirectionDto step)
     {
+        // Anchor the replay trail at the room we're standing in as the FIRST buffered step
+        // goes out — the room the whole chain projects from. Starting the projection at
+        // _history.First instead (the newest confirmed room) overshoots after a run of
+        // ambiguous non-strict confirms and aborts on step 0 (report paradigm-20260818-081025).
+        if (_recentSteps.Count == 0) _stepsAnchor = State.CurrentRoom?.Key;
         _recentSteps.Add(step);
         PersistSteps();
     }
@@ -1545,6 +1561,7 @@ public sealed class RoomTracker
     private void ClearPendingAndSteps()
     {
         while (_pending.TryDequeue(out _)) { /* drain */ }
+        _stepsAnchor = null;
         if (_recentSteps.Count == 0) return;
         _recentSteps.Clear();
         PersistSteps();
@@ -1562,6 +1579,7 @@ public sealed class RoomTracker
         _profile.LastKnownRoom = new RoomRef(room.Key.Map, room.Key.Room);
         // RecentSteps reset on Confirmed — clear in-memory + persist.
         _recentSteps.Clear();
+        _stepsAnchor = null;
         _profile.RecentSteps = null;
         _ = when;                                                // reserved for future per-step timestamp persistence
     }

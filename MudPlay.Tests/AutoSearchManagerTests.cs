@@ -108,6 +108,50 @@ public sealed class AutoSearchManagerTests
         Assert.Empty(mgr.LastSentForTests);
     }
 
+    // ----- settle hold only when a loot consumer is armed -----
+
+    [Fact]
+    public void ClearRoom_NoLootConsumer_ReleasesGateImmediately_NoSettleHold()
+    {
+        // report paradigm-20260818-060742: with the get engines off (nothing collects
+        // what the search reveals) the settle window is dead time on every room — release
+        // the walker the moment the `sea` goes out rather than idling a full settle for it.
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(
+            isEnabled: () => true,
+            coordinator: coord);              // no get engine, no demand
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged();
+        Assert.True(SearchHeld(coord));       // held from entry so the sea fires in place
+        mgr.OnClassifyElapsed();              // clear room → sea fires
+
+        Assert.Single(mgr.LastSentForTests);
+        Assert.Equal("sea", Decode(mgr.LastSentForTests[0]));
+        Assert.False(SearchHeld(coord));      // released immediately — no settle idle
+    }
+
+    [Fact]
+    public void ClearRoom_GetEngineArmed_HoldsForSettle()
+    {
+        // A get engine is armed to collect the reveal, so the walker is held through the
+        // settle window (until OnSettleElapsed) exactly as before.
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(
+            isEnabled: () => true,
+            hasGetEngineArmed: () => true,
+            coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged();
+        mgr.OnClassifyElapsed();
+
+        Assert.Single(mgr.LastSentForTests);
+        Assert.True(SearchHeld(coord));       // held for the collection settle
+        mgr.OnSettleElapsed();
+        Assert.False(SearchHeld(coord));
+    }
+
     // ----- fight in the room: defer + hold, fire on clear -----
 
     [Fact]
@@ -118,6 +162,7 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
             hasEngageableHostiles: () => hostiles,
+            hasGetEngineArmed: () => true,   // a consumer is armed, so the settle window is held
             coordinator: coord);
         mgr.SetWireSender(_ => { });
 

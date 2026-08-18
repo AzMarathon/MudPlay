@@ -63,6 +63,9 @@ public sealed partial class CombatManager
 
     private CombatSpellDecision? _pendingDebuff;
     private string? _pendingDebuffTarget;
+    // The room roster captured with the pending debuff, so an AoE debuff tags the mobs
+    // that were present when it was PICKED (not whenever the coordinator confirms it).
+    private IReadOnlyList<string>? _pendingDebuffRoomKeys;
 
     // Optional bridge to the CastingDirector's in-between window (Evaluate). Used
     // by TryPreAttackInBetween to let a due survival cast — or, failing that, the
@@ -240,20 +243,27 @@ public sealed partial class CombatManager
             _spellChooser.ResetForNewTarget();
             _alternationRound = 0;
             _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
-            // Anchor the tally clock at the engage moment, NOT MinValue. MaxCasts
-            // counts real rounds and the engage announce is round 0 — the attack
-            // spell fires on a LATER server round. In a MULTI-mob room the other
-            // mobs' swing lines trip the damage-driven combat tick within ~100ms of
-            // the engage; a MinValue reset let that premature tick tally the spell
-            // before it ever fired, so a MaxCasts-1 nuke cap-switched to the
-            // alternate the same round and the normal spell never went out ("LBOL →
-            // MMIS without firing LBOL", report paradigm-20260815-202241 —
-            // engageable=2, sinceAttack≈79ms). Anchoring here makes AttackTallyMinGap
-            // reject that premature tick; the first genuine round tick (~a round
-            // later) tallies. Single-mob rooms already behaved (their first tick IS a
-            // real round, sinceAttack≈5000ms), so this only closes the multi-mob
-            // early-swap.
-            _lastAttackTallyAt = _now();
+            // Anchor the tally clock at the engage moment ONLY in a MULTI-mob room.
+            // MaxCasts counts real rounds and the engage announce is round 0 — the
+            // attack spell fires on a LATER server round. In a multi-mob room the
+            // OTHER mobs' swing lines trip the damage-driven combat tick within ~100ms
+            // of the engage; a MinValue reset let that premature tick tally the spell
+            // before it ever fired, so a MaxCasts-1 nuke cap-switched to the alternate
+            // the same round and the normal spell never went out ("LBOL → MMIS without
+            // firing LBOL", report paradigm-20260815-202241 — engageable=2,
+            // sinceAttack≈79ms). Anchoring makes AttackTallyMinGap reject that
+            // premature tick; the first genuine round tick tallies.
+            //
+            // A SINGLE-mob room has no other mob to produce a premature tick — its
+            // first damage tick IS round 1. But that tick can land UNDER
+            // AttackTallyMinGap after the engage (the server delivered round 1 ~3.3s
+            // out), and anchoring at engage wrongly rejected it too, slipping the first
+            // tally to round 2. A MaxCasts-1 spell then auto-repeated one extra round
+            // before the cap-switch fired (report paradigm-20260818-055820: engine cast
+            // lbol, cap-switch lbol→mmis at sinceAttack≈9333ms, engageable=1). So only
+            // anchor when there's another mob to guard against; leave solo fights at
+            // MinValue so the first genuine tick always tallies.
+            _lastAttackTallyAt = enemyCount > 1 ? _now() : DateTimeOffset.MinValue;
         }
 
         // A per-monster forced attack COMMAND wins over the entire normal flow
@@ -790,7 +800,7 @@ public sealed partial class CombatManager
         if (!_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
             return false;
 
-        _spellChooser.MarkCast(decision, picked.RawName);
+        _spellChooser.MarkCast(decision, picked.RawName, ctx.RoomMobKeys);
         _currentTarget = picked.RawName;
         // Arm the attack resume: the debuff's *Combat Off* re-announces the combat
         // action through the combat-off resume path — mirroring the director's own
@@ -847,6 +857,7 @@ public sealed partial class CombatManager
         // existing combat-off resume path.
         _pendingDebuff = decision;
         _pendingDebuffTarget = target;
+        _pendingDebuffRoomKeys = ctx.RoomMobKeys;
         return (decision.Spell!,
             decision.Action == CombatSpellAction.AreaDebuff ? null : target);
     }
@@ -904,9 +915,10 @@ public sealed partial class CombatManager
     public void CommitInBetweenDebuff()
     {
         if (_pendingDebuff is not { } decision) return;
-        _spellChooser.MarkCast(decision, _pendingDebuffTarget ?? string.Empty);
+        _spellChooser.MarkCast(decision, _pendingDebuffTarget ?? string.Empty, _pendingDebuffRoomKeys);
         _pendingDebuff = null;
         _pendingDebuffTarget = null;
+        _pendingDebuffRoomKeys = null;
     }
 
     // Count engageable monsters in the observation, matching the candidate build in
@@ -930,10 +942,28 @@ public sealed partial class CombatManager
                 continue;
             }
             MonsterOverlay overlay = ResolveOverlay(n);
-            if (MonsterEngagement.IsEngageable(overlay))
+            if (MonsterEngagement.IsEngageable(overlay, _userEngagedInstances.Contains(e.RawName)))
                 count++;
         }
         return count;
+    }
+
+    // The RawNames of the engageable monsters in the room — the roster the AoE debuff
+    // tags on cast and checks for new arrivals against. Mirrors CountEngageable's filter
+    // exactly (unknown number → engageable, else the overlay), so EnemyCount and
+    // RoomMobKeys never disagree about which mobs count.
+    private List<string> CollectEngageableMobKeys(RoomEntitiesObservation obs)
+    {
+        var keys = new List<string>();
+        for (int i = 0; i < obs.Entities.Count; i++)
+        {
+            RoomEntity e = obs.Entities[i];
+            if (e.Kind != EntityKind.Monster) continue;
+            if (e.MonsterNumber is not int n) { keys.Add(e.RawName); continue; }
+            if (MonsterEngagement.IsEngageable(ResolveOverlay(n), _userEngagedInstances.Contains(e.RawName)))
+                keys.Add(e.RawName);
+        }
+        return keys;
     }
 
     private static bool TargetPresent(RoomEntitiesObservation obs, string rawTarget)
@@ -987,7 +1017,8 @@ public sealed partial class CombatManager
             AlternationPreferSpell: AlternationPreferSpell(settings),
             HpBelowDrainTrigger: hpBelowDrain,
             DrainTargetEligible: drainEligible,
-            HpBelowDrainRelease: hpBelowDrainRelease);
+            HpBelowDrainRelease: hpBelowDrainRelease,
+            RoomMobKeys:         CollectEngageableMobKeys(obs));
     }
 
     // Resolve the drain spell's two live gates for a target: whether HP has fallen
@@ -1463,6 +1494,16 @@ public sealed partial class CombatManager
         // comment on _immunityHandledThisRound); the rest of the burst is a leftover
         // from the primary and must not tear down the fallback we just switched to.
         if (_immunityHandledThisRound) return;
+
+        // A manual user cast (the user hand-typed an attack / drain spell to probe a
+        // target) draws this same "no effect" line — but _lastCastAction /
+        // _castingSpellTarget still point at the engine's PRIOR auto cast, so
+        // attributing the immunity here would blame the wrong spell (report
+        // paradigm-20260818-055955: a hand-typed `dtch` at an elemental marked the
+        // engine's `mmis` immune, dropping the cascade straight to melee). The engine
+        // holds its own attack during an override round, so the only cast in flight
+        // is the user's — a manual probe must not mutate the auto-cascade immune maps.
+        if (_userAttackOverride) return;
 
         // Command mode: a spell placed in the ATTACK-COMMAND slot (NormalAttackCommand
         // = "harm") reaches the wire via SendAttack, not a chooser cast — no spell is

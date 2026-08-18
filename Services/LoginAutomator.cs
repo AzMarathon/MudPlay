@@ -58,6 +58,12 @@ public sealed class LoginAutomator : IDisposable
     // Fired after the final step matches and its response is sent.
     public event Action? LoggedIntoGame;
 
+    // Fired after ANY step matches and its response is sent (not just the last).
+    // Lets the main-menu auto-entry keep its arm window fresh while a login is
+    // actively progressing, so realm entry still fires if a trailing (mis-authored
+    // or MegaMUD-holdover) step never matches and LoggedIntoGame never comes.
+    public event Action? StepAdvanced;
+
     // Fired when a step's send fails (no value to substitute, send IO error,
     // etc.). Payload is a short reason.
     public event Action<string>? Aborted;
@@ -316,6 +322,10 @@ public sealed class LoginAutomator : IDisposable
         _log?.Invoke(done
             ? $"LoginAutomator: matched step {indexAtDispatch + 1}/{_steps.Count} — final step sent"
             : $"LoginAutomator: matched step {indexAtDispatch + 1}/{_steps.Count}; awaiting step {_stepIndex + 1}/{_steps.Count} (waiting for: \"{nextPattern}\")");
+
+        // A step just matched + sent — a login is actively progressing. Signal it
+        // so the auto-entry arm window stays fresh even if a later step stalls.
+        StepAdvanced?.Invoke();
 
         if (done) { FireDone(); return; }
         TryAdvance();
