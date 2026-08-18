@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
 
@@ -34,7 +35,8 @@ public static class RemoteActionPathExpander
         RoomKey source,
         IReadOnlyList<Direction> directions,
         BfsMapper? bfs = null,
-        IRoomFilter? filter = null)
+        IRoomFilter? filter = null,
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(directions);
@@ -80,8 +82,17 @@ public static class RemoteActionPathExpander
                 MultiActionExitData effective = SelectCheapestPerStep(bfs, filter, current, maData);
 
                 (int InsertAt, List<WalkStep> Steps)? detour =
-                    BuildAnchoredDetour(graph, bfs, filter, roomBefore, current, effective);
-                if (detour is null) break;
+                    BuildAnchoredDetour(graph, bfs, filter, roomBefore, current, effective, log);
+                if (detour is null)
+                {
+                    log?.Debug("Walker",
+                        $"remote-action exit {current} {dir}->{exit.Target}: detour could not be routed " +
+                        $"({effective.Actions.Count} action(s)) — truncating; the walk will fail as no-route");
+                    break;
+                }
+                log?.Debug("Walker",
+                    $"remote-action exit {current} {dir}->{exit.Target}: go-act-return detour built " +
+                    $"({effective.Actions.Count} action(s), {detour.Value.Steps.Count} step(s))");
                 if (detour.Value.Steps.Count > 0) detours.Add(detour.Value);
 
                 roomBefore.Add(current);
@@ -149,7 +160,8 @@ public static class RemoteActionPathExpander
         IRoomFilter? filter,
         IReadOnlyList<RoomKey> approach,
         RoomKey host,
-        MultiActionExitData maData)
+        MultiActionExitData maData,
+        LogService? log)
     {
         int hostIndex = approach.Count;
 
@@ -162,7 +174,7 @@ public static class RemoteActionPathExpander
         // anchoring only applies when every action lives in another room).
         if (!allRemote)
         {
-            List<WalkStep>? hostSteps = BuildDetourFromAnchor(graph, bfs, filter, host, maData);
+            List<WalkStep>? hostSteps = BuildDetourFromAnchor(graph, bfs, filter, host, maData, log);
             return hostSteps is null ? null : (hostIndex, hostSteps);
         }
 
@@ -181,7 +193,7 @@ public static class RemoteActionPathExpander
         // there is, there's nothing to type — fall back to a host anchor.
         if (first is null || last is null)
         {
-            List<WalkStep>? plain = BuildDetourFromAnchor(graph, bfs, filter, host, maData);
+            List<WalkStep>? plain = BuildDetourFromAnchor(graph, bfs, filter, host, maData, log);
             return plain is null ? null : (hostIndex, plain);
         }
 
@@ -201,7 +213,7 @@ public static class RemoteActionPathExpander
         if (bestIndex < 0) return null;
 
         RoomKey bestAnchor = bestIndex < hostIndex ? approach[bestIndex] : host;
-        List<WalkStep>? steps = BuildDetourFromAnchor(graph, bfs, filter, bestAnchor, maData);
+        List<WalkStep>? steps = BuildDetourFromAnchor(graph, bfs, filter, bestAnchor, maData, log);
         return steps is null ? null : (bestIndex, steps);
     }
 
@@ -217,7 +229,8 @@ public static class RemoteActionPathExpander
         BfsMapper bfs,
         IRoomFilter? filter,
         RoomKey anchor,
-        MultiActionExitData maData)
+        MultiActionExitData maData,
+        LogService? log)
     {
         var steps = new List<WalkStep>();
         RoomKey cursor = anchor;
@@ -229,7 +242,7 @@ public static class RemoteActionPathExpander
 
             if (!cursor.Equals(issueRoom))
             {
-                if (!TryAppendLeg(graph, bfs, filter, steps, cursor, issueRoom)) return null;
+                if (!TryAppendLeg(graph, bfs, filter, steps, cursor, issueRoom, log)) return null;
                 cursor = issueRoom;
             }
 
@@ -238,7 +251,7 @@ public static class RemoteActionPathExpander
 
         if (!cursor.Equals(anchor))
         {
-            if (!TryAppendLeg(graph, bfs, filter, steps, cursor, anchor)) return null;
+            if (!TryAppendLeg(graph, bfs, filter, steps, cursor, anchor, log)) return null;
         }
 
         return steps;
@@ -283,7 +296,8 @@ public static class RemoteActionPathExpander
 
     // Route from→to via BFS and append the leg as MoveSteps (Text exits carry
     // their command label). Detour legs are ordinary passages in practice, so
-    // nested multi-action exits aren't re-expanded here. False when no route
+    // nested multi-action exits aren't re-expanded here — a leg that crosses one
+    // instead fails the whole detour (see the guard below). False when no route
     // exists or a hop can't be resolved.
     private static bool TryAppendLeg(
         RoomGraphManager graph,
@@ -291,7 +305,8 @@ public static class RemoteActionPathExpander
         IRoomFilter? filter,
         List<WalkStep> steps,
         RoomKey from,
-        RoomKey to)
+        RoomKey to,
+        LogService? log)
     {
         IReadOnlyList<Direction>? legs = bfs.FindPath(from, to, filter);
         if (legs is null || legs.Count == 0) return false;
@@ -301,6 +316,24 @@ public static class RemoteActionPathExpander
         {
             Room? room = graph.GetRoom(cur);
             if (room is null || !room.Exits.TryGetValue(d, out RoomExit e)) return false;
+
+            // A detour leg that itself crosses a REMOTE multi-action exit is a
+            // NESTED remote action — reaching one lever requires first pulling a
+            // lever in yet another room. The go-act-return machinery doesn't
+            // recurse into that, so bail: fail the whole detour (→ Expand
+            // truncates → the walk fails cleanly as no-route) rather than emit a
+            // bare move the send-side would reject mid-walk with a misleading
+            // "not supported on loop circuits" message. Nested remote-action
+            // routing is a known unsolved case (tracked as its own follow-up).
+            if (e.Hint == RoomExitHint.MultiActionHidden && e.MultiAction is { HasRemoteActions: true })
+            {
+                log?.Debug("Walker",
+                    $"remote-action detour leg {from}->{to}: hop {d} at {cur} crosses a NESTED " +
+                    $"remote-action exit (->{e.Target}) — nested remote actions aren't auto-solved yet, " +
+                    "abandoning the detour");
+                return false;
+            }
+
             string? label = e.Hint == RoomExitHint.Text && e.TextCommands is { Count: > 0 } tc
                 ? tc[0]
                 : null;
@@ -308,5 +341,16 @@ public static class RemoteActionPathExpander
             cur = e.Target;
         }
         return true;
+    }
+
+    // True when steps ends at destination — its last crossing (MoveStep) targets
+    // it. A remote-action detour that couldn't be routed truncates the expansion
+    // short, so this returns false and the caller can fail the walk cleanly at
+    // plan time instead of stranding on a partial path.
+    public static bool ReachesDestination(IReadOnlyList<WalkStep> steps, RoomKey destination)
+    {
+        for (int i = steps.Count - 1; i >= 0; i--)
+            if (steps[i] is MoveStep ms) return ms.ExpectedTarget.Equals(destination);
+        return false;
     }
 }

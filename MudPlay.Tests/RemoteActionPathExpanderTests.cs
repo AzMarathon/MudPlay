@@ -391,6 +391,96 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
         Assert.Equal(new RoomKey(1, 2), only.ExpectedTarget);
     }
 
+    // Nested remote action: the lever room for 1/2's gated E exit (1/5) is itself
+    // reachable only through 1/2's gated N exit, whose own action lives in 1/6.
+    // Reaching the outer lever thus requires first solving an inner remote gate —
+    // the go-act-return machinery doesn't recurse into that, so the detour is
+    // abandoned and the path truncates before the gated hop. This is the
+    // 6/878→6/924 four-lever-alcove report in miniature.
+    //
+    //   1/1 ─E─▶ 1/2 ─E (Hidden/Needs 1 Actions)─▶ 1/9   (Action#1 in 1/5)
+    //             │N (Hidden/Needs 1 Actions)             (Action#1 in 1/6)
+    //             ▼
+    //            1/5  (D slot → Action#1 for 1/2's E exit)
+    //             │S back to 1/2
+    //            1/6  (D slot → Action#1 for 1/2's N exit), reachable 1/2 S
+    private const string NestedRemoteActionGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Host",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/5 (Hidden/Needs 1 Actions, specific order)", "S": "1/6",
+            "E": "1/9 (Hidden/Needs 1 Actions, specific order)", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "OuterLever",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action#1 [on the E exit of room 1/2]: pull lever" },
+          { "Map Number": 1, "Room Number": 6, "Name": "InnerLever",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action#1 [on the N exit of room 1/2]: pull switch" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void NestedRemoteAction_DetourAbandoned_TruncatesShortOfDestination()
+    {
+        RoomGraphManager graph = NewGraph(NestedRemoteActionGraphJson);
+        BfsMapper bfs = new(graph);
+
+        // BFS routes 1/1 → 1/9 as E, E (it crosses both gated exits freely). The
+        // detour to prime 1/2's E exit must reach lever room 1/5, but the only
+        // way in crosses 1/2's own gated N exit — a nested remote action the
+        // expander can't auto-solve, so the detour is dropped.
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1),
+            new[] { Direction.E, Direction.E }, bfs);
+
+        // Only the first plain hop survives; the gated hop is truncated away.
+        MoveStep only = Assert.IsType<MoveStep>(Assert.Single(steps));
+        Assert.Equal(new RoomKey(1, 2), only.ExpectedTarget);
+
+        // The plan-time guard the walker uses to fail cleanly sees the shortfall.
+        Assert.False(RemoteActionPathExpander.ReachesDestination(steps, new RoomKey(1, 9)));
+    }
+
+    [Fact]
+    public void ReachesDestination_TrueOnlyWhenLastCrossingTargetsIt()
+    {
+        var dest = new RoomKey(6, 924);
+
+        // Ends on the primed cross to the destination (a trailing CommandStep or
+        // intervening non-move steps don't hide the last crossing).
+        WalkStep[] reaching =
+        {
+            new MoveStep(Direction.E, new RoomKey(6, 877)),
+            new CommandStep("pull lever"),
+            new MoveStep(Direction.D, dest),
+        };
+        Assert.True(RemoteActionPathExpander.ReachesDestination(reaching, dest));
+
+        // Truncated short — the last crossing lands elsewhere.
+        WalkStep[] truncated =
+        {
+            new MoveStep(Direction.E, new RoomKey(6, 877)),
+            new MoveStep(Direction.N, new RoomKey(6, 876)),
+        };
+        Assert.False(RemoteActionPathExpander.ReachesDestination(truncated, dest));
+
+        // No crossing at all.
+        Assert.False(RemoteActionPathExpander.ReachesDestination(Array.Empty<WalkStep>(), dest));
+    }
+
     [Fact]
     public void UnknownSource_ReturnsEmpty()
     {

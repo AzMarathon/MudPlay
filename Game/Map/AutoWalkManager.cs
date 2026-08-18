@@ -940,7 +940,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
             else
             {
-                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter);
+                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter, _log);
             }
         }
         finally { gateScope?.Dispose(); }
@@ -948,6 +948,23 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (expanded.Count == 0)
         {
             Raise(new WalkEvent(WalkEventKind.Failed, "path expansion empty", destination));
+            return false;
+        }
+
+        // A remote-action detour that couldn't be routed (e.g. a NESTED remote-action
+        // door inside a lever alcove) truncates the expansion short of the destination.
+        // Fail cleanly here — the program log (Walker/Debug) names the exit that stopped
+        // it — rather than walking the partial path and stranding, or mis-sending a bare
+        // move the send-side rejects with a misleading "not supported on loop circuits".
+        // Boat plans stitch their own arrival legs, so only vet the plain expansion.
+        if (boatPlan is null && !RemoteActionPathExpander.ReachesDestination(expanded, destination))
+        {
+            _log?.Debug("Walker",
+                $"walk to {destination}: expansion truncated ({expanded.Count} step(s)) short of the destination — " +
+                "a remote-action detour on the route could not be routed (see the detour lines above)");
+            Raise(new WalkEvent(WalkEventKind.Failed,
+                "route needs an exit the walker can't auto-solve yet (a nested remote-action door) — see the program log",
+                destination));
             return false;
         }
 
@@ -1109,11 +1126,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         List<WalkStep> steps = new();
         if (plan.ToDock.Count > 0)
-            steps.AddRange(RemoteActionPathExpander.Expand(_graph, source, plan.ToDock, _bfs, _filter));
+            steps.AddRange(RemoteActionPathExpander.Expand(_graph, source, plan.ToDock, _bfs, _filter, _log));
         steps.Add(new BoatStep(plan.Passage));
         if (plan.FromArrival.Count > 0)
             steps.AddRange(RemoteActionPathExpander.Expand(
-                _graph, plan.Passage.ArrivalRoom, plan.FromArrival, _bfs, _filter));
+                _graph, plan.Passage.ArrivalRoom, plan.FromArrival, _bfs, _filter, _log));
         return steps;
     }
 
@@ -1533,6 +1550,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
             if (sync == SpecialExitSend.Sent) return;
             if (sync == SpecialExitSend.Failed)
             {
+                _log?.Debug("Walker",
+                    $"special-exit dispatch rejected step {_index + 1}/{_path!.Count} " +
+                    $"({step.Direction} {exit.Hint} -> {exit.Target}): {syncFail}");
                 Raise(new WalkEvent(WalkEventKind.Failed, syncFail!, _destination));
                 Reset();
                 return;

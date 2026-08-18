@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.20.10**
-> - Navigation: the walker no longer plans a route through a hidden, action-gated exit it can't actually open — some game-data exports annotate a fork/lever passage's opener on only one side, leaving the reciprocal exit with no action data. The router now routes **around** such an un-openable exit (or fails cleanly with "no route") instead of sending a doomed move and stranding the walker
+> **Version 3.20.11**
+> - Navigation: walking to a room reachable only through a **nested** remote-action exit — a lever alcove that is itself behind another action-gated door — now fails cleanly at plan time ("route needs an exit the walker can't auto-solve yet") instead of the misleading "not supported on loop circuits" block
+> - Navigation: the walker and loop engines now log their remote-action detour and special-exit dispatch decisions on the debug side, so a blocked walk is diagnosable from the program log
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
