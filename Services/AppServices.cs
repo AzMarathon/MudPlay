@@ -1734,6 +1734,12 @@ public sealed class AppServices
         LogService bootstrapLog = new();
         DataMigration.RunIfNeeded(bootstrapLog);
 
+        // One-time forced retirement of the pre-split Messages catalogue (legacy single
+        // Global seed + per-set messages.json), so existing installs land on the new
+        // realm-flavored seeds bootstrapped just above. Guarded by a marker; backs up to
+        // .bak first. Remove-after-rollout (tracked as a GitHub issue).
+        DataMigration.RetireLegacyMessagesOnce(bootstrapLog);
+
         _current = new AppServices(bootstrapLog);
         return _current;
     }

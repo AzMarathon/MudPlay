@@ -13,11 +13,12 @@ namespace MudPlay.Models.GameData;
 // semantically fits.
 //
 // Storage lives alongside the active game-data set at
-// Data/game data/{set}/messages.json with the universal seed at
-// Data/Global/Messages.seed.json (user-writable; bootstrapped from the
-// bundled Defaults/ copy on first launch). The seed is generated from the
-// wcc-export spell-messages.json via the offline gen_wcc_seed.py script;
-// user edits write back to the per-set file (creating it on first save).
+// Data/game data/{set}/messages.json with the realm-flavored seed at
+// Data/Global/Messages.{stock|paradigm}.seed.json (user-writable; bootstrapped
+// from the bundled Defaults/ copy on first launch, realm picked from the set's
+// Info.json Legit). Each seed is decoded offline from that realm's MegaMUD
+// messages.md by tools/decode_messages_md.py — a record's name attributes it to
+// its spell/item by name. User edits write back to the per-set file.
 //
 // Identity rule: Id is SHA1(Name | CasterMessage | TargetMessage |
 // WitnessMessage | AppliedMessage | AppliedEndsWith) truncated to 16
