@@ -2196,16 +2196,7 @@ public sealed partial class CombatManager : IDisposable
         // survivor the kills haven't cleared yet.
         if (_expGainsThisRound >= 2)
         {
-            _lastDeathAt = DateTimeOffset.Now;
-            _attackSentSinceDeath = false;
-            _currentTarget = null;
-            _castingSpellTarget = null;
-            _inferredKillPendingRemoval = null;
-            ClearBackstabResolution();
-            if (TrySendRoomRefresh("AoE multi-kill"))
-                _log?.Combat(LogCategory,
-                    $"AoE multi-kill ({_expGainsThisRound} exp this round) — re-parsing room with "
-                    + "CR to re-pick from the true roster instead of corpse-casting a survivor");
+            ForceAoeMultiKillReparse("AoE multi-kill");
             return;
         }
 
@@ -2443,6 +2434,40 @@ public sealed partial class CombatManager : IDisposable
             DropTargetForInferredKill(
                 "kill inferred from exp gain (prompt, pre-*Combat Off*) — dropping target so the round's alternate can't corpse-cast");
         }
+
+        // AoE multi-kill MID-ROUND: a 2nd+ exp gain in the same round means an AoE
+        // dropped several mobs at once. NoteUnattributedDeath's re-parse only fires on
+        // the trailing *Combat Off* — but when a survivor keeps combat continuously
+        // engaged, that Off never lands, so the stale EnemyCount keeps the engine (and
+        // the server's auto-repeat) firing the room spell at the lone survivor round
+        // after round (report paradigm-20260818-052120: "FBAL keeps rooming despite only
+        // Queen Ant left, until I hit enter"). Force the roster re-parse now so the next
+        // observation is the TRUE roster and the chooser drops to single-target once the
+        // live count falls below the room spell's MinEnemies. Debounced + reset per round,
+        // so this and the Off-path never double-CR and a normal one-kill-per-round fight
+        // (exp count 1) never trips it.
+        if (_expGainsThisRound >= 2)
+            ForceAoeMultiKillReparse("AoE multi-kill mid-round");
+    }
+
+    // AoE room-wipe recovery: drop all combat state and force ONE debounced CR
+    // re-parse so the next observation is the TRUE roster, re-picking from what's
+    // actually left rather than a survivor the kills haven't cleared yet. Shared by
+    // the *Combat Off* path (NoteUnattributedDeath) and the mid-round exp-gain path
+    // (OnUserGainExperience) — the latter catches the survivor-keeps-combat case
+    // where no Off ever lands.
+    private void ForceAoeMultiKillReparse(string context)
+    {
+        _lastDeathAt = DateTimeOffset.Now;
+        _attackSentSinceDeath = false;
+        _currentTarget = null;
+        _castingSpellTarget = null;
+        _inferredKillPendingRemoval = null;
+        ClearBackstabResolution();
+        if (TrySendRoomRefresh(context))
+            _log?.Combat(LogCategory,
+                $"AoE multi-kill ({_expGainsThisRound} exp this round) — re-parsing room with "
+                + "CR to re-pick from the true roster instead of firing at a survivor");
     }
 
     // Drop the current target for a kill inferred from an exp gain. Nulls both
