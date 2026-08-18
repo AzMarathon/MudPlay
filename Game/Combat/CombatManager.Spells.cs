@@ -63,6 +63,9 @@ public sealed partial class CombatManager
 
     private CombatSpellDecision? _pendingDebuff;
     private string? _pendingDebuffTarget;
+    // The room roster captured with the pending debuff, so an AoE debuff tags the mobs
+    // that were present when it was PICKED (not whenever the coordinator confirms it).
+    private IReadOnlyList<string>? _pendingDebuffRoomKeys;
 
     // Optional bridge to the CastingDirector's in-between window (Evaluate). Used
     // by TryPreAttackInBetween to let a due survival cast — or, failing that, the
@@ -797,7 +800,7 @@ public sealed partial class CombatManager
         if (!_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
             return false;
 
-        _spellChooser.MarkCast(decision, picked.RawName);
+        _spellChooser.MarkCast(decision, picked.RawName, ctx.RoomMobKeys);
         _currentTarget = picked.RawName;
         // Arm the attack resume: the debuff's *Combat Off* re-announces the combat
         // action through the combat-off resume path — mirroring the director's own
@@ -854,6 +857,7 @@ public sealed partial class CombatManager
         // existing combat-off resume path.
         _pendingDebuff = decision;
         _pendingDebuffTarget = target;
+        _pendingDebuffRoomKeys = ctx.RoomMobKeys;
         return (decision.Spell!,
             decision.Action == CombatSpellAction.AreaDebuff ? null : target);
     }
@@ -911,9 +915,10 @@ public sealed partial class CombatManager
     public void CommitInBetweenDebuff()
     {
         if (_pendingDebuff is not { } decision) return;
-        _spellChooser.MarkCast(decision, _pendingDebuffTarget ?? string.Empty);
+        _spellChooser.MarkCast(decision, _pendingDebuffTarget ?? string.Empty, _pendingDebuffRoomKeys);
         _pendingDebuff = null;
         _pendingDebuffTarget = null;
+        _pendingDebuffRoomKeys = null;
     }
 
     // Count engageable monsters in the observation, matching the candidate build in
@@ -941,6 +946,23 @@ public sealed partial class CombatManager
                 count++;
         }
         return count;
+    }
+
+    // The RawNames of the engageable monsters in the room — the roster the AoE debuff
+    // tags on cast and checks for new arrivals against. Mirrors CountEngageable's filter
+    // exactly (unknown number → engageable, else the overlay), so EnemyCount and
+    // RoomMobKeys never disagree about which mobs count.
+    private List<string> CollectEngageableMobKeys(RoomEntitiesObservation obs)
+    {
+        var keys = new List<string>();
+        for (int i = 0; i < obs.Entities.Count; i++)
+        {
+            RoomEntity e = obs.Entities[i];
+            if (e.Kind != EntityKind.Monster) continue;
+            if (e.MonsterNumber is not int n) { keys.Add(e.RawName); continue; }
+            if (MonsterEngagement.IsEngageable(ResolveOverlay(n))) keys.Add(e.RawName);
+        }
+        return keys;
     }
 
     private static bool TargetPresent(RoomEntitiesObservation obs, string rawTarget)
@@ -994,7 +1016,8 @@ public sealed partial class CombatManager
             AlternationPreferSpell: AlternationPreferSpell(settings),
             HpBelowDrainTrigger: hpBelowDrain,
             DrainTargetEligible: drainEligible,
-            HpBelowDrainRelease: hpBelowDrainRelease);
+            HpBelowDrainRelease: hpBelowDrainRelease,
+            RoomMobKeys:         CollectEngageableMobKeys(obs));
     }
 
     // Resolve the drain spell's two live gates for a target: whether HP has fallen

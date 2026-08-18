@@ -2,8 +2,9 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.21.7
+## 3.21.8
 
+- Combat: debuff casting reworked — the AoE debuff now casts **once** and "tags" the mobs present, re-firing (up to its per-room cap) only when a **new** mob enters/is summoned rather than every round; and the single-target debuff now correctly takes over whenever the AoE isn't covering the room (Auto-Nuke off, unconfigured, or the room below its minimum-enemy count), fixing a case where a configured AoE debuff with Auto-Nuke off left the single-target debuff never firing
 - Recovery: auto-rest no longer gets stuck off after a fight ends in an empty room — a post-combat "wait for the room to re-confirm" hold could sit forever when the room stays empty and you don't move (an empty room never re-announces its contents), leaving you below your HP/mana rest threshold yet never resting; the hold now releases on a short timeout once nothing has re-asserted a hostile
 - Combat: a room/AoE attack spell now drops to single-target the same round the room thins below its minimum-enemy count, even when a lone survivor keeps the fight going — previously it kept re-casting the AoE at the last mob (which the server auto-repeats) until a `*Combat Off*` landed or you pressed Enter, because the room roster only re-parsed on the trailing Off
 - Navigation: Auto-Search no longer stalls the walker with a per-room settle pause when nothing is set to collect what it reveals — with Auto-Get Items / Auto-Get Cash off and no path-item hunt active, it releases the walker the moment the `sea` goes out instead of idling ~⅓ second in every room, so travelling with Auto-Search on is markedly faster
@@ -11,7 +12,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Combat: a hand-cast attack/drain spell that draws "no effect" (e.g. probing an immune elemental with `dtch`) no longer marks the engine's **own** last auto-cast spell immune — a manual probe used to wrongly drop the auto-attack cascade to melee instead of trying the next attack spell
 - Combat: a hand-cast enemy debuff (a monster-targeting spell such as `vuln`) no longer arms a phantom self-buff recast timer or shows up as a bogus self-buff in the Buff Watchdog
 - Game Data: an item's "bought / sold" list now shows **every** room a shop operates from — a shop that runs from several rooms (e.g. the silverbark canoe's Boat Launch, at both Arlysia City Docks and the Pier) previously surfaced only its first room
-- bug reports addressed: paradigm-20260818-055820, paradigm-20260818-055955, paradigm-20260818-080337, paradigm-20260818-060742, paradigm-20260818-052120, paradigm-20260818-050950, paradigm-20260818-092532
+- bug reports addressed: paradigm-20260818-055820, paradigm-20260818-055955, paradigm-20260818-080337, paradigm-20260818-060742, paradigm-20260818-052120, paradigm-20260818-050950, paradigm-20260818-092532, paradigm-20260817-205819
 
 ## 3.21.0
 
