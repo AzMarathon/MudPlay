@@ -2,12 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.21.2
+## 3.21.3
 
 - Combat: a capped attack spell no longer fires an extra round against a lone monster — the engine's cap-switch to the alternate was landing one round late when a solo fight's first round arrived quickly (under ~4s), so e.g. LBOL set to cast **1** fired twice before switching to MMIS; the per-round tally now counts a solo fight's first round instead of mistaking it for a multi-mob premature tick
 - Combat: a hand-cast attack/drain spell that draws "no effect" (e.g. probing an immune elemental with `dtch`) no longer marks the engine's **own** last auto-cast spell immune — a manual probe used to wrongly drop the auto-attack cascade to melee instead of trying the next attack spell
 - Combat: a hand-cast enemy debuff (a monster-targeting spell such as `vuln`) no longer arms a phantom self-buff recast timer or shows up as a bogus self-buff in the Buff Watchdog
-- bug reports addressed: paradigm-20260818-055820, paradigm-20260818-055955
+- Game Data: an item's "bought / sold" list now shows **every** room a shop operates from — a shop that runs from several rooms (e.g. the silverbark canoe's Boat Launch, at both Arlysia City Docks and the Pier) previously surfaced only its first room
+- bug reports addressed: paradigm-20260818-055820, paradigm-20260818-055955, paradigm-20260818-080337
 
 ## 3.21.0
 
