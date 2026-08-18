@@ -13,12 +13,34 @@ namespace MudPlay.Game.Map;
 // a remote action on a given exit, the expander treats it as a plain passage —
 // there's no per-room hardcoding here.
 //
+// Nested remote actions — a lever whose room is itself behind another
+// action-gated exit — are solved recursively and generically off this same
+// exit-graph data; no room, map, or area is special-cased. The only bespoke
+// area solvers (the teleport-maze and the pyramid) live elsewhere, because
+// their mechanics aren't expressible as exit-graph actions; every nested
+// lever / switch / ask-gate puzzle the data does describe falls out of this.
+//
 // Door wording matches the MajorMUD verb form (open door <direction>). The
 // direction is the full word (north, east, …) since that's the form the server
 // accepts on the door verb; movements themselves use the abbreviated form
 // (n, e, …) which AutoWalkManager.EncodeMove handles.
 public static class RemoteActionPathExpander
 {
+    // Levels of nesting the recursive detour builder will solve before falling
+    // back to clean-fail. One level = a lever whose room is reached only by
+    // crossing another action-gated exit (the confirmed tomb-vault case is a
+    // single level: open the alcove, then pull the order lever). A moderate
+    // bound so genuinely deeper — or mis-modelled — nests fail safe rather than
+    // emit a long speculative compound walk. Cycles are caught independently by
+    // the visited-set regardless of this cap; raising it is the one knob to
+    // support deeper nests once their timing is confirmed in-game.
+    private const int MaxNestedDepth = 3;
+
+    // Absolute backstop on the assembled detour length for one top-level exit —
+    // guards the pathological deep-but-branchy case that stays under the depth
+    // cap. Far above any real go-act-return round-trip.
+    private const int MaxDetourSteps = 200;
+
     // Expand directions against the actual exits rooted at source. Stops at the
     // first step whose source room or exit cell can't be resolved — the walker
     // will detect the truncation as a stale-path failure when it runs out of
@@ -81,13 +103,24 @@ public static class RemoteActionPathExpander
                 // (distinct StepNumbers) still pulls every step.
                 MultiActionExitData effective = SelectCheapestPerStep(bfs, filter, current, maData);
 
+                // Seed the cycle guard with this top-level crossing so a nested
+                // sub-detour that routes back through the very gate we're opening
+                // is caught as a cycle instead of recursing forever.
+                var visited = new HashSet<(RoomKey, Direction)> { (current, dir) };
                 (int InsertAt, List<WalkStep> Steps)? detour =
-                    BuildAnchoredDetour(graph, bfs, filter, roomBefore, current, effective, log);
+                    BuildAnchoredDetour(graph, bfs, filter, roomBefore, current, effective, log, 0, visited);
                 if (detour is null)
                 {
                     log?.Debug("Walker",
                         $"remote-action exit {current} {dir}->{exit.Target}: detour could not be routed " +
                         $"({effective.Actions.Count} action(s)) — truncating; the walk will fail as no-route");
+                    break;
+                }
+                if (detour.Value.Steps.Count > MaxDetourSteps)
+                {
+                    log?.Debug("Walker",
+                        $"remote-action exit {current} {dir}->{exit.Target}: detour is " +
+                        $"{detour.Value.Steps.Count} steps (> {MaxDetourSteps}) — abandoning as runaway; truncating");
                     break;
                 }
                 log?.Debug("Walker",
@@ -161,7 +194,9 @@ public static class RemoteActionPathExpander
         IReadOnlyList<RoomKey> approach,
         RoomKey host,
         MultiActionExitData maData,
-        LogService? log)
+        LogService? log,
+        int depth,
+        HashSet<(RoomKey, Direction)> visited)
     {
         int hostIndex = approach.Count;
 
@@ -174,7 +209,7 @@ public static class RemoteActionPathExpander
         // anchoring only applies when every action lives in another room).
         if (!allRemote)
         {
-            List<WalkStep>? hostSteps = BuildDetourFromAnchor(graph, bfs, filter, host, maData, log);
+            List<WalkStep>? hostSteps = BuildDetourFromAnchor(graph, bfs, filter, host, maData, log, depth, visited);
             return hostSteps is null ? null : (hostIndex, hostSteps);
         }
 
@@ -193,7 +228,7 @@ public static class RemoteActionPathExpander
         // there is, there's nothing to type — fall back to a host anchor.
         if (first is null || last is null)
         {
-            List<WalkStep>? plain = BuildDetourFromAnchor(graph, bfs, filter, host, maData, log);
+            List<WalkStep>? plain = BuildDetourFromAnchor(graph, bfs, filter, host, maData, log, depth, visited);
             return plain is null ? null : (hostIndex, plain);
         }
 
@@ -213,7 +248,7 @@ public static class RemoteActionPathExpander
         if (bestIndex < 0) return null;
 
         RoomKey bestAnchor = bestIndex < hostIndex ? approach[bestIndex] : host;
-        List<WalkStep>? steps = BuildDetourFromAnchor(graph, bfs, filter, bestAnchor, maData, log);
+        List<WalkStep>? steps = BuildDetourFromAnchor(graph, bfs, filter, bestAnchor, maData, log, depth, visited);
         return steps is null ? null : (bestIndex, steps);
     }
 
@@ -224,13 +259,22 @@ public static class RemoteActionPathExpander
     // last action, route back to anchor. Emitting the commands in order keeps a
     // "specific order" exit valid, and a single anchor keeps them contiguous.
     // Returns null when any leg can't be routed.
+    //
+    // A leg may cross a nested action-gated exit; TryAppendLeg opens it inline
+    // (its own go-act-return, one recursion level deeper), so the emitted
+    // commands for this exit's own ordered actions can be interleaved with the
+    // nested exits' commands. That's sequence-safe: a "specific order" gate
+    // tracks only its own levers' relative order, and the nested exits' levers
+    // are actions for other exits (confirmed game mechanic).
     private static List<WalkStep>? BuildDetourFromAnchor(
         RoomGraphManager graph,
         BfsMapper bfs,
         IRoomFilter? filter,
         RoomKey anchor,
         MultiActionExitData maData,
-        LogService? log)
+        LogService? log,
+        int depth,
+        HashSet<(RoomKey, Direction)> visited)
     {
         var steps = new List<WalkStep>();
         RoomKey cursor = anchor;
@@ -242,7 +286,7 @@ public static class RemoteActionPathExpander
 
             if (!cursor.Equals(issueRoom))
             {
-                if (!TryAppendLeg(graph, bfs, filter, steps, cursor, issueRoom, log)) return null;
+                if (!TryAppendLeg(graph, bfs, filter, steps, cursor, issueRoom, log, depth, visited)) return null;
                 cursor = issueRoom;
             }
 
@@ -251,7 +295,7 @@ public static class RemoteActionPathExpander
 
         if (!cursor.Equals(anchor))
         {
-            if (!TryAppendLeg(graph, bfs, filter, steps, cursor, anchor, log)) return null;
+            if (!TryAppendLeg(graph, bfs, filter, steps, cursor, anchor, log, depth, visited)) return null;
         }
 
         return steps;
@@ -295,10 +339,17 @@ public static class RemoteActionPathExpander
     }
 
     // Route from→to via BFS and append the leg as MoveSteps (Text exits carry
-    // their command label). Detour legs are ordinary passages in practice, so
-    // nested multi-action exits aren't re-expanded here — a leg that crosses one
-    // instead fails the whole detour (see the guard below). False when no route
-    // exists or a hop can't be resolved.
+    // their command label). A hop that crosses a NESTED remote-action exit is
+    // opened inline — its own go-act-return detour is built one recursion level
+    // deeper, spliced in, then the primed exit is crossed — so reaching a lever
+    // that lives behind another action-gated door just works. depth/visited
+    // bound the recursion: past MaxNestedDepth, or a gate already on the current
+    // recursion stack (a lever-cycle), the whole detour fails cleanly rather
+    // than emit a bare move the send-side would reject mid-walk. False when no
+    // route exists or a hop can't be resolved. Post-condition unchanged: on
+    // success the walker stands at `to` (each nested detour returns to its
+    // crossing room before the cross), so BuildDetourFromAnchor's flat-leg
+    // cursor bookkeeping still holds.
     private static bool TryAppendLeg(
         RoomGraphManager graph,
         BfsMapper bfs,
@@ -306,7 +357,9 @@ public static class RemoteActionPathExpander
         List<WalkStep> steps,
         RoomKey from,
         RoomKey to,
-        LogService? log)
+        LogService? log,
+        int depth,
+        HashSet<(RoomKey, Direction)> visited)
     {
         IReadOnlyList<Direction>? legs = bfs.FindPath(from, to, filter);
         if (legs is null || legs.Count == 0) return false;
@@ -317,21 +370,43 @@ public static class RemoteActionPathExpander
             Room? room = graph.GetRoom(cur);
             if (room is null || !room.Exits.TryGetValue(d, out RoomExit e)) return false;
 
-            // A detour leg that itself crosses a REMOTE multi-action exit is a
-            // NESTED remote action — reaching one lever requires first pulling a
-            // lever in yet another room. The go-act-return machinery doesn't
-            // recurse into that, so bail: fail the whole detour (→ Expand
-            // truncates → the walk fails cleanly as no-route) rather than emit a
-            // bare move the send-side would reject mid-walk with a misleading
-            // "not supported on loop circuits" message. Nested remote-action
-            // routing is a known unsolved case (tracked as its own follow-up).
-            if (e.Hint == RoomExitHint.MultiActionHidden && e.MultiAction is { HasRemoteActions: true })
+            // Nested remote-action exit: reaching this hop's target requires
+            // first pulling a lever in another room. Open it recursively (its own
+            // go-act-return), then cross the primed exit as a plain cardinal.
+            if (e.Hint == RoomExitHint.MultiActionHidden && e.MultiAction is { HasRemoteActions: true } nestedRaw)
             {
+                (RoomKey, Direction) exitId = (cur, d);
+                bool cycle = visited.Contains(exitId);
+                if (cycle || depth + 1 > MaxNestedDepth)
+                {
+                    log?.Debug("Walker",
+                        $"remote-action detour leg {from}->{to}: hop {d} at {cur} crosses a nested exit " +
+                        $"(->{e.Target}) that " +
+                        (cycle ? "forms a lever-cycle" : $"exceeds the depth cap ({MaxNestedDepth})") +
+                        " — abandoning the detour (clean-fail)");
+                    return false;
+                }
+
+                MultiActionExitData nested = SelectCheapestPerStep(bfs, filter, cur, nestedRaw);
+                visited.Add(exitId);
+                List<WalkStep>? sub = BuildDetourFromAnchor(graph, bfs, filter, cur, nested, log, depth + 1, visited);
+                visited.Remove(exitId);   // stack-scoped: a sibling leg may legitimately re-cross the (now-open) gate
+                if (sub is null)
+                {
+                    log?.Debug("Walker",
+                        $"remote-action detour leg {from}->{to}: nested exit {cur} {d}->{e.Target} " +
+                        "could not be routed — abandoning the detour (clean-fail)");
+                    return false;
+                }
+
                 log?.Debug("Walker",
-                    $"remote-action detour leg {from}->{to}: hop {d} at {cur} crosses a NESTED " +
-                    $"remote-action exit (->{e.Target}) — nested remote actions aren't auto-solved yet, " +
-                    "abandoning the detour");
-                return false;
+                    $"remote-action detour leg {from}->{to}: opened nested exit {cur} {d}->{e.Target} " +
+                    $"({nested.Actions.Count} inner action(s), {sub.Count} step(s), depth {depth + 1})");
+
+                steps.AddRange(sub);   // returns the walker to cur
+                steps.Add(new MoveStep(d, e.Target) { SkipSpecialDispatch = true });   // then cross the primed exit
+                cur = e.Target;
+                continue;
             }
 
             string? label = e.Hint == RoomExitHint.Text && e.TextCommands is { Count: > 0 } tc

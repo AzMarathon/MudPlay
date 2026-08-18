@@ -1492,6 +1492,26 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   - **Walker takeaway:** walk-to-action-room → send the command(s) in `StepNumber` order → walk-back to
     the exit's room → send the cardinal. The generous open window makes normal walk distances safe; do
     not gate on a data-supplied timer (there isn't one) or on parsing a confirmation line.
+- **[CONFIRMED, user 2026-08-17]** **A "specific order" multi-action exit tracks ONLY its own sequence
+  levers, in RELATIVE order — pulling unrelated levers in between does NOT break it; and nested
+  action gates can chain.** Two facts that let the walker solve *nested* lever vaults (a lever whose room
+  is itself behind another action-gated exit):
+  - **Relative order, own levers only.** For `Needs N Actions, specific order`, the gate only requires
+    that ITS OWN actions fire in relative order (#1 before #2, #2 before #3, …). Pulling a lever for a
+    *different* exit (e.g. the entrance lever of an alcove you must open to reach the next sequence lever)
+    between two of the gate's ordered steps does **not** reset the sequence. So the client may interleave:
+    open alcove *i*, pull sequence-lever *i*, repeat — the sequence stays valid.
+  - **Persistence covers the compound walk.** An opened action-gated exit stays passable for the same
+    minutes-long window (above), and opening several nested gates and re-crossing them all lands well
+    inside it — so a multi-gate compound detour is safe.
+  - **Grounding example (data-Paradigm-1.9.1): the 6/861 tomb vault → 6/924.** Descent
+    `6/861 →D→ 6/922 →D→ 6/923 →D→ 6/924`; `6/861` D needs 4 ordered levers, in alcoves 6/919 / 6/921 /
+    6/920 / 6/918. Each alcove is behind its own `Needs 1 Actions` entrance gate whose lever sits in a
+    freely-walked Ancestral Tomb room (6/889 / 6/917 / 6/903 / 6/875) — genuinely one level of nesting.
+  - **Client encoding:** `RemoteActionPathExpander` opens nested gates recursively (open the inner door,
+    then cross), bounded by a nesting-depth cap + a lever-cycle guard; past those it clean-fails. This is
+    fully generic off the exit graph — no per-area code (the Asylum + Pyramid remain the only bespoke
+    area solvers).
 - **[CONFIRMED, capture 2026-07-28 report 180730 — SUPERSEDES the earlier report-195552 "both needed" claim]**
   **Two guardroom levers with identical commands on one gate are REDUNDANT alternatives — one pull raises
   it.** Some `Door` exits are raised not by a same-room verb but by a `pull lever` performed in one or

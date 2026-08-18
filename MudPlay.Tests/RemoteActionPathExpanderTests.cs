@@ -393,10 +393,10 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
 
     // Nested remote action: the lever room for 1/2's gated E exit (1/5) is itself
     // reachable only through 1/2's gated N exit, whose own action lives in 1/6.
-    // Reaching the outer lever thus requires first solving an inner remote gate —
-    // the go-act-return machinery doesn't recurse into that, so the detour is
-    // abandoned and the path truncates before the gated hop. This is the
-    // 6/878→6/924 four-lever-alcove report in miniature.
+    // Reaching the outer lever thus requires first opening an inner remote gate —
+    // the expander recurses into it (open 1/6's switch, cross into 1/5, pull the
+    // outer lever), so the whole route is solved. This is the 6/878→6/924
+    // four-lever-alcove report in miniature.
     //
     //   1/1 ─E─▶ 1/2 ─E (Hidden/Needs 1 Actions)─▶ 1/9   (Action#1 in 1/5)
     //             │N (Hidden/Needs 1 Actions)             (Action#1 in 1/6)
@@ -433,24 +433,182 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
         """;
 
     [Fact]
-    public void NestedRemoteAction_DetourAbandoned_TruncatesShortOfDestination()
+    public void NestedRemoteAction_RecursivelySolved_OpensInnerThenCrossesOuter()
     {
         RoomGraphManager graph = NewGraph(NestedRemoteActionGraphJson);
         BfsMapper bfs = new(graph);
 
-        // BFS routes 1/1 → 1/9 as E, E (it crosses both gated exits freely). The
-        // detour to prime 1/2's E exit must reach lever room 1/5, but the only
-        // way in crosses 1/2's own gated N exit — a nested remote action the
-        // expander can't auto-solve, so the detour is dropped.
+        // BFS routes 1/1 → 1/9 as E, E (it crosses both gated exits freely). To
+        // prime 1/2's E exit the walker must reach lever room 1/5, whose only way
+        // in crosses 1/2's own gated N exit — so the expander opens that nested
+        // gate first (walk to 1/6, pull switch, return), crosses into 1/5, pulls
+        // the outer lever, returns, then crosses the primed E exit to 1/9.
         var steps = RemoteActionPathExpander.Expand(
             graph, new RoomKey(1, 1),
             new[] { Direction.E, Direction.E }, bfs);
 
-        // Only the first plain hop survives; the gated hop is truncated away.
+        Assert.Equal(8, steps.Count);
+
+        Assert.Equal(new RoomKey(1, 2), ((MoveStep)steps[0]).ExpectedTarget);   // approach
+
+        // Inner go-act-return: open 1/2's N gate by pulling the switch in 1/6.
+        Assert.Equal(Direction.S, ((MoveStep)steps[1]).Direction);
+        Assert.Equal(new RoomKey(1, 6), ((MoveStep)steps[1]).ExpectedTarget);
+        Assert.Equal("pull switch", ((CommandStep)steps[2]).Command);
+        Assert.Equal(new RoomKey(1, 2), ((MoveStep)steps[3]).ExpectedTarget);   // inner return
+
+        // Cross the now-primed nested exit into the alcove, pull the outer lever.
+        MoveStep nestedCross = Assert.IsType<MoveStep>(steps[4]);
+        Assert.Equal(Direction.N, nestedCross.Direction);
+        Assert.Equal(new RoomKey(1, 5), nestedCross.ExpectedTarget);
+        Assert.True(nestedCross.SkipSpecialDispatch);
+        Assert.Equal("pull lever", ((CommandStep)steps[5]).Command);
+
+        Assert.Equal(new RoomKey(1, 2), ((MoveStep)steps[6]).ExpectedTarget);   // outer return
+
+        // Finally cross the top-level primed E exit to the destination.
+        MoveStep topCross = Assert.IsType<MoveStep>(steps[7]);
+        Assert.Equal(Direction.E, topCross.Direction);
+        Assert.Equal(new RoomKey(1, 9), topCross.ExpectedTarget);
+        Assert.True(topCross.SkipSpecialDispatch);
+
+        Assert.True(RemoteActionPathExpander.ReachesDestination(steps, new RoomKey(1, 9)));
+
+        // Sequence invariant: inner switch (idx 2) pulled before the nested cross
+        // (idx 4), which precedes the outer lever (idx 5) — "open alcove, then
+        // pull the order-lever," never the reverse.
+        int innerPull = -1, nested = -1, outerPull = -1;
+        for (int i = 0; i < steps.Count; i++)
+        {
+            if (steps[i] is CommandStep { Command: "pull switch" }) innerPull = i;
+            if (steps[i] is MoveStep { ExpectedTarget.Room: 5 }) nested = i;
+            if (steps[i] is CommandStep { Command: "pull lever" }) outerPull = i;
+        }
+        Assert.True(innerPull >= 0 && innerPull < nested && nested < outerPull);
+    }
+
+    // Depth cap: a linear chain of four nested gates off 1/2 (E is the top exit;
+    // its lever in 1/20 is behind N, whose lever in 1/21 is behind S, whose lever
+    // in 1/22 is behind W, whose lever in 1/23 is behind D). Opening E recurses
+    // N→S→W→D; crossing the 4th gate (D) is attempted at depth 3, so depth+1=4
+    // exceeds MaxNestedDepth (3) and the whole detour clean-fails. Each lever room
+    // holds the PREVIOUS gate's action and has a plain reverse to 1/2.
+    private const string DeeplyNestedGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Hub",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/20 (Hidden/Needs 1 Actions, any order)",
+            "S": "1/21 (Hidden/Needs 1 Actions, any order)",
+            "E": "1/9 (Hidden/Needs 1 Actions, any order)",
+            "W": "1/22 (Hidden/Needs 1 Actions, any order)",
+            "NE": "1/24", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "1/23 (Hidden/Needs 1 Actions, any order)" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 20, "Name": "LeverE",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action#1 [on the E exit of room 1/2]: pull lever" },
+          { "Map Number": 1, "Room Number": 21, "Name": "LeverN",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action#1 [on the N exit of room 1/2]: pull lever" },
+          { "Map Number": 1, "Room Number": 22, "Name": "LeverS",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action#1 [on the S exit of room 1/2]: pull lever" },
+          { "Map Number": 1, "Room Number": 23, "Name": "LeverW",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "1/2",
+            "D": "Action#1 [on the W exit of room 1/2]: pull lever" },
+          { "Map Number": 1, "Room Number": 24, "Name": "LeverD",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "1/2", "U": "0",
+            "D": "Action#1 [on the D exit of room 1/2]: pull lever" }
+        ]
+        """;
+
+    [Fact]
+    public void DeeplyNestedRemoteAction_ExceedsDepthCap_Truncates()
+    {
+        RoomGraphManager graph = NewGraph(DeeplyNestedGraphJson);
+        BfsMapper bfs = new(graph);
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1),
+            new[] { Direction.E, Direction.E }, bfs);
+
+        // Four levels of nesting exceed the depth cap, so the whole detour is
+        // abandoned and only the first plain hop survives.
         MoveStep only = Assert.IsType<MoveStep>(Assert.Single(steps));
         Assert.Equal(new RoomKey(1, 2), only.ExpectedTarget);
+        Assert.False(RemoteActionPathExpander.ReachesDestination(steps, new RoomKey(1, 9)));
+    }
 
-        // The plan-time guard the walker uses to fail cleanly sees the shortfall.
+    // Lever-cycle: gate N (→1/30) needs a lever in 1/31, reachable only through
+    // gate S; gate S (→1/31) needs a lever in 1/32, reachable only back through
+    // gate N. Opening the top E exit recurses N→S→(N again); the second crossing
+    // of N is still on the recursion stack, so the visited-set catches the cycle
+    // and clean-fails (well before the depth cap). 1/33 holds E's own lever.
+    private const string CyclicNestedGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Hub",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/30 (Hidden/Needs 1 Actions, any order)",
+            "S": "1/31 (Hidden/Needs 1 Actions, any order)",
+            "E": "1/9 (Hidden/Needs 1 Actions, any order)", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 30, "Name": "BehindN",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/33", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action#1 [on the S exit of room 1/2]: pull lever" },
+          { "Map Number": 1, "Room Number": 33, "Name": "LeverE",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/30",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action#1 [on the E exit of room 1/2]: pull lever" },
+          { "Map Number": 1, "Room Number": 31, "Name": "BehindS",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action#1 [on the N exit of room 1/2]: pull lever" }
+        ]
+        """;
+
+    [Fact]
+    public void CyclicNestedRemoteAction_Truncates()
+    {
+        RoomGraphManager graph = NewGraph(CyclicNestedGraphJson);
+        BfsMapper bfs = new(graph);
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1),
+            new[] { Direction.E, Direction.E }, bfs);
+
+        // The two gates depend on each other, so the recursion detects the cycle
+        // and abandons the detour — only the first plain hop survives.
+        MoveStep only = Assert.IsType<MoveStep>(Assert.Single(steps));
+        Assert.Equal(new RoomKey(1, 2), only.ExpectedTarget);
         Assert.False(RemoteActionPathExpander.ReachesDestination(steps, new RoomKey(1, 9)));
     }
 

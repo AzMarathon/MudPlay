@@ -2,10 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.20.11
+## 3.21.0
 
-- Navigation: walking to a room reachable only through a **nested** remote-action exit — a lever alcove that is itself behind another action-gated door — now fails cleanly at plan time ("route needs an exit the walker can't auto-solve yet") instead of the misleading "not supported on loop circuits" block
-- Navigation: the walker and loop engines now log their remote-action detour and special-exit dispatch decisions on the debug side, so a blocked walk is diagnosable from the program log rather than a guess
+- Navigation: the walker now **solves nested action-gated exits** — a lever whose alcove is itself behind another action-gated door — by opening each inner door first (walk in, pull, return) before crossing, so routes through multi-level lever vaults (e.g. Paradigm's 6/861 tomb → 6/924) complete on their own; fully generic off game data, no per-area code (Asylum + Pyramid stay the only bespoke solvers)
+- Navigation: only a very deep (4+ level) or cyclic nest, or a genuinely unroutable one, still fails — now cleanly at plan time ("route needs an action-gated exit the walker can't auto-solve") instead of the old misleading "not supported on loop circuits" block
+- Navigation: the walker and loop engines log their remote-action detour and special-exit dispatch decisions on the debug side, so a blocked or nested walk is diagnosable from the program log
+- bug reports addressed: paradigm-20260817-233052
 
 ## 3.20.10
 

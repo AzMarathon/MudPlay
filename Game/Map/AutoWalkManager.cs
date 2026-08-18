@@ -951,19 +951,21 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return false;
         }
 
-        // A remote-action detour that couldn't be routed (e.g. a NESTED remote-action
-        // door inside a lever alcove) truncates the expansion short of the destination.
-        // Fail cleanly here — the program log (Walker/Debug) names the exit that stopped
-        // it — rather than walking the partial path and stranding, or mis-sending a bare
-        // move the send-side rejects with a misleading "not supported on loop circuits".
-        // Boat plans stitch their own arrival legs, so only vet the plain expansion.
+        // A remote-action detour that couldn't be routed truncates the expansion
+        // short of the destination. The expander solves nested action gates
+        // recursively, so this now only fires for a route past the nesting-depth
+        // cap, a lever-cycle, or a genuinely unroutable leg. Fail cleanly here —
+        // the program log (Walker/Debug) names the exit that stopped it — rather
+        // than walking the partial path and stranding, or mis-sending a bare move
+        // the send-side rejects. Boat plans stitch their own arrival legs, so only
+        // vet the plain expansion.
         if (boatPlan is null && !RemoteActionPathExpander.ReachesDestination(expanded, destination))
         {
             _log?.Debug("Walker",
                 $"walk to {destination}: expansion truncated ({expanded.Count} step(s)) short of the destination — " +
                 "a remote-action detour on the route could not be routed (see the detour lines above)");
             Raise(new WalkEvent(WalkEventKind.Failed,
-                "route needs an exit the walker can't auto-solve yet (a nested remote-action door) — see the program log",
+                "route needs an action-gated exit the walker can't auto-solve (too deeply nested, a lever-cycle, or unroutable) — see the program log",
                 destination));
             return false;
         }
