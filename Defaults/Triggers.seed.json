@@ -40,26 +40,6 @@
     "Location": "GameData"
   },
   {
-    "Name": "floating key death",
-    "Enabled": true,
-    "Scope": "GameMessages",
-    "MatchType": "Literal",
-    "Pattern": "floating key for {dmg} damage!",
-    "Response": "get golden lion key",
-    "SoundFile": null,
-    "Location": "GameData"
-  },
-  {
-    "Name": "illuminate",
-    "Enabled": true,
-    "Scope": "GameMessages",
-    "MatchType": "Literal",
-    "Pattern": "You cast illuminate!",
-    "Response": "use light ball",
-    "SoundFile": null,
-    "Location": "GameData"
-  },
-  {
     "Name": "low on lives",
     "Enabled": true,
     "Scope": "GameMessages",
@@ -86,16 +66,6 @@
     "MatchType": "Literal",
     "Pattern": "The slaver leader whimpers and drops his weapon, calling for mercy!",
     "Response": "ask dying slaver leader keep",
-    "SoundFile": null,
-    "Location": "GameData"
-  },
-  {
-    "Name": "teleport",
-    "Enabled": true,
-    "Scope": "GameMessages",
-    "MatchType": "Literal",
-    "Pattern": "You find yourself...elsewhere.",
-    "Response": "par",
     "SoundFile": null,
     "Location": "GameData"
   }
