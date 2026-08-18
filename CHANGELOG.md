@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.22.0
+
+- Navigation: the walker now routes through two special exits it couldn't before — an **item-use teleport** (an item whose use transports you, e.g. `use potion of levitation` to reach the far side) and a **room-command reveal** (a hidden exit opened by typing a room command, e.g. `clear rubble`) — so quest routes gated on them, like the trek to the Necromancer at 9/1431, now plan and walk on their own instead of failing with "No path"
+- Navigation: a route blocked **only** because you lack a required action-exit item now fails with a named **"a required item to go obtain (…)"** message that names the item, instead of a bare "No path"; these quest items are never auto-fetched
+- Navigation: fixed a latent case where an item-gated command teleport (an emblem / chime that ports you past a locked door) dropped its inventory check — it no longer routes you through as if you held the item
+- bug reports addressed: paradigm-20260818-061428
+
 ## 3.21.11
 
 - Reconnect: after an unexpected drop, first profile load, or a cleanup relog, the client now **enters the realm even if your logon steps don't cleanly reach the game** — the realm-entry command fires the moment the entry menu appears, so a mis-authored or holdover nav step no longer strands you at the menu (it still won't auto-enter right after a deliberate `@hangup` / hang-up-on-low-HP / when-naked, by design)

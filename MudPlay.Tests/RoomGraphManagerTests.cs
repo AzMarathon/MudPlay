@@ -39,6 +39,89 @@ public sealed class RoomGraphManagerTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "Rooms.json"), json);
     }
 
+    // Route to the Necromancer (9/1431) needs two special gates the graph learns
+    // here: an item-use teleport (3/1 → 9/1009 via `use potion of levitation`,
+    // item 992, anchored on gate fixture 993's "Obtained From: Room 3/1") and a
+    // room-CMD reveal lever (9/1012 N `clear rubble`, CMD 1422).
+    private const string NecromancerRoomsJson = """
+        [
+          { "Map Number": 3, "Room Number": 1, "Name": "Mossy Cave, Waterfall",
+            "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "3/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "1/2362" },
+          { "Map Number": 9, "Room Number": 1009, "Name": "Waterfall, Dirt Path",
+            "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "9/1010", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "3/1" },
+          { "Map Number": 9, "Room Number": 1012, "Name": "Crumbling Ruin, Entrance",
+            "Light": 0, "Shop": 0, "NPC": 0, "CMD": 1422, "Lair": "", "Delay": 0,
+            "N": "9/1013 (Hidden/Needs 1 Actions, any order)", "S": "9/1011",
+            "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 9, "Room Number": 1013, "Name": "Crumbling Ruin",
+            "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 0,
+            "N": "9/1014", "S": "9/1012", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+    private const string NecromancerItemsJson = """
+        [
+          { "Number": 992, "Name": "potion of levitation", "Abil-0": 43, "AbilVal-0": 607,
+            "Obtained From": "NPC #401" },
+          { "Number": 993, "Name": "waterfall", "Obtained From": "Room 3/1" }
+        ]
+        """;
+    private const string NecromancerSpellsJson = """
+        [ { "Number": 607, "Name": "potion of levitation", "Abil-0": 148, "AbilVal-0": 1421 } ]
+        """;
+    private const string NecromancerTbInfoJson = """
+        [
+          { "Number": 1421, "LinkTo": 0,
+            "Action": "roomitem 993 1834:message 1835:teleport 1009 9:message 1836\n",
+            "Called From": "Spell #607" },
+          { "Number": 1422, "LinkTo": 0,
+            "Action": "clear rubble:testskill strength 0 1423:remoteaction 1012 1840 0 0\nmove rubble:testskill strength 0 1423:remoteaction 1012 1840 0 0\n",
+            "Called From": "Room 9/1012" }
+        ]
+        """;
+
+    [Fact]
+    public void OnActiveSetChanged_WiresItemUseTeleport_And_RoomCmdRevealLever()
+    {
+        SeedRooms("alpha", NecromancerRoomsJson);
+        SeedTable("alpha", "Items", NecromancerItemsJson);
+        SeedTable("alpha", "Spells", NecromancerSpellsJson);
+        SeedTable("alpha", "TBInfo", NecromancerTbInfoJson);
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        TBInfoStore store = new(cache);
+        store.OnActiveSetChanged("alpha");
+        RoomGraphManager graph = new(cache, log: null, tbinfo: store, spellCatalog: new KnownSpellCatalog(cache));
+
+        graph.OnActiveSetChanged("alpha");
+
+        // Gate 1 — item-use teleport minted at the fixture's room (3/1), pointing at
+        // the teleport destination, gated on carrying the holder item, crossing by
+        // using it.
+        Room? mossy = graph.GetRoom(new RoomKey(3, 1));
+        Assert.NotNull(mossy);
+        Assert.True(mossy!.Exits.TryGetValue(Direction.Teleport, out RoomExit tele));
+        Assert.Equal(new RoomKey(9, 1009), tele.Target);
+        Assert.Equal(RoomExitHint.Teleport, tele.Hint);
+        Assert.Equal(992, tele.KeyItemId);
+        Assert.Equal("use potion of levitation", tele.TextCommands![0]);
+
+        // Gate 2 — the room-CMD `clear rubble` promoted the N exit's empty
+        // MultiActionHidden into a satisfiable, same-room action BFS can route.
+        Room? entrance = graph.GetRoom(new RoomKey(9, 1012));
+        Assert.NotNull(entrance);
+        Assert.True(entrance!.Exits.TryGetValue(Direction.N, out RoomExit hidden));
+        Assert.Equal(RoomExitHint.MultiActionHidden, hidden.Hint);
+        Assert.NotNull(hidden.MultiAction);
+        Assert.True(hidden.MultiAction!.IsSatisfiable);
+        Assert.False(hidden.MultiAction.HasRemoteActions);
+        Assert.Equal("clear rubble", hidden.MultiAction.Actions[0].Commands[0]);
+    }
+
     // ----- RoomKey.TryParseWire --------------------------------------
 
     [Theory]

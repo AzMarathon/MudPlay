@@ -418,6 +418,12 @@ public sealed class RoomGraphManager
         // index for BuildGreetTeleportEdges to reuse after the teleport passes run.
         Dictionary<int, (int Greet, string Name)> greeters = InjectGuardDoorActions(byExit);
 
+        // Fold in room-CMD reveal actions: a hidden exit whose opener lives in the
+        // room's CMD chain (a `remoteaction`, e.g. 9/1012's `clear rubble` revealing
+        // its N passage) rather than an Action cell. Without this it imports as a
+        // MultiActionHidden with NO action data and BFS skips it unconditionally.
+        InjectRoomCmdRemoteActions(byExit);
+
         // Patch each action-gated exit with the gathered data.
         foreach (((RoomKey roomKey, Direction dir), List<ExitAction> actions) in byExit)
         {
@@ -477,6 +483,7 @@ public sealed class RoomGraphManager
         MarkCastPocketEntrances();
         BuildTeleportEdges();
         BuildGreetTeleportEdges(greeters);
+        BuildItemUseTeleportEdges();
         BuildBoatEdges();
         BuildSecondaryIndexes();
 
@@ -583,6 +590,55 @@ public sealed class RoomGraphManager
         return greeters;
     }
 
+    // Promote room-CMD reveal actions into routable exit data. A room whose CMD
+    // chain ends in a `remoteaction` that opens one of its own hidden exits (the
+    // canonical case: 9/1012 "Crumbling Ruin, Entrance" CMD 1422 `clear rubble`
+    // revealing the N passage to 9/1013) imports the exit as MultiActionHidden but
+    // with NO action data — so BFS skips it unconditionally and the room beyond is
+    // unroutable. The keyword the player types already parses (it backs the room
+    // tooltip); here we fold it into the same `byExit` bucket the guard-door / lever
+    // promotions use, so the patch loop attaches a satisfiable MultiActionExitData
+    // and SpecialExitDispatch sends the keyword then the cardinal. Zero-difficulty
+    // `testskill` checks (the rubble case) never fail, so no fail-handling is owed.
+    private void InjectRoomCmdRemoteActions(
+        Dictionary<(RoomKey Room, Direction Dir), List<ExitAction>> byExit)
+    {
+        if (_tbinfo is null) return;
+
+        foreach ((RoomKey key, Room room) in _rooms)
+        {
+            if (room.Cmd <= 0) continue;
+
+            // Collapse synonyms (clear/move/push × rubble/mound/rock all reveal the
+            // same exit) to the first keyword per (target room, direction).
+            Dictionary<(int Room, int Dir), string>? firstByExit = null;
+            foreach (TBInfoActionResolver.RemoteActionExit ra in
+                     TBInfoActionResolver.EnumerateRemoteActions(_tbinfo, room.Cmd))
+                (firstByExit ??= new()).TryAdd((ra.RoomNumber, ra.DirectionIndex), ra.Keyword);
+            if (firstByExit is null) continue;
+
+            foreach (((int roomNum, int dirIdx), string keyword) in firstByExit)
+            {
+                Direction dir = s_directions[dirIdx];
+                RoomKey target = new(key.Map, roomNum);
+                // Same-room reveal (target is the CMD's own room) attaches to that
+                // room's own exit; a cross-room remoteaction carries RemoteSourceRoom
+                // so the dispatch treats it as remote (and safely fails if it can't
+                // resolve, rather than sending the keyword in the wrong room).
+                RoomKey? remote = target == key ? null : key;
+
+                var exitKey = (target, dir);
+                if (!byExit.TryGetValue(exitKey, out List<ExitAction>? list))
+                    byExit[exitKey] = list = new List<ExitAction>();
+                list.Add(new ExitAction(StepNumber: 1, new[] { keyword }, remote));
+
+                _log?.Log(LogSeverity.Info, "RoomGraph",
+                    $"Room {target} {dir}: hidden exit revealed by room-CMD action '{keyword}'"
+                    + (remote is { } r ? $" (issued from {r})" : "") + ".");
+            }
+        }
+    }
+
     // Monster numbers standing in a room: the single placed NPC (Room.Npc) plus
     // every mob id in the room's lair group. Yields each id once in that order.
     private static IEnumerable<int> EnumerateRoomMonsters(Room room)
@@ -644,7 +700,14 @@ public sealed class RoomGraphManager
             {
                 if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked or RoomExitHint.Item)) continue;
                 if (!destinations.Contains(exit.Target)) continue;
-                (rebuilt ??= new(room.Exits))[dir] = exit with { Hint = RoomExitHint.Teleport };
+                // Clear the door key on a re-hinted Teleport: you teleport PAST a
+                // shadowed Door/KeyLocked exit, so its key isn't needed. Keep it only
+                // when the origin was a genuine Item gate (a real carry requirement).
+                // Without this, the Teleport possession-gate in MovementFilter would
+                // wrongly block a chime/emblem teleport on the bypassed door's key.
+                int keyItemId = exit.Hint == RoomExitHint.Item ? exit.KeyItemId : 0;
+                (rebuilt ??= new(room.Exits))[dir] =
+                    exit with { Hint = RoomExitHint.Teleport, KeyItemId = keyItemId };
                 _log?.Log(LogSeverity.Debug, "RoomGraph",
                     $"Room {key} {dir} → {exit.Target}: {exit.Hint} re-hinted Teleport (CMD {room.Cmd} teleport bypass).");
             }
@@ -825,6 +888,81 @@ public sealed class RoomGraphManager
                     + (minLevel > 0 ? $" (Level {minLevel}+)." : "."));
             }
         }
+    }
+
+    // Synthesise a routable Direction.Teleport edge for an item whose USE teleports
+    // the player (ItemUseTeleportResolver). Unlike CMD / greet / cast teleports,
+    // the source room is not a world anchor — the teleport lives entirely on the
+    // item, gated on a room fixture (`roomitem`). We anchor the edge at that fixture
+    // item's own room (its "Obtained From: Room M/R"), which is exactly where the
+    // game lets the teleport fire. The synthesised exit carries `use <item>` in
+    // TextCommands and the holder item as KeyItemId, so SpecialExitDispatch crosses
+    // it by using the item and MovementFilter skips it when the item isn't carried.
+    // One Teleport slot per room; filed under the non-planar Direction.Teleport slot
+    // so the map layout is unchanged. No-op without a spell catalog / TBInfo
+    // (parameterless / test construction). The item is consumed on use, but the
+    // return trip is a normal exit, so the walker never needs it to come back.
+    private void BuildItemUseTeleportEdges()
+    {
+        if (_tbinfo is null || _spellCatalog is null) return;
+        JsonDocument? itemsDoc = _cache.GetRawTable("Items");
+        if (itemsDoc is null) return;
+
+        // Number → "Obtained From" text, for anchoring a teleport's roomitem gate to
+        // its source room. Built once; the raw Items table stays cached for the many
+        // lazy runtime consumers (unlike Rooms / Monsters, it is NOT evicted here).
+        Dictionary<int, string> obtainedFrom = new();
+        foreach (JsonElement row in itemsDoc.RootElement.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Object) continue;
+            if (!TryReadInt(row, "Number", out int num) || num <= 0) continue;
+            if (TryReadString(row, "Obtained From") is { } src && !string.IsNullOrWhiteSpace(src))
+                obtainedFrom[num] = src;
+        }
+
+        foreach (ItemUseTeleportResolver.ItemUseTeleport t in
+                 ItemUseTeleportResolver.Enumerate(itemsDoc, _spellCatalog, _tbinfo))
+        {
+            if (t.GateItemId <= 0) continue;                            // no fixture gate → nothing to anchor on
+            if (!obtainedFrom.TryGetValue(t.GateItemId, out string? src)) continue;
+
+            foreach (RoomKey source in ParseObtainedFromRooms(src))
+            {
+                if (!_rooms.TryGetValue(source, out Room? room)) continue;
+                if (room.Exits.ContainsKey(Direction.Teleport)) continue;             // one Teleport slot per room
+                if (room.Exits.Values.Any(e => e.Target == t.Destination)) continue;  // already reachable
+
+                string cmd = string.IsNullOrEmpty(t.HolderItemName) ? "use" : "use " + t.HolderItemName;
+                RoomExit tele = new(
+                    t.Destination,
+                    RoomExitHint.Teleport,
+                    RawHint: "item-use teleport",
+                    KeyItemId: t.HolderItemId,
+                    TextCommands: new[] { cmd },
+                    MinLevel: t.MinLevel);
+                _rooms[source] = room with
+                {
+                    Exits = new Dictionary<Direction, RoomExit>(room.Exits) { [Direction.Teleport] = tele }
+                };
+                _log?.Log(LogSeverity.Info, "RoomGraph",
+                    $"Room {source}: synthesised item-use Teleport edge '{cmd}' → {t.Destination} "
+                    + $"(gated on carrying item #{t.HolderItemId})"
+                    + (t.MinLevel > 0 ? $" (Level {t.MinLevel}+)." : "."));
+            }
+        }
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex s_obtainedFromRoom =
+        new(@"Room\s+(\d+)/(\d+)",
+            System.Text.RegularExpressions.RegexOptions.Compiled
+            | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    // Pull every "Room M/R" out of an item's "Obtained From" text as a RoomKey.
+    private static IEnumerable<RoomKey> ParseObtainedFromRooms(string obtainedFrom)
+    {
+        foreach (System.Text.RegularExpressions.Match m in s_obtainedFromRoom.Matches(obtainedFrom))
+            if (int.TryParse(m.Groups[1].Value, out int map) && int.TryParse(m.Groups[2].Value, out int room))
+                yield return new RoomKey(map, room);
     }
 
     // NPC ask-transport edges. A placed/lair monster whose greet dialogue ports

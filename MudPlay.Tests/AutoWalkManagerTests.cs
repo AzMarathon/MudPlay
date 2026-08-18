@@ -1676,7 +1676,7 @@ public sealed class AutoWalkManagerTests : IDisposable
 
         WalkEvent failed = events.Single(e => e.Kind == WalkEventKind.Failed);
         Assert.Contains("obsidian key", failed.Detail);
-        Assert.Contains("a required item you're missing (obsidian key)", failed.Detail);
+        Assert.Contains("a required item to go obtain (obsidian key)", failed.Detail);
     }
 
     [Fact]
@@ -1687,7 +1687,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.False(walker.WalkTo(new RoomKey(1, 2)));
 
         WalkEvent failed = events.Single(e => e.Kind == WalkEventKind.Failed);
-        Assert.Contains("a required item you're missing", failed.Detail);
+        Assert.Contains("a required item to go obtain", failed.Detail);
         Assert.DoesNotContain("(", failed.Detail);            // no name parenthetical
     }
 
@@ -1746,7 +1746,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.False(walker.WalkTo(new RoomKey(1, 4)));
 
         WalkEvent failed = events.Single(e => e.Kind == WalkEventKind.Failed);
-        Assert.Contains("a required item you're missing (gate key)", failed.Detail);
+        Assert.Contains("a required item to go obtain (gate key)", failed.Detail);
         Assert.DoesNotContain("a level requirement", failed.Detail);
     }
 
