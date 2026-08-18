@@ -5,6 +5,7 @@
 > - Navigation: the walker now **solves nested action-gated exits** — a lever whose alcove is itself behind another action-gated door — by opening each inner door first (walk in, pull, return) before crossing, so routes through multi-level lever vaults complete on their own; fully generic off game data, no per-area code
 > - Navigation: only a very deep (4+ level) or cyclic nest, or a genuinely unroutable one, still fails — now cleanly at plan time instead of the old misleading "not supported on loop circuits" block
 > - Navigation: the walker and loop engines log their remote-action detour and special-exit dispatch decisions on the debug side, so a blocked or nested walk is diagnosable from the program log
+> - Navigation: the blue walk-to route line (and its "steps to arrive" ETA) now draws the **full planned path** including go-act-return lever detours, instead of collapsing each out-and-back into a straight line that redrew as the walker looped
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
