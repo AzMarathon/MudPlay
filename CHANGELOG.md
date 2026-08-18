@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.21.9
+
+- Navigation: position recovery in same-named mazes now replays your move chain from the room the chain **started** at (not the newest confirmed room), so after fast manual movement outruns the tracker it re-derives where you are instead of aborting the replay and going Lost
+
 ## 3.21.8
 
 - Combat: debuff casting reworked — the AoE debuff now casts **once** and "tags" the mobs present, re-firing (up to its per-room cap) only when a **new** mob enters/is summoned rather than every round; and the single-target debuff now correctly takes over whenever the AoE isn't covering the room (Auto-Nuke off, unconfigured, or the room below its minimum-enemy count), fixing a case where a configured AoE debuff with Auto-Nuke off left the single-target debuff never firing

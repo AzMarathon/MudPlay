@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.21.8**
+> **Version 3.21.9**
+> - Navigation: position recovery in same-named mazes now replays your move chain from the room the chain **started** at (not the newest confirmed room), so after fast manual movement outruns the tracker it re-derives where you are instead of going Lost
 > - Combat: debuff casting reworked — the AoE debuff casts **once** and tags the room, re-firing only for a new/summoned mob (up to its cap); the single-target debuff now takes over whenever the AoE isn't covering (Auto-Nuke off, unconfigured, or below its min-enemy count), fixing a configured-AoE-with-Auto-Nuke-off case where the single-target debuff never fired
 > - Recovery: auto-rest no longer gets stuck off after a fight ends in an empty room — a post-combat "wait for the room to re-confirm" hold could sit forever when the room stays empty and you don't move, leaving you below your rest threshold yet never resting
 > - Combat: a room/AoE attack spell now drops to single-target the same round the room thins below its minimum-enemy count, even when a lone survivor keeps the fight going (previously it kept re-casting the AoE at the last mob until a `*Combat Off*` or an Enter press)
