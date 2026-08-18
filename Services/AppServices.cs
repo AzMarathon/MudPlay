@@ -4168,6 +4168,8 @@ public sealed class AppServices
             isDemandActive: () =>
                 PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
             hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
+            hasGetEngineArmed: () =>
+                ReadAutoModeFlag(d => d.AutoGetItems) || ReadAutoModeFlag(d => d.AutoGetCash),
             coordinator: MovementCoordinator,
             log: Log);
 

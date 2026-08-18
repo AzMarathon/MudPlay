@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.21.3**
+> **Version 3.21.4**
+> - Navigation: Auto-Search no longer stalls the walker with a per-room pause when nothing is set to collect what it reveals (Auto-Get Items / Auto-Get Cash off, no path-item hunt), so travelling with Auto-Search on is markedly faster
 > - Combat: a capped attack spell no longer fires an extra round against a lone monster — the engine's cap-switch to the alternate was landing one round late when a solo fight's first round arrived quickly, so e.g. LBOL set to cast **1** fired twice before switching to MMIS
 > - Combat: a hand-cast attack/drain spell that draws "no effect" (e.g. probing an immune elemental with `dtch`) no longer marks the engine's **own** last auto-cast spell immune — a manual probe used to wrongly drop the auto-attack cascade to melee instead of trying the next attack spell
 > - Combat: a hand-cast enemy debuff (a monster-targeting spell such as `vuln`) no longer arms a phantom self-buff recast timer or shows up as a bogus self-buff in the Buff Watchdog
