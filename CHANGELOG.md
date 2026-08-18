@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.21.0
+
+- Navigation: the walker now **solves nested action-gated exits** — a lever whose alcove is itself behind another action-gated door — by opening each inner door first (walk in, pull, return) before crossing, so routes through multi-level lever vaults (e.g. Paradigm's 6/861 tomb → 6/924) complete on their own; fully generic off game data, no per-area code (Asylum + Pyramid stay the only bespoke solvers)
+- Navigation: only a very deep (4+ level) or cyclic nest, or a genuinely unroutable one, still fails — now cleanly at plan time ("route needs an action-gated exit the walker can't auto-solve") instead of the old misleading "not supported on loop circuits" block
+- Navigation: the walker and loop engines log their remote-action detour and special-exit dispatch decisions on the debug side, so a blocked or nested walk is diagnosable from the program log
+- Navigation: the blue walk-to route line (and its "steps to arrive" ETA) now draws the **full planned path** including go-act-return lever detours, instead of collapsing each out-and-back into a straight line that redrew segment-by-segment as the walker looped out and back
+- bug reports addressed: paradigm-20260817-233052, paradigm-20260818-000725
+
 ## 3.20.10
 
 - Navigation: the walker no longer plans a route through a hidden, action-gated exit it can't actually open — some game-data exports annotate a fork/lever passage's opener on only one side (e.g. Paradigm 9/1050's West exit), leaving the reciprocal exit with no action data. The router now routes **around** such an un-openable exit (or fails cleanly with "no route") instead of sending a doomed move that the server refuses and stranding the walker
