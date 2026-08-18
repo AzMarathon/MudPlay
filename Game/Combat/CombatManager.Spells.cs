@@ -1464,6 +1464,16 @@ public sealed partial class CombatManager
         // from the primary and must not tear down the fallback we just switched to.
         if (_immunityHandledThisRound) return;
 
+        // A manual user cast (the user hand-typed an attack / drain spell to probe a
+        // target) draws this same "no effect" line — but _lastCastAction /
+        // _castingSpellTarget still point at the engine's PRIOR auto cast, so
+        // attributing the immunity here would blame the wrong spell (report
+        // paradigm-20260818-055955: a hand-typed `dtch` at an elemental marked the
+        // engine's `mmis` immune, dropping the cascade straight to melee). The engine
+        // holds its own attack during an override round, so the only cast in flight
+        // is the user's — a manual probe must not mutate the auto-cascade immune maps.
+        if (_userAttackOverride) return;
+
         // Command mode: a spell placed in the ATTACK-COMMAND slot (NormalAttackCommand
         // = "harm") reaches the wire via SendAttack, not a chooser cast — no spell is
         // in flight (_castingSpellTarget null) — so the spell-slot cascade below can't

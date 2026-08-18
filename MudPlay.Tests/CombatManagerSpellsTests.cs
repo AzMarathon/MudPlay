@@ -766,6 +766,36 @@ public sealed class CombatManagerSpellsTests
         Assert.True(h.Sent.Count > afterTick);          // resumed after the utility cast
     }
 
+    [Fact]
+    public void ManualCast_NoEffect_DoesNotMarkEngineSpellImmune()
+    {
+        // report paradigm-20260818-055955: a hand-typed spell that draws "no effect"
+        // must not be blamed on the engine's last AUTO cast. The engine's
+        // _lastCastAction still points at its own prior spell, so attributing the
+        // immunity there wrongly marked the engine's attack spell immune and dropped
+        // the cascade straight to melee. The override guard keeps a manual probe from
+        // mutating the auto-cascade immune map.
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "zap", MinEnemies = 0 };
+        h.Combat.SetCombatSpellPredicate(code => string.Equals(code, "dtch", StringComparison.OrdinalIgnoreCase));
+        h.AddMonster(1, "earth elemental");
+
+        h.Feed("Also here: earth elemental.");            // engine engages with "harm earth elemental"
+        Assert.Equal("harm earth elemental", h.LastSent);
+
+        // The user hand-casts a probe (dtch) at the elemental; the server says it has no
+        // effect. The override holds the engine's send THIS round, so the wrong immune
+        // mark only surfaces next round — pre-fix, "harm" was marked immune and the engine
+        // switched to the alternate "zap" once the override cleared.
+        h.Combat.OnManualCastObserved("dtch");
+        h.Feed("Your spell has no effect on earth elemental.");
+        h.Tick();   // clears the override; engine re-decides
+
+        Assert.DoesNotContain("zap earth elemental", h.AllSent);   // harm NOT marked immune
+    }
+
     // ----- Auto-Nuke auto-engine gate ----------------------------------
 
     [Fact]

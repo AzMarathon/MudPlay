@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.21.0**
-> - Navigation: the walker now **solves nested action-gated exits** — a lever whose alcove is itself behind another action-gated door — by opening each inner door first (walk in, pull, return) before crossing, so routes through multi-level lever vaults complete on their own; fully generic off game data, no per-area code
-> - Navigation: only a very deep (4+ level) or cyclic nest, or a genuinely unroutable one, still fails — now cleanly at plan time instead of the old misleading "not supported on loop circuits" block
-> - Navigation: the walker and loop engines log their remote-action detour and special-exit dispatch decisions on the debug side, so a blocked or nested walk is diagnosable from the program log
-> - Navigation: the blue walk-to route line (and its "steps to arrive" ETA) now draws the **full planned path** including go-act-return lever detours, instead of collapsing each out-and-back into a straight line that redrew as the walker looped
+> **Version 3.21.1**
+> - Combat: a hand-cast attack/drain spell that draws "no effect" (e.g. probing an immune elemental with `dtch`) no longer marks the engine's **own** last auto-cast spell immune — a manual probe used to wrongly drop the auto-attack cascade to melee instead of trying the next attack spell
+> - Combat: a hand-cast enemy debuff (a monster-targeting spell such as `vuln`) no longer arms a phantom self-buff recast timer or shows up as a bogus self-buff in the Buff Watchdog
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

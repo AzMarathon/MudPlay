@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.21.1
+
+- Combat: a hand-cast attack/drain spell that draws "no effect" (e.g. probing an immune elemental with `dtch`) no longer marks the engine's **own** last auto-cast spell immune — a manual probe used to wrongly drop the auto-attack cascade to melee instead of trying the next attack spell
+- Combat: a hand-cast enemy debuff (a monster-targeting spell such as `vuln`) no longer arms a phantom self-buff recast timer or shows up as a bogus self-buff in the Buff Watchdog
+- bug reports addressed: paradigm-20260818-055955
+
 ## 3.21.0
 
 - Navigation: the walker now **solves nested action-gated exits** — a lever whose alcove is itself behind another action-gated door — by opening each inner door first (walk in, pull, return) before crossing, so routes through multi-level lever vaults (e.g. Paradigm's 6/861 tomb → 6/924) complete on their own; fully generic off game data, no per-area code (Asylum + Pyramid stay the only bespoke solvers)

@@ -5303,6 +5303,14 @@ public sealed class AppServices
             if (!string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase)) continue;
             Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
             if (rec is null || string.IsNullOrWhiteSpace(rec.CasterMessage)) return null;
+            // An enemy-targeting spell (a debuff / attack scope) is never a self-buff,
+            // even if it has a positive duration — so a hand-cast one (e.g. vuln,
+            // Targets 8 Monster-or-User) must not arm a self-buff recast timer or show
+            // up as a phantom self-buff in the Buff Watchdog. This lookup feeds the
+            // self-buff recast-window logic only (report paradigm-20260817-205819).
+            if (Game.Combat.DebuffTargeting.IsSingleTargetEnemy(s.Targets)
+                || Game.Combat.DebuffTargeting.IsAreaEnemy(s.Targets))
+                return null;
             // Duration is in spell rounds; the recast clock wants wall-clock seconds.
             // Uses the wall-clock per-round length so "recast within N s" fires at the
             // buff's REAL remaining time, not ~1-2 s early off the nominal Dur×3.
