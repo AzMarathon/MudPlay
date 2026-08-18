@@ -181,6 +181,16 @@ public sealed class CombatManagerSpellsTests
             Combat.OnCombatTick();
         }
 
+        // A genuine round-1 boundary tick that lands FAST — under AttackTallyMinGap
+        // after the engage (the server delivered round 1's damage line ~3s out). A
+        // solo fight must still tally this as round 1, not reject it as premature.
+        public void TickFast()
+        {
+            _clock += TimeSpan.FromSeconds(3);
+            Cast.OnCombatTick();
+            Combat.OnCombatTick();
+        }
+
         public string LastSent => Sent.Count == 0
             ? string.Empty
             : Encoding.Latin1.GetString(Sent[^1]).TrimEnd('\r');
@@ -510,6 +520,30 @@ public sealed class CombatManagerSpellsTests
         // The first genuine round now tallies lbol → MaxCasts=1 reached → swap to the alternate.
         h.Tick();
         Assert.Equal("mmis rotworm", h.LastSent);
+    }
+
+    // Report paradigm-20260818-055820: the engine cast lbol (MaxCasts=1) and the server
+    // auto-repeated it, but the cap-switch to mmis fired one round late (cap-switch logged
+    // at sinceAttack≈9333ms, engageable=1), so lbol fired twice. Cause: the tally clock was
+    // anchored at engage to reject a MULTI-mob premature tick, but a SINGLE-mob fight's
+    // genuine round-1 tick can land under AttackTallyMinGap (~3s) and got rejected too,
+    // slipping the first tally to round 2. The anchor is now multi-mob only.
+    [Fact]
+    public void MaxCasts1_SingleMobEngage_FastFirstRound_TalliesRound1_NoLateSwap()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "small animated tree");
+
+        h.Feed("Also here: small animated tree.");
+        Assert.Equal("lbol small animated tree", h.LastSent);   // engage → lbol (round 0)
+
+        // Round 1 lands fast — under AttackTallyMinGap after the engage. A solo fight has
+        // no premature tick to guard against, so it must still tally round 1, reach
+        // MaxCasts=1, and switch to mmis so lbol doesn't auto-repeat a second round.
+        h.TickFast();
+        Assert.Equal("mmis small animated tree", h.LastSent);
     }
 
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even

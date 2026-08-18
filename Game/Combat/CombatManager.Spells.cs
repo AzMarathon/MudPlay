@@ -240,20 +240,27 @@ public sealed partial class CombatManager
             _spellChooser.ResetForNewTarget();
             _alternationRound = 0;
             _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
-            // Anchor the tally clock at the engage moment, NOT MinValue. MaxCasts
-            // counts real rounds and the engage announce is round 0 — the attack
-            // spell fires on a LATER server round. In a MULTI-mob room the other
-            // mobs' swing lines trip the damage-driven combat tick within ~100ms of
-            // the engage; a MinValue reset let that premature tick tally the spell
-            // before it ever fired, so a MaxCasts-1 nuke cap-switched to the
-            // alternate the same round and the normal spell never went out ("LBOL →
-            // MMIS without firing LBOL", report paradigm-20260815-202241 —
-            // engageable=2, sinceAttack≈79ms). Anchoring here makes AttackTallyMinGap
-            // reject that premature tick; the first genuine round tick (~a round
-            // later) tallies. Single-mob rooms already behaved (their first tick IS a
-            // real round, sinceAttack≈5000ms), so this only closes the multi-mob
-            // early-swap.
-            _lastAttackTallyAt = _now();
+            // Anchor the tally clock at the engage moment ONLY in a MULTI-mob room.
+            // MaxCasts counts real rounds and the engage announce is round 0 — the
+            // attack spell fires on a LATER server round. In a multi-mob room the
+            // OTHER mobs' swing lines trip the damage-driven combat tick within ~100ms
+            // of the engage; a MinValue reset let that premature tick tally the spell
+            // before it ever fired, so a MaxCasts-1 nuke cap-switched to the alternate
+            // the same round and the normal spell never went out ("LBOL → MMIS without
+            // firing LBOL", report paradigm-20260815-202241 — engageable=2,
+            // sinceAttack≈79ms). Anchoring makes AttackTallyMinGap reject that
+            // premature tick; the first genuine round tick tallies.
+            //
+            // A SINGLE-mob room has no other mob to produce a premature tick — its
+            // first damage tick IS round 1. But that tick can land UNDER
+            // AttackTallyMinGap after the engage (the server delivered round 1 ~3.3s
+            // out), and anchoring at engage wrongly rejected it too, slipping the first
+            // tally to round 2. A MaxCasts-1 spell then auto-repeated one extra round
+            // before the cap-switch fired (report paradigm-20260818-055820: engine cast
+            // lbol, cap-switch lbol→mmis at sinceAttack≈9333ms, engageable=1). So only
+            // anchor when there's another mob to guard against; leave solo fights at
+            // MinValue so the first genuine tick always tallies.
+            _lastAttackTallyAt = enemyCount > 1 ? _now() : DateTimeOffset.MinValue;
         }
 
         // A per-monster forced attack COMMAND wins over the entire normal flow
