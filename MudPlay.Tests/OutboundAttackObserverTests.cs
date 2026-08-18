@@ -11,11 +11,12 @@ namespace MudPlay.Tests;
 // recognised verb (bare or with a target) fires; anything else stays silent.
 public sealed class OutboundAttackObserverTests
 {
-    private static (OutboundAttackObserver obs, List<string> seen) New()
+    private static (OutboundAttackObserver obs, List<string> seen, List<string?> targets) New()
     {
         List<string> seen = new();
-        OutboundAttackObserver obs = new(verb => seen.Add(verb));
-        return (obs, seen);
+        List<string?> targets = new();
+        OutboundAttackObserver obs = new((verb, target) => { seen.Add(verb); targets.Add(target); });
+        return (obs, seen, targets);
     }
 
     private static void Send(OutboundAttackObserver obs, string command)
@@ -24,7 +25,7 @@ public sealed class OutboundAttackObserverTests
     [Fact]
     public void EveryAttackVerb_Fires_BareOrTargeted()
     {
-        (OutboundAttackObserver obs, List<string> seen) = New();
+        (OutboundAttackObserver obs, List<string> seen, _) = New();
         foreach (string cmd in new[]
                  { "a", "at", "att", "aa", "bash", "smash", "sm", "sma", "bs" })
             Send(obs, cmd);
@@ -38,9 +39,19 @@ public sealed class OutboundAttackObserverTests
     }
 
     [Fact]
+    public void Target_Forwarded_NullForBareVerb()
+    {
+        (OutboundAttackObserver obs, _, List<string?> targets) = New();
+        Send(obs, "a giant rat");   // targeted
+        Send(obs, "aa");            // bare — self-resolving, no target
+        Send(obs, "  bash  Orc ");  // trimmed remainder
+        Assert.Equal(new string?[] { "giant rat", null, "Orc" }, targets);
+    }
+
+    [Fact]
     public void NonAttackCommand_StaysSilent()
     {
-        (OutboundAttackObserver obs, List<string> seen) = New();
+        (OutboundAttackObserver obs, List<string> seen, _) = New();
         Send(obs, "n");          // cardinal move
         Send(obs, "mmis rat");   // a cast, not a physical attack
         Send(obs, "look n");     // peek
@@ -52,7 +63,7 @@ public sealed class OutboundAttackObserverTests
     [Fact]
     public void EmptyOrOversized_Ignored()
     {
-        (OutboundAttackObserver obs, List<string> seen) = New();
+        (OutboundAttackObserver obs, List<string> seen, _) = New();
         obs.ObserveOutbound(ReadOnlySpan<byte>.Empty);
         obs.ObserveOutbound(Encoding.Latin1.GetBytes("\r\n"));
         obs.ObserveOutbound(Encoding.Latin1.GetBytes(new string('x', 200)));

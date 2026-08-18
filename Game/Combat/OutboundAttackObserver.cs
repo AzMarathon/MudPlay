@@ -29,9 +29,9 @@ public sealed class OutboundAttackObserver
         "a", "at", "att", "aa", "bash", "smash", "sm", "sma", "bs",
     };
 
-    private readonly Action<string> _onAttackCommand;
+    private readonly Action<string, string?> _onAttackCommand;
 
-    public OutboundAttackObserver(Action<string> onAttackCommand)
+    public OutboundAttackObserver(Action<string, string?> onAttackCommand)
     {
         ArgumentNullException.ThrowIfNull(onAttackCommand);
         _onAttackCommand = onAttackCommand;
@@ -47,6 +47,10 @@ public sealed class OutboundAttackObserver
 
         int space = cmd.IndexOf(' ');
         string verb = space >= 0 ? cmd[..space] : cmd;
-        if (AttackVerbs.Contains(verb)) _onAttackCommand(verb);
+        // The remainder is the target the user aimed at ("a giant rat" → "giant rat"),
+        // needed to mark a manually-engaged neutral. null for a bare verb.
+        string? target = space >= 0 ? cmd[(space + 1)..].Trim() : null;
+        if (AttackVerbs.Contains(verb))
+            _onAttackCommand(verb, string.IsNullOrEmpty(target) ? null : target);
     }
 }

@@ -567,7 +567,14 @@ Client mapping: the per-monster overlay `Relationship` (`Enemy` / `Neutral` / `F
 flag (Monster edit dialog, shown only for `Neutral`) makes auto-combat **engage a neutral like an
 enemy** — but because neutrals never open on you, the *other* un-engaged neutrals still don't block
 resting, so between kills the engine rests/meditates (only when below the rest trigger) before turning
-on the next one. `Enemy` and passive neutrals are unchanged.
+on the next one.
+
+There's one more path onto a passive neutral: **if *you* hand-attack one** (a manual swing or combat
+cast), it turns hostile per the mechanic above, so the client marks that instance user-engaged and the
+auto-combat engine **takes over finishing it** — treating it like an enemy until it dies (and holding
+the walker in the room) instead of stopping the moment you engaged it. It's keyed per-instance by name
+and pruned once the mob is gone, so it never leaks onto a freshly-arrived same-named passive neutral;
+the *other* un-engaged neutrals stay passive and rest-safe. `Enemy` monsters are unchanged.
 
 ## Monster aggression — who opens on you unprovoked
 

@@ -332,6 +332,11 @@ public static class BugReportBuilder
         // A guarded priority we're chasing through the "moves to protect" redirect —
         // explains re-attacks aimed at a monster that isn't our live target.
         Kv(sb, "Guard-blocked priority", combat.GuardBlockedTarget ?? "(none)");
+        // Passive neutrals the user hand-attacked that the engine has taken over killing —
+        // explains why auto-combat is (or isn't) fighting a neutral the user engaged.
+        Kv(sb, "User-engaged neutrals", combat.UserEngagedInstances.Count > 0
+            ? string.Join(", ", combat.UserEngagedInstances)
+            : "(none)");
         Kv(sb, "Worn weapon", WornSlot(inv, "Weapon Hand") ?? "(none)");
         Kv(sb, "Worn off-hand", WornSlot(inv, "Off-Hand") ?? "(none)");
         Kv(sb, "Using alternate weapon", combat.UsingAlternateWeapon.ToString());

@@ -1660,4 +1660,71 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal("turn large zombie", h.LastSent);
     }
+
+    // ----- user-engaged passive-neutral takeover (report paradigm-20260814) -----
+
+    // A passive neutral (Neutral relationship, not KillOnSight) is left alone by the
+    // engine — until the user hand-attacks it, which turns it hostile. The manual attack
+    // marks that instance so the engine takes over killing it.
+    [Fact]
+    public void PassiveNeutral_LeftAlone_ManualAttackMarksItEngaged()
+    {
+        using Harness h = new(wireCaster: false);
+        h.AddMonster(1, "townsperson");
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);   // passive — no KillOnSight
+
+        h.Feed("Also here: townsperson.");
+        Assert.False(h.Combat.IsUserEngagedInstance("townsperson"));
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("townsperson"));   // engine ignores it
+
+        h.Combat.NoteAttackCommandObserved("a", "townsperson");             // user swings
+        Assert.True(h.Combat.IsUserEngagedInstance("townsperson"));          // engine takes over
+    }
+
+    // The user types an abbreviated target to engage fast ("a towns" for "townsperson");
+    // the mark must resolve the room instance from that prefix.
+    [Fact]
+    public void ManualAttack_AbbreviatedTarget_ResolvesAndMarks()
+    {
+        using Harness h = new(wireCaster: false);
+        h.AddMonster(1, "townsperson");
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);
+        h.Feed("Also here: townsperson.");
+
+        h.Combat.NoteAttackCommandObserved("a", "towns");
+        Assert.True(h.Combat.IsUserEngagedInstance("townsperson"));
+    }
+
+    // An enemy needs no per-instance override — it already engages on its own — so a
+    // manual swing at one must NOT add it to the user-engaged set (which would only ever
+    // matter for a passive neutral).
+    [Fact]
+    public void ManualAttack_OnEnemy_DoesNotAddInstanceOverride()
+    {
+        using Harness h = new(wireCaster: false);
+        h.AutoCombatEnabled = false;   // engine won't swing → no echo-claim to consume the manual verb
+        h.AddMonster(1, "giant rat");  // default relationship = Enemy
+        h.Feed("Also here: giant rat.");
+
+        h.Combat.NoteAttackCommandObserved("a", "giant rat");
+        Assert.False(h.Combat.IsUserEngagedInstance("giant rat"));
+    }
+
+    // The takeover is per-room: once the marked neutral is gone (killed, or we changed
+    // rooms), a full-roster observation prunes it so the flag can't leak onto a freshly
+    // arrived same-named mob.
+    [Fact]
+    public void UserEngagedNeutral_ClearedWhenItLeavesRoom()
+    {
+        using Harness h = new(wireCaster: false);
+        h.AddMonster(1, "townsperson");
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);
+        h.AddMonster(2, "giant rat");
+        h.Feed("Also here: townsperson.");
+        h.Combat.NoteAttackCommandObserved("a", "townsperson");
+        Assert.True(h.Combat.IsUserEngagedInstance("townsperson"));
+
+        h.Feed("Also here: giant rat.");   // full-roster observe — townsperson gone
+        Assert.False(h.Combat.IsUserEngagedInstance("townsperson"));
+    }
 }

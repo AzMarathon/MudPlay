@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.21.10
+
+- Combat: when you hand-attack a **passive neutral** (one the engine normally leaves alone), the auto-combat engine now **takes over and keeps killing it** — hitting a neutral turns it hostile, so the engine treats that instance like an enemy until it dies instead of stopping the moment you engaged it; the walker also holds in the room until it's dead
+- bug reports addressed: paradigm-20260818-081214
+
 ## 3.21.9
 
 - Navigation: position recovery in same-named mazes now replays your move chain from the room the chain **started** at (not the newest confirmed room), so after fast manual movement outruns the tracker it re-derives where you are instead of aborting the replay and going Lost

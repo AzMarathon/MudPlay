@@ -942,7 +942,7 @@ public sealed partial class CombatManager
                 continue;
             }
             MonsterOverlay overlay = ResolveOverlay(n);
-            if (MonsterEngagement.IsEngageable(overlay))
+            if (MonsterEngagement.IsEngageable(overlay, _userEngagedInstances.Contains(e.RawName)))
                 count++;
         }
         return count;
@@ -960,7 +960,8 @@ public sealed partial class CombatManager
             RoomEntity e = obs.Entities[i];
             if (e.Kind != EntityKind.Monster) continue;
             if (e.MonsterNumber is not int n) { keys.Add(e.RawName); continue; }
-            if (MonsterEngagement.IsEngageable(ResolveOverlay(n))) keys.Add(e.RawName);
+            if (MonsterEngagement.IsEngageable(ResolveOverlay(n), _userEngagedInstances.Contains(e.RawName)))
+                keys.Add(e.RawName);
         }
         return keys;
     }

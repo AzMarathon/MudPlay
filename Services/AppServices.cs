@@ -3373,7 +3373,7 @@ public sealed class AppServices
             // A hand-typed cast feeds BOTH the combat resume signal and the buff-recast
             // clock: NoteManualBuffCast arms the timer (by cast code) for a hand-cast buff
             // so the Buff Watchdog + recast engine track it the same as an engine cast.
-            onManualCast: c => { Combat.OnManualCastObserved(c); CastDirector.NoteManualBuffCast(c); });
+            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c); });
         // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
         // taking the round's attack — a user override — while an in-between spell (heal
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
@@ -3382,7 +3382,8 @@ public sealed class AppServices
         // A hand-typed PHYSICAL attack (a / at / att / aa / bash / smash / sm / sma / bs)
         // is likewise a user override — the observer forwards every recognised verb and
         // Combat drops its own swing's echo via a one-shot claim.
-        OutboundAttack = new Game.Combat.OutboundAttackObserver(Combat.NoteAttackCommandObserved);
+        OutboundAttack = new Game.Combat.OutboundAttackObserver(
+            (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a
@@ -3515,6 +3516,11 @@ public sealed class AppServices
         // standing in an unwinnable fight. Reuses CombatManager's deterministic
         // CanEngageMonster so the gate and the swing decision can't diverge.
         CombatTracker.SetActionabilityGate(n => Combat.CanEngageMonster(n));
+
+        // A passive neutral the user hand-engaged fights like a hostile until it dies —
+        // so the walker gate must hold for it too, matching CombatManager's attack
+        // takeover. Share CombatManager's per-instance set so the two can't disagree.
+        CombatTracker.SetUserEngagedInstanceGate(raw => Combat.IsUserEngagedInstance(raw));
 
         // Keep the walker gate's room-population read in sync with
         // CombatManager's own Min/Max monster skip, so a too-crowded room

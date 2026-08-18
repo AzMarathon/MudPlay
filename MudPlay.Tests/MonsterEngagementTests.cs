@@ -41,4 +41,23 @@ public sealed class MonsterEngagementTests
         Assert.False(MonsterEngagement.IsEngageable(
             new MonsterOverlay { Relationship = MonsterRelationship.Hangup }));
     }
+
+    // The per-instance override: a passive neutral the user hand-engaged fights like a
+    // hostile until dead, so it's engageable regardless of its species relationship.
+    [Fact]
+    public void UserEngagedInstance_MakesPassiveNeutralEngageable()
+    {
+        MonsterOverlay passive = new() { Relationship = MonsterRelationship.Neutral };
+        Assert.False(MonsterEngagement.IsEngageable(passive, userEngagedInstance: false));
+        Assert.True(MonsterEngagement.IsEngageable(passive, userEngagedInstance: true));
+    }
+
+    // The override never drags in a Friend/Flee/Hangup — it only widens what the
+    // OR-rule already allows plus the explicit user-engaged flag, so a non-engaged
+    // instance still follows the pure relationship rule.
+    [Fact]
+    public void UserEngagedFalse_LeavesFriendSafe()
+        => Assert.False(MonsterEngagement.IsEngageable(
+            new MonsterOverlay { Relationship = MonsterRelationship.Friend },
+            userEngagedInstance: false));
 }

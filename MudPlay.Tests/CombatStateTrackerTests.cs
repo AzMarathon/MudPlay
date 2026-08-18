@@ -239,6 +239,29 @@ public sealed class CombatStateTrackerTests
         Assert.True(h.CombatGateHeld);
     }
 
+    // A passive neutral doesn't hold the walker gate — until the user hand-engages it,
+    // at which point it fights like a hostile and the gate must hold so the walker can't
+    // stroll off mid-fight (report paradigm-20260814).
+    [Fact]
+    public void UserEngagedPassiveNeutral_HoldsGate()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "townsperson", killable: true);
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);   // passive — no KillOnSight
+
+        HashSet<string> engaged = new(StringComparer.OrdinalIgnoreCase);
+        h.Tracker.SetUserEngagedInstanceGate(raw => engaged.Contains(raw));
+
+        h.Feed("Also here: townsperson.");
+        Assert.False(h.Tracker.HasEngageableHostiles);   // passive neutral left alone
+        Assert.False(h.CombatGateHeld);
+
+        engaged.Add("townsperson");
+        h.Feed("Also here: townsperson.");
+        Assert.True(h.Tracker.HasEngageableHostiles);    // now fights like a hostile
+        Assert.True(h.CombatGateHeld);
+    }
+
     // ----- HasHostileMonster — auto-attack-independent danger signal ----
 
     [Fact]

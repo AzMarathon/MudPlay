@@ -1,16 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.21.9**
-> - Navigation: position recovery in same-named mazes now replays your move chain from the room the chain **started** at (not the newest confirmed room), so after fast manual movement outruns the tracker it re-derives where you are instead of going Lost
-> - Combat: debuff casting reworked — the AoE debuff casts **once** and tags the room, re-firing only for a new/summoned mob (up to its cap); the single-target debuff now takes over whenever the AoE isn't covering (Auto-Nuke off, unconfigured, or below its min-enemy count), fixing a configured-AoE-with-Auto-Nuke-off case where the single-target debuff never fired
-> - Recovery: auto-rest no longer gets stuck off after a fight ends in an empty room — a post-combat "wait for the room to re-confirm" hold could sit forever when the room stays empty and you don't move, leaving you below your rest threshold yet never resting
-> - Combat: a room/AoE attack spell now drops to single-target the same round the room thins below its minimum-enemy count, even when a lone survivor keeps the fight going (previously it kept re-casting the AoE at the last mob until a `*Combat Off*` or an Enter press)
-> - Navigation: Auto-Search no longer stalls the walker with a per-room pause when nothing is set to collect what it reveals (Auto-Get Items / Auto-Get Cash off, no path-item hunt), so travelling with Auto-Search on is markedly faster
-> - Combat: a capped attack spell no longer fires an extra round against a lone monster — the engine's cap-switch to the alternate was landing one round late when a solo fight's first round arrived quickly, so e.g. LBOL set to cast **1** fired twice before switching to MMIS
-> - Combat: a hand-cast attack/drain spell that draws "no effect" (e.g. probing an immune elemental with `dtch`) no longer marks the engine's **own** last auto-cast spell immune — a manual probe used to wrongly drop the auto-attack cascade to melee instead of trying the next attack spell
-> - Combat: a hand-cast enemy debuff (a monster-targeting spell such as `vuln`) no longer arms a phantom self-buff recast timer or shows up as a bogus self-buff in the Buff Watchdog
-> - Game Data: an item's "bought / sold" list now shows **every** room a shop operates from (a shop that runs from several rooms previously surfaced only its first)
+> **Version 3.21.10**
+> - Combat: when you hand-attack a **passive neutral** (one the engine normally leaves alone), the auto-combat engine now **takes over and keeps killing it** — hitting a neutral turns it hostile, so the engine treats that instance like an enemy until it dies instead of stopping the moment you engaged it; the walker also holds in the room until it's dead
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

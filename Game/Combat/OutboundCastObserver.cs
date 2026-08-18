@@ -36,9 +36,9 @@ public sealed class OutboundCastObserver
     private const int MaxBytes = 64;
 
     private readonly Func<string, bool> _isCastCode;
-    private readonly Action<string> _onManualCast;
+    private readonly Action<string, string?> _onManualCast;
 
-    public OutboundCastObserver(Func<string, bool> isCastCode, Action<string> onManualCast)
+    public OutboundCastObserver(Func<string, bool> isCastCode, Action<string, string?> onManualCast)
     {
         ArgumentNullException.ThrowIfNull(isCastCode);
         ArgumentNullException.ThrowIfNull(onManualCast);
@@ -55,9 +55,12 @@ public sealed class OutboundCastObserver
         if (cmd.Length == 0) return;
 
         // First whitespace-delimited token is the cast-code; the remainder (if
-        // any) is the target ("swan rat"). A bare code ("swan") self-targets.
+        // any) is the target ("swan rat"). A bare code ("swan") self-targets. The
+        // target is forwarded so a manual combat cast can mark an engaged neutral.
         int space = cmd.IndexOf(' ');
         string first = space >= 0 ? cmd[..space] : cmd;
-        if (_isCastCode(first)) _onManualCast(first);
+        string? target = space >= 0 ? cmd[(space + 1)..].Trim() : null;
+        if (_isCastCode(first))
+            _onManualCast(first, string.IsNullOrEmpty(target) ? null : target);
     }
 }
