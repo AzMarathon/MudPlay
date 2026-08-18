@@ -30,32 +30,12 @@
     "Location": "GameData"
   },
   {
-    "Name": "desert damage",
-    "Enabled": true,
-    "Scope": "GameMessages",
-    "MatchType": "Literal",
-    "Pattern": "You suffer in the desert heat...",
-    "Response": "drink water",
-    "SoundFile": null,
-    "Location": "GameData"
-  },
-  {
     "Name": "low on lives",
     "Enabled": true,
     "Scope": "GameMessages",
     "MatchType": "Literal",
     "Pattern": "You feel your life-force ebbing.",
     "Response": ".LOW ON LIVES!^M;o^M",
-    "SoundFile": null,
-    "Location": "GameData"
-  },
-  {
-    "Name": "rosebush sleep",
-    "Enabled": true,
-    "Scope": "GameMessages",
-    "MatchType": "Literal",
-    "Pattern": "You awaken from unnatural slumber.",
-    "Response": "st",
     "SoundFile": null,
     "Location": "GameData"
   },
