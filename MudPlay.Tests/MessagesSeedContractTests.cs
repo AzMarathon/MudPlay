@@ -67,7 +67,6 @@ public sealed class MessagesSeedContractTests : IDisposable
         Assert.Equal(2, recs!.Count);
 
         MessageRecord net = recs[0];
-        Assert.Equal(MessageAction.WaitForEnd, net.Action);
         Assert.True(net.Flags.HasFlag(MessageFlags.Confused));
         Assert.True(net.Flags.HasFlag(MessageFlags.MovementPrevented));
         Assert.Equal("You are entangled in a net!", net.AppliedMessage);
@@ -75,7 +74,6 @@ public sealed class MessagesSeedContractTests : IDisposable
 
         MessageRecord belt = recs[1];
         Assert.Equal(MessageFlags.None, belt.Flags);
-        Assert.Equal(MessageAction.Ignore, belt.Action);
         Assert.NotNull(belt.Links);
         Assert.Single(belt.Links!);
         Assert.Equal("Items", belt.Links![0].Table);

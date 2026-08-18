@@ -2895,11 +2895,12 @@ records, zero misalignment):
     Find-in-conversations*, `0200` Mana-regen, `0400` Find-in-text*, `0800` reserved*, `1000`
     Ends-combat, `2000` Last-action-failed, `4000` Use-when-chasing*, `8000` Disabled. (`*` = the
     find-mode/chasing bits the importer strips.) Validated end-to-end against message text.
-  - `ACTION` — the Action radio, a **top-down index 0–6** = our `MessageAction`: 0 Ignore,
-    1 Check-who's-in-room (RecheckRoom), 2 Wait-until-wears-off (WaitForEnd), 3 Rest-full-HP,
-    4 Rest-full-Mana, 5 Don't-rest-run, 6 Hangup.
-  - `RESPONSE` — literal text sent to the server when the line matches (e.g. a `.`-prefixed say +
-    `^M` carriage-returns + macro directives like `=x`). Kept verbatim; NOT interpreted at decode.
+  - `ACTION` — the Action radio, a top-down index 0–6 (0 Ignore, 1 Check-who's-in-room,
+    2 Wait-until-wears-off, 3 Rest-full-HP, 4 Rest-full-Mana, 5 Don't-rest-run, 6 Hangup).
+    **Read but NOT emitted** — every one of these is handled by the client's own engines /
+    settings, so a MudPlay message is recognition only and carries no action.
+  - `RESPONSE` — literal text the server-echo would trigger MegaMUD to send. **Read but NOT
+    emitted** — a player response to a seen line is a *Trigger* in MudPlay, not a message.
 - **Line 2** — the **Message** line (the pattern matched on the wire).
 - **Line 3** — the **Ends-with** line (wear-off). **Blank when the effect has no wear-off.**
 

@@ -1071,9 +1071,6 @@ public sealed class AppServices
     // by CastingDirector's Tier-2 cure path.
     public Game.Conditions.ConditionTracker Conditions { get; private set; } = null!;
 
-    // Sends a game-data message's Response command when its CasterMessage lands.
-    public Game.Conditions.MessageResponder MessageResponder { get; private set; } = null!;
-
     // Outbound ailment-sync engine — on a local curable ailment it
     // announces on say (.@poisoned etc.) so other MudPlay
     // clients mirror our state, and @waits the leader; on clear it @oks.
@@ -3186,10 +3183,6 @@ public sealed class AppServices
         // lands in MainWindowViewModel alongside the other line
         // consumers.
         Conditions = new Game.Conditions.ConditionTracker(Messages, Log);
-        // Sends a game-data message's Response command when its CasterMessage
-        // lands (e.g. "desert damage" → "use water"). Wire-sender + line feed
-        // bound per-session by MainWindowViewModel.
-        MessageResponder = new Game.Conditions.MessageResponder(Messages, Log);
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a
         // curable ailment (or being held) it announces ".@poisoned" /

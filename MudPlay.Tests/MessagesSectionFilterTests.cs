@@ -11,8 +11,8 @@ namespace MudPlay.Tests;
 public sealed class MessagesSectionFilterTests
 {
     private static MessageRecord WithLinks(string name, params GameDataLink[] links) =>
-        new(Id: name, Name: name, Action: MessageAction.Ignore, Flags: MessageFlags.None,
-            RawFlagsHex: 0, Response: "", CasterMessage: "", TargetMessage: "",
+        new(Id: name, Name: name, Flags: MessageFlags.None,
+            RawFlagsHex: 0, CasterMessage: "", TargetMessage: "",
             WitnessMessage: "", AppliedMessage: "", AppliedEndsWith: "",
             Links: links.Length == 0 ? null : links);
 

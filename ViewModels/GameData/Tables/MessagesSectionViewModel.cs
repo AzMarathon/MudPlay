@@ -40,7 +40,7 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Name", "Action", "Lines", "Preview",
+        "Name", "Lines", "Preview",
     };
 
     public override string SearchKeyColumn => "Name";
@@ -122,7 +122,6 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
             var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Name"]    = m.Name,
-                ["Action"]  = m.Action.ToString(),
                 ["Lines"]   = lines,
                 ["Preview"] = preview,
             };
@@ -223,10 +222,8 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         MessageRecord blank = new(
             Id:              string.Empty,
             Name:            string.Empty,
-            Action:          MessageAction.Ignore,
             Flags:           MessageFlags.None,
             RawFlagsHex:     0,
-            Response:        string.Empty,
             CasterMessage:   string.Empty,
             TargetMessage:   string.Empty,
             WitnessMessage:  string.Empty,

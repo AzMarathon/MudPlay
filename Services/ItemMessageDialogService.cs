@@ -65,10 +65,8 @@ public sealed class ItemMessageDialogService
         MessageRecord record = match ?? new MessageRecord(
             Id:              string.Empty,
             Name:            itemName,
-            Action:          MessageAction.Ignore,
             Flags:           MessageFlags.None,
             RawFlagsHex:     0,
-            Response:        string.Empty,
             CasterMessage:   string.Empty,
             TargetMessage:   string.Empty,
             WitnessMessage:  string.Empty,

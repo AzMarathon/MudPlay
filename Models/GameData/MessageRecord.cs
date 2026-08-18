@@ -34,17 +34,20 @@ namespace MudPlay.Models.GameData;
 // paired with AppliedEndsWith. AppliedEndsWith: wear-off text, only
 // meaningful alongside a non-empty AppliedMessage. RawFlagsHex preserves
 // the full 16-bit flag word from the legacy MegaMUD format (reserved
-// 0x0800). Response keeps literal ^M separators. Links back-reference the
-// game-data rows this record is anchored to — usually one Spells#N,
-// possibly several when name-aliased variants share the same lines (e.g.
-// priest + druid resist cold).
+// 0x0800). Links back-reference the game-data rows this record is anchored
+// to — usually one Spells#N, possibly several when name-aliased variants
+// share the same lines (e.g. priest + druid resist cold).
+//
+// A message is RECOGNITION only — it identifies a line and (via Flags) the
+// condition it means. Player-defined RESPONSES to a seen line live in the
+// Triggers table, not here; the legacy per-message Response + Action fields
+// were retired with that split (nothing branched on Action, and the handful
+// of message Responses were the same lines already handled as triggers).
 public sealed record MessageRecord(
     string                       Id,
     string                       Name,
-    MessageAction                Action,
     MessageFlags                 Flags,
     ushort                       RawFlagsHex,
-    string                       Response,
     string                       CasterMessage,
     string                       TargetMessage,
     string                       WitnessMessage,
@@ -83,33 +86,6 @@ public sealed record MessageRecord(
 public readonly record struct GameDataLink(
     string Table,
     int    Number);
-
-// What the engine does when any of the record's lines fires. Values match
-// the legacy MegaMUD messages.md action code (single decimal digit) so
-// records round-trip through that format without translation.
-public enum MessageAction
-{
-    // Note the match for logging; take no engine action.
-    Ignore      = 0,
-
-    // Re-poll the current room state before the next decision.
-    RecheckRoom = 1,
-
-    // Pause the action loop until the condition expires.
-    WaitForEnd  = 2,
-
-    // Rest until HP is full before continuing.
-    RestHp      = 3,
-
-    // Rest / meditate until MA is full before continuing.
-    RestMana    = 4,
-
-    // Skip auto-rest and switch to auto-run while the condition is active.
-    Run         = 5,
-
-    // Drop the connection.
-    Hangup      = 6,
-}
 
 // Typed view of the message flag bitfield. Values match the legacy
 // MegaMUD messages.md 16-bit hex encoding so records round-trip through
