@@ -86,6 +86,10 @@ public sealed class HealthManagerTests
         /// this to MainWindowViewModel.RequestHangupDisconnect.</summary>
         public int HangupDisconnectCount { get; private set; }
 
+        /// <summary>Controllable clock for the reconfirm-hold timeout backstop.
+        /// Advance it to simulate the window elapsing with no room re-display.</summary>
+        public DateTimeOffset Clock = DateTimeOffset.UtcNow;
+
         public Harness(HealthSettings? settings = null)
         {
             Settings = settings ?? new HealthSettings();
@@ -102,7 +106,8 @@ public sealed class HealthManagerTests
                 readDeathFloor: () => DeathFloor,
                 log: Log,
                 hangupSignal: Hangup,
-                hasHostileInRoom: () => HostileInRoom);
+                hasHostileInRoom: () => HostileInRoom,
+                now: () => Clock);
             Health.SetWireSender(b => Sent.Add(b));
             Health.SetHangupDisconnect(() => HangupDisconnectCount++);
             Health.SetShadowRest(
@@ -442,6 +447,32 @@ public sealed class HealthManagerTests
         Assert.DoesNotContain("rest", h.SentLines);
 
         h.Health.NoteRoomEntitiesReconfirmed();   // room empty (HostilesPresent stays false)
+
+        Assert.True(h.Health.RestInFlight);
+        Assert.Contains("rest", h.SentLines);
+    }
+
+    [Fact]
+    public void ForceClear_EmptyStaticRoom_NeverReconfirms_TimeoutReleasesHoldAndRests()
+    {
+        // reports paradigm-20260818-050950 / -092532: an empty, static room emits no
+        // "Also here:" line and a stationary character triggers no room change, so the
+        // reconfirm hold never clears and auto-rest is stuck off — below the threshold,
+        // out of combat, yet never resting. The timeout backstop releases the hold so a
+        // genuinely clear room rests without waiting on a re-display that never comes.
+        using Harness h = new();
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.Health.NoteCombatForceCleared();   // hold armed at the current clock
+        h.State.Hp = 50;                      // breach → held, no rest yet
+
+        Assert.False(h.Health.RestInFlight);
+        Assert.DoesNotContain("rest", h.SentLines);
+
+        // No reconfirm ever arrives (empty static room, no hostiles). Time passes beyond
+        // the backstop; the next Evaluate tick releases the hold and rests.
+        h.Clock += TimeSpan.FromSeconds(5);
+        h.Health.Evaluate();
 
         Assert.True(h.Health.RestInFlight);
         Assert.Contains("rest", h.SentLines);

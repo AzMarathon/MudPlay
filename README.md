@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.21.5**
+> **Version 3.21.7**
+> - Recovery: auto-rest no longer gets stuck off after a fight ends in an empty room — a post-combat "wait for the room to re-confirm" hold could sit forever when the room stays empty and you don't move, leaving you below your rest threshold yet never resting
 > - Combat: a room/AoE attack spell now drops to single-target the same round the room thins below its minimum-enemy count, even when a lone survivor keeps the fight going (previously it kept re-casting the AoE at the last mob until a `*Combat Off*` or an Enter press)
 > - Navigation: Auto-Search no longer stalls the walker with a per-room pause when nothing is set to collect what it reveals (Auto-Get Items / Auto-Get Cash off, no path-item hunt), so travelling with Auto-Search on is markedly faster
 > - Combat: a capped attack spell no longer fires an extra round against a lone monster — the engine's cap-switch to the alternate was landing one round late when a solo fight's first round arrived quickly, so e.g. LBOL set to cast **1** fired twice before switching to MMIS

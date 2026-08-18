@@ -121,6 +121,14 @@ public sealed class HealthManager : IDisposable
     // a lingering hostile re-asserts the hostiles guard, an empty room lets the held
     // rest through. Set on force-clear, cleared on the next observation / room change.
     private bool _restHeldPendingReconfirm;
+    // When the reconfirm hold was set. An empty, static room never emits the
+    // "Also here:" line that clears the hold, and a stationary character never
+    // triggers a room change, so the hold is released after RestReconfirmTimeout
+    // as a backstop — by then the resync re-display has had time to re-assert any
+    // real hostile (which the hostiles guard then blocks). Kept short.
+    private DateTimeOffset _restHoldSetAt;
+    private static readonly TimeSpan RestReconfirmTimeout = TimeSpan.FromSeconds(3);
+    private readonly Func<DateTimeOffset> _now;
     private bool _fledThisCombat;        // reacted to run-trigger (flee OR @heal), awaiting combat end
     private bool _hangFired;             // emergency-hangup latch; re-arms when danger passes
     private Map.IRecoverableEngine? _fleeEngine;     // engine we paused mid-flee
@@ -211,7 +219,8 @@ public sealed class HealthManager : IDisposable
         HangupSignal? hangupSignal = null,
         Func<bool>? hasHostileInRoom = null,
         Func<Map.RoomKey, Map.RoomKey, IReadOnlyList<Map.Direction>?>? findReversePath = null,
-        Action<Action>? post = null)
+        Action<Action>? post = null,
+        Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(coordinator);
@@ -233,6 +242,7 @@ public sealed class HealthManager : IDisposable
         _log = log;
         _hangupSignal = hangupSignal;
         _post = post ?? (a => a());
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
         _state.PropertyChanged += OnStateChanged;
     }
 
@@ -810,6 +820,21 @@ public sealed class HealthManager : IDisposable
         if (shadowRest && hostilesPresent && shouldRest && !_state.InCombat && !_restInFlight)
             _log?.Combat(LogCategory, "shadowrest — resting with hostile in room (staying stealthed)");
 
+        // Reconfirm-hold backstop: an empty, static room never emits the "Also here:"
+        // line NoteRoomEntitiesReconfirmed waits on, and a stationary character never
+        // triggers NoteRoomChanged — so a post-force-clear hold could sit forever,
+        // silently blocking auto-rest (reports paradigm-20260818-050950 / -092532:
+        // below the rest threshold, out of combat, yet never resting). Release the hold
+        // after a short window: by then the watchdog's resync re-display has had ample
+        // time to re-assert any real hostile — which the hostiles guard below still
+        // blocks — so a room that's genuinely clear is safe to rest in.
+        if (_restHeldPendingReconfirm && _now() - _restHoldSetAt > RestReconfirmTimeout)
+        {
+            _restHeldPendingReconfirm = false;
+            _log?.Combat(LogCategory,
+                "rest reconfirm-hold timed out — no room re-display re-asserted a hostile, releasing to rest");
+        }
+
         if (shouldRest && !_state.InCombat && !_restInFlight && _restHeldPendingReconfirm
             && (!hostilesPresent || shadowRest))
         {
@@ -1190,7 +1215,11 @@ public sealed class HealthManager : IDisposable
     // CR and is waiting on the re-display to self-heal). Hold the rest-out branch
     // until that re-display re-confirms the room, so we don't rest in the flicker
     // before a still-present monster re-asserts.
-    public void NoteCombatForceCleared() => _restHeldPendingReconfirm = true;
+    public void NoteCombatForceCleared()
+    {
+        _restHeldPendingReconfirm = true;
+        _restHoldSetAt = _now();
+    }
 
     // A room observation arrived after a force-clear — the room model is now
     // authoritative. Release the hold and re-evaluate: a hostile that re-appeared
