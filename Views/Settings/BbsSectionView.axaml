@@ -254,6 +254,13 @@
 
                     <TextBlock Classes="GroupHeader" Text="Automated Logon Menu Navigation"/>
 
+                    <!-- Guidance: these steps drive the reconnect/login handshake only. A
+                         MegaMUD-holdover "Are you sure you want to log off? (Y/N)" step (a
+                         BBS quit-confirmation) never appears on the reconnect path, so the
+                         automator stalls waiting for it and the character never re-enters. -->
+                    <TextBlock Classes="FieldLabel" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="Only add steps to LOG IN to the game — never log-out or quit steps (e.g. a &quot;log off? (Y/N)&quot; confirmation). A logout step will never match on reconnect and stalls the automatic re-entry."/>
+
                     <StackPanel IsEnabled="{Binding HasProfile}" Spacing="4" Margin="0,6,0,0">
                         <Grid ColumnDefinitions="*,140,Auto,Auto,Auto" Margin="0,0,0,2">
                             <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Message"/>

@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.21.10**
-> - Combat: when you hand-attack a **passive neutral** (one the engine normally leaves alone), the auto-combat engine now **takes over and keeps killing it** — hitting a neutral turns it hostile, so the engine treats that instance like an enemy until it dies instead of stopping the moment you engaged it; the walker also holds in the room until it's dead
+> **Version 3.21.11**
+> - Reconnect: after an unexpected drop, first profile load, or a cleanup relog, the client now **enters the realm even if your logon steps don't cleanly reach the game** — the realm-entry command fires the moment the entry menu appears, so a mis-authored or holdover nav step no longer strands you at the menu (still won't auto-enter right after a deliberate hang-up, by design)
+> - BBS settings: the logon-steps editor now says to add **only log-in steps, never a log-out/quit step** — a MegaMUD-holdover "log off? (Y/N)" step never matches on login and stalls the sequence
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

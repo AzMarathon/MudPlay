@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.21.11
+
+- Reconnect: after an unexpected drop, first profile load, or a cleanup relog, the client now **enters the realm even if your logon steps don't cleanly reach the game** — the realm-entry command fires the moment the entry menu appears, so a mis-authored or holdover nav step no longer strands you at the menu (it still won't auto-enter right after a deliberate `@hangup` / hang-up-on-low-HP / when-naked, by design)
+- BBS settings: the logon-steps editor now says to add **only log-in steps, never a log-out/quit step** — a MegaMUD-holdover "log off? (Y/N)" step never matches on login and stalls the sequence
+- bug reports addressed: paradigm-20260818-142340
+
 ## 3.21.10
 
 - Combat: when you hand-attack a **passive neutral** (one the engine normally leaves alone), the auto-combat engine now **takes over and keeps killing it** — hitting a neutral turns it hostile, so the engine treats that instance like an enemy until it dies instead of stopping the moment you engaged it; the walker also holds in the room until it's dead

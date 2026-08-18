@@ -1938,17 +1938,20 @@ public partial class MainWindowViewModel : ObservableObject
         {
             AppServices.Current.Log.Info("LoginAuto", $"Login automation complete for '{bbsName}'.");
             DetachLoginKillSwitch();
-            // Arm the main-menu-entry automation NOW — the BBS-login
-            // sequence just completed, so we expect the MajorMUD main
-            // menu to render shortly. If it does, the engine sends the
-            // configured GameEntryCommand. If it doesn't render in the
-            // arm window, the latch closes — protects against in-game
-            // chat that happens to look like the menu line.
-            AppServices.Current.MainMenuEntry.Arm();
+            // Keep the main-menu-entry latch primed for the menu that renders
+            // right after the final step. Auto-entry was ARMED at login start
+            // (below) and refreshed on each step; here we just extend the window
+            // once more for the imminent menu.
+            AppServices.Current.MainMenuEntry.KeepArmed();
             // Once the post-entry refresh (stat / inventory / who) has printed, dump the
             // quests this character can now start — once, at the tail of the login sequence.
             _ = AnnounceAvailableQuestsAfterLoginAsync();
         };
+        // Keep auto-entry armed while the login actively progresses, so the
+        // realm-entry menu still fires the entry command even if a trailing
+        // (mis-authored / MegaMUD-holdover) step never matches and LoggedIntoGame
+        // never comes — the reported "did not re-enter on disconnect" case.
+        automator.StepAdvanced += () => AppServices.Current.MainMenuEntry.KeepArmed();
         automator.Aborted += reason =>
         {
             AppServices.Current.Log.Warn("LoginAuto", $"'{bbsName}': {reason}");
@@ -1989,6 +1992,16 @@ public partial class MainWindowViewModel : ObservableObject
         };
         scanner.PromptObserved += handler;
         _loginKillSwitch = handler;
+
+        // Arm auto-entry at the START of the login (not on completion). This is
+        // the single point that decides authorization for the connect: Arm()
+        // consumes the hangup-suppression flag, so a login that follows a
+        // health/manual hangup is NOT authorized and no later step can re-open
+        // it. On an authorized login (fresh profile load, reconnect after an
+        // unexpected drop, cleanup relog) the window stays primed via KeepArmed
+        // as steps advance, so the realm-entry menu fires the entry command even
+        // when the user's nav steps don't cleanly end at "in game".
+        AppServices.Current.MainMenuEntry.Arm();
 
         automator.Start();
     }

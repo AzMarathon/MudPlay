@@ -48,6 +48,27 @@ public sealed class LoginAutomatorTests
     }
 
     [Fact]
+    public async Task StepAdvanced_FiresOncePerMatchedStep()
+    {
+        // Each matched+sent step raises StepAdvanced (the signal that keeps the
+        // main-menu auto-entry window fresh while a login is progressing).
+        AutomationStep s1 = new("Login:", "alice");
+        AutomationStep s2 = new("Password:", "pw");
+        (LoginAutomator a, _) = Build(steps: new[] { s1, s2 });
+        int advances = 0;
+        a.StepAdvanced += () => advances++;
+        a.Start();
+
+        a.Feed(Ascii("Login:"));
+        await Task.Delay(20);
+        Assert.Equal(1, advances);
+
+        a.Feed(Ascii("Password:"));
+        await Task.Delay(20);
+        Assert.Equal(2, advances);
+    }
+
+    [Fact]
     public async Task EmptySend_StillSendsCarriageReturn()
     {
         AutomationStep s = new("Press any key", "");

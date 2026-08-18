@@ -27,6 +27,8 @@ Settings live in four tiers — **Defaults → Global → BBS → Character** �
 
 In **Settings → BBS + Display**, fill in the board's **name**, **host**, and **port**, your **username / password**, and — if the board needs it — the **automated logon** steps that walk you from the BBS menu into the game. Reconnect behavior and terminal size live here too. These are **BBS-tier**: shared by every character on that board.
 
+Each logon step is a **Message** to wait for and a **Response** to send when it appears (with `{username}` / `{password}` tokens for your saved credentials). Add **only steps that LOG YOU IN** — never a log-out or quit step (e.g. a *"Are you sure you want to log off? (Y/N)"* confirmation, a common MegaMUD holdover). That prompt never appears on the login path, so a logout step just sits there unmatched and stalls the sequence. You don't need a final "enter the realm" step either: once your steps reach the game's entry menu, MudPlay sends the entry command for you — and it does so even if your steps don't perfectly reach the end, so an automatic reconnect after a drop still lands you back in the game. (The one time it won't auto-enter is right after you hang up on purpose — a manual `@hangup` or a hang-up-on-low-HP / hang-up-when-naked rule — so you can read the screen and enter manually.)
+
 With that saved, **Connect** (Alt+H, or File → Connect) and MudPlay logs you in.
 
 ## Playing, and turning on automation
