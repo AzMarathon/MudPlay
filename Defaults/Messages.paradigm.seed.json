@@ -2208,20 +2208,6 @@
     ]
   },
   {
-    "Id": "36aae404f932a840",
-    "Name": "damn",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are damned!",
-    "AppliedEndsWith": "The malaise of your soul has lifted",
-    "Links": null
-  },
-  {
     "Id": "2a03db372967694e",
     "Name": "damnation",
     "Action": "Ignore",
@@ -4031,48 +4017,6 @@
     ]
   },
   {
-    "Id": "617e00ffbc37fad9",
-    "Name": "freezing blizzard",
-    "Action": "Ignore",
-    "Flags": "LosingHp",
-    "RawFlagsHex": 8,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Icy hail pelts everyone in the room",
-    "AppliedEndsWith": "Your awareness returns to normal.",
-    "Links": null
-  },
-  {
-    "Id": "de3a2b78c9ccb61c",
-    "Name": "freezing blizzard",
-    "Action": "Ignore",
-    "Flags": "LosingHp",
-    "RawFlagsHex": 8,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Icy hail pelts {target}, freezing your bones!",
-    "AppliedEndsWith": "Your awareness returns to normal.",
-    "Links": null
-  },
-  {
-    "Id": "97d2019f2084c473",
-    "Name": "freezing blizzard",
-    "Action": "Ignore",
-    "Flags": "LosingHp",
-    "RawFlagsHex": 8,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel oblivious!",
-    "AppliedEndsWith": "Your awareness returns to normal.",
-    "Links": null
-  },
-  {
     "Id": "72ac6999f6d0798f",
     "Name": "frenzy",
     "Action": "Ignore",
@@ -5488,8 +5432,8 @@
     ]
   },
   {
-    "Id": "7be77c351984173e",
-    "Name": "ivory scepter",
+    "Id": "da59cc8f554bc93a",
+    "Name": "ivory sceptre",
     "Action": "Ignore",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -5499,7 +5443,12 @@
     "WitnessMessage": "",
     "AppliedMessage": "You are protected by divine power",
     "AppliedEndsWith": "You feel vulnerable",
-    "Links": null
+    "Links": [
+      {
+        "Table": "Items",
+        "Number": 1515
+      }
+    ]
   },
   {
     "Id": "fa6746746a418288",
@@ -7591,20 +7540,6 @@
     ]
   },
   {
-    "Id": "c580435e8b4ea9db",
-    "Name": "protection from good",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel safe from good",
-    "AppliedEndsWith": "The effects of protection from good wear off",
-    "Links": null
-  },
-  {
     "Id": "d251859a2ed9c658",
     "Name": "protective aura",
     "Action": "Ignore",
@@ -7978,20 +7913,6 @@
         "Number": 674
       }
     ]
-  },
-  {
-    "Id": "b0d22122560af6af",
-    "Name": "rotting beholder nausea",
-    "Action": "WaitForEnd",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel nauseous!",
-    "AppliedEndsWith": "You feel less sick.",
-    "Links": null
   },
   {
     "Id": "8b8ebf7983641a1d",
@@ -8932,20 +8853,6 @@
         "Number": 5741
       }
     ]
-  },
-  {
-    "Id": "56d4f2747cda492d",
-    "Name": "song of deflection",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are protected from attack",
-    "AppliedEndsWith": "Your shield of deflection wears off",
-    "Links": null
   },
   {
     "Id": "7476de8729fec827",

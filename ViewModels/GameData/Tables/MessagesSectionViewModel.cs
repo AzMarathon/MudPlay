@@ -23,7 +23,20 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
     private readonly GameDataCache? _cache;
 
     public override string Id => "messages";
-    public override string Title => "Messages";
+    public override string Title => "Unfiltered Messages";
+
+    // Description banner (renders under the title): explains what lands here — the
+    // catalogue records NOT claimed by a spell or item (those are edited from the
+    // Spells / Items tabs). What remains is standalone condition detectors + orphans.
+    public override string? BannerText =>
+        "Messages not tied to a spell or item live here. A message linked to a spell is " +
+        "edited from the Spells tab, one linked to an item from the item dialog's Message " +
+        "section; only the leftovers — standalone condition detectors and orphaned records — " +
+        "show in this list.";
+
+    // When nothing is unfiltered, the tab hides itself from the sidebar (the browser
+    // re-checks on every reload) — an empty overflow bucket is just noise.
+    public override bool HideWhenEmpty => true;
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
@@ -34,7 +47,7 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
-        Title, "message", "response", "condition", "pattern",
+        Title, "messages", "unfiltered", "response", "condition", "pattern",
         "blinded", "poisoned", "paralyzed", "confused", "diseased", "regenerating",
     };
 

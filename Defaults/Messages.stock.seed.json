@@ -1567,20 +1567,6 @@
     ]
   },
   {
-    "Id": "36aae404f932a840",
-    "Name": "damn",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are damned!",
-    "AppliedEndsWith": "The malaise of your soul has lifted",
-    "Links": null
-  },
-  {
     "Id": "2a03db372967694e",
     "Name": "damnation",
     "Action": "Ignore",
@@ -2814,48 +2800,6 @@
         "Number": 194
       }
     ]
-  },
-  {
-    "Id": "617e00ffbc37fad9",
-    "Name": "freezing blizzard",
-    "Action": "Ignore",
-    "Flags": "LosingHp",
-    "RawFlagsHex": 8,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Icy hail pelts everyone in the room",
-    "AppliedEndsWith": "Your awareness returns to normal.",
-    "Links": null
-  },
-  {
-    "Id": "de3a2b78c9ccb61c",
-    "Name": "freezing blizzard",
-    "Action": "Ignore",
-    "Flags": "LosingHp",
-    "RawFlagsHex": 8,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Icy hail pelts {target}, freezing your bones!",
-    "AppliedEndsWith": "Your awareness returns to normal.",
-    "Links": null
-  },
-  {
-    "Id": "97d2019f2084c473",
-    "Name": "freezing blizzard",
-    "Action": "Ignore",
-    "Flags": "LosingHp",
-    "RawFlagsHex": 8,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel oblivious!",
-    "AppliedEndsWith": "Your awareness returns to normal.",
-    "Links": null
   },
   {
     "Id": "8efdcf9c0b613948",
@@ -5265,25 +5209,6 @@
     ]
   },
   {
-    "Id": "c580435e8b4ea9db",
-    "Name": "protection from good",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel safe from good",
-    "AppliedEndsWith": "The effects of protection from good wear off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 108
-      }
-    ]
-  },
-  {
     "Id": "81f22afc80a63fcf",
     "Name": "protective shell",
     "Action": "Ignore",
@@ -6260,20 +6185,6 @@
         "Number": 53
       }
     ]
-  },
-  {
-    "Id": "56d4f2747cda492d",
-    "Name": "song of deflection",
-    "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are protected from attack",
-    "AppliedEndsWith": "Your shield of deflection wears off",
-    "Links": null
   },
   {
     "Id": "7476de8729fec827",
