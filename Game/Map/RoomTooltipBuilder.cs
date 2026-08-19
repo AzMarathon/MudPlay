@@ -241,14 +241,25 @@ public static class RoomTooltipBuilder
         // Lair regen sits directly beneath the Lair line (its simultaneous cap +
         // per-mob respawn time), where it annotates the mobs it describes, rather
         // than at the bottom of the tooltip.
-        if (rm.LairMax is { } lairMax)
+        string regen = FormatLairRegen(rm.LairMax, room.Delay);
+        if (regen.Length > 0)
         {
             if (sb.Length > 0) sb.Append('\n');
-            sb.Append("Max Regen: ").Append(lairMax);
-            string regenTime = BuildRegenTime(room.Delay);
-            if (regenTime.Length > 0) sb.Append(" @ ").Append(regenTime);
+            sb.Append(regen);
         }
         return sb.ToString();
+    }
+
+    // The "Max Regen: N @ (Delay-1)m 30s" line for a room's lair (N = the lair
+    // tag's simultaneous cap, the time = its respawn cadence), or empty when the
+    // room has no lair. Shared by the map tooltip and the Room Info panel so the
+    // two never drift.
+    public static string FormatLairRegen(int? lairMax, int delay)
+    {
+        if (lairMax is not { } max) return string.Empty;
+        string line = "Max Regen: " + max.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string time = BuildRegenTime(delay);
+        return time.Length > 0 ? line + " @ " + time : line;
     }
 
     // Floor items the room drops on the ground — its static `Placed` list plus any

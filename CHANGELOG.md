@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.22.3
+
+- Navigation: the **Room Info** panel now mirrors the map tooltip — monsters are shown in three labelled groups, **Placed** / **Assigned** / **Lair**, instead of one flat tagged list, with the lair's **Max Regen** line beneath the Lair group
+
 ## 3.22.2
 
 - Game Data: an item that sits on a room's floor now shows a **"Placed in"** section on its record — a clickable link to each room that holds it, with **Queue Walking here →**; room-only items (like the bogwood box) previously showed no source at all
