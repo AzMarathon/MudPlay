@@ -4848,6 +4848,12 @@ public sealed class AppServices
         // its own bank -> shop -> origin light detour and needs the `i` dump to
         // notice the bought copy land.
         Inventory.Changed += AutoDeposit.OnInventoryChanged;
+        // In a stash room mid-loop, suppress cash + item auto-collect so a search
+        // there can't re-expose and re-grab the pile the pass-through stash just
+        // hid (report paradigm-20260819-121516). AutoDeposit owns the room/stash/
+        // running-engine state; the lambda reads it live per survey line.
+        Cash.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
+        AutoGetItems.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
         // Bank deposits (already a copper value) join stash hides in the Session
         // Stats stashed/deposited figure. The transaction-history ledger is fed
         // separately from the `You deposit …` echo (InventoryManager.BankDeposited,

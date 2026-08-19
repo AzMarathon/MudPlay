@@ -110,6 +110,21 @@ public sealed class CashManagerTests
     }
 
     [Fact]
+    public void OnGround_Collect_Suppressed_InStashRoomWhileLooping()
+    {
+        // Report paradigm-20260819-121516: a search in a stash room re-exposes the
+        // just-hidden pile and auto-collect grabs it back. In a stash room mid-loop
+        // the collect must be skipped — no `get` sent — even under Collect policy.
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Cash.SuppressCollectInStashRoom = () => true;
+
+        h.Feed("There are 50 gold pieces here.");
+
+        Assert.Empty(h.Sent);   // no `get` — the pile stays stashed
+    }
+
+    [Fact]
     public void OnGround_Singular_CollectsAsCountOne()
     {
         using Harness h = new();

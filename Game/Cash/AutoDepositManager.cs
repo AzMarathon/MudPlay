@@ -592,6 +592,15 @@ public sealed class AutoDepositManager : IDisposable
         return false;
     }
 
+    // True when the character is standing in a marked stash room with a loop /
+    // lair running — the pass-through-stash context. AppServices wires this into
+    // the cash + item auto-collect engines so a search here can't re-expose and
+    // re-grab the pile the stash just hid (report paradigm-20260819-121516).
+    public bool IsPassingThroughStashRoom()
+        => _tracker.State.CurrentRoom is { } room
+           && IsStashRoom(room.Key)
+           && SnapshotRunningEngine().Kind != ResumeKind.None;
+
     // Whether room is one the running engine will reach on its own — a resolved
     // loop-circuit room, or a marked Auto-Lair room. Such a room needs no detour:
     // the pass-through handler stashes it when the engine walks through.

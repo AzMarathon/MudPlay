@@ -155,6 +155,13 @@ public sealed class CashManager : IDisposable
     // can be exercised without a real 60-second wait; production reads the wall
     // clock.
     internal Func<DateTime> AutoDepositClock { get; set; } = static () => DateTime.UtcNow;
+
+    // True while standing in a marked stash room with a loop / lair running. Coin
+    // auto-collect is suppressed there so a search's "You notice …" survey can't
+    // re-expose and re-grab the pile the pass-through stash just hid (report
+    // paradigm-20260819-121516). Wired by AppServices to AutoDeposit; defaults to
+    // never-suppress so tests and non-looping play are unaffected.
+    internal Func<bool> SuppressCollectInStashRoom { get; set; } = static () => false;
     private bool _disposed;
 
     // ----- Encumbrance-gated collection --------------------------------
@@ -380,6 +387,14 @@ public sealed class CashManager : IDisposable
         switch (policy)
         {
             case CashPolicy.Collect:
+                // In a stash room mid-loop, don't re-collect — a `sea` re-exposes
+                // the just-stashed pile and this would grab it right back.
+                if (SuppressCollectInStashRoom())
+                {
+                    _log?.Info(LogCategory,
+                        $"stash room (looping) — not collecting {count} {currency}");
+                    break;
+                }
                 // Specific amount (not bare `get <currency>` which
                 // would grab all available) so encumbrance / weight
                 // tracking can do exact arithmetic instead of waiting
@@ -422,6 +437,12 @@ public sealed class CashManager : IDisposable
 
         if (policy == CashPolicy.Collect)
         {
+            if (SuppressCollectInStashRoom())
+            {
+                _log?.Info(LogCategory,
+                    $"stash room (looping) — not collecting corpse {count} {currency}");
+                return;
+            }
             // Fresh coin on the ground → re-arm collection of this currency even if
             // we already took an earlier pile in this room (a new mob wandered in).
             _collectedGround.Remove(currency);
