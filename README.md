@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.0**
-> - Navigation: the walker now routes through two special exits it couldn't before — an **item-use teleport** (an item whose use transports you, e.g. `use potion of levitation`) and a **room-command reveal** (a hidden exit opened by typing a room command, e.g. `clear rubble`) — so quest routes gated on them, like the trek to the Necromancer at 9/1431, now plan and walk on their own instead of failing with "No path"
-> - Navigation: a route blocked **only** because you lack a required action-exit item now fails with a named **"a required item to go obtain (…)"** message, instead of a bare "No path"; these quest items are never auto-fetched
-> - Navigation: fixed a latent case where an item-gated command teleport (an emblem / chime that ports you past a locked door) dropped its inventory check
+> **Version 3.22.1**
+> - Game Data: an item that sits on a room's floor now shows a **"Placed in"** section on its record — a clickable link to each room that holds it, with **Queue Walking here →**; room-only items (like the bogwood box) previously showed no source at all
+> - Navigation: the Room Info panel and map now list a room's statically-**placed** floor items, not just ones its `roomitem` command scatters — so an item sitting in a room shows up when you go there
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
