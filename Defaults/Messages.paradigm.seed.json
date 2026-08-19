@@ -1419,7 +1419,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "A chaotic storm assaults your foe for {damage} damage!",
     "TargetMessage": "A chaotic storm assaults you for {damage} damage!",
-    "WitnessMessage": "A chaotic storm assaults {target}the room for {damage} damage!",
+    "WitnessMessage": "A chaotic storm assaults the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -1436,7 +1436,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "A chaotic storm assaults {target} for {damage} damage!",
     "TargetMessage": "A chaotic storm assaults you for {damage} damage!",
-    "WitnessMessage": "A chaotic storm assaults {target}the room for {damage} damage!",
+    "WitnessMessage": "A chaotic storm assaults the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -1997,7 +1997,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "Dancing blades slice the foe for {damage} damage!",
     "TargetMessage": "Dancing blades slice you for {damage} damage!",
-    "WitnessMessage": "Dancing blades slice {target}the room for {damage} damage!",
+    "WitnessMessage": "Dancing blades slice the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -2645,7 +2645,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "An earthquake rocks the room for {damage} damage!",
     "TargetMessage": "An earthquake rocks you for {damage} damage!",
-    "WitnessMessage": "An earthquake rocks {target}the room for {damage} damage!",
+    "WitnessMessage": "An earthquake rocks the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -2662,7 +2662,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "An earthquake rocks {target} for {damage} damage!",
     "TargetMessage": "An earthquake rocks you for {damage} damage!",
-    "WitnessMessage": "An earthquake rocks {target}the room for {damage} damage!",
+    "WitnessMessage": "An earthquake rocks the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -3189,7 +3189,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "The fireball explodes, causing {damage} damage!",
     "TargetMessage": "You take {damage} damage from the explosion!",
-    "WitnessMessage": "An explosion rocks {target}the room for {damage} damage!",
+    "WitnessMessage": "An explosion rocks the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -3206,7 +3206,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "{target} take {damage} damage from the explosion!",
     "TargetMessage": "You take {damage} damage from the explosion!",
-    "WitnessMessage": "An explosion rocks {target}the room for {damage} damage!",
+    "WitnessMessage": "An explosion rocks the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -4828,7 +4828,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "A massive explosion blasts {target} for {damage} damage!",
     "TargetMessage": "A massive explosion blasts you for {damage} damage!",
-    "WitnessMessage": "A massive explosion rocks {target}the room for {damage} damage!",
+    "WitnessMessage": "A massive explosion rocks the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -4845,7 +4845,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "A massive explosion rocks {target} for {damage} damage!",
     "TargetMessage": "A massive explosion blasts you for {damage} damage!",
-    "WitnessMessage": "A massive explosion rocks {target}the room for {damage} damage!",
+    "WitnessMessage": "A massive explosion rocks the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -6678,7 +6678,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "A massive blast of light sears your foes for {damage} damage!",
     "TargetMessage": "A massive blast of light sears you for {damage} damage!",
-    "WitnessMessage": "A massive blast of light {target}sears the room for {damage} damage!",
+    "WitnessMessage": "A massive blast of light sears the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -8210,7 +8210,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "A shockwave ripples through the room for {damage} damage!",
     "TargetMessage": "A shockwave strikes you for {damage} damage!",
-    "WitnessMessage": "A shockwave ripples {target}through the room for {damage} damage!",
+    "WitnessMessage": "A shockwave ripples through the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -8227,7 +8227,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "A shockwave strikes {target} for {damage} damage!",
     "TargetMessage": "A shockwave strikes you for {damage} damage!",
-    "WitnessMessage": "A shockwave ripples {target}through the room for {damage} damage!",
+    "WitnessMessage": "A shockwave ripples through the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -9213,7 +9213,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "You cast swarm on the room for {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on you for {damage} damage!",
-    "WitnessMessage": "{source} casts {spellname} on {target}the room for {damage} damage!",
+    "WitnessMessage": "{source} casts {spellname} on the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -10948,7 +10948,7 @@
     "Name": "greater healing rain",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "You cast {spellname} on your {target}party, healing {damage} damage!",
+    "CasterMessage": "You cast {spellname} on your party, healing {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on you, healing {damage} damage!",
     "WitnessMessage": "{source} casts {spellname} on the room!",
     "AppliedMessage": "",
@@ -10999,7 +10999,7 @@
     "Name": "healing rain",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "You cast {spellname} on your {target}party, healing {damage} damage!",
+    "CasterMessage": "You cast {spellname} on your party, healing {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on you, healing {damage} damage!",
     "WitnessMessage": "{source} casts {spellname} on the room!",
     "AppliedMessage": "",
@@ -11016,7 +11016,7 @@
     "Name": "major healing rain",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "You cast {spellname} on your {target}party, healing {damage} damage!",
+    "CasterMessage": "You cast {spellname} on your party, healing {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on you, healing {damage} damage!",
     "WitnessMessage": "{source} casts {spellname} on the room!",
     "AppliedMessage": "",
@@ -11526,7 +11526,7 @@
     "Name": "divine mercy",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "You cast {spellname} on your {target}party, healing {damage} damage!",
+    "CasterMessage": "You cast {spellname} on your party, healing {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on you, healing {damage} damage!",
     "WitnessMessage": "{source} casts {spellname} on the room!",
     "AppliedMessage": "",
@@ -11543,9 +11543,9 @@
     "Name": "note of destruction",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "You sing a {spellname}, {target}causing {damage} damage to your foes!",
+    "CasterMessage": "You sing a {spellname}, causing {damage} damage to your foes!",
     "TargetMessage": "{source} sings a {spellname} to you for {damage} damage!",
-    "WitnessMessage": "{source} sings a {spellname} {target}for {damage} damage!",
+    "WitnessMessage": "{source} sings a {spellname} for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -12070,7 +12070,7 @@
     "Name": "firestorm",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A blazing firestorm sears your {spellname}foe for {damage} damage!",
+    "CasterMessage": "A blazing firestorm sears your foe for {damage} damage!",
     "TargetMessage": "A blazing firestorm burns through you for {damage} damage!",
     "WitnessMessage": "",
     "AppliedMessage": "",
@@ -13583,7 +13583,7 @@
     "Name": "chain lightning",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Blue lightning streaks among your {spellname}foes for {damage} damage!",
+    "CasterMessage": "Blue lightning streaks among your foes for {damage} damage!",
     "TargetMessage": "Blue lightning streaks out and sears you for {damage} damage!",
     "WitnessMessage": "Blue lightning streaks out and sears {source} for {damage} damage!",
     "AppliedMessage": "",
@@ -13736,9 +13736,9 @@
     "Name": "armageddon",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "You cast {spellname} on {target}the room for {damage} damage!",
+    "CasterMessage": "You cast {spellname} on the room for {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on you for {damage} damage!",
-    "WitnessMessage": "{source} casts {spellname} on {target}the room for {damage} damage!",
+    "WitnessMessage": "{source} casts {spellname} on the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -14161,7 +14161,7 @@
     "Name": "spirit horde",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A horde of shrieking spirits ravages your {spellname}foe for {damage} damage!",
+    "CasterMessage": "A horde of shrieking spirits ravages your foe for {damage} damage!",
     "TargetMessage": "A horde of shrieking spirits ravages you for {damage} damage!",
     "WitnessMessage": "A horde of shrieking spirits sweeps through the room!",
     "AppliedMessage": "",
@@ -14195,7 +14195,7 @@
     "Name": "eldritch storm",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A storm of raw energy blasts your {spellname}foes for {damage} damage!",
+    "CasterMessage": "A storm of raw energy blasts your foes for {damage} damage!",
     "TargetMessage": "A storm of raw energy blasts you for {damage} damage!",
     "WitnessMessage": "A storm of raw energy blasts the room!",
     "AppliedMessage": "",
@@ -14382,9 +14382,9 @@
     "Name": "nuke spell",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "You cast {spellname} on {target}the room for {damage} damage!",
+    "CasterMessage": "You cast {spellname} on the room for {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on you for {damage} damage!",
-    "WitnessMessage": "{source} casts {spellname} on {target}the room for {damage} damage!",
+    "WitnessMessage": "{source} casts {spellname} on the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -14467,9 +14467,9 @@
     "Name": "earthquake",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "An earthquake rocks {spellname}the room for {damage} damage!",
+    "CasterMessage": "An earthquake rocks the room for {damage} damage!",
     "TargetMessage": "An earthquake rocks you for {damage} damage!",
-    "WitnessMessage": "An earthquake rocks {source}the room for {damage} damage!",
+    "WitnessMessage": "An earthquake rocks the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -14671,7 +14671,7 @@
     "Name": "acid tempest",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Your {spellname}foes are drenched in acid as the wind batters them for {damage} damage!",
+    "CasterMessage": "Your foes are drenched in acid as the wind batters them for {damage} damage!",
     "TargetMessage": "You are drenched in acid as the wind batters you for {damage} damage!",
     "WitnessMessage": "An acidic tempest blows through the room!",
     "AppliedMessage": "",
@@ -14773,9 +14773,9 @@
     "Name": "earthquake",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "An earthquake rocks {spellname}the room for {damage} damage!",
+    "CasterMessage": "An earthquake rocks the room for {damage} damage!",
     "TargetMessage": "An earthquake rocks you for {damage} damage!",
-    "WitnessMessage": "An earthquake rocks {source}the room for {damage} damage!",
+    "WitnessMessage": "An earthquake rocks the room for {damage} damage!",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
@@ -14824,7 +14824,7 @@
     "Name": "chain lightning",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Blue lightning streaks among your {spellname}foes for {damage} damage!",
+    "CasterMessage": "Blue lightning streaks among your foes for {damage} damage!",
     "TargetMessage": "Blue lightning streaks out and sears you for {damage} damage!",
     "WitnessMessage": "Blue lightning streaks out and sears {source} for {damage} damage!",
     "AppliedMessage": "",
@@ -14858,7 +14858,7 @@
     "Name": "hellstorm",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A hellish storm of fire and brimstone scorches your {spellname}foes for {damage} damage!",
+    "CasterMessage": "A hellish storm of fire and brimstone scorches your foes for {damage} damage!",
     "TargetMessage": "A hellish storm of fire and brimstone scorches you for {damage} damage!",
     "WitnessMessage": "A hellish storm of fire and brimstone scorch the room!",
     "AppliedMessage": "",
@@ -14909,7 +14909,7 @@
     "Name": "blizzard",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A storm of freezing hail smashes your {spellname}foes for {damage} damage!",
+    "CasterMessage": "A storm of freezing hail smashes your foes for {damage} damage!",
     "TargetMessage": "A storm of freezing hail smashes you for {damage} damage!",
     "WitnessMessage": "A storm of freezing hail blows through the room!",
     "AppliedMessage": "",
@@ -14926,7 +14926,7 @@
     "Name": "eldritch storm",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A storm of raw energy blasts your {spellname}foes for {damage} damage!",
+    "CasterMessage": "A storm of raw energy blasts your foes for {damage} damage!",
     "TargetMessage": "A storm of raw energy blasts you for {damage} damage!",
     "WitnessMessage": "A storm of raw energy blasts the room!",
     "AppliedMessage": "",
@@ -14994,7 +14994,7 @@
     "Name": "spirit horde",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A horde of shrieking spirits ravages your {spellname}foe for {damage} damage!",
+    "CasterMessage": "A horde of shrieking spirits ravages your foe for {damage} damage!",
     "TargetMessage": "A horde of shrieking spirits ravages you for {damage} damage!",
     "WitnessMessage": "A horde of shrieking spirits sweeps through the room!",
     "AppliedMessage": "",
@@ -15453,7 +15453,7 @@
     "Name": "spirit horde",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A horde of shrieking spirits ravages your {spellname}foe for {damage} damage!",
+    "CasterMessage": "A horde of shrieking spirits ravages your foe for {damage} damage!",
     "TargetMessage": "A horde of shrieking spirits ravages you for {damage} damage!",
     "WitnessMessage": "A horde of shrieking spirits sweeps through the room!",
     "AppliedMessage": "",
@@ -15470,7 +15470,7 @@
     "Name": "eldritch storm",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A storm of raw energy blasts your {spellname}foes for {damage} damage!",
+    "CasterMessage": "A storm of raw energy blasts your foes for {damage} damage!",
     "TargetMessage": "A storm of raw energy blasts you for {damage} damage!",
     "WitnessMessage": "A storm of raw energy blasts the room!",
     "AppliedMessage": "",
@@ -15955,6 +15955,5259 @@
       {
         "Table": "Spells",
         "Number": 5825
+      }
+    ]
+  },
+  {
+    "Id": "e7069207a26778e0",
+    "Name": "red potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You drink the {spellname}, and a healing warmth spreads through your body!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} quaffs a red potion!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 50
+      }
+    ]
+  },
+  {
+    "Id": "6de510a5fb2cbce5",
+    "Name": "breathes flame",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You {spellname} at {target} for {damage} damage!",
+    "TargetMessage": "The {source} {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 78
+      }
+    ]
+  },
+  {
+    "Id": "a78cfcaedbd0932d",
+    "Name": "violet potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You drink down the thick violet fluid.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} quaffs a violet potion!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 112
+      }
+    ]
+  },
+  {
+    "Id": "695747810b82f1ca",
+    "Name": "magma drip",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A large globule of magma drips down, burning you for {damage} damage!",
+    "TargetMessage": "A large globule of magma drips down, burning you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 115
+      }
+    ]
+  },
+  {
+    "Id": "6403c31c3e454406",
+    "Name": "breathes a jet of frost",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You {spellname} at {target} for {damage} damage!",
+    "TargetMessage": "The {source} {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 117
+      }
+    ]
+  },
+  {
+    "Id": "37873e166243087b",
+    "Name": "incense",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You burn the {spellname}, and inhale the pungent smoke.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} burns a stick of {spellname}.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "The effects of the incense wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 118
+      }
+    ]
+  },
+  {
+    "Id": "4477fce55ff0ed90",
+    "Name": "alcohol",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The alcohol goes down smoothly.",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 119
+      }
+    ]
+  },
+  {
+    "Id": "15a95c41d6e84a50",
+    "Name": "flame shower",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A searing storm of fire sweeps through the room for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 261
+      }
+    ]
+  },
+  {
+    "Id": "50d94361af93fcd2",
+    "Name": "dragonfire",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 266
+      }
+    ]
+  },
+  {
+    "Id": "53c94a7683625c1f",
+    "Name": "blazing inferno",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A blazing inferno sears the room for {damage} damage!",
+    "TargetMessage": "A blazing inferno sears you for {damage} damage!",
+    "WitnessMessage": "A blazing inferno sweeps through the room!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 159
+      }
+    ]
+  },
+  {
+    "Id": "56291e306486ba75",
+    "Name": "white satin gloves",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} is healed of {damage} damage!",
+    "TargetMessage": "You are healed of {damage} damage!",
+    "WitnessMessage": "{target} is healed of {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 161
+      }
+    ]
+  },
+  {
+    "Id": "6054566e50e4cad5",
+    "Name": "dark touch",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Dark energy sears {target} for {damage} damage!",
+    "TargetMessage": "Dark energy sears you for {damage} damage!",
+    "WitnessMessage": "Dark energy sears {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 162
+      }
+    ]
+  },
+  {
+    "Id": "8f29c28d0c9f1df1",
+    "Name": "winged sandals",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The wings on your sandals glow slightly!",
+    "TargetMessage": "",
+    "WitnessMessage": "The wings on {source}'s sandals glow slightly!",
+    "AppliedMessage": "You feel fast",
+    "AppliedEndsWith": "You slow down",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 168
+      }
+    ]
+  },
+  {
+    "Id": "a0510b4a6d1fe36f",
+    "Name": "mirrored shield",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Your shield flashes blindingly!",
+    "TargetMessage": "{source}'s shield flashes blindingly!",
+    "WitnessMessage": "{source}'s shield flashes blindingly!",
+    "AppliedMessage": "You feel fast",
+    "AppliedEndsWith": "You slow down",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 169
+      }
+    ]
+  },
+  {
+    "Id": "ca40964ac69ce319",
+    "Name": "ebony greataxe",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A sinister aura surrounds your foe!",
+    "TargetMessage": "A sinister aura surrounds you!",
+    "WitnessMessage": "A sinister aura pervades the room!",
+    "AppliedMessage": "You feel unlucky",
+    "AppliedEndsWith": "The effects of curse wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 171
+      }
+    ]
+  },
+  {
+    "Id": "3aec98917cd4caf0",
+    "Name": "thunderstaff-lbol",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Blue-white lightning strikes {target} for {damage} damage!",
+    "TargetMessage": "Blue-white lightning strikes you for {damage} damage!",
+    "WitnessMessage": "Blue-white lightning strikes {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 173
+      }
+    ]
+  },
+  {
+    "Id": "24a32c29039b01b4",
+    "Name": "frost sceptre-fjet",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A withering blast of cold freezes {target} for {damage} damage!",
+    "TargetMessage": "A withering blast of cold freezes you for {damage} damage!",
+    "WitnessMessage": "A withering blast of cold freezes {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 175
+      }
+    ]
+  },
+  {
+    "Id": "75847c5d98fe6078",
+    "Name": "blue potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You quaff a {spellname}, and your eyes tingle slightly!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} quaffs a blue potion.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 181
+      }
+    ]
+  },
+  {
+    "Id": "cb02840206ce46d5",
+    "Name": "green potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You quaff a {spellname}.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} quaffs a {spellname}.",
+    "AppliedMessage": "You feel fast",
+    "AppliedEndsWith": "You slow down",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 183
+      }
+    ]
+  },
+  {
+    "Id": "344963e87bc4728d",
+    "Name": "frothing pink potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Your throat BURNS!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} convulses in pain!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 185
+      }
+    ]
+  },
+  {
+    "Id": "dd80cbb645e17a68",
+    "Name": "silvery potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You quaff a {spellname}. Your body starts to tingle!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} quaffs a {spellname}.",
+    "AppliedMessage": "Your body begins to tingle",
+    "AppliedEndsWith": "The tingling fades away",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 186
+      }
+    ]
+  },
+  {
+    "Id": "256ad867e6b40a4d",
+    "Name": "quake",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A quake rocks the room for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 192
+      }
+    ]
+  },
+  {
+    "Id": "ede35eadb2aefb68",
+    "Name": "ice blast",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a withering {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a withering {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 195
+      }
+    ]
+  },
+  {
+    "Id": "9bfb244e338e3e61",
+    "Name": "rose book confuse",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You read the book, and the complex inscriptions cloud your mind!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} reads the silver-spined tome.",
+    "AppliedMessage": "You are confused",
+    "AppliedEndsWith": "The effects of confusion wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 199
+      }
+    ]
+  },
+  {
+    "Id": "a6ae760efa2c7c6e",
+    "Name": "blind book",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "As you read the thin grey tome, a flash of brilliant light erupts from it!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} reads the thin grey tome.",
+    "AppliedMessage": "You are blind",
+    "AppliedEndsWith": "You can see again",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 200
+      }
+    ]
+  },
+  {
+    "Id": "955c7f843ebe10ec",
+    "Name": "sprays",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} the area with thorns for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 204
+      }
+    ]
+  },
+  {
+    "Id": "5d6d2193753ee1d8",
+    "Name": "belches acid",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 205
+      }
+    ]
+  },
+  {
+    "Id": "60e21b7b5308dbec",
+    "Name": "sharp stones",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a spray of {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a spray of {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 206
+      }
+    ]
+  },
+  {
+    "Id": "440bde28e5ec90e4",
+    "Name": "swarm",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on the room for {damage} damage!",
+    "TargetMessage": "{source} casts {spellname} on you for {damage} damage!",
+    "WitnessMessage": "{source} casts {spellname} on the room for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 208
+      }
+    ]
+  },
+  {
+    "Id": "38b84a21a683b3ea",
+    "Name": "tower of flame",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A tower of flame engulfs you for {damage} damage!",
+    "WitnessMessage": "A tower of flame engulfs {source} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 209
+      }
+    ]
+  },
+  {
+    "Id": "598d7284f0a7215a",
+    "Name": "chaos storm",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A chaotic storm assaults your foe for {damage} damage!",
+    "TargetMessage": "A chaotic storm assaults you for {damage} damage!",
+    "WitnessMessage": "A chaotic storm assaults the room for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 212
+      }
+    ]
+  },
+  {
+    "Id": "78675f10e33ae0d3",
+    "Name": "opaque field",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A tingling sensation washes over you.",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 213
+      }
+    ]
+  },
+  {
+    "Id": "b479894945deaa3e",
+    "Name": "black gem",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Your body is wracked with pain!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are blind and dizzy",
+    "AppliedEndsWith": "You are no longer blind and dizzy",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 214
+      }
+    ]
+  },
+  {
+    "Id": "ec273799f41c0955",
+    "Name": "minor healing",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}, healing {damage} damage!",
+    "TargetMessage": "{source} casts {spellname} on you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 219
+      }
+    ]
+  },
+  {
+    "Id": "ff7b0b071402d3ad",
+    "Name": "major healing",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target} for {damage} healing!",
+    "TargetMessage": "{source} casts {spellname} on you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 220
+      }
+    ]
+  },
+  {
+    "Id": "612feb99ee59ab73",
+    "Name": "greater healing",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}, healing {damage} damage!",
+    "TargetMessage": "{source} casts {spellname} on you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 221
+      }
+    ]
+  },
+  {
+    "Id": "27f335b82579631d",
+    "Name": "cure poison",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}!",
+    "TargetMessage": "{source} casts {spellname} on you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 222
+      }
+    ]
+  },
+  {
+    "Id": "970bb2b398f60630",
+    "Name": "cure disease",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}!",
+    "TargetMessage": "{source} casts {spellname} upon you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 223
+      }
+    ]
+  },
+  {
+    "Id": "73096d4e5e983b0e",
+    "Name": "remove curse",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}!",
+    "TargetMessage": "{source} casts {spellname} upon you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 224
+      }
+    ]
+  },
+  {
+    "Id": "df3ddc4ed3bb325d",
+    "Name": "catlobepas eye",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You gaze into the eye of the catoblepas!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} gazes into the eye of the catoblepas!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 228
+      }
+    ]
+  },
+  {
+    "Id": "dd9bb9dc0cba9e55",
+    "Name": "flask",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} throws a {spellname}, which explodes for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 229
+      }
+    ]
+  },
+  {
+    "Id": "fbca79b3ccad689a",
+    "Name": "gout of flame",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A gout of flame belches from the pipe, scorching you with fire!",
+    "TargetMessage": "A gout of flame belches from the pipe, scorching {source} with fire!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 230
+      }
+    ]
+  },
+  {
+    "Id": "414128766ec873dc",
+    "Name": "eye beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The cyclops' gaze sears you with green fire for {damage} damage!",
+    "WitnessMessage": "The cyclops' gaze sears {source} with green fire for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 231
+      }
+    ]
+  },
+  {
+    "Id": "63912556fad7c7d6",
+    "Name": "spray of spores",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 232
+      }
+    ]
+  },
+  {
+    "Id": "fe8f2a7e0e02bbd9",
+    "Name": "spits",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} spits venom in your eyes!",
+    "WitnessMessage": "The {source} {spellname} venom in {target}'s eyes!",
+    "AppliedMessage": "You feel dizzy and weak",
+    "AppliedEndsWith": "You are no longer dizzy and weak",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 238
+      }
+    ]
+  },
+  {
+    "Id": "583d9d8c650e265f",
+    "Name": "fireball",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The fireball explodes, causing {damage} damage!",
+    "TargetMessage": "You take {damage} damage from the explosion!",
+    "WitnessMessage": "An explosion rocks the room for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 243
+      }
+    ]
+  },
+  {
+    "Id": "3e721cf618b8d697",
+    "Name": "ball of magma",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} hurls a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} hurls a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 246
+      }
+    ]
+  },
+  {
+    "Id": "7f7dbc42901af5cd",
+    "Name": "breathes fire",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 247
+      }
+    ]
+  },
+  {
+    "Id": "c71353ad2931b21a",
+    "Name": "yellow fungus",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You eat the yellow fungus, and feel better!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} eats some yellow fungus!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 248
+      }
+    ]
+  },
+  {
+    "Id": "cb82c9ffad2c1d51",
+    "Name": "yellow fungus",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You eat the yellow fungus, and feel better!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} eats some yellow fungus!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 249
+      }
+    ]
+  },
+  {
+    "Id": "8d2e3269c8f068a7",
+    "Name": "red fungus",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You eat the red fungus.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} eats some red fungus.",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 250
+      }
+    ]
+  },
+  {
+    "Id": "76e31c4ded64aee1",
+    "Name": "unholy wrath",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} brings {spellname} upon you for {damage} damage!",
+    "WitnessMessage": "The {source} brings {spellname} upon {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 252
+      }
+    ]
+  },
+  {
+    "Id": "0ecd633080b8c888",
+    "Name": "death gaze",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "{source} raises its eyes and locks you in a {spellname}.",
+    "WitnessMessage": "{source} raises its eyes in a {spellname} and locks them onto {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 306
+      }
+    ]
+  },
+  {
+    "Id": "9067903ce7e95e6b",
+    "Name": "calls for aid",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The orc warleader bellows loudly for aid!",
+    "WitnessMessage": "The orc warleader bellows loudly for aid!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 315
+      }
+    ]
+  },
+  {
+    "Id": "b696c64403efbbbe",
+    "Name": "food",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You feel a little better.",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 316
+      }
+    ]
+  },
+  {
+    "Id": "fa72bc58aa82fd9a",
+    "Name": "drink",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You feel a little better.",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 317
+      }
+    ]
+  },
+  {
+    "Id": "3f227728d00d56e3",
+    "Name": "volley of spikes",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 320
+      }
+    ]
+  },
+  {
+    "Id": "460c3593e13594af",
+    "Name": "breathes a greenish cloud",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} onto you!",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are partially petrified",
+    "AppliedEndsWith": "Your body returns to normal",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 322
+      }
+    ]
+  },
+  {
+    "Id": "a42ddb458739f201",
+    "Name": "spits acid",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 325
+      }
+    ]
+  },
+  {
+    "Id": "74feee7cbea53c0c",
+    "Name": "cloud of reddish vapour",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} emits a {spellname} throughout the area for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 326
+      }
+    ]
+  },
+  {
+    "Id": "1df33719ad393ed8",
+    "Name": "sunbolt wand",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A bolt of white-hot flame strikes {target} for {damage} damage!",
+    "TargetMessage": "A bolt of white-hot flame strikes you for {damage} damage!",
+    "WitnessMessage": "A bolt of white-hot flame strikes {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 332
+      }
+    ]
+  },
+  {
+    "Id": "a418ce0c045bf2d3",
+    "Name": "green beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "It points towards you, and fires a brilliant green beam for {damage} damage!",
+    "WitnessMessage": "It points towards {source}, and fires a brilliant green beam for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 341
+      }
+    ]
+  },
+  {
+    "Id": "5510c79d268f6d53",
+    "Name": "vampiric hits",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The dagger drains {target} of life for {damage} damage!",
+    "TargetMessage": "The dagger drains you of life for {damage} damage!",
+    "WitnessMessage": "The dagger drains {target} of life for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 342
+      }
+    ]
+  },
+  {
+    "Id": "8d675306fd9c48a4",
+    "Name": "tentacles",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The tentacles grip you and sting you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 343
+      }
+    ]
+  },
+  {
+    "Id": "1906170f12d8e3e3",
+    "Name": "tentacles",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The tentacles grip you and sting you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 344
+      }
+    ]
+  },
+  {
+    "Id": "118756d9ff186c81",
+    "Name": "black cauldron",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "An incredible surge of power runs through your body!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} shudders as incredible power is unleashed!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 356
+      }
+    ]
+  },
+  {
+    "Id": "ed46c4c66e78ee7e",
+    "Name": "fiery spark",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The {spellname} shoots a {target} at you for {damage} damage!",
+    "TargetMessage": "The {source} shoots a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} shoots a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 357
+      }
+    ]
+  },
+  {
+    "Id": "f8bfe8dcb67843d0",
+    "Name": "breathes burning steam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 359
+      }
+    ]
+  },
+  {
+    "Id": "07e4857e4effed16",
+    "Name": "freezes",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} touches you and {spellname} you for {damage} damage!",
+    "WitnessMessage": "The {source} touches and {spellname} {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 360
+      }
+    ]
+  },
+  {
+    "Id": "7b96b9f16e178a5e",
+    "Name": "flame dart",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 364
+      }
+    ]
+  },
+  {
+    "Id": "4553bc1d14a3f9d9",
+    "Name": "roots",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source}'s {spellname} burst out of the earth and squeeze you for {damage} damage!",
+    "WitnessMessage": "The {source}'s {spellname} burst out of the earth and squeeze {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 366
+      }
+    ]
+  },
+  {
+    "Id": "7249d948fdfbdb03",
+    "Name": "magic bolt",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 367
+      }
+    ]
+  },
+  {
+    "Id": "2f5aa01e645e93bb",
+    "Name": "green fruit",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A healing warmth passes through you!",
+    "TargetMessage": "",
+    "WitnessMessage": "A warm glow appears around {source}, then fades!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 370
+      }
+    ]
+  },
+  {
+    "Id": "544010d60558353f",
+    "Name": "summon huorn",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} seems to call out in a ghostly voice!",
+    "WitnessMessage": "The {source} seems to call out in a ghostly voice!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 371
+      }
+    ]
+  },
+  {
+    "Id": "a2111a001d3b88ee",
+    "Name": "cone of frost",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 375
+      }
+    ]
+  },
+  {
+    "Id": "c9116304fe0bf89f",
+    "Name": "spray of acid",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 376
+      }
+    ]
+  },
+  {
+    "Id": "76db0996858bebd2",
+    "Name": "cloud of poison",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 377
+      }
+    ]
+  },
+  {
+    "Id": "8791d984cb30f3bd",
+    "Name": "blast of flame",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 379
+      }
+    ]
+  },
+  {
+    "Id": "08707b5af3912d89",
+    "Name": "gibbers",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} gibbers madly at you!",
+    "WitnessMessage": "The {source} {spellname} madly at {target}!",
+    "AppliedMessage": "You are confused",
+    "AppliedEndsWith": "The effects of confusion wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 381
+      }
+    ]
+  },
+  {
+    "Id": "c67a009f80585758",
+    "Name": "divine intervention",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A shimmering golden mist descends over you!",
+    "TargetMessage": "",
+    "WitnessMessage": "A shimmering golden mist descends over {source}!",
+    "AppliedMessage": "You are protected by divine power",
+    "AppliedEndsWith": "You feel vulnerable",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 384
+      }
+    ]
+  },
+  {
+    "Id": "9ddbe3899c76eabb",
+    "Name": "death ray",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A dark beam shoots forth and drains you for {damage} damage!",
+    "WitnessMessage": "A dark beam shoots forth and drains {source} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 398
+      }
+    ]
+  },
+  {
+    "Id": "cebd25604462d86b",
+    "Name": "rainbow beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 399
+      }
+    ]
+  },
+  {
+    "Id": "e4a349fec37eb0d7",
+    "Name": "blast of flame",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 403
+      }
+    ]
+  },
+  {
+    "Id": "4398dccf6e422b1b",
+    "Name": "eye of the beholder",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You use up the magic of the beholder's eye!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} uses up the magic of the beholder's eye!",
+    "AppliedMessage": "Your eyes are tingling",
+    "AppliedEndsWith": "Your awareness returns to normal",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 407
+      }
+    ]
+  },
+  {
+    "Id": "72a55118b73772d0",
+    "Name": "envelops",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} envelops you in flames!",
+    "WitnessMessage": "The {source} {spellname} {target} in flames!",
+    "AppliedMessage": "You are on fire",
+    "AppliedEndsWith": "The flames enveloping you die down",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 410
+      }
+    ]
+  },
+  {
+    "Id": "5b9ee0fc01e48481",
+    "Name": "elemental earthquake",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "An earthquake rocks {target} for {damage} damage!",
+    "TargetMessage": "An earthquake rocks you for {damage} damage!",
+    "WitnessMessage": "An earthquake rocks {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 416
+      }
+    ]
+  },
+  {
+    "Id": "33194a85fa48b2f6",
+    "Name": "elemental lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Lightning fries {target} for {damage} damage!",
+    "TargetMessage": "Lightning fries you for {damage} damage!",
+    "WitnessMessage": "Lightning fries {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 417
+      }
+    ]
+  },
+  {
+    "Id": "1a8bcc7f2b238981",
+    "Name": "elemental fire",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Fire burns {target} for {damage} damage!",
+    "TargetMessage": "Fire burns you for {damage} damage!",
+    "WitnessMessage": "Fire burns {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 418
+      }
+    ]
+  },
+  {
+    "Id": "bd99cb9bbc98e48c",
+    "Name": "elemental ice",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Ice freezes {target} for {damage} damage!",
+    "TargetMessage": "Ice freezes you for {damage} damage!",
+    "WitnessMessage": "Ice freezes {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 419
+      }
+    ]
+  },
+  {
+    "Id": "a2ffc8a0879259c6",
+    "Name": "cosmos spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Shimmering sparks of energy explode forth!",
+    "TargetMessage": "",
+    "WitnessMessage": "Shimmering sparks of energy explode forth and cover {source}!",
+    "AppliedMessage": "You are filled with cosmic energy",
+    "AppliedEndsWith": "The cosmic energy fizzles out",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 421
+      }
+    ]
+  },
+  {
+    "Id": "9348827f342ed893",
+    "Name": "barkskin",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You feel strange for a moment.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source}'s skin hardens and turns brown like bark!",
+    "AppliedMessage": "You feel tough",
+    "AppliedEndsWith": "The effects of barkskin wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 422
+      }
+    ]
+  },
+  {
+    "Id": "d41c6d8bb47a7b29",
+    "Name": "crash through roof",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You land on the opposing rooftop, which collapses beneath you!",
+    "TargetMessage": "You land on the opposing rooftop, which collapses beneath you!",
+    "WitnessMessage": "{source} crashes through the roof and lands with a heavy thump!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 437
+      }
+    ]
+  },
+  {
+    "Id": "faba4081d5e8ea62",
+    "Name": "shadowstrike",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A bolt of darkness strikes you for {damage} damage!",
+    "WitnessMessage": "A bolt of darkness strikes {source} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 441
+      }
+    ]
+  },
+  {
+    "Id": "34b42c4865add712",
+    "Name": "remove bonds",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You glow with a brilliant bluish light!",
+    "TargetMessage": "You glow with a brilliant bluish light!",
+    "WitnessMessage": "{source} glows with a brilliant bluish light!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 447
+      }
+    ]
+  },
+  {
+    "Id": "4f47eb149dd746ee",
+    "Name": "pristine scroll",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The scroll explodes with unfathomable force!",
+    "TargetMessage": "The scroll explodes with unfathomable force!",
+    "WitnessMessage": "The scroll explodes with unfathomable force!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 450
+      }
+    ]
+  },
+  {
+    "Id": "0ffd1a972321a2af",
+    "Name": "strain",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You strain yourself trying to move the portcullis!",
+    "TargetMessage": "{source} is hurt while straining to move the portcullis!",
+    "WitnessMessage": "{source} is hurt while straining to move the portcullis!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 451
+      }
+    ]
+  },
+  {
+    "Id": "eb2ecf8be24475c7",
+    "Name": "trap lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "An incredible blast of lightning streaks out and sears you!",
+    "TargetMessage": "",
+    "WitnessMessage": "An incredible blast of lightning streaks out and sears {source} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 452
+      }
+    ]
+  },
+  {
+    "Id": "3677b1bc03dff443",
+    "Name": "black water",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You swallow some of the scummy black water, and feel sick!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 453
+      }
+    ]
+  },
+  {
+    "Id": "3f1e8fb33e099c40",
+    "Name": "shimmering vial",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You drink from the shimmering vial, and energy flows through you!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} drinks from a vial of shimmering liquid.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 457
+      }
+    ]
+  },
+  {
+    "Id": "8823168ff79f2c03",
+    "Name": "golden vial",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You drink from the golden vial, and are filled with energy!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} drinks from a golden vial.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 459
+      }
+    ]
+  },
+  {
+    "Id": "b11e75ee057c556c",
+    "Name": "blast of lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 478
+      }
+    ]
+  },
+  {
+    "Id": "a38289468afd35b5",
+    "Name": "swamp poison",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You take {damage} damage from the poisonous swamp!",
+    "WitnessMessage": "{source} takes {damage} damage from the poisonous swamp!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 485
+      }
+    ]
+  },
+  {
+    "Id": "716097545f4e7fca",
+    "Name": "gypsy withering",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "With frightening speed, your body begins to wither!",
+    "TargetMessage": "With frightening speed, your body begins to wither!",
+    "WitnessMessage": "With frightening speed, {source}'s body begins to wither!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 487
+      }
+    ]
+  },
+  {
+    "Id": "13846003690a7000",
+    "Name": "death curse",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "As the curse runs its course, you die in agony, withered to death!",
+    "TargetMessage": "As the curse runs its course, you die in agony, withered to death!",
+    "WitnessMessage": "{source} runs about in agony, then drops to the ground, withered to death!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 488
+      }
+    ]
+  },
+  {
+    "Id": "8b6ae7389ad384ac",
+    "Name": "blast of acid",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a withering {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a withering {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 509
+      }
+    ]
+  },
+  {
+    "Id": "359548d87cc973ff",
+    "Name": "freezing water",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You are freezing cold!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 511
+      }
+    ]
+  },
+  {
+    "Id": "0732d1ddf7a37acf",
+    "Name": "drowning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are drowning!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} is drowning!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 513
+      }
+    ]
+  },
+  {
+    "Id": "1e95f8631290cc0b",
+    "Name": "drowned to death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You have drowned...",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} spasms and drowns...",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 514
+      }
+    ]
+  },
+  {
+    "Id": "f1a852fd6671807b",
+    "Name": "life energy",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} saps your {spellname} for {damage} damage!",
+    "WitnessMessage": "The {source} saps the {spellname} from {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 518
+      }
+    ]
+  },
+  {
+    "Id": "55d44d629bee52d8",
+    "Name": "bolt of energy",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} hurls a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} hurls a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 519
+      }
+    ]
+  },
+  {
+    "Id": "600b3c82e034ce28",
+    "Name": "spore zombie curse",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are covered in deadly spores",
+    "AppliedEndsWith": "The spores covering your body finally consume you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 523
+      }
+    ]
+  },
+  {
+    "Id": "ac82e088f03e2b3d",
+    "Name": "zombie death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You transform into a spore zombie!",
+    "WitnessMessage": "{source} transforms into a spore zombie!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 524
+      }
+    ]
+  },
+  {
+    "Id": "c36ceb8030542c35",
+    "Name": "remove mask",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The water spirit glares at you contemptuously.",
+    "WitnessMessage": "The water spirit glares at {source} contemptuously.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 525
+      }
+    ]
+  },
+  {
+    "Id": "81f70f7c42f4e306",
+    "Name": "magma heat",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are seared by the flames for {damage} damage!",
+    "TargetMessage": "You are seared by the flames for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 526
+      }
+    ]
+  },
+  {
+    "Id": "8d0a7dcd20037a84",
+    "Name": "dragon fear effect",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A sensation of utter panic and horror comes over you...",
+    "WitnessMessage": "A look of utter horror and panic comes over {source}!",
+    "AppliedMessage": "You are overcome by dragonfear",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 532
+      }
+    ]
+  },
+  {
+    "Id": "19aec63348fc0b69",
+    "Name": "sand breath",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You are shredded by the sand for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 538
+      }
+    ]
+  },
+  {
+    "Id": "fd0cb660ea7bec8f",
+    "Name": "obsidian shards",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The obsidian golem fires a spray of shards at the room for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 545
+      }
+    ]
+  },
+  {
+    "Id": "168305e0927bbc30",
+    "Name": "obsidian talisman",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You grasp the obsidian talisman, and it begins to crackle with energy!",
+    "TargetMessage": "{source} grasps an obsidian talisman, and it begins to crackle with energy!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 546
+      }
+    ]
+  },
+  {
+    "Id": "eead0ff870f7cb14",
+    "Name": "obsidian talisman explosion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The obsidian talisman explodes!",
+    "TargetMessage": "",
+    "WitnessMessage": "The obsidian talisman explodes, causing {source} {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 547
+      }
+    ]
+  },
+  {
+    "Id": "ffcacdbd653829db",
+    "Name": "spray of gems",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 548
+      }
+    ]
+  },
+  {
+    "Id": "6da2a63d309ac6da",
+    "Name": "squeezes",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} your brain with psychic energy for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} {target}'s brain with psychic energy for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 549
+      }
+    ]
+  },
+  {
+    "Id": "b8b2420c1a8e9463",
+    "Name": "icy beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a thin {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a thin {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 552
+      }
+    ]
+  },
+  {
+    "Id": "6745d30327886a76",
+    "Name": "belches",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} a vile fluid on you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} a vile fluid on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 556
+      }
+    ]
+  },
+  {
+    "Id": "7f136fd46cdb2723",
+    "Name": "obsidian talisman drain",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You feel drained!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 580
+      }
+    ]
+  },
+  {
+    "Id": "289bda7763f0da6c",
+    "Name": "cloud of spores",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} sprays a cloud of spores at you!",
+    "WitnessMessage": "The {source} sprays a {spellname} at {target}!",
+    "AppliedMessage": "You are plagued by horrible hallucinations",
+    "AppliedEndsWith": "The awful hallucinations slowly die off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 581
+      }
+    ]
+  },
+  {
+    "Id": "4d6c4b542d9f39a6",
+    "Name": "duergar teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You are enveloped in a blinding flash!",
+    "WitnessMessage": "{source} vanishes in a blinding flash!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 582
+      }
+    ]
+  },
+  {
+    "Id": "e1789227a0a1820a",
+    "Name": "jail teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Battered and beaten, you are knocked unconscious and dragged off to jail!",
+    "TargetMessage": "Battered and beaten, you are knocked unconscious and dragged off to jail!",
+    "WitnessMessage": "{source} is knocked unconscious and dragged off to jail!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 584
+      }
+    ]
+  },
+  {
+    "Id": "1d66f91d53f289bb",
+    "Name": "globule",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} spits a large {spellname} of liquid on you!",
+    "WitnessMessage": "The {source} spits a large {spellname} of liquid on {target}!",
+    "AppliedMessage": "You are held by the queen's spit",
+    "AppliedEndsWith": "You can move again",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 595
+      }
+    ]
+  },
+  {
+    "Id": "f427eb86392e72f3",
+    "Name": "glob of slime",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} spits a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} spits a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 601
+      }
+    ]
+  },
+  {
+    "Id": "bbc2283b40b00ad0",
+    "Name": "laughs",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "{source} laughs contemptuously at you!",
+    "WitnessMessage": "{source} laughs contemptuously at {spellname}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 602
+      }
+    ]
+  },
+  {
+    "Id": "baa3aab38e9fcaa1",
+    "Name": "upper portal",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You step into the portal, and find yourself elsewhere!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} steps into the portal, and disappears!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 619
+      }
+    ]
+  },
+  {
+    "Id": "73839d4f500a46f2",
+    "Name": "lower portal (invited)",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You step into the portal, and find yourself elsewhere!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} steps into the portal, and disappears!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 620
+      }
+    ]
+  },
+  {
+    "Id": "213038e785744e95",
+    "Name": "lower portal (uninvited)",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You step into the portal, and find yourself elsewhere!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} steps into the portal, and disappears!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 621
+      }
+    ]
+  },
+  {
+    "Id": "6469730c15c34ba2",
+    "Name": "crystal orb",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} is healed of {damage} damage!",
+    "TargetMessage": "You are healed of {damage} damage!",
+    "WitnessMessage": "{target} is healed of {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 665
+      }
+    ]
+  },
+  {
+    "Id": "522fe7e7b0b2d05e",
+    "Name": "marble orb",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} receives a boost of mana!",
+    "TargetMessage": "You receive a boost of mana!",
+    "WitnessMessage": "{target} receives a boost of mana!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 667
+      }
+    ]
+  },
+  {
+    "Id": "79eb47b603292dda",
+    "Name": "teak wand",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} is healed of {damage} damage!",
+    "TargetMessage": "You are healed of {damage} damage!",
+    "WitnessMessage": "{target} is healed of {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 669
+      }
+    ]
+  },
+  {
+    "Id": "846bec54f9bdeb34",
+    "Name": "mahogany wand",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} receives a boost of mana!",
+    "TargetMessage": "You receive a boost of mana!",
+    "WitnessMessage": "{target} receives a boost of mana!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 670
+      }
+    ]
+  },
+  {
+    "Id": "950e88793699ef4e",
+    "Name": "pine wand",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A blue glow surrounds {target}!",
+    "TargetMessage": "A feeling of freedom fills you!",
+    "WitnessMessage": "{target} is surrounded by a blue glow!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 671
+      }
+    ]
+  },
+  {
+    "Id": "9faf9605fb12767d",
+    "Name": "darkwood rod",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} is healed of {damage} damage!",
+    "TargetMessage": "You are healed of {damage} damage!",
+    "WitnessMessage": "{target} is healed of {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 672
+      }
+    ]
+  },
+  {
+    "Id": "1d4743cfc750eb58",
+    "Name": "silverwood rod",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} receives a boost of mana!",
+    "TargetMessage": "You receive a boost of mana!",
+    "WitnessMessage": "{target} receives a boost of mana!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 673
+      }
+    ]
+  },
+  {
+    "Id": "34d6fd574fc335fc",
+    "Name": "timer",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You have a strange feeling that time is running out!",
+    "TargetMessage": "You have a strange feeling that time is running out!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 685
+      }
+    ]
+  },
+  {
+    "Id": "2f1cc18c88ad9760",
+    "Name": "fire pit damage",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You take {damage} damage from the flames!",
+    "WitnessMessage": "{source} takes {damage} damage from the flames!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 688
+      }
+    ]
+  },
+  {
+    "Id": "b2feb24311c185c6",
+    "Name": "level 1 fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You take fall damage!",
+    "TargetMessage": "You take {damage} damage from the fall!",
+    "WitnessMessage": "{source} takes {damage} damage from the fall!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 689
+      }
+    ]
+  },
+  {
+    "Id": "1d4497a832100e38",
+    "Name": "darts",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Darts fire out of the walls and pierce you!",
+    "TargetMessage": "",
+    "WitnessMessage": "Darts fire out of the walls, piercing {source}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 693
+      }
+    ]
+  },
+  {
+    "Id": "65af207de45f9db2",
+    "Name": "dart poison",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Poison burns through your veins!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 694
+      }
+    ]
+  },
+  {
+    "Id": "5107aef5dd49f57b",
+    "Name": "crossbow bolts",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Sharp bolts fly out of the darkness, impaling you!",
+    "TargetMessage": "",
+    "WitnessMessage": "Sharp bolts fly out of the darkness, impaling {source}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 695
+      }
+    ]
+  },
+  {
+    "Id": "2b5221b04566240a",
+    "Name": "scything blade",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A wickedly sharp blade sweeps out and slices you!",
+    "TargetMessage": "",
+    "WitnessMessage": "A wickedly sharp blade sweeps out and slices {source}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 696
+      }
+    ]
+  },
+  {
+    "Id": "bf7b3b3718551c2f",
+    "Name": "flame blast",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A blast of flame jets out and burns you!",
+    "TargetMessage": "A blast of flame jets out and burns you!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 697
+      }
+    ]
+  },
+  {
+    "Id": "3c8fecbb031f8fee",
+    "Name": "pyramid 4 arch fail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A strange sensation comes over you!",
+    "TargetMessage": "{source} vanishes in a flash!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 702
+      }
+    ]
+  },
+  {
+    "Id": "117eee9a95ccf246",
+    "Name": "poison",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You suddenly convulse in extreme pain.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} convulses in pain!",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 704
+      }
+    ]
+  },
+  {
+    "Id": "16d172f8c0163f83",
+    "Name": "level 2 fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You take fall damage!",
+    "TargetMessage": "You take {damage} damage from the fall!",
+    "WitnessMessage": "{source} takes {damage} damage from the fall!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 707
+      }
+    ]
+  },
+  {
+    "Id": "46d3ef25bcc06ea4",
+    "Name": "level 3 fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You take fall damage!",
+    "TargetMessage": "You take {damage} damage from the fall!",
+    "WitnessMessage": "{source} takes {damage} damage from the fall!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 708
+      }
+    ]
+  },
+  {
+    "Id": "f06cdf4c84d860d2",
+    "Name": "level 4 fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You take fall damage!",
+    "TargetMessage": "You take {damage} damage from the fall!",
+    "WitnessMessage": "{source} takes {damage} damage from the fall!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 709
+      }
+    ]
+  },
+  {
+    "Id": "c15c6599a9c25402",
+    "Name": "level 5 fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You take fall damage!",
+    "TargetMessage": "You take {damage} damage from the fall!",
+    "WitnessMessage": "{source} takes {damage} damage from the fall!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 710
+      }
+    ]
+  },
+  {
+    "Id": "41a012701ba6327a",
+    "Name": "waterskin",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You take a swig of water from your waterskin.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} takes a swig of water from a waterskin.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 711
+      }
+    ]
+  },
+  {
+    "Id": "7fab35238fa3e496",
+    "Name": "desert sandstorm",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A whirling sandstorm appears out of nowhere, and sweeps you away!",
+    "TargetMessage": "A whirling sandstorm appears out of nowhere, and sweeps you away!",
+    "WitnessMessage": "A whirling sandstorm appears out of nowhere, and sweeps you away!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 713
+      }
+    ]
+  },
+  {
+    "Id": "ebbb5e88377b8b95",
+    "Name": "sinkhole",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Suddenly a sinkhole opens up under you, and you are swallowed by sand!",
+    "TargetMessage": "",
+    "WitnessMessage": "With a puff of dust, {source} is suddenly swallowed up by a sinkhole!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 714
+      }
+    ]
+  },
+  {
+    "Id": "6f80a05a5263ef47",
+    "Name": "whirlwind",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} throws a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} throws a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 715
+      }
+    ]
+  },
+  {
+    "Id": "dda779abfdca7db3",
+    "Name": "elemental lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Lightning fries {target} for {damage} damage!",
+    "TargetMessage": "Lightning fries you for {damage} damage!",
+    "WitnessMessage": "Lightning fries {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 718
+      }
+    ]
+  },
+  {
+    "Id": "f661b3c2f0262d8b",
+    "Name": "elemental fire",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Fire burns {target} for {damage} damage!",
+    "TargetMessage": "Fire burns you for {damage} damage!",
+    "WitnessMessage": "Fire burns {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 719
+      }
+    ]
+  },
+  {
+    "Id": "ea928e30782e3fd0",
+    "Name": "elemental ice",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Ice freezes {target} for {damage} damage!",
+    "TargetMessage": "Ice freezes you for {damage} damage!",
+    "WitnessMessage": "Ice freezes {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 720
+      }
+    ]
+  },
+  {
+    "Id": "8d13f6a1704525ce",
+    "Name": "spits a stream of acid",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 722
+      }
+    ]
+  },
+  {
+    "Id": "a1a406775620f147",
+    "Name": "stomach bile",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "Stomach bile burns you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 724
+      }
+    ]
+  },
+  {
+    "Id": "7badec893e3408f4",
+    "Name": "crescent moon staff",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} is healed of {damage} damage!",
+    "TargetMessage": "You are healed of {damage} damage!",
+    "WitnessMessage": "{target} is healed of {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 738
+      }
+    ]
+  },
+  {
+    "Id": "33de04132b562990",
+    "Name": "rainbow stone",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Your mana increases!",
+    "TargetMessage": "You gain {damage} mana!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 739
+      }
+    ]
+  },
+  {
+    "Id": "9cf6321cb8dc7dd5",
+    "Name": "battered",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You take {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 754
+      }
+    ]
+  },
+  {
+    "Id": "b0938597caa5b786",
+    "Name": "break",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You {spellname} a chair on {target} for {damage} damage!",
+    "TargetMessage": "{source} {spellname}s a chair on you for {damage} damage!",
+    "WitnessMessage": "{source} {spellname}s a chair on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 757
+      }
+    ]
+  },
+  {
+    "Id": "fbd027a381579c85",
+    "Name": "flame altar",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You take {damage} damage from the flames!",
+    "WitnessMessage": "{source} takes {damage} damage from the flames!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 758
+      }
+    ]
+  },
+  {
+    "Id": "67a606dc902158c4",
+    "Name": "dark blessing",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You feel lucky",
+    "AppliedEndsWith": "The effects of bless wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 759
+      }
+    ]
+  },
+  {
+    "Id": "403cd5f6f2793610",
+    "Name": "splinterstorm",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} casts {spellname}, stabbing you for {damage} damage!",
+    "WitnessMessage": "The {source} casts {spellname}, stabbing the room!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 764
+      }
+    ]
+  },
+  {
+    "Id": "b597ac744e1a61c1",
+    "Name": "flesh-eating gas",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a corrosive blast of {spellname} at you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 766
+      }
+    ]
+  },
+  {
+    "Id": "e7c3ca4226e0df7b",
+    "Name": "burning maw",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} uses its {spellname} and grabs you for {damage} damage!",
+    "WitnessMessage": "The {source} uses its {spellname} and grabs {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 768
+      }
+    ]
+  },
+  {
+    "Id": "ceac5ee3f108dbfb",
+    "Name": "stormcrown",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Forked lightning streaks out and fries {target} for {damage} damage!",
+    "TargetMessage": "Forked lightning streaks out and fries you for {damage} damage!",
+    "WitnessMessage": "Forked lightning streaks out and fries {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 773
+      }
+    ]
+  },
+  {
+    "Id": "656ad767e3f1b0f4",
+    "Name": "thunderstun",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Your foes are dazed by the blast!",
+    "TargetMessage": "You are dazed by the blast!",
+    "WitnessMessage": "A shockwave rumbles through the room!",
+    "AppliedMessage": "You are stunned",
+    "AppliedEndsWith": "You are no longer stunned",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 774
+      }
+    ]
+  },
+  {
+    "Id": "a0409b7c7b766590",
+    "Name": "silver rapier",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A flash from your {spellname} blinds {target}!",
+    "TargetMessage": "A flash from {source}'s {spellname} blinds you!",
+    "WitnessMessage": "A flash from {source}'s {spellname} blinds {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 776
+      }
+    ]
+  },
+  {
+    "Id": "f2d71b8b9e709e59",
+    "Name": "voodoo stun",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The tasloi shaman shakes his doll furiously!",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are stunned",
+    "AppliedEndsWith": "You are no longer stunned",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 777
+      }
+    ]
+  },
+  {
+    "Id": "9f6eb4c7bb9a5c23",
+    "Name": "platinum mace",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You grip the mace tightly, summoning its power!",
+    "TargetMessage": "{source} invokes the power of the platinum mace!",
+    "WitnessMessage": "{source} grips the platinum mace tightly!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 778
+      }
+    ]
+  },
+  {
+    "Id": "c5a21806cfb540cd",
+    "Name": "witchwood spear",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Vines grow around {target}'s legs!",
+    "TargetMessage": "Vines grow around your legs!",
+    "WitnessMessage": "Vines grow around {target}'s legs!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 779
+      }
+    ]
+  },
+  {
+    "Id": "0d7d2dce18c657b2",
+    "Name": "lightning shot",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "White lightning shoots out frying {target} for {damage} damage!",
+    "TargetMessage": "White lightning shoots out frying you for {damage} damage!",
+    "WitnessMessage": "White lightning shoots out frying {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 789
+      }
+    ]
+  },
+  {
+    "Id": "443843b143d30b0d",
+    "Name": "web entangle",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are entangled in sticky strands of webbing.",
+    "TargetMessage": "You are entangled in sticky strands of webbing.",
+    "WitnessMessage": "You are entangled in sticky strands of webbing.",
+    "AppliedMessage": "You are entangled",
+    "AppliedEndsWith": "The effects of entangle wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 811
+      }
+    ]
+  },
+  {
+    "Id": "1bd2a1ee870819f9",
+    "Name": "mamba fear effect",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A sensation of utter panic and horror comes over you...",
+    "WitnessMessage": "A look of utter horror and panic comes over {source}!",
+    "AppliedMessage": "You are overcome by fear",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 818
+      }
+    ]
+  },
+  {
+    "Id": "af402d9f962db558",
+    "Name": "terror",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source}'s unearthly shriek strikes terror into your heart!",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are afraid",
+    "AppliedEndsWith": "The effects of fear wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 822
+      }
+    ]
+  },
+  {
+    "Id": "47cdf85a6d171352",
+    "Name": "envelops",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} envelops you in flames!",
+    "WitnessMessage": "The {source} {spellname} {target} in flames!",
+    "AppliedMessage": "You are on fire",
+    "AppliedEndsWith": "The flames enveloping you die down",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 830
+      }
+    ]
+  },
+  {
+    "Id": "fe5f61302b647c8b",
+    "Name": "bone necklace",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are affected by a mana flux",
+    "AppliedEndsWith": "The mana flux dissipates rapidly",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 833
+      }
+    ]
+  },
+  {
+    "Id": "418701f48539f73a",
+    "Name": "salt spray",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "{source} casts {spellname} on the room for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 835
+      }
+    ]
+  },
+  {
+    "Id": "58dfa78c5ce4f25c",
+    "Name": "fear",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}, healing {damage} damage!",
+    "TargetMessage": "{source} casts {spellname} on you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "You are afraid",
+    "AppliedEndsWith": "The effects of fear wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 836
+      }
+    ]
+  },
+  {
+    "Id": "ddc4bf9252db7e31",
+    "Name": "fangblade poison",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A sickly green beam shoots out and strikes them!",
+    "TargetMessage": "A sickly green beam shoots out and strikes you!",
+    "WitnessMessage": "A sickly green beam shoots out and strikes them!",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 845
+      }
+    ]
+  },
+  {
+    "Id": "f038664cd1a0bcd2",
+    "Name": "darkwood staff",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Vines grow around {target}'s legs!",
+    "TargetMessage": "Vines grow around your legs!",
+    "WitnessMessage": "Vines grow around {target}'s legs!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 849
+      }
+    ]
+  },
+  {
+    "Id": "f1e9df1ead697c5c",
+    "Name": "fall from bridge",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You land with a heavy thud!",
+    "TargetMessage": "You land with a heavy thud!",
+    "WitnessMessage": "{source} falls through the treetops above, and lands with a heavy thump!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 850
+      }
+    ]
+  },
+  {
+    "Id": "dfd793dfb3124bd2",
+    "Name": "cure for takata leaf",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Your strength returns!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 855
+      }
+    ]
+  },
+  {
+    "Id": "6a5db49e7b14e69a",
+    "Name": "firebrand cape",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You pull your cloak tight about you!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} pulls their cloak tight around themself!",
+    "AppliedMessage": "The fire of battle burns within your veins",
+    "AppliedEndsWith": "You lose the battle frenzy",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 861
+      }
+    ]
+  },
+  {
+    "Id": "054542657971ae5e",
+    "Name": "death's shadow",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You pull your cloak tight about you!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} pulls their cloak tight around themself!",
+    "AppliedMessage": "The feeling of real ultimate power flows through you",
+    "AppliedEndsWith": "The feeling of power fades away",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 864
+      }
+    ]
+  },
+  {
+    "Id": "a07764276b3762ec",
+    "Name": "smite",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}!",
+    "TargetMessage": "{source} casts {spellname} upon you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "You feel powerful",
+    "AppliedEndsWith": "The effects of smite wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 873
+      }
+    ]
+  },
+  {
+    "Id": "8e20c1aac8e0ba2b",
+    "Name": "speed",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}.",
+    "TargetMessage": "{source} casts {spellname} on you.",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "You feel fast",
+    "AppliedEndsWith": "You slow down",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 874
+      }
+    ]
+  },
+  {
+    "Id": "07875d0d995a1c66",
+    "Name": "magic armour",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on yourself. A glimmering shield surrounds you!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "You feel armoured",
+    "AppliedEndsWith": "The effects of magic armour wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 875
+      }
+    ]
+  },
+  {
+    "Id": "aa4cd65f451ba51e",
+    "Name": "rapid healing",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}!",
+    "TargetMessage": "{source} casts {spellname} upon you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "You are healing faster",
+    "AppliedEndsWith": "Your healing rate returns to normal",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 876
+      }
+    ]
+  },
+  {
+    "Id": "23ba31c304e0d39e",
+    "Name": "icy breath",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breaths a freezing cone of {spellname} on you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 895
+      }
+    ]
+  },
+  {
+    "Id": "4229b30f502ddbec",
+    "Name": "poison darts",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 905
+      }
+    ]
+  },
+  {
+    "Id": "74d4396931976f4f",
+    "Name": "carved ivory mask",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A bright glowing flame appears and hovers over {target}.",
+    "TargetMessage": "A bright glowing flame appears and hovers over your head.",
+    "WitnessMessage": "A bright glowing flame appears and hovers over {target}.",
+    "AppliedMessage": "A glowing flame gives you magical sight",
+    "AppliedEndsWith": "The glowing flame floating over you vanishes without a sound",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 917
+      }
+    ]
+  },
+  {
+    "Id": "6cdfb6c931b6ef4f",
+    "Name": "bridge jump",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The water pulls you under and you come up downstream",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 923
+      }
+    ]
+  },
+  {
+    "Id": "3446342dbd7eb5b3",
+    "Name": "earthquake hold",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are flat on your back",
+    "AppliedEndsWith": "You get back on your feet",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 927
+      }
+    ]
+  },
+  {
+    "Id": "57cb65dba603a7f5",
+    "Name": "phoenixfire",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 931
+      }
+    ]
+  },
+  {
+    "Id": "ef21304a759f5ce3",
+    "Name": "drenched in acid",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are covered in acid",
+    "AppliedEndsWith": "The acid covering you dries up",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 934
+      }
+    ]
+  },
+  {
+    "Id": "5701c6465f903ddb",
+    "Name": "surprise pounds",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Your {spellname} {target} for {damage} damage!",
+    "TargetMessage": "{source} {spellname} you for {damage} damage!",
+    "WitnessMessage": "{source} {spellname} {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 942
+      }
+    ]
+  },
+  {
+    "Id": "3f824e76ff19d941",
+    "Name": "magma explosion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A magma explosion hits you for {damage} damage!",
+    "TargetMessage": "A magma explosion hits you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 944
+      }
+    ]
+  },
+  {
+    "Id": "30dbaefee38139d5",
+    "Name": "death ray",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A dark beam shoots forth and drains you for {damage} damage!",
+    "WitnessMessage": "A dark beam shoots forth and drains {source} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 954
+      }
+    ]
+  },
+  {
+    "Id": "751243c9efd4574b",
+    "Name": "drain life",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target}'s life is drained for {damage} damage!",
+    "TargetMessage": "Your life is drained for {damage} damage!",
+    "WitnessMessage": "{target}'s life is drained for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 984
+      }
+    ]
+  },
+  {
+    "Id": "335c6c6398433622",
+    "Name": "disease",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are diseased",
+    "AppliedEndsWith": "The disease dies down",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 986
+      }
+    ]
+  },
+  {
+    "Id": "a0b5e2d97ee214c2",
+    "Name": "deeply bite",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You bite into {target}, drinking their blood!",
+    "TargetMessage": "He bites into you, drinking your blood!",
+    "WitnessMessage": "He bites into {target}, drinking their blood!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 991
+      }
+    ]
+  },
+  {
+    "Id": "49974e67492f26a0",
+    "Name": "gaunts",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} is healed of {damage} damage!",
+    "TargetMessage": "You are healed of {damage} damage!",
+    "WitnessMessage": "{target} is healed of {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1006
+      }
+    ]
+  },
+  {
+    "Id": "1e7e900daa08bd05",
+    "Name": "exalted word",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A holy symbol springs from your fingers and burns {target} for {damage} damage!",
+    "TargetMessage": "A holy symbol springs forth and burns you for {damage} damage!",
+    "WitnessMessage": "A holy symbol springs forth and burns {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1007
+      }
+    ]
+  },
+  {
+    "Id": "ff6f1e20403fa1ea",
+    "Name": "sunburst",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A bright ray of sunlight appears and scorches {target} for {damage} damage!",
+    "TargetMessage": "A bright ray of sunlight appears and scorches you for {damage} damage!",
+    "WitnessMessage": "A bright ray of sunlight appears and scorches {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1009
+      }
+    ]
+  },
+  {
+    "Id": "f8655d3a6b2161e7",
+    "Name": "shadow breath",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "Your soul is drained for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1011
+      }
+    ]
+  },
+  {
+    "Id": "a1d04b5f065fa375",
+    "Name": "freezing",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Icy hail pelts the room, freezing your foe's bones!",
+    "TargetMessage": "Icy hail pelts you, freezing your bones!",
+    "WitnessMessage": "Icy hail blows through the room!",
+    "AppliedMessage": "You are freezing",
+    "AppliedEndsWith": "You are no longer freezing",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1015
+      }
+    ]
+  },
+  {
+    "Id": "29de9270046135ad",
+    "Name": "cone of fire",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1029
+      }
+    ]
+  },
+  {
+    "Id": "03f897737f5e28f0",
+    "Name": "cone of ice",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1030
+      }
+    ]
+  },
+  {
+    "Id": "0a746b7b79f4381f",
+    "Name": "cone of lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1031
+      }
+    ]
+  },
+  {
+    "Id": "c465a4b8bf0ccd34",
+    "Name": "yellow beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You feel slow",
+    "AppliedEndsWith": "You speed up",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1064
+      }
+    ]
+  },
+  {
+    "Id": "7f4f3b5c76db93da",
+    "Name": "violet beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You are confused",
+    "AppliedEndsWith": "The effects of confusion wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1065
+      }
+    ]
+  },
+  {
+    "Id": "932435230a0a0eac",
+    "Name": "black beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You are blind",
+    "AppliedEndsWith": "You can see again",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1066
+      }
+    ]
+  },
+  {
+    "Id": "a1509bb3ea771b76",
+    "Name": "red beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You feel weak and powerless",
+    "AppliedEndsWith": "You feel your strength return",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1067
+      }
+    ]
+  },
+  {
+    "Id": "f9805cf5716b035b",
+    "Name": "yellow wave",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} sweeps through the room!",
+    "TargetMessage": "{source}'s {spellname} sweeps through you!",
+    "WitnessMessage": "{source}'s {spellname} sweeps through the room!",
+    "AppliedMessage": "You feel slow",
+    "AppliedEndsWith": "You speed up",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1069
+      }
+    ]
+  },
+  {
+    "Id": "bba6327937076339",
+    "Name": "violet wave",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} sweeps through the room!",
+    "TargetMessage": "{source}'s {spellname} sweeps through you!",
+    "WitnessMessage": "{source}'s {spellname} sweeps through the room!",
+    "AppliedMessage": "You are confused",
+    "AppliedEndsWith": "The effects of confusion wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1070
+      }
+    ]
+  },
+  {
+    "Id": "427847f631247517",
+    "Name": "black wave",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} sweeps through the room!",
+    "TargetMessage": "{source}'s {spellname} sweeps through you!",
+    "WitnessMessage": "{source}'s {spellname} sweeps through the room!",
+    "AppliedMessage": "You are blind",
+    "AppliedEndsWith": "You can see again",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1071
+      }
+    ]
+  },
+  {
+    "Id": "eff0f99f458e3f59",
+    "Name": "red wave",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} sweeps through the room!",
+    "TargetMessage": "{source}'s {spellname} sweeps through you!",
+    "WitnessMessage": "{source}'s {spellname} sweeps through the room!",
+    "AppliedMessage": "You feel weak and powerless",
+    "AppliedEndsWith": "You feel your strength return",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1072
+      }
+    ]
+  },
+  {
+    "Id": "0a89b3561082a23c",
+    "Name": "rotten eye",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You use up the magic of the beholder's eye!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} uses up the magic of the beholder's eye!",
+    "AppliedMessage": "You feel nauseous",
+    "AppliedEndsWith": "You feel less sick",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1095
+      }
+    ]
+  },
+  {
+    "Id": "c490b92b11e89551",
+    "Name": "lunar beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A brilliant beam zaps {target} for {damage} damage!",
+    "TargetMessage": "A brilliant beam zaps you for {damage} damage!",
+    "WitnessMessage": "A brilliant beam zaps {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1118
+      }
+    ]
+  },
+  {
+    "Id": "7c404ff45d32448e",
+    "Name": "chain",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You throw a {spellname} at {target}'s ankles, tripping them!",
+    "TargetMessage": "{source} throws a {spellname} at your ankles, tripping you!",
+    "WitnessMessage": "{source} throws a {spellname} at {target}'s ankles, tripping them!",
+    "AppliedMessage": "You are caught in a chain",
+    "AppliedEndsWith": "You get back on your feet",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1121
+      }
+    ]
+  },
+  {
+    "Id": "fa56057f63817f28",
+    "Name": "yellow potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You quaff a {spellname}, and your body starts to tingle!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} quaffs a {spellname}.",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1127
+      }
+    ]
+  },
+  {
+    "Id": "dba9097c33d93b4c",
+    "Name": "crimson potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You quaff the crimson potion, it burns your throat going down!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} lets out an agonizing cough as they drink the bubbling potion.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1128
+      }
+    ]
+  },
+  {
+    "Id": "8536231a94a990eb",
+    "Name": "bubbling blue potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You drink the bubbling potion and feel violently ill.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} doesn't look so good.",
+    "AppliedMessage": "You feel nauseous",
+    "AppliedEndsWith": "You feel less sick",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1129
+      }
+    ]
+  },
+  {
+    "Id": "6dede67a6efc6383",
+    "Name": "oily potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You choke and gag from swallowing the vile, oily potion.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} chokes and gags from drinking an oily potion.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1130
+      }
+    ]
+  },
+  {
+    "Id": "64d4e0bff9970894",
+    "Name": "ray of fire from the heavens",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} smites you with great fury!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} is smitten by a {spellname}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1135
+      }
+    ]
+  },
+  {
+    "Id": "ae0bcd5d529ac123",
+    "Name": "rainbow potion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You raise the rainbow potion to your lips and...",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} quaffs the rainbow potion.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1161
+      }
+    ]
+  },
+  {
+    "Id": "3e6ea0f8c801faab",
+    "Name": "spear slam knockdown",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You slam {target} into the ground!",
+    "TargetMessage": "You're slammed into the ground!",
+    "WitnessMessage": "{target} is slammed into the ground!",
+    "AppliedMessage": "You are flat on your back",
+    "AppliedEndsWith": "You get back on your feet",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1169
+      }
+    ]
+  },
+  {
+    "Id": "806cdb1c6b96240b",
+    "Name": "vomit",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You {spellname} gore and acid on {target} for {damage} damage!",
+    "TargetMessage": "{source} {spellname}s gore and acid on you for {damage} damage!",
+    "WitnessMessage": "{source} {spellname}s gore and acid on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1171
+      }
+    ]
+  },
+  {
+    "Id": "d9fed9f7a694747d",
+    "Name": "wrong letter",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A spike shoots out from the button, stabbing your finger!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} pulls their hand back in agony!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1175
+      }
+    ]
+  },
+  {
+    "Id": "b5cf50373e87ce03",
+    "Name": "yellow beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You feel slow",
+    "AppliedEndsWith": "You speed up",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1188
+      }
+    ]
+  },
+  {
+    "Id": "4224e0aa89cb300d",
+    "Name": "violet beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You are confused",
+    "AppliedEndsWith": "The effects of confusion wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1189
+      }
+    ]
+  },
+  {
+    "Id": "0b153dd8962347c7",
+    "Name": "black beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You are blind",
+    "AppliedEndsWith": "You can see again",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1190
+      }
+    ]
+  },
+  {
+    "Id": "74ff995b221a4eb9",
+    "Name": "red beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You feel weak and powerless",
+    "AppliedEndsWith": "You feel your strength return",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1191
+      }
+    ]
+  },
+  {
+    "Id": "79586b6ce92aa420",
+    "Name": "green beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "It points towards you, and fires a brilliant green beam for {damage} damage!",
+    "WitnessMessage": "It points towards {source}, and fires a brilliant green beam for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1192
+      }
+    ]
+  },
+  {
+    "Id": "4693434f520de996",
+    "Name": "tail quake",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "An earthquake rocks you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1203
+      }
+    ]
+  },
+  {
+    "Id": "9eb25d5250d7a48e",
+    "Name": "spray of spores",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1204
+      }
+    ]
+  },
+  {
+    "Id": "18bccdd1987407a7",
+    "Name": "gnaj bolt",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A bolt of white-hot flame strikes {target} for {damage} damage!",
+    "TargetMessage": "A bolt of white-hot flame strikes you for {damage} damage!",
+    "WitnessMessage": "A bolt of white-hot flame strikes {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1209
+      }
+    ]
+  },
+  {
+    "Id": "c32ec2a7ce89a2ec",
+    "Name": "blast of energy",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You fire a {spellname} at {target} for {damage} damage!",
+    "TargetMessage": "{source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "{source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1210
+      }
+    ]
+  },
+  {
+    "Id": "4e28e237102c7931",
+    "Name": "hellfire",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1214
+      }
+    ]
+  },
+  {
+    "Id": "aaf7768e4cb58787",
+    "Name": "blacknight",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You pull your cloak tight about you!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} pulls their cloak tight around themself!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1220
+      }
+    ]
+  },
+  {
+    "Id": "1a1416553bde1bd9",
+    "Name": "noose",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You tighten the noose around your own neck!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} tightens the noose around their own neck!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1232
+      }
+    ]
+  },
+  {
+    "Id": "f2fdb235cae76fb2",
+    "Name": "kill enigma",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are covered in acid",
+    "AppliedEndsWith": "The acid covering you dries up",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1234
+      }
+    ]
+  },
+  {
+    "Id": "6b115f3256ecd263",
+    "Name": "wretched boils",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "Boils fester all over your body",
+    "AppliedEndsWith": "The boils vanish from your body",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1237
+      }
+    ]
+  },
+  {
+    "Id": "6a7ecbd416fa605b",
+    "Name": "gruesome curse",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A gruesome curse springs forth and you feel tainted!",
+    "WitnessMessage": "{source} doesn't look so good.",
+    "AppliedMessage": "You don't feel so good",
+    "AppliedEndsWith": "You begin to feel better, the taint removed",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1238
+      }
+    ]
+  },
+  {
+    "Id": "d79442763c2aba85",
+    "Name": "starbeam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A brilliant beam of starlight spears {target} for {damage} damage!",
+    "TargetMessage": "A brilliant beam of starlight spears you for {damage} damage!",
+    "WitnessMessage": "A brilliant beam of starlight spears {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1241
+      }
+    ]
+  },
+  {
+    "Id": "69413224c83d5f87",
+    "Name": "knockdown",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} is knocked off their feet, landing with a heavy thump!",
+    "TargetMessage": "You are knocked off your feet, and land with a heavy thump!",
+    "WitnessMessage": "{target} is knocked flat!",
+    "AppliedMessage": "You are flat on your back",
+    "AppliedEndsWith": "You get back on your feet",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1245
+      }
+    ]
+  },
+  {
+    "Id": "427c0691bf3ffa31",
+    "Name": "nebo secondary",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target}'s life is drained for {damage} damage!",
+    "TargetMessage": "Your life is drained for {damage} damage!",
+    "WitnessMessage": "{target}'s life is drained for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1246
+      }
+    ]
+  },
+  {
+    "Id": "9ed7aad845e44921",
+    "Name": "hellstorm",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A hellish storm of fire and brimstone scorches your foes for {damage} damage!",
+    "TargetMessage": "A hellish storm of fire and brimstone scorches you for {damage} damage!",
+    "WitnessMessage": "A hellish storm of fire and brimstone scorch the room!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1247
+      }
+    ]
+  },
+  {
+    "Id": "07229cd3811c2d62",
+    "Name": "bone necklace",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are affected by a mana flux",
+    "AppliedEndsWith": "The mana flux dissipates rapidly",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1249
+      }
+    ]
+  },
+  {
+    "Id": "cd26f03e199f8645",
+    "Name": "bolt of lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1254
+      }
+    ]
+  },
+  {
+    "Id": "25ea063a33ad8130",
+    "Name": "unholy fury",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You summon {spellname} upon {target} for {damage} damage!",
+    "TargetMessage": "{source} summons {spellname} upon you for {damage} damage!",
+    "WitnessMessage": "{source} summons {spellname} upon {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1259
+      }
+    ]
+  },
+  {
+    "Id": "a15c81b368011dc9",
+    "Name": "ruby-encrusted fire",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A blazing inferno sears the room for {damage} damage!",
+    "TargetMessage": "A blazing inferno sears you for {damage} damage!",
+    "WitnessMessage": "A blazing inferno sweeps through the room!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1265
+      }
+    ]
+  },
+  {
+    "Id": "30b64d367472f5bd",
+    "Name": "spike spin",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "An explosion of spikes pierces your foes for {damage} damage!",
+    "TargetMessage": "An explosion of spikes pierces you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1319
+      }
+    ]
+  },
+  {
+    "Id": "ba2303a33f7b7890",
+    "Name": "seared by the flames",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are seared by the flames!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} is seared by the flames!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1324
+      }
+    ]
+  },
+  {
+    "Id": "24d96f3a1f8091d5",
+    "Name": "greatsword",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The greatsword of the statue swings down and cleaves you for {damage} damage!",
+    "TargetMessage": "",
+    "WitnessMessage": "The greatsword the statue swings down and cleaves {source} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1334
+      }
+    ]
+  },
+  {
+    "Id": "cc97fc439dc74c6f",
+    "Name": "fire chamber heat",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are seared by the flames for {damage} damage!",
+    "TargetMessage": "You are seared by the flames for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1338
+      }
+    ]
+  },
+  {
+    "Id": "8e4dd363bc566c49",
+    "Name": "lightning chamber",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are fried by the lightning for {damage} damage!",
+    "TargetMessage": "You are fried by the lightning for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1339
+      }
+    ]
+  },
+  {
+    "Id": "a50f1c026884cc7d",
+    "Name": "ice chamber",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are frozen by the blizzard for {damage} damage!",
+    "TargetMessage": "You are frozen by the blizzard for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1340
+      }
+    ]
+  },
+  {
+    "Id": "a830015f818426d0",
+    "Name": "stone chamber",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are pelted by rock shards for {damage} damage!",
+    "TargetMessage": "You are pelted by rock shards for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1341
+      }
+    ]
+  },
+  {
+    "Id": "bcffc0c1d878f8d9",
+    "Name": "crimson shard",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The crimson shard suddenly glows, and burns your skin!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1343
+      }
+    ]
+  },
+  {
+    "Id": "9687795289332f44",
+    "Name": "amber shard",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The amber shard suddenly glows, and shocks your body!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1344
+      }
+    ]
+  },
+  {
+    "Id": "ae89bef643d8e2ac",
+    "Name": "sapphire shard",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The sapphire shard suddenly glows, and freezes your bones!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1345
+      }
+    ]
+  },
+  {
+    "Id": "b0d9889b176c434b",
+    "Name": "quartz shard",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The quarts shard suddenly glows, and splinters pierce you!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1346
+      }
+    ]
+  },
+  {
+    "Id": "bfdc4dedef3a9318",
+    "Name": "blood bath",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are suddenly drenched in hot, boiling, blood!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1352
+      }
+    ]
+  },
+  {
+    "Id": "add13e9e671f28b7",
+    "Name": "chain lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Blue lightning streaks among your foes for {damage} damage!",
+    "TargetMessage": "Blue lightning streaks out and sears you for {damage} damage!",
+    "WitnessMessage": "Blue lightning streaks out and sears {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1353
+      }
+    ]
+  },
+  {
+    "Id": "d00283686c1042ce",
+    "Name": "poison bite",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1366
+      }
+    ]
+  },
+  {
+    "Id": "7b39d885c74f6f83",
+    "Name": "maelstrom",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A whirling maelstrom assaults your foe for {damage} damage!",
+    "TargetMessage": "A whirling maelstrom assaults you for {damage} damage!",
+    "WitnessMessage": "A whirling maelstrom assaultsthe room for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1374
+      }
+    ]
+  },
+  {
+    "Id": "4cc174bd179db89d",
+    "Name": "vial of holy water",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You hurl a {spellname} at {target}, splashing them for {damage} damage!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} hurls a {spellname} at {target}, splashing them for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1385
+      }
+    ]
+  },
+  {
+    "Id": "f7be4aa288c47799",
+    "Name": "sandstorm",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A stinging sandstorm fills the room, scathing your foes!",
+    "TargetMessage": "A stinging sandstorm surrounds you!",
+    "WitnessMessage": "A stinging sandstorm fills the room!",
+    "AppliedMessage": "A sandstorm surrounds you",
+    "AppliedEndsWith": "The sandstorm subsides, allowing your scathed flesh to heal",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1387
+      }
+    ]
+  },
+  {
+    "Id": "15dc585ffa6ce93d",
+    "Name": "magma wave",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A wave of magma crashes over you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1393
+      }
+    ]
+  },
+  {
+    "Id": "3248e490217d805c",
+    "Name": "incinerate",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The altar flame erupts, incinerating you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1394
+      }
+    ]
+  },
+  {
+    "Id": "2057f71932c37d03",
+    "Name": "belches acid",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1412
+      }
+    ]
+  },
+  {
+    "Id": "e91ef7a836af8cdb",
+    "Name": "sinkhole",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Suddenly a sinkhole opens up under you, and you are swallowed by sand!",
+    "TargetMessage": "",
+    "WitnessMessage": "With a puff of dust, {source} is suddenly swallowed up by a sinkhole!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5100
+      }
+    ]
+  },
+  {
+    "Id": "af86ee2eb965cef4",
+    "Name": "hellfire",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5116
+      }
+    ]
+  },
+  {
+    "Id": "f4360e410168e975",
+    "Name": "blast of lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5117
+      }
+    ]
+  },
+  {
+    "Id": "d7760f07397c0555",
+    "Name": "cone of flame",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You fire a {spellname} at {target} for {damage} damage!",
+    "TargetMessage": "{source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "{source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5146
+      }
+    ]
+  },
+  {
+    "Id": "ccdbd04108dc4252",
+    "Name": "blast of lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5154
+      }
+    ]
+  },
+  {
+    "Id": "aec083fffedfd4ce",
+    "Name": "energy drain",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You are drained of {damage} life!",
+    "WitnessMessage": "{source} is drained of {spellname} life!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5158
+      }
+    ]
+  },
+  {
+    "Id": "95b2db6ac0fb7fed",
+    "Name": "eye beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The cyclops' gaze sears you with green fire for {damage} damage!",
+    "WitnessMessage": "The cyclops' gaze sears {source} with green fire for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5174
+      }
+    ]
+  },
+  {
+    "Id": "6c069d4827f5a708",
+    "Name": "black orb",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You rub a black orb.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} rubs a black orb.",
+    "AppliedMessage": "Your legs are petrified",
+    "AppliedEndsWith": "Your legs return to normal",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5175
+      }
+    ]
+  },
+  {
+    "Id": "4f74806b617a0a82",
+    "Name": "sucks the life",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} out of the room for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5267
+      }
+    ]
+  },
+  {
+    "Id": "996ccabb756ff452",
+    "Name": "net",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You throw a {spellname} at {target} and entangle them!",
+    "TargetMessage": "{source} throws a {spellname} on you, entangling you!",
+    "WitnessMessage": "{source} throws a {spellname} on {target}, entangling them!",
+    "AppliedMessage": "You are entangled in a net",
+    "AppliedEndsWith": "You work yourself free",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5411
+      }
+    ]
+  },
+  {
+    "Id": "4c01c2489f90a0ee",
+    "Name": "jail teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Battered and beaten, you are knocked unconscious and dragged off to jail!",
+    "TargetMessage": "Battered and beaten, you are knocked unconscious and dragged off to jail!",
+    "WitnessMessage": "{source} is knocked unconscious and dragged off to jail!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5432
+      }
+    ]
+  },
+  {
+    "Id": "1b684982a18f9848",
+    "Name": "sharp stones",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} fires a spray of {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} fires a spray of {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5455
+      }
+    ]
+  },
+  {
+    "Id": "ce5649fdb81726e1",
+    "Name": "belches acid",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5459
+      }
+    ]
+  },
+  {
+    "Id": "91c8e1fc920f1ea1",
+    "Name": "divine intervention",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A shimmering golden mist descends over you!",
+    "TargetMessage": "",
+    "WitnessMessage": "A shimmering golden mist descends over {source}!",
+    "AppliedMessage": "You are protected by divine power",
+    "AppliedEndsWith": "You feel vulnerable",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5477
+      }
+    ]
+  },
+  {
+    "Id": "f03175a3c95f9c04",
+    "Name": "roar",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} beats his chest and roars deafeningly!",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are too scared to flee",
+    "AppliedEndsWith": "You feel braver",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5486
+      }
+    ]
+  },
+  {
+    "Id": "d8902cef622789a9",
+    "Name": "gold dust",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} chortles wickedly and throws some gold dust at you!",
+    "WitnessMessage": "The {source} chortles wickedly and throws some {spellname} at {target}!",
+    "AppliedMessage": "You are cursed by a leprechaun",
+    "AppliedEndsWith": "The leprechaun's curse wears off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5495
+      }
+    ]
+  },
+  {
+    "Id": "d1cf4b1ac851cc21",
+    "Name": "roots",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source}'s {spellname} burst out of the earth and squeeze you for {damage} damage!",
+    "WitnessMessage": "The {source}'s {spellname} burst out of the earth and squeeze {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5497
+      }
+    ]
+  },
+  {
+    "Id": "12a554c7900d6d40",
+    "Name": "purify",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
+    "TargetMessage": "Purification burns you with divine power for {damage} damage!",
+    "WitnessMessage": "{target} is purified with divine power for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5530
+      }
+    ]
+  },
+  {
+    "Id": "7ae53fbf39cf1f05",
+    "Name": "disrupt",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} at {target} for {damage} damage!",
+    "TargetMessage": "{source} casts {spellname} on you for {damage} damage!",
+    "WitnessMessage": "{source} casts {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5532
+      }
+    ]
+  },
+  {
+    "Id": "45d861663bd0942e",
+    "Name": "flesh-eating gas",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a corrosive blast of {spellname} at you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5555
+      }
+    ]
+  },
+  {
+    "Id": "62100b14c42fa415",
+    "Name": "draws the breath",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You {spellname} from {target} for {damage} damage!",
+    "TargetMessage": "{source} {spellname} from your body for {damage} damage!",
+    "WitnessMessage": "{source} {spellname} from {target}'s body!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5602
+      }
+    ]
+  },
+  {
+    "Id": "108fe4645ccc91bd",
+    "Name": "life energy",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} saps your {spellname} for {damage} damage!",
+    "WitnessMessage": "The {source} saps the {spellname} from {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5628
+      }
+    ]
+  },
+  {
+    "Id": "aafaf73712dfb472",
+    "Name": "whirlwind",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} throws a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} throws a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5647
+      }
+    ]
+  },
+  {
+    "Id": "bea570b7192ab0f9",
+    "Name": "chain",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You throw a {spellname} at {target}'s ankles, tripping them!",
+    "TargetMessage": "{source} throws a {spellname} at your ankles, tripping you!",
+    "WitnessMessage": "{source} throws a {spellname} at {target}'s ankles, tripping them!",
+    "AppliedMessage": "You are caught in a chain",
+    "AppliedEndsWith": "You get back on your feet",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5765
+      }
+    ]
+  },
+  {
+    "Id": "cba89ccaafeb1f85",
+    "Name": "ball of magma",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} hurls a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} hurls a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5791
+      }
+    ]
+  },
+  {
+    "Id": "9af99c5ceb6bbb23",
+    "Name": "earthquake hold",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are flat on your back",
+    "AppliedEndsWith": "You get back on your feet",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5795
+      }
+    ]
+  },
+  {
+    "Id": "5c21209b50ac690b",
+    "Name": "eye beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The cyclops' gaze sears you with green fire for {damage} damage!",
+    "WitnessMessage": "The cyclops' gaze sears {source} with green fire for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5819
+      }
+    ]
+  },
+  {
+    "Id": "0d9ec0c6d4ba9ed1",
+    "Name": "drains",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} surrounds everyone and {spellname} their life for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5822
+      }
+    ]
+  },
+  {
+    "Id": "54ce09ac7edf6b8d",
+    "Name": "time distortion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "A shimmering force sweeps throughout the area!",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are caught in a time distortion field",
+    "AppliedEndsWith": "You speed up",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5830
       }
     ]
   }
