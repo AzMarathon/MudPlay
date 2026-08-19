@@ -14,10 +14,10 @@ namespace MudPlay.Game.Map;
 //
 // Field order (blank-line separated where indicated):
 //   1. Name (Map/Room)
-//   2. Also Here (NPC + lair monsters with Max-N)
-//   3. Light description ("pitch black" / "very dark" / "barely visible" /
-//      "dimly lit") — surfaced when the room's own Light is significantly
-//      negative.
+//   2. blank
+//   3. Room contents — monster groups (Placed / Assigned / Lair), then the lair
+//      "Max Regen: N @ (Delay-1)m 30s" line directly beneath the Lair line, then
+//      "Floor items: …" (the room's Placed / roomitem items).
 //   4. blank
 //   5. Shop: …
 //   6. Room Spell: …
@@ -25,8 +25,8 @@ namespace MudPlay.Game.Map;
 //   8. Obvious exits: per-direction list with destination room name +
 //      (map/room) + Door / Trap / gated annotation.
 //   9. blank
-//   10. Room Light: ±N
-//   11. Max Regen: N @ (Delay-1)m 30s
+//   10. Room Light: ±N + light description ("pitch black" / "very dark" /
+//       "barely visible" / "dimly lit") beneath it.
 //
 // Lair string format expected (per the MDB): "(Max N): id,id,...,[group-index]".
 // Older NMR < 1.83 imports may omit the trailing bracket; the parser tolerates
@@ -35,7 +35,8 @@ public static class RoomTooltipBuilder
 {
     public static string Build(Room room, RoomGraphManager graph, GameDataCache? data,
         TBInfoStore? tbinfo = null, MonsterSpawnIndex? spawnIndex = null,
-        Game.Spells.KnownSpellCatalog? spellCatalog = null, int charIllu = 0)
+        Game.Spells.KnownSpellCatalog? spellCatalog = null, int charIllu = 0,
+        RoomFloorItemIndex? floorItems = null)
     {
         ArgumentNullException.ThrowIfNull(room);
         ArgumentNullException.ThrowIfNull(graph);
@@ -45,9 +46,16 @@ public static class RoomTooltipBuilder
         // 1. Name (Map/Room)
         sb.Append(room.DisplayName).Append(" (").Append(room.Key).Append(')');
 
-        // 2. Also Here
+        // 2. Room contents — the monster groups (Placed / Assigned / Lair + lair
+        // regen) followed by any floor items, set off from the name by a blank
+        // line so the header stands alone.
+        var contents = new List<string>();
         string alsoHere = BuildAlsoHere(room, data, spawnIndex);
-        if (alsoHere.Length > 0) sb.Append('\n').Append(alsoHere);
+        if (alsoHere.Length > 0) contents.Add(alsoHere);
+        string floorItemsLine = BuildFloorItems(room, data, floorItems);
+        if (floorItemsLine.Length > 0) contents.Add(floorItemsLine);
+        if (contents.Count > 0)
+            sb.Append('\n').Append('\n').Append(string.Join("\n", contents));
 
         // 4-7. Shop / Room Spell (blank line separator above when any).
         string shopLine = room.Shop > 0
@@ -109,14 +117,7 @@ public static class RoomTooltipBuilder
             if (lightDesc.Length > 0) sb.Append('\n').Append(lightDesc);
         }
 
-        // 11. Max Regen + regen time.
-        if (TryParseLairMax(room.RawLairTag, out int maxRegen))
-        {
-            if (needBottomBlank) { sb.Append('\n'); needBottomBlank = false; }
-            sb.Append('\n').Append("Max Regen: ").Append(maxRegen);
-            string regenTime = BuildRegenTime(room.Delay);
-            if (regenTime.Length > 0) sb.Append(" @ ").Append(regenTime);
-        }
+        // Max Regen now renders beneath the Lair line (section 2) instead of here.
 
         return sb.ToString();
     }
@@ -236,7 +237,41 @@ public static class RoomTooltipBuilder
         Line("Placed", rm.Placed);
         Line("Assigned", rm.Assigned);
         Line("Lair", rm.Lair);
+
+        // Lair regen sits directly beneath the Lair line (its simultaneous cap +
+        // per-mob respawn time), where it annotates the mobs it describes, rather
+        // than at the bottom of the tooltip.
+        if (rm.LairMax is { } lairMax)
+        {
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append("Max Regen: ").Append(lairMax);
+            string regenTime = BuildRegenTime(room.Delay);
+            if (regenTime.Length > 0) sb.Append(" @ ").Append(regenTime);
+        }
         return sb.ToString();
+    }
+
+    // Floor items the room drops on the ground — its static `Placed` list plus any
+    // `roomitem` scatter, from RoomFloorItemIndex. One "Floor items: ..." line,
+    // name-deduped, each with its record number. Empty when nothing is on the
+    // floor (or no index was supplied). Fixes the case where an item's own record
+    // named its room (e.g. the bogwood box → 14/10415) but the room tooltip didn't
+    // list the item.
+    private static string BuildFloorItems(Room room, GameDataCache? data, RoomFloorItemIndex? floorItems)
+    {
+        if (floorItems is null) return string.Empty;
+        IReadOnlyList<int> ids = floorItems.FloorItemsOf(room.Key);
+        if (ids.Count == 0) return string.Empty;
+
+        var parts = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (int id in ids)
+        {
+            string name = LookupName(data, "Items", id) ?? $"#{id}";
+            string label = $"{name}(#{id})";
+            if (seen.Add(label)) parts.Add(label);
+        }
+        return "Floor items: " + string.Join(", ", parts);
     }
 
     // ----- Light description ---------------------------------------

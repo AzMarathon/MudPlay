@@ -5,8 +5,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 ## 3.22.2
 
 - Game Data: an item that sits on a room's floor now shows a **"Placed in"** section on its record — a clickable link to each room that holds it, with **Queue Walking here →**; room-only items (like the bogwood box) previously showed no source at all
-- Navigation: the Room Info panel and map now list a room's statically-**placed** floor items, not just ones its `roomitem` command scatters — so an item sitting in a room shows up when you go there
-- Navigation: the room tooltip / Room Info panel now split monsters into **Placed** (a boss / NPC fixture), **Assigned** (roams / rarely spawns there), and **Lair** (a consistent lair spawner) instead of one lumped "Also Here" line — a monster can appear under more than one, showing the distinction at a glance
+- Navigation: the Room Info panel **and the map hover tooltip** now list a room's statically-**placed** floor items, not just ones its `roomitem` command scatters — so an item sitting in a room (like the bogwood box at 14/10415) shows up when you hover / go there
+- Navigation: the room tooltip / Room Info panel now split monsters into **Placed** (a boss / NPC fixture), **Assigned** (roams / rarely spawns there), and **Lair** (a consistent lair spawner) instead of one lumped "Also Here" line — a monster can appear under more than one, showing the distinction at a glance; the lair's **Max Regen** now sits directly beneath the Lair line
 
 ## 3.22.0
 

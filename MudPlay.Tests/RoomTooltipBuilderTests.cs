@@ -341,6 +341,42 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
+    public void Build_FloorItems_ListsRoomsPlacedItems()
+    {
+        // The bogwood box (item 3796) is placed on room 14/10415's floor via the
+        // room's Placed column; the tooltip must list it (report: the item record
+        // named the room but the room tooltip didn't show the item).
+        const string rooms = """
+            [
+              { "Map Number": 14, "Room Number": 10415, "Name": "Damp Chamber, Platform",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 0, "Placed": "3796",
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string items = """
+            [ { "Number": 3796, "Name": "bogwood box" } ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"), rooms);
+        File.WriteAllText(Path.Combine(setRoot, "Items.json"), items);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"), "[]");
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tb = new(cache);
+        tb.OnActiveSetChanged(_setName);
+        RoomFloorItemIndex floor = new(cache, tb);
+
+        Room room = graph.GetRoom(new RoomKey(14, 10415))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, floorItems: floor);
+
+        Assert.Contains("Floor items: bogwood box(#3796)", text);
+    }
+
+    [Fact]
     public void Build_MultiActionHiddenExit_RendersRequiredCommands()
     {
         // Live repro: room 10/271 west "(Hidden/Needs 1 Actions, any order)"
@@ -789,29 +825,27 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
-    public void Build_FieldOrder_NameAlsoHereBlankShopBlankExitsBlankLightLightDescMaxRegen()
+    public void Build_FieldOrder_NameMonstersRegenExitsLight()
     {
         var (graph, cache) = NewGraph();
         Room dark = graph.GetRoom(new RoomKey(1, 2))!;     // dark lair room
         string text = RoomTooltipBuilder.Build(dark, graph, cache);
 
-        // Sequential order: Name → monster group(s) → exits → Room Light → light desc → Max Regen.
-        // 1/2's monsters are lair-tag members, so they render under "Lair:".
-        // The light-description phrase now sits BELOW the numeric
-        // "Room Light: -N" line (per the user's request); 1/2 has
-        // no Shop / Spell, so no shop section.
+        // Sequential order: Name → Lair line → Max Regen (right beneath the Lair
+        // line) → exits → Room Light → light desc. 1/2's monsters are lair-tag
+        // members, so they render under "Lair:"; it has no Shop / Spell.
         int posName   = text.IndexOf("North Square (1/2)");
         int posAlso   = text.IndexOf("Lair:");
+        int posRegen  = text.IndexOf("Max Regen: 2");
         int posExits  = text.IndexOf("Obvious exits:");
         int posRLight = text.IndexOf("Room Light: -180");
         int posDesc   = text.IndexOf("very dark");
-        int posRegen  = text.IndexOf("Max Regen: 2");
 
         Assert.True(posName < posAlso);
-        Assert.True(posAlso < posExits);
+        Assert.True(posAlso < posRegen);     // Max Regen sits directly below the Lair line
+        Assert.True(posRegen < posExits);    // ...and above the exits block
         Assert.True(posExits < posRLight);
         Assert.True(posRLight < posDesc);
-        Assert.True(posDesc < posRegen);
     }
 
     // ----- Door / key pick+bash requirement in the exit hint --------

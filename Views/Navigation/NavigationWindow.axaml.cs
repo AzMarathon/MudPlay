@@ -154,7 +154,7 @@ public partial class NavigationWindow : Window
             return;
         }
 
-        label.Text = Game.Map.RoomTooltipBuilder.Build(room, svc.RoomGraph, svc.GameData, svc.TBInfo, svc.MonsterSpawns, svc.SpellCatalog, svc.PlayerIllumination.Current);
+        label.Text = Game.Map.RoomTooltipBuilder.Build(room, svc.RoomGraph, svc.GameData, svc.TBInfo, svc.MonsterSpawns, svc.SpellCatalog, svc.PlayerIllumination.Current, svc.RoomFloorItems);
 
         // Font is char-tier configurable (Settings → General → Navigation tooltip
         // font). Read it live per hover so a Settings change lands on the next
