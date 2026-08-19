@@ -46,6 +46,19 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Assert.False(RoomTooltipBuilder.TryParseLairMax(tag, out _));
     }
 
+    // FormatLairRegen is shared by the map tooltip and the Room Info panel, so
+    // both surfaces show the identical "Max Regen: N @ time" line.
+    [Theory]
+    [InlineData(2, 5, "Max Regen: 2 @ 4m 30s")]   // Delay 5 → (5-1)m 30s
+    [InlineData(3, 1, "Max Regen: 3 @ 30s")]      // Delay 1 → 30s
+    [InlineData(1, 0, "Max Regen: 1")]            // no Delay → count only
+    public void FormatLairRegen_FormatsCountAndTime(int max, int delay, string expected)
+        => Assert.Equal(expected, RoomTooltipBuilder.FormatLairRegen(max, delay));
+
+    [Fact]
+    public void FormatLairRegen_NoLair_ReturnsEmpty()
+        => Assert.Equal(string.Empty, RoomTooltipBuilder.FormatLairRegen(null, 5));
+
     [Fact]
     public void ParseLairTag_NMR183_HandlesTrailingGroupBracket()
     {
