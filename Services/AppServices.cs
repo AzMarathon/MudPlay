@@ -4195,6 +4195,10 @@ public sealed class AppServices
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();
             Cash.OnRoomChanged();
+            // Pass-through stash runs here — ahead of LoopRunner's StateChanged
+            // handler — so its `hide` reaches the wire before the loop's next move
+            // (else the coins hide in the NEXT room; report paradigm-20260819-054200).
+            AutoDeposit?.OnRoomEntered(t);
         };
 
         Walker = new Game.Map.AutoWalkManager(RoomGraph, Bfs, RoomTracker,
