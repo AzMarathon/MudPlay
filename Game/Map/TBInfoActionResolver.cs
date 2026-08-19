@@ -59,6 +59,59 @@ public static class TBInfoActionResolver
         }
     }
 
+    // One room-CMD remoteaction that reveals a hidden exit: the keyword the player
+    // types, the room whose exit it opens, and the direction index of that exit
+    // (0..9 = N,S,E,W,NE,NW,SE,SW,U,D — the RemoteAction arg order the game uses).
+    public readonly record struct RemoteActionExit(string Keyword, int RoomNumber, int DirectionIndex);
+
+    // Yields each `<keyword>:…:remoteaction <room> <msg> <var> <dir>` line in a
+    // room's CMD chain as a RemoteActionExit. Unlike EnumerateRemoteActionKeywords
+    // (tooltip-only — keyword alone), this carries the room + direction the action
+    // reveals so the graph build can promote that hidden exit into a routable,
+    // satisfiable action. A middle `testskill` is ignored here: the walker just
+    // issues the keyword and the reveal follows (a zero-difficulty check never
+    // fails; a real one is a separate concern the dispatch would surface).
+    public static IEnumerable<RemoteActionExit> EnumerateRemoteActions(TBInfoStore store, int roomCmd)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (roomCmd <= 0) yield break;
+
+        TBInfoEntry? entry = store.GetEntry(roomCmd);
+        if (entry is null || string.IsNullOrWhiteSpace(entry.Action)) yield break;
+
+        foreach (string raw in entry.Action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string line = raw.Trim();
+            if (line.Length == 0) continue;
+
+            string[] parts = line.Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length < 2) continue;
+
+            string keyword = parts[0];
+            if (string.IsNullOrWhiteSpace(keyword)) continue;
+
+            for (int i = 1; i < parts.Length; i++)
+            {
+                if (!parts[i].StartsWith("remoteaction", StringComparison.OrdinalIgnoreCase)) continue;
+                if (TryParseRemoteAction(parts[i], out int room, out int dir) && room > 0 && dir is >= 0 and <= 9)
+                    yield return new RemoteActionExit(keyword, room, dir);
+                break;
+            }
+        }
+    }
+
+    // `remoteaction <room> <message> <var> <direction> …` — the room is the first
+    // number, the direction index is the fourth (message + one variable sit
+    // between). Mirrors TBInfoActionDecoder.ParseRemoteAction's arg positions.
+    private static bool TryParseRemoteAction(string token, out int room, out int direction)
+    {
+        room = 0;
+        direction = -1;
+        string[] w = token.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (w.Length < 5) return false;                 // remoteaction room msg var dir
+        return int.TryParse(w[1], out room) & int.TryParse(w[4], out direction);
+    }
+
     // Yields the player-typed keyword from each line whose directive chain performs
     // an in-place effect — a `giveitem` or `random` directive — the mine / gather
     // commands in the Dwarven Mines ("mine ore", "mine vein", …, which yield ore

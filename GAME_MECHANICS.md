@@ -1753,6 +1753,54 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
     recovery, deposits, party comeback, trainer routing) never prompt — they keep the default
     teleport-allowed shortest route.
 
+## `testskill` obstacle checks *([CONFIRMED] 2026-08-18, user + game-data trace, Paradigm 1.9.1)*
+
+A `testskill <stat> <difficulty> <failTextblock>` directive in a room-CMD / greet / spell action chain
+is a **stat check with a random roll**: the game rolls a die in a range tied to the difficulty and
+compares it to the character's `<stat>`. Roll **under** your stat → the check **passes** and the chain's
+follow-on action fires (a `remoteaction` reveal, a `teleport`, etc.); roll over → the **fail action**
+runs (jump to `<failTextblock>`), which often lands you somewhere unintended. Example that DOES roll: the
+Slums slaver-rooftop `jump` exits carry `testskill agility` and can drop you into the wrong room on a miss.
+
+**Difficulty `0` is the special case: it never actually checks anything — the action always fires.** So
+`clear rubble:testskill strength 0 …:remoteaction …` behaves like a plain lever/reveal, not a gamble.
+Client consequence: the walker treats a difficulty-0 `testskill` reveal as a deterministic action (send
+the keyword, then take the exit — no fail-handling). A non-zero `testskill` exit is NOT auto-traversed as
+a sure thing.
+
+## Special exits the walker can route through *([CONFIRMED] 2026-08-18, user + game-data trace, Paradigm 1.9.1)*
+
+Two exit shapes beyond ordinary cardinals / doors / CMD-teleports, both on the route to the Necromancer
+(9/1431, phoenix-feather quest):
+
+- **Room-command reveal (a lever whose opener is the room CMD).** A hidden exit (`(Hidden/Needs N
+  Actions)`) whose unlock isn't an exit `Action` cell but a `remoteaction` in the **room's CMD chain**.
+  Canonical: 9/1012 "Crumbling Ruin, Entrance" CMD 1422 = `clear rubble:testskill strength 0 …:
+  remoteaction 1012 … 0` (synonyms `move`/`push` × `rubble`/`mound`/`rock`; the trailing `0` = the N
+  exit). You type `clear rubble`, the N passage to 9/1013 opens. The reveal is **one-directional** — only
+  the closed side (9/1012→N) needs it; the reverse (9/1013→S→9/1012) is a normal always-open exit — and
+  the opened exit **stays open a few minutes**.
+- **Item-use teleport (an item whose USE transports you).** Distinct from CMD / greet / room-spell
+  teleports: the teleport lives entirely on the **item**, via the chain item `Abil 43 (CastsSp)` → spell
+  → spell `Abil 148 (TextBlock)` → TBInfo whose Action has a literal `teleport <room> <map>`. Canonical:
+  **potion of levitation** (item 992 → spell 607 → TBInfo 1421 `roomitem 993 …: teleport 1009 9`) — used
+  in **3/1** it transports you to **9/1009**. It is gated two ways: you must **carry** the item (it's a
+  single-use consumable, spent on use), and the TBInfo's `roomitem <fixture>` gate means it only fires in
+  the room that holds that fixture (item 993 "waterfall" lives in 3/1, which is why it "must be used
+  there"). The return trip is a normal exit (9/1009→D→3/1), so the potion is never needed to come back.
+  This is likely the ONLY item-only-anchored teleport in the data; the client anchors its graph edge on
+  the fixture item's own room (its `Obtained From`), since there's no exit / CMD / greet to hang it on.
+  **Partied:** every member needs their OWN potion, and the crossing is a party-relay — the leader must
+  tell the party to use theirs *before* using its own. The client already does this via its standard
+  teleport party-relay (a leader with followers sends `.@party use potion of levitation` on the party
+  channel, THEN uses its own `use potion of levitation`), because the item-use teleport is an ordinary
+  `Teleport`-hint edge. The one thing the client can't verify is whether each follower actually carries
+  a potion — a member without one is left behind (we don't track follower inventory).
+
+Quest items on such routes (the potion, plus the titanium fork / magical quartz rod that gate the ruin's
+barrier exits) are **never auto-obtained** — they're quest-locked, so a route missing one fails with a
+named "go obtain the &lt;item&gt;" message rather than trying to fetch it.
+
 ## Great Pyramid puzzle climb *([CONFIRMED] 2026-07-29, user + capture `follower log of going up the pyramid.log` + hand-drawn map + game-data trace, Paradigm 1.9.1)*
 
 - **Geography.** Starts at `Scorched Cavern, Firepit` = `12/1239` (its `up` casts spell 685 =

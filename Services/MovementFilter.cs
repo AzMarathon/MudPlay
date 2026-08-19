@@ -233,6 +233,17 @@ public sealed class MovementFilter : IRoomFilter
             case RoomExitHint.KeyLocked:
                 return IsLockedDoorImpassable(in exit, carries);
 
+            case RoomExitHint.Teleport:
+                // A synthesised teleport edge that crosses by USING a carried item
+                // (an item-use teleport such as `use potion of levitation`) is
+                // impassable without that item. KeyItemId is a genuine possession
+                // requirement only — RoomGraphManager clears it on a teleport that
+                // merely shadows a locked door (you teleport past the door, no key
+                // needed) — so a set KeyItemId here always means "carry this". The
+                // item is acquirable, so this gate is suspended for the gated-route
+                // planning pass like the other item gates.
+                return exit.KeyItemId > 0 && !carries(exit.KeyItemId);
+
             case RoomExitHint.MultiActionHidden:
                 // A hidden exit whose unlock action needs a held item ("hold up
                 // amber talisman (Item: 815)") is impassable without it — no
