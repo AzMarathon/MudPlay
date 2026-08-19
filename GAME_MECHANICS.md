@@ -1790,6 +1790,12 @@ Two exit shapes beyond ordinary cardinals / doors / CMD-teleports, both on the r
   there"). The return trip is a normal exit (9/1009→D→3/1), so the potion is never needed to come back.
   This is likely the ONLY item-only-anchored teleport in the data; the client anchors its graph edge on
   the fixture item's own room (its `Obtained From`), since there's no exit / CMD / greet to hang it on.
+  **Partied:** every member needs their OWN potion, and the crossing is a party-relay — the leader must
+  tell the party to use theirs *before* using its own. The client already does this via its standard
+  teleport party-relay (a leader with followers sends `.@party use potion of levitation` on the party
+  channel, THEN uses its own `use potion of levitation`), because the item-use teleport is an ordinary
+  `Teleport`-hint edge. The one thing the client can't verify is whether each follower actually carries
+  a potion — a member without one is left behind (we don't track follower inventory).
 
 Quest items on such routes (the potion, plus the titanium fork / magical quartz rod that gate the ruin's
 barrier exits) are **never auto-obtained** — they're quest-locked, so a route missing one fails with a
