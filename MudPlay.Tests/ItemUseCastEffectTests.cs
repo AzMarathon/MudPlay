@@ -58,6 +58,12 @@ public sealed class ItemUseCastEffectTests : IDisposable
         return vm.BuildDroppedByForTests(itemNumber);
     }
 
+    private IReadOnlyList<PlacedInRow> PlacedInFor(string itemNumber)
+    {
+        ItemsSectionViewModel vm = new(_cache);
+        return vm.BuildPlacedInForTests(itemNumber);
+    }
+
     [Fact]
     public void NonWeaponUseCast_ShowsEffectDamage()
     {
@@ -225,5 +231,33 @@ public sealed class ItemUseCastEffectTests : IDisposable
         IReadOnlyList<DroppedByRow> dropped = DroppedByFor("300");
 
         Assert.Contains(dropped, r => r.Label == "Prismatic Dragon(10%)");
+    }
+
+    [Fact]
+    public void PlacedIn_ResolvesRoomNameAndLocator()
+    {
+        // Item #3796 (bogwood box) is floor-placed in room 14/10415; its "Obtained
+        // From: Room 14/10415" must surface a clickable "Placed in" row naming the
+        // room. Previously a room-only item rendered nothing (report-driven).
+        Seed("Rooms", "[{\"Map Number\":14,\"Room Number\":10415,\"Name\":\"Damp Chamber, Platform\"}]");
+        Seed("Items", "[{\"Number\":3796,\"Name\":\"bogwood box\",\"ItemType\":8,\"Obtained From\":\"Room 14/10415\"}]");
+        _cache.SwitchSet("v1.11p");
+
+        IReadOnlyList<PlacedInRow> placed = PlacedInFor("3796");
+
+        Assert.Contains(placed, r => r.Location == "Damp Chamber, Platform - 14/10415" && r.CanOpen);
+    }
+
+    [Fact]
+    public void PlacedIn_FallsBackToLocatorWhenRoomNameMissing()
+    {
+        // No Rooms row for the placement → the row still shows the bare "Room m/r"
+        // locator rather than dropping the placement entirely.
+        Seed("Items", "[{\"Number\":29,\"Name\":\"small sign\",\"ItemType\":8,\"Obtained From\":\"Room 1/224\"}]");
+        _cache.SwitchSet("v1.11p");
+
+        IReadOnlyList<PlacedInRow> placed = PlacedInFor("29");
+
+        Assert.Contains(placed, r => r.Location == "Room 1/224" && r.CanOpen);
     }
 }

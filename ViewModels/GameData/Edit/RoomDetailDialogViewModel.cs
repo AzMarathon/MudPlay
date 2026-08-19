@@ -166,26 +166,20 @@ public sealed partial class RoomDetailDialogViewModel
         KeyLabel = $"Map {key.Map} · Room {key.Room}";
         IsBlacklisted = _services.RoomBlacklist.IsBlacklisted(key);
 
-        // Monsters — lair + summoned (shared resolver), then the placed NPC the
-        // tooltip's "Also Here" deliberately omits (a boss / shopkeeper lives on
-        // the room's Npc field, not its lair tag).
-        IReadOnlyList<RoomTooltipBuilder.RoomMonsterRef> alsoHere =
-            RoomTooltipBuilder.ResolveAlsoHere(room, _services.GameData, _services.MonsterSpawns, out int? max);
-        MonsterHeader = max is { } m ? $"Also here (max {m}):" : "Also here:";
-
-        var monsterNames = new HashSet<string>(StringComparer.Ordinal);
-        foreach (RoomTooltipBuilder.RoomMonsterRef mref in alsoHere)
-        {
-            monsterNames.Add(mref.Name);
-            Monsters.Add(MakeMonsterLink(mref.Id, mref.Name, note: null));
-        }
-        if (room.Npc > 0)
-        {
-            string placed = _services.GameData.FindNameByNumber("Monsters", room.Npc)
-                ?? $"#{room.Npc}";
-            if (monsterNames.Add(placed))
-                Monsters.Add(MakeMonsterLink(room.Npc, placed, note: "placed"));
-        }
+        // Monsters — split into Placed (the room's NPC fixture / a boss),
+        // Assigned (roam / rare-random spawns), and Lair (consistent lair
+        // spawners), each link tagged with its category. A monster may appear
+        // under more than one group (a placed boss that also roams) — the
+        // distinction is intentional, not a duplicate.
+        RoomTooltipBuilder.RoomMonsters rm =
+            RoomTooltipBuilder.ResolveRoomMonsters(room, _services.GameData, _services.MonsterSpawns);
+        MonsterHeader = rm.LairMax is { } m ? $"Monsters (lair max {m}):" : "Monsters:";
+        foreach (RoomTooltipBuilder.RoomMonsterRef mref in rm.Placed)
+            Monsters.Add(MakeMonsterLink(mref.Id, mref.Name, note: "placed"));
+        foreach (RoomTooltipBuilder.RoomMonsterRef mref in rm.Assigned)
+            Monsters.Add(MakeMonsterLink(mref.Id, mref.Name, note: "assigned"));
+        foreach (RoomTooltipBuilder.RoomMonsterRef mref in rm.Lair)
+            Monsters.Add(MakeMonsterLink(mref.Id, mref.Name, note: "lair"));
 
         // Exits — one clickable row per obvious exit, using the same ordering +
         // hint rendering as the map tooltip.

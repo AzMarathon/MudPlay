@@ -32,6 +32,13 @@ public sealed class RoomFloorItemIndexTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "TBInfo.json"), json);
     }
 
+    private void SeedRooms(string setName, string json)
+    {
+        string dir = Path.Combine(_root, setName);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), json);
+    }
+
     // Load a set's TBInfo into a fresh store + index. Returns both so a test can
     // drive a later set-swap on the same instances.
     private (GameDataCache Cache, TBInfoStore Tb, RoomFloorItemIndex Index) Build(string setName)
@@ -105,6 +112,49 @@ public sealed class RoomFloorItemIndexTests : IDisposable
         RoomFloorItemIndex idx = Build("alpha").Index;
 
         Assert.Empty(idx.FloorItemsOf(new RoomKey(7, 1010)));
+    }
+
+    [Fact]
+    public void PlacedColumn_IsIndexedAsFloorItems()
+    {
+        // Room 14/10415 statically places item 3796 plus two copies of item 73 —
+        // the dupes collapse to the distinct set (bogwood box, report-driven).
+        SeedTb("alpha", "[]");
+        SeedRooms("alpha", """
+            [ { "Map Number": 14, "Room Number": 10415, "Placed": "3796,73,73" } ]
+            """);
+        RoomFloorItemIndex idx = Build("alpha").Index;
+
+        Assert.Equal(new[] { 3796, 73 }, idx.FloorItemsOf(new RoomKey(14, 10415)));
+    }
+
+    [Fact]
+    public void PlacedColumn_ToleratesTrailingNul()
+    {
+        // The MDB pads the Placed string with a trailing separator + NUL — the
+        // parse must yield just the real id, not a phantom 0. A trailing empty
+        // token (space here) exercises the same non-numeric-token skip path.
+        SeedTb("alpha", "[]");
+        SeedRooms("alpha", "[ { \"Map Number\": 14, \"Room Number\": 10415, \"Placed\": \"3796,\\u0000\" } ]");
+        RoomFloorItemIndex idx = Build("alpha").Index;
+
+        Assert.Equal(new[] { 3796 }, idx.FloorItemsOf(new RoomKey(14, 10415)));
+    }
+
+    [Fact]
+    public void PlacedColumn_AndRoomitem_BothContribute()
+    {
+        // A room can both statically place an item AND scatter one via a CMD chain;
+        // the index merges both sources under the one room key.
+        SeedTb("alpha", """
+            [ { "Number": 5, "Action": "make emblem:roomitem 474 1", "Called From": "Room 7/1008" } ]
+            """);
+        SeedRooms("alpha", """
+            [ { "Map Number": 7, "Room Number": 1008, "Placed": "900" } ]
+            """);
+        RoomFloorItemIndex idx = Build("alpha").Index;
+
+        Assert.Equal(new[] { 900, 474 }, idx.FloorItemsOf(new RoomKey(7, 1008)));
     }
 
     [Fact]

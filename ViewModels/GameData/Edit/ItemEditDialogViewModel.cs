@@ -101,6 +101,12 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     public IReadOnlyList<DroppedByRow> DroppedBy { get; }
     public bool HasDroppedBy => DroppedBy.Count > 0;
 
+    // Rooms whose static Placed list drops this item on the floor, each a
+    // clickable link to the room's record (+ Queue-Walk). Empty when the item is
+    // never floor-placed.
+    public IReadOnlyList<PlacedInRow> PlacedIn { get; }
+    public bool HasPlacedIn => PlacedIn.Count > 0;
+
     // Chest-contents readout (containers only) — the decoded loot table's
     // per-item drop chances plus a one-line yield summary. Empty for any item
     // that isn't a container wired to a loot textblock.
@@ -148,7 +154,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         IReadOnlyList<ItemSource>? containerSources = null,
         IReadOnlyList<ItemGiver>? givers = null,
         Func<int, IReadOnlyList<ShopSaleRow>>? shopSalesForCharm = null,
-        IReadOnlyList<DroppedByRow>? droppedBy = null)
+        IReadOnlyList<DroppedByRow>? droppedBy = null,
+        IReadOnlyList<PlacedInRow>? placedIn = null)
     {
         WccNoStr     = wccNoStr;
         Name         = existing?.Name ?? mdbName;
@@ -157,6 +164,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         _shopSalesForCharm = shopSalesForCharm;
         foreach (ShopSaleRow row in shops) ShopSales.Add(row);
         DroppedBy    = droppedBy ?? Array.Empty<DroppedByRow>();
+        PlacedIn     = placedIn  ?? Array.Empty<PlacedInRow>();
         CanBuySell   = !isLight;
         CanAutoOpen  = isContainer;
 

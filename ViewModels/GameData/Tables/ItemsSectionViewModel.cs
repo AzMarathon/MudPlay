@@ -204,7 +204,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             containerSources: containerSources,
             givers:           givers,
             shopSalesForCharm: ShopsForCharm,
-            droppedBy:        mdb.DroppedBy);
+            droppedBy:        mdb.DroppedBy,
+            placedIn:         mdb.PlacedIn);
 
         // Replace any open item menu with the new one: a double-click on another
         // row swaps the shown item instead of opening a second window. Closing
@@ -247,4 +248,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     // Test seam: the clickable "Dropped by" monster links for a given item.
     internal IReadOnlyList<Edit.DroppedByRow> BuildDroppedByForTests(string itemNumber)
         => new ItemMdbViewBuilder(_cache, 50).Build(itemNumber).DroppedBy ?? System.Array.Empty<Edit.DroppedByRow>();
+
+    // Test seam: the clickable "Placed in" room links for a given item.
+    internal IReadOnlyList<Edit.PlacedInRow> BuildPlacedInForTests(string itemNumber)
+        => new ItemMdbViewBuilder(_cache, 50).Build(itemNumber).PlacedIn ?? System.Array.Empty<Edit.PlacedInRow>();
 }
