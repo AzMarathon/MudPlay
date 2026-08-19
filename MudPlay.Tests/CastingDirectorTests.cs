@@ -180,6 +180,43 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void MajorHeal_TakesOverBelowMajorTrigger_NotMinor()
+    {
+        // Report paradigm-20260819-121247: below the major trigger the engine kept
+        // firing minor (walked first) and never reached major — the player died.
+        // With both configured + major affordable, major must take over in its band.
+        using Harness h = new();
+        h.Spells.MinorHealSpell = "mihe";
+        h.Spells.MajorHealSpell = "mahe";
+        h.Health.MinorHealCombatTrigger = 80;
+        h.Health.MajorHealCombatTrigger = 70;
+
+        h.SetPrompt(hp: 40, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);  // 40 <= 70 → major band
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mahe", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void MinorHeal_FallsBackInMajorBand_WhenMajorUnaffordable()
+    {
+        // In the major band but can't pay for the major heal → minor still fires
+        // (the yield is affordability-gated), rather than healing nothing.
+        using Harness h = new();
+        h.Spells.MinorHealSpell = "mihe";
+        h.Spells.MajorHealSpell = "mahe";
+        h.Health.MinorHealCombatTrigger = 80;
+        h.Health.MajorHealCombatTrigger = 70;
+        h.ManaCosts["mahe"] = 60;   // major costs more than the pool below
+        h.ManaCosts["mihe"] = 10;
+
+        h.SetPrompt(hp: 40, maxHp: 100, ma: 30, maxMa: 100, inCombat: true);  // ma 30 < 60 → can't afford major
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mihe", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void RoutineCombat_NoCast_WhenAboveThreshold()
     {
         using Harness h = new();
@@ -288,23 +325,23 @@ public sealed class CastingDirectorTests
     // ----- tier interaction -------------------------------------------
 
     [Fact]
-    public void DefaultPriority_MinorBeatsMajor_WhenBothCandidates()
+    public void MajorTakesPrecedence_InMajorBand_EvenAtDefaultPriority()
     {
-        // Default priority: Minor self heal=3, Major self heal=4.
-        // HP=30% triggers BOTH (Minor threshold 70%, Major threshold
-        // 40%). Lower priority number wins → Minor goes first. If
-        // the user wants Major to win at life-threat, they re-order
-        // priorities on the Spells tab.
+        // Default priority walks Minor (3) before Major (4), but severity wins:
+        // once HP is in the major band the minor slot YIELDS to major, so major
+        // fires without the user having to re-order priorities (report
+        // paradigm-20260819-121247). HP=30% is below BOTH triggers (Minor 70%,
+        // Major 40%).
         using Harness h = new();
         h.Spells.MajorHealSpell = "fullheal";
         h.Spells.MinorHealSpell = "heal";
         h.Health.MajorHealCombatTrigger = 40;
         h.Health.MinorHealCombatTrigger = 70;
 
-        h.SetPrompt(hp: 30, maxHp: 100, inCombat: true);
+        h.SetPrompt(hp: 30, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);
 
         Assert.Single(h.CastsSent);
-        Assert.Equal("heal", h.CastsSent[0]);
+        Assert.Equal("fullheal", h.CastsSent[0]);
     }
 
     [Fact]
