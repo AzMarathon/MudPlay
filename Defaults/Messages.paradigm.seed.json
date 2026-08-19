@@ -21210,5 +21210,8301 @@
         "Number": 5830
       }
     ]
+  },
+  {
+    "Id": "763a6f1cc8a530dd",
+    "Name": "dissolves",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} reaches out and {spellname} your weapon!",
+    "WitnessMessage": "The {source} reaches out and {spellname} {target}'s weapon!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 86
+      }
+    ]
+  },
+  {
+    "Id": "bf353a3c508b915b",
+    "Name": "explode",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "{source} explodes violently!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 244
+      }
+    ]
+  },
+  {
+    "Id": "34f2fee68a0b3957",
+    "Name": "judgement of doom",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The baleful toll of a mammoth bell sounds, far off in the distance!",
+    "TargetMessage": "The baleful toll of a mammoth bell sounds, far off in the distance!",
+    "WitnessMessage": "The baleful toll of a mammoth bell sounds, far off in the distance!",
+    "AppliedMessage": "You have been Judged, your doom is upon you",
+    "AppliedEndsWith": "Your judgement of doom has been lifted",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 311
+      }
+    ]
+  },
+  {
+    "Id": "fa628d41c6501226",
+    "Name": "Eye of Magnus",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A bright glowing flame appears and hovers over {target}.",
+    "TargetMessage": "A bright glowing flame appears and hovers over your head.",
+    "WitnessMessage": "A bright glowing flame appears and hovers over {target}.",
+    "AppliedMessage": "The Eye of Magnus watches over you",
+    "AppliedEndsWith": "The glowing eye floating above your head vanishes in a puff of smoke",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 312
+      }
+    ]
+  },
+  {
+    "Id": "67a49a4cc361516b",
+    "Name": "bigheal",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on your party, healing {damage} damage!",
+    "TargetMessage": "{source} casts {spellname} on you, healing {damage} damage!",
+    "WitnessMessage": "{source} casts {spellname} on the room!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 313
+      }
+    ]
+  },
+  {
+    "Id": "dd46fa75ff5b1aab",
+    "Name": "vacuum",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You trip on a wire, and a shower of large rocks pound down on you!",
+    "TargetMessage": "{source} trips on a wire, and a shower of large rocks pounds down!",
+    "WitnessMessage": "{source} arrives, looking dazed and battered!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 334
+      }
+    ]
+  },
+  {
+    "Id": "aada9f5282de8f25",
+    "Name": "fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You land with a heavy thump!",
+    "TargetMessage": "You land with a heavy thump!",
+    "WitnessMessage": "{source} falls from the rooftop above, and lands with a heavy thump!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 335
+      }
+    ]
+  },
+  {
+    "Id": "be8f270ef0359e8a",
+    "Name": "fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You land with a heavy thump!",
+    "TargetMessage": "You land with a heavy thump!",
+    "WitnessMessage": "{source} falls from the rooftop above, and lands with a heavy thump!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 336
+      }
+    ]
+  },
+  {
+    "Id": "bfa53da0a31fb48a",
+    "Name": "fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You land with a heavy thump!",
+    "TargetMessage": "You land with a heavy thump!",
+    "WitnessMessage": "{source} falls from the rooftop above, and lands with a heavy thump!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 338
+      }
+    ]
+  },
+  {
+    "Id": "949cf8dd082237be",
+    "Name": "beat up",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You wake up in the slums, dazed and bruised!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 352
+      }
+    ]
+  },
+  {
+    "Id": "8b0fbdcc07662f3d",
+    "Name": "jet of frost",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 401
+      }
+    ]
+  },
+  {
+    "Id": "ca4900cb609a19d9",
+    "Name": "cone of flame",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You fire a {spellname} at {target} for {damage} damage!",
+    "TargetMessage": "{source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "{source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 426
+      }
+    ]
+  },
+  {
+    "Id": "d97fbdfc91ea6fa0",
+    "Name": "fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You land with a heavy thump!",
+    "TargetMessage": "You land with a heavy thump!",
+    "WitnessMessage": "{source} falls from the rooftop above, and lands with a heavy thump!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 436
+      }
+    ]
+  },
+  {
+    "Id": "bd9b0dda85cac3f2",
+    "Name": "card-wizard",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 490
+      }
+    ]
+  },
+  {
+    "Id": "f3b6a19a8fb43d69",
+    "Name": "card-priest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 491
+      }
+    ]
+  },
+  {
+    "Id": "090e8bc4bcd7a610",
+    "Name": "card-knight",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 492
+      }
+    ]
+  },
+  {
+    "Id": "8dc430314cce52dd",
+    "Name": "card-chariot",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 493
+      }
+    ]
+  },
+  {
+    "Id": "aaeafe61a42d329c",
+    "Name": "card-grail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 494
+      }
+    ]
+  },
+  {
+    "Id": "9f405ae0268f5609",
+    "Name": "card-sun",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 495
+      }
+    ]
+  },
+  {
+    "Id": "74d28c4db61918c7",
+    "Name": "card-wheel of fortune",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 496
+      }
+    ]
+  },
+  {
+    "Id": "d4991ef8a029062f",
+    "Name": "card-angel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 497
+      }
+    ]
+  },
+  {
+    "Id": "963312527e965f3f",
+    "Name": "card-death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 498
+      }
+    ]
+  },
+  {
+    "Id": "d39607b165003442",
+    "Name": "card-fool",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 499
+      }
+    ]
+  },
+  {
+    "Id": "9d58b70b0547c952",
+    "Name": "card-swamp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 500
+      }
+    ]
+  },
+  {
+    "Id": "9100f4350c43425f",
+    "Name": "card-demon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 501
+      }
+    ]
+  },
+  {
+    "Id": "854afb9c40b62ec9",
+    "Name": "card-void",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 502
+      }
+    ]
+  },
+  {
+    "Id": "f864ba1f8c9db412",
+    "Name": "giant troll death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} regenerates, and gets back up!",
+    "WitnessMessage": "The {source} regenerates, and gets back up!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 508
+      }
+    ]
+  },
+  {
+    "Id": "cc280352c542bfd2",
+    "Name": "sucks the life",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} {spellname} out of the room for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 520
+      }
+    ]
+  },
+  {
+    "Id": "fec8d0b32bc63e2f",
+    "Name": "exit jail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are let out of jail by the guards, and released in the slums!",
+    "TargetMessage": "You are let out of jail by the guards, and released in the slums!",
+    "WitnessMessage": "{source} is dragged out of jail by the guards!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 585
+      }
+    ]
+  },
+  {
+    "Id": "c2394cc819e828d3",
+    "Name": "summon zombie cat",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} makes an arcane gesture!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 592
+      }
+    ]
+  },
+  {
+    "Id": "02580050be7e7fc6",
+    "Name": "redberry poison trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A needle springs out and stabs your finger!",
+    "TargetMessage": "",
+    "WitnessMessage": "A needle springs out and stabs {source}'s finger!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 627
+      }
+    ]
+  },
+  {
+    "Id": "ad2801320492a80d",
+    "Name": "redberry poison trap",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Poison burns through your veins!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 628
+      }
+    ]
+  },
+  {
+    "Id": "9cd90b08e711eaa6",
+    "Name": "venom trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A needle springs out and stabs your finger!",
+    "TargetMessage": "",
+    "WitnessMessage": "A needle springs out and stabs {source}'s finger!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 629
+      }
+    ]
+  },
+  {
+    "Id": "65ae664dbd90defd",
+    "Name": "venom trap",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Poison burns through your veins!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 630
+      }
+    ]
+  },
+  {
+    "Id": "81b3da16bfe16ac7",
+    "Name": "venom save",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You resist the poison, and take only partial damage!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 631
+      }
+    ]
+  },
+  {
+    "Id": "8ad22de1e801f8ee",
+    "Name": "mistweed trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A needle springs out and stabs your finger!",
+    "TargetMessage": "",
+    "WitnessMessage": "A needle springs out and stabs {source}'s finger!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 632
+      }
+    ]
+  },
+  {
+    "Id": "3cd964b8bddbcfd5",
+    "Name": "mistweed trap",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Poison flows through your veins, and you pass out!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} falls to the ground, unconscious.",
+    "AppliedMessage": "You are unconscious",
+    "AppliedEndsWith": "You awaken, groggy and confused from the poison",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 633
+      }
+    ]
+  },
+  {
+    "Id": "f29ca0ef6b83c36b",
+    "Name": "mistweed save",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Poison flows through your veins!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are drowsy and disoriented",
+    "AppliedEndsWith": "You feel better",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 634
+      }
+    ]
+  },
+  {
+    "Id": "d49c878837e04786",
+    "Name": "nightshade poison trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A needle springs out and stabs your finger!",
+    "TargetMessage": "",
+    "WitnessMessage": "A needle springs out and stabs {source}'s finger!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 635
+      }
+    ]
+  },
+  {
+    "Id": "9e3bdc275d9565ac",
+    "Name": "nightshade trap",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Poison burns through your veins!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 636
+      }
+    ]
+  },
+  {
+    "Id": "798c4ab35ada55c5",
+    "Name": "nightshade poison save",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You resist the poison, and take only partial damage!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 637
+      }
+    ]
+  },
+  {
+    "Id": "8e665cc61ad38fbb",
+    "Name": "crushing blocks",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A heavy stone block falls and crushes you!",
+    "TargetMessage": "",
+    "WitnessMessage": "A heavy stone block falls and crushes {source}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 698
+      }
+    ]
+  },
+  {
+    "Id": "3535e211c4672698",
+    "Name": "sunstone bracelet",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are surrounded by an orange glow",
+    "AppliedEndsWith": "The orange glow surrounding you fades",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 745
+      }
+    ]
+  },
+  {
+    "Id": "3b3d590c1e8054a2",
+    "Name": "increase HP",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}!",
+    "TargetMessage": "{source} casts {spellname} upon you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 746
+      }
+    ]
+  },
+  {
+    "Id": "544a9147f80e5ae7",
+    "Name": "allow healing",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}!",
+    "TargetMessage": "{source} casts {spellname} upon you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 747
+      }
+    ]
+  },
+  {
+    "Id": "180d55c5b6a1b5fc",
+    "Name": "explosion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "hurl your shuriken and strike",
+    "TargetMessage": "hurls a shuriken and strikes",
+    "WitnessMessage": "hurls a shuriken and strikes",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 752
+      }
+    ]
+  },
+  {
+    "Id": "f8451e494072f1d9",
+    "Name": "massive boulder",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You launch a {spellname} at {target} for {damage} damage!",
+    "TargetMessage": "The {source} launches a {spellname} that smashes you for {damage} damage!",
+    "WitnessMessage": "The {source} launches a {spellname} that smashes {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 765
+      }
+    ]
+  },
+  {
+    "Id": "2d0155aab3c4fabe",
+    "Name": "petrification",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "Your body begins to get heavy and solidify!",
+    "WitnessMessage": "{source} is quickly turned into a stone statue!",
+    "AppliedMessage": "You are transformed into stone",
+    "AppliedEndsWith": "Your body returns to its normal state",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 769
+      }
+    ]
+  },
+  {
+    "Id": "c89f341f9ec7d4c3",
+    "Name": "burning maw",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} uses its {spellname} and grabs you for {damage} damage!",
+    "WitnessMessage": "The {source} uses its {spellname} and grabs {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 783
+      }
+    ]
+  },
+  {
+    "Id": "983f0a205ffef82c",
+    "Name": "stormcrown thunderstun",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Your foes are dazed by the blast!",
+    "TargetMessage": "You are dazed by the blast!",
+    "WitnessMessage": "A shockwave rumbles through the room!",
+    "AppliedMessage": "You are stunned",
+    "AppliedEndsWith": "You are no longer stunned",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 786
+      }
+    ]
+  },
+  {
+    "Id": "d03c10cd68109709",
+    "Name": "misc",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Icy hail pelts the room, freezing your foe's bones!",
+    "TargetMessage": "Icy hail pelts you, freezing your bones!",
+    "WitnessMessage": "Icy hail blows through the room!",
+    "AppliedMessage": "You feel oblivious",
+    "AppliedEndsWith": "Your awareness returns to normal",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 813
+      }
+    ]
+  },
+  {
+    "Id": "a06957b3d323f9e4",
+    "Name": "fire portal",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Dark flame sears you!",
+    "TargetMessage": "Dark flame sears you for {damage} damage!",
+    "WitnessMessage": "Dark flame sears {source} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 834
+      }
+    ]
+  },
+  {
+    "Id": "f248e6b66ac99f48",
+    "Name": "entangle",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} casts {spellname} on you!",
+    "WitnessMessage": "The {source} casts {spellname} on {target}!",
+    "AppliedMessage": "Your feet are incased in coral",
+    "AppliedEndsWith": "You can move again",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 837
+      }
+    ]
+  },
+  {
+    "Id": "1faa4ed0372a806c",
+    "Name": "chain lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Blue lightning streaks among your foes for {damage} damage!",
+    "TargetMessage": "Blue lightning streaks out and sears you for {damage} damage!",
+    "WitnessMessage": "Blue lightning streaks out and sears {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 856
+      }
+    ]
+  },
+  {
+    "Id": "f5139497b4a57e75",
+    "Name": "form of the dragon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You invoke the the {spellname}",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} invokes the {spellname}!",
+    "AppliedMessage": "The spirit of the dragon inhabits your body",
+    "AppliedEndsWith": "The spirit of the dragon has left your body",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 858
+      }
+    ]
+  },
+  {
+    "Id": "6338f200b149f5aa",
+    "Name": "bite",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The fangblade bites you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 883
+      }
+    ]
+  },
+  {
+    "Id": "80729c53471e0096",
+    "Name": "drain spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The fangblade draws life from you!",
+    "TargetMessage": "You feel rejuvenated!",
+    "WitnessMessage": "{source} looks pale for a moment!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 896
+      }
+    ]
+  },
+  {
+    "Id": "cb24275822267f9f",
+    "Name": "freeze spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The freezing touch chills your bones!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 901
+      }
+    ]
+  },
+  {
+    "Id": "d3af8157037fcb38",
+    "Name": "lady dark temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "You can sense the faint outline of a portal appear in the room.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 916
+      }
+    ]
+  },
+  {
+    "Id": "c9ef5d86b5ccfa01",
+    "Name": "exit jail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are let out of jail by the guards, and released in the slums!",
+    "TargetMessage": "You are let out of jail by the guards, and released in the slums!",
+    "WitnessMessage": "{source} is dragged out of jail by the guards!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 929
+      }
+    ]
+  },
+  {
+    "Id": "d206f1a5cecfa51f",
+    "Name": "planewalker wail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} lets out a soulless wail!",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are deathly afraid",
+    "AppliedEndsWith": "You don't feel quite so afraid anymore",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 932
+      }
+    ]
+  },
+  {
+    "Id": "35b94bd06b6e29b0",
+    "Name": "sysop jail tele",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Battered and beaten, you are knocked unconscious and dragged off to jail!",
+    "TargetMessage": "Battered and beaten, you are knocked unconscious and dragged off to jail!",
+    "WitnessMessage": "{source} is knocked unconscious and dragged off to jail!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 936
+      }
+    ]
+  },
+  {
+    "Id": "4db55b8f79e42d8b",
+    "Name": "paralysis",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "Your legs are paralyzed",
+    "AppliedEndsWith": "You can move again",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 939
+      }
+    ]
+  },
+  {
+    "Id": "7b3ff263285fa6dc",
+    "Name": "fear",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You are struck with {source}!",
+    "WitnessMessage": "{source} looks deathly afraid!",
+    "AppliedMessage": "You are afraid",
+    "AppliedEndsWith": "The effects of fear wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 940
+      }
+    ]
+  },
+  {
+    "Id": "18855c1bbe6fed31",
+    "Name": "acid burns",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Acid sears {target} for {damage} damage!",
+    "TargetMessage": "Acid sears you for {damage} damage!",
+    "WitnessMessage": "Acid sears {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 945
+      }
+    ]
+  },
+  {
+    "Id": "6c43ab1fa1fc0e41",
+    "Name": "burrows",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "Something in the swarm burrows into you!",
+    "WitnessMessage": "",
+    "AppliedMessage": "Something is burrowing into you",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 946
+      }
+    ]
+  },
+  {
+    "Id": "19513209e413641b",
+    "Name": "burrows deeper",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You don't feel so good.",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are on the doorstep of death",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 947
+      }
+    ]
+  },
+  {
+    "Id": "0aa66780aba8569f",
+    "Name": "death's door",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Something has stopped your heart.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} flinches in pain and drops dead.",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 948
+      }
+    ]
+  },
+  {
+    "Id": "c74346078db16eba",
+    "Name": "fear",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The beholder gazes at you with an eyestalk!",
+    "WitnessMessage": "The beholder gazes at {source} with an eyestalk!",
+    "AppliedMessage": "You are afraid",
+    "AppliedEndsWith": "The effects of fear wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 957
+      }
+    ]
+  },
+  {
+    "Id": "baac8e503e421c5c",
+    "Name": "necro drain",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are draining %'s life away!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You feel your lifeforce begin to drain",
+    "AppliedEndsWith": "Your lifeforce is back to normal",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 963
+      }
+    ]
+  },
+  {
+    "Id": "af7eaf04619e7d41",
+    "Name": "card-wizard",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 965
+      }
+    ]
+  },
+  {
+    "Id": "076d9628aa8e22d2",
+    "Name": "card-priest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 966
+      }
+    ]
+  },
+  {
+    "Id": "803a2ee56d5aee7a",
+    "Name": "card-knight",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 967
+      }
+    ]
+  },
+  {
+    "Id": "d5cbe3bc38c14a8a",
+    "Name": "card-chariot",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 968
+      }
+    ]
+  },
+  {
+    "Id": "7adcc84ad7003b6e",
+    "Name": "card-grail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 969
+      }
+    ]
+  },
+  {
+    "Id": "a526030e4f5aa61b",
+    "Name": "card-sun",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 970
+      }
+    ]
+  },
+  {
+    "Id": "9086aeb16fdd2dae",
+    "Name": "card-wheel of fortune",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 971
+      }
+    ]
+  },
+  {
+    "Id": "991d06b40b8e804d",
+    "Name": "card-angel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 972
+      }
+    ]
+  },
+  {
+    "Id": "612bd7b6601bace4",
+    "Name": "card-death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 973
+      }
+    ]
+  },
+  {
+    "Id": "f2588ddbe91c1816",
+    "Name": "card-fool",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 974
+      }
+    ]
+  },
+  {
+    "Id": "0d9cb8af92869130",
+    "Name": "card-swamp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 975
+      }
+    ]
+  },
+  {
+    "Id": "36c98e3a84a399aa",
+    "Name": "card-void",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 976
+      }
+    ]
+  },
+  {
+    "Id": "f5b74c823695cfa7",
+    "Name": "card-demon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "The gaze of luck is upon you",
+    "AppliedEndsWith": "The gaze of luck is no longer upon you",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 983
+      }
+    ]
+  },
+  {
+    "Id": "84a332578ec02fe3",
+    "Name": "dark temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The freshly dead corpse becomes a wolfman!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 999
+      }
+    ]
+  },
+  {
+    "Id": "e243f1eac3ef8395",
+    "Name": "bolt of lightning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A bolt of lightning from the heavens strikes {target} for {damage} damage!",
+    "TargetMessage": "A bolt of lightning from the heavens strikes you for {damage} damage!",
+    "WitnessMessage": "A bolt of lightning from the heavens strikes {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1001
+      }
+    ]
+  },
+  {
+    "Id": "6cc95602d94d4293",
+    "Name": "sunlight",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A bright ray of sunlight appears and scorches {target} for {damage} damage!",
+    "TargetMessage": "A bright ray of sunlight appears and scorches you for {damage} damage!",
+    "WitnessMessage": "A bright ray of sunlight appears and scorches {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1002
+      }
+    ]
+  },
+  {
+    "Id": "960064d444782551",
+    "Name": "unholy light",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "An {spellname} shoots out and rots {target} for {damage} damage!",
+    "TargetMessage": "An {spellname} shoots out and rots you for {damage} damage!",
+    "WitnessMessage": "An {spellname} shoots out and rots {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1010
+      }
+    ]
+  },
+  {
+    "Id": "8de85069d7d6c1ae",
+    "Name": "freedom",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}!",
+    "TargetMessage": "{source} casts {spellname} upon you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1023
+      }
+    ]
+  },
+  {
+    "Id": "2bc8a4a126727b40",
+    "Name": "stinky cloud",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You feel nauseous",
+    "AppliedEndsWith": "You feel less sick",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1035
+      }
+    ]
+  },
+  {
+    "Id": "9141b2d04d62296d",
+    "Name": "restoration",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{target}'s body is returned to full health!",
+    "TargetMessage": "Your body is returned to full health!",
+    "WitnessMessage": "{target}'s body glows with a white light!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1039
+      }
+    ]
+  },
+  {
+    "Id": "791547d87e7c28a5",
+    "Name": "green beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1068
+      }
+    ]
+  },
+  {
+    "Id": "447e1454b8fc9356",
+    "Name": "green wave",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} sweeps through the room!",
+    "TargetMessage": "{source}'s {spellname} sweeps through you!",
+    "WitnessMessage": "{source}'s {spellname} sweeps through the room!",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1073
+      }
+    ]
+  },
+  {
+    "Id": "ba375831f81eb5b9",
+    "Name": "library summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You faint from the loss of blood, your body feels strange...",
+    "TargetMessage": "From the fresh corpse arises a vampire!",
+    "WitnessMessage": "From the fresh corpse arises a vampire!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1083
+      }
+    ]
+  },
+  {
+    "Id": "ba38449dad657df4",
+    "Name": "sea teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You struggle in the water, straining to keep afloat!",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1088
+      }
+    ]
+  },
+  {
+    "Id": "9273641a9a1baa99",
+    "Name": "ship teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You suddenly find your self aboard an ancient sea vessel!",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} just vanished with no trace!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1089
+      }
+    ]
+  },
+  {
+    "Id": "2b2cc95d04d263bd",
+    "Name": "gypsy combo",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You make a powerful incantation!",
+    "TargetMessage": "{source} makes a powerful incantation!",
+    "WitnessMessage": "{source} makes a powerful incantation!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1100
+      }
+    ]
+  },
+  {
+    "Id": "bc68355b65e2efa1",
+    "Name": "strut",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You strut your stuff with your hot pants!",
+    "TargetMessage": "{source} struts their stuff with their hot pants!",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are mesmerized",
+    "AppliedEndsWith": "The effects of the hot pants wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1109
+      }
+    ]
+  },
+  {
+    "Id": "54c140cc291f07d8",
+    "Name": "leprosy",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You writhe in agony as your flesh erupts and splits open!",
+    "WitnessMessage": "{source} writhes in agony and is covered in festering wounds!",
+    "AppliedMessage": "You are covered in festering wounds",
+    "AppliedEndsWith": "The festering wounds covering your body close abruptly",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1134
+      }
+    ]
+  },
+  {
+    "Id": "d5b1e617566a4bf3",
+    "Name": "black explosion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The potion suddenly explodes, burning everyone in the room!",
+    "TargetMessage": "",
+    "WitnessMessage": "A sudden explosion rocks the room, burning you with its fire!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1143
+      }
+    ]
+  },
+  {
+    "Id": "92efd12286015130",
+    "Name": "rainbow1",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "You become covered in wretched boils!",
+    "WitnessMessage": "{source} is covered in wretched boils!",
+    "AppliedMessage": "Boils fester all over your body",
+    "AppliedEndsWith": "The boils vanish from your body",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1162
+      }
+    ]
+  },
+  {
+    "Id": "b9328dbe9e21f48c",
+    "Name": "rainbow2",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You feel dizzy and weak",
+    "AppliedEndsWith": "You are no longer dizzy and weak",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1163
+      }
+    ]
+  },
+  {
+    "Id": "a0d6f9c63922e9fa",
+    "Name": "rainbow3",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A healing warmth passes through you!",
+    "TargetMessage": "",
+    "WitnessMessage": "A warm glow appears around {source}, then fades!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1164
+      }
+    ]
+  },
+  {
+    "Id": "c53781afda4f560c",
+    "Name": "cloud of poison gas",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} breathes a {spellname} on you for {damage} damage!",
+    "WitnessMessage": "The {source} breathes a {spellname} on {target} for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1172
+      }
+    ]
+  },
+  {
+    "Id": "2f56405e28cc9001",
+    "Name": "destructo smash",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A shockwave ripples through the room for {damage} damage!",
+    "TargetMessage": "A shockwave strikes you for {damage} damage!",
+    "WitnessMessage": "A shockwave ripples through the room for {damage} damage!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1173
+      }
+    ]
+  },
+  {
+    "Id": "b266524730207b25",
+    "Name": "bloodstone bracers",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A magical blast erupts, dazing your foes!",
+    "TargetMessage": "A magical blast erupts, dazing you!",
+    "WitnessMessage": "A magical blast erupts, dazing the room!",
+    "AppliedMessage": "You are stunned",
+    "AppliedEndsWith": "You are no longer stunned",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1174
+      }
+    ]
+  },
+  {
+    "Id": "5e5d1144fca004f3",
+    "Name": "fear1",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are afraid",
+    "AppliedEndsWith": "The effects of fear wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1178
+      }
+    ]
+  },
+  {
+    "Id": "bde2908db6f432d6",
+    "Name": "fear2",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are too scared to flee",
+    "AppliedEndsWith": "You feel braver",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1179
+      }
+    ]
+  },
+  {
+    "Id": "aaf5617cd5d1ee5b",
+    "Name": "fear3",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are deathly afraid",
+    "AppliedEndsWith": "You don't feel quite so afraid anymore",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1180
+      }
+    ]
+  },
+  {
+    "Id": "3b6653e594d30a73",
+    "Name": "fire explosion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The body parts suddenly combust in a furious explosion!",
+    "TargetMessage": "The body parts suddenly combust in a furious explosion!",
+    "WitnessMessage": "The body parts suddenly combust in a furious explosion!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1183
+      }
+    ]
+  },
+  {
+    "Id": "00da61433ee59a31",
+    "Name": "fire explosion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The body parts suddenly combust in a furious explosion!",
+    "TargetMessage": "The body parts suddenly combust in a furious explosion!",
+    "WitnessMessage": "The body parts suddenly combust in a furious explosion!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1184
+      }
+    ]
+  },
+  {
+    "Id": "0966d0a3a30b8635",
+    "Name": "green beam",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A {spellname} hits {target}",
+    "TargetMessage": "{source}'s {spellname} hits you!",
+    "WitnessMessage": "{source}'s {spellname} hits {target}!",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1193
+      }
+    ]
+  },
+  {
+    "Id": "87bbd08094169e67",
+    "Name": "fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You land with a heavy thump!",
+    "TargetMessage": "You land with a heavy thump!",
+    "WitnessMessage": "{source} falls from the rooftop above, and lands with a heavy thump!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1207
+      }
+    ]
+  },
+  {
+    "Id": "be05121bbfe75ecb",
+    "Name": "gnaj explosion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "{source} explodes violently!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1212
+      }
+    ]
+  },
+  {
+    "Id": "c7cfbff9db849a72",
+    "Name": "vanishing jumpkick",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{spellname} causes the room to explode around him!",
+    "TargetMessage": "{spellname} causes the room to explode around him!",
+    "WitnessMessage": "{spellname} causes the room to explode around him!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1221
+      }
+    ]
+  },
+  {
+    "Id": "2f378b3f8afd3fd7",
+    "Name": "ether death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{spellname} causes the room to explode around him!",
+    "TargetMessage": "{spellname} causes the room to explode around him!",
+    "WitnessMessage": "{spellname} causes the room to explode around him!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1222
+      }
+    ]
+  },
+  {
+    "Id": "725ebd039df3f5ce",
+    "Name": "fear",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are afraid",
+    "AppliedEndsWith": "The effects of fear wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1230
+      }
+    ]
+  },
+  {
+    "Id": "3e5ff4c5eb347612",
+    "Name": "zombie bomb",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} erupts in a huge explosion!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1243
+      }
+    ]
+  },
+  {
+    "Id": "0ee4739751dd60c7",
+    "Name": "bloodstone bracers",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A magical blast erupts, dazing your foes!",
+    "TargetMessage": "A magical blast erupts, dazing you!",
+    "WitnessMessage": "A magical blast erupts, dazing the room!",
+    "AppliedMessage": "You are stunned",
+    "AppliedEndsWith": "You are no longer stunned",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1248
+      }
+    ]
+  },
+  {
+    "Id": "fa2a983c156b3feb",
+    "Name": "dead heal",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You cast {spellname} on {target}, healing {damage} damage!",
+    "TargetMessage": "{source} casts {spellname} on you!",
+    "WitnessMessage": "{source} casts {spellname} on {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1252
+      }
+    ]
+  },
+  {
+    "Id": "af9d95476225f212",
+    "Name": "dirty pool",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The water soothes your parched throat.",
+    "TargetMessage": "",
+    "WitnessMessage": "{source} smiles and looks soothed!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1261
+      }
+    ]
+  },
+  {
+    "Id": "7c3611e7215e4113",
+    "Name": "bloodstone bracers",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "A magical blast erupts, dazing your foes!",
+    "TargetMessage": "A magical blast erupts, dazing you!",
+    "WitnessMessage": "A magical blast erupts, dazing the room!",
+    "AppliedMessage": "You are stunned",
+    "AppliedEndsWith": "You are no longer stunned",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1266
+      }
+    ]
+  },
+  {
+    "Id": "d70e73b8e090f640",
+    "Name": "a cloud of poison gas",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} floods the room with {spellname} for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1304
+      }
+    ]
+  },
+  {
+    "Id": "fd4790961e8e00db",
+    "Name": "voodoo doll",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You glare at {target} as you invoke your voodoo doll!",
+    "TargetMessage": "{source} glares at you as they invoke their voodoo doll!",
+    "WitnessMessage": "{source} glares at {target} as they invoke their voodoo doll!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1313
+      }
+    ]
+  },
+  {
+    "Id": "a27457a552b50c2c",
+    "Name": "foot quake",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "An earthquake rocks you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1318
+      }
+    ]
+  },
+  {
+    "Id": "5f853bf322e6ba20",
+    "Name": "hold immune",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Uncontrollable energy fills {target}!",
+    "TargetMessage": "Uncontrollable energy fills your being!",
+    "WitnessMessage": "Uncontrollable energy fills {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1322
+      }
+    ]
+  },
+  {
+    "Id": "fe08aee0e3e3b655",
+    "Name": "fear immune",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Uncontrollable energy fills {target}!",
+    "TargetMessage": "Uncontrollable energy fills your being!",
+    "WitnessMessage": "Uncontrollable energy fills {target}!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1323
+      }
+    ]
+  },
+  {
+    "Id": "2bba686ecf42d9ba",
+    "Name": "sdfsdfsdfsdfsdf",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "Your starlight spell fades away.",
+    "TargetMessage": "",
+    "WitnessMessage": "You are surrounded by a shimmering light!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1342
+      }
+    ]
+  },
+  {
+    "Id": "144706a8e647d1b9",
+    "Name": "wretched boils",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "Boils fester all over your body",
+    "AppliedEndsWith": "The boils vanish from your body",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1355
+      }
+    ]
+  },
+  {
+    "Id": "822d7cc4beb60108",
+    "Name": "petrification",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "Your body begins to get heavy and solidify!",
+    "WitnessMessage": "{source} is quickly turned into a stone statue!",
+    "AppliedMessage": "You are transformed into stone",
+    "AppliedEndsWith": "Your body returns to its normal state",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1364
+      }
+    ]
+  },
+  {
+    "Id": "3648ca76c4fbeb51",
+    "Name": "ray of petrification",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You fire a {spellname} at {target} for {damage} damage!",
+    "TargetMessage": "{source} fires a {spellname} at you for {damage} damage!",
+    "WitnessMessage": "{source} fires a {spellname} at {target} for {damage} damage!",
+    "AppliedMessage": "You are transformed into stone",
+    "AppliedEndsWith": "Your body returns to its normal state",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1373
+      }
+    ]
+  },
+  {
+    "Id": "7127696659b503eb",
+    "Name": "stomach bile",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "Stomach bile burns you for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5202
+      }
+    ]
+  },
+  {
+    "Id": "a2d75e3c51f66bcb",
+    "Name": "shriek",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} rears its head, and shrieks in fury!",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are confused",
+    "AppliedEndsWith": "The effects of confusion wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5400
+      }
+    ]
+  },
+  {
+    "Id": "c858ea39e2f9f03a",
+    "Name": "exit jail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "You are let out of jail by the guards, and released in the slums!",
+    "TargetMessage": "You are let out of jail by the guards, and released in the slums!",
+    "WitnessMessage": "{source} is dragged out of jail by the guards!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5433
+      }
+    ]
+  },
+  {
+    "Id": "a11d9e4bf80fdd59",
+    "Name": "fire explosion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "The body parts suddenly combust in a furious explosion!",
+    "TargetMessage": "The body parts suddenly combust in a furious explosion!",
+    "WitnessMessage": "The body parts suddenly combust in a furious explosion!",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5612
+      }
+    ]
+  },
+  {
+    "Id": "9c11835e60781fae",
+    "Name": "drains",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} surrounds everyone and {spellname} their life for {damage} damage!",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5768
+      }
+    ]
+  },
+  {
+    "Id": "3ee9b1e086a2688b",
+    "Name": "hydra head create",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 90
+      }
+    ]
+  },
+  {
+    "Id": "580f2e307569fd55",
+    "Name": "free",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 164
+      }
+    ]
+  },
+  {
+    "Id": "9a671c491e749fde",
+    "Name": "raptor summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 198
+      }
+    ]
+  },
+  {
+    "Id": "0687d152b46d6140",
+    "Name": "remove engulfs",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 235
+      }
+    ]
+  },
+  {
+    "Id": "45227502fb6a8d67",
+    "Name": "summon twins",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 280
+      }
+    ]
+  },
+  {
+    "Id": "8439910c19fecf5f",
+    "Name": "negate magic",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 310
+      }
+    ]
+  },
+  {
+    "Id": "c388f19a2736e49d",
+    "Name": "medium divides",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 382
+      }
+    ]
+  },
+  {
+    "Id": "918610d68a0e4ee9",
+    "Name": "large divides",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 383
+      }
+    ]
+  },
+  {
+    "Id": "c9936fe08834803f",
+    "Name": "mana rgen drain",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 412
+      }
+    ]
+  },
+  {
+    "Id": "f88b9f3269062800",
+    "Name": "elemental fusion",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 415
+      }
+    ]
+  },
+  {
+    "Id": "d175546e69e77b06",
+    "Name": "obsidian talisman teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 434
+      }
+    ]
+  },
+  {
+    "Id": "578a88152f5cb18f",
+    "Name": "sdf",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 438
+      }
+    ]
+  },
+  {
+    "Id": "e3ff64b253b1cdcb",
+    "Name": "summon slaver leader",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 444
+      }
+    ]
+  },
+  {
+    "Id": "fad07502c68b18f5",
+    "Name": "portal teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 454
+      }
+    ]
+  },
+  {
+    "Id": "6c675b0aa92113a2",
+    "Name": "wounded",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 455
+      }
+    ]
+  },
+  {
+    "Id": "1f99f84ecc17ec5d",
+    "Name": "summon weaponmaster",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 456
+      }
+    ]
+  },
+  {
+    "Id": "848dccc7fa1d23a2",
+    "Name": "wooden box",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 460
+      }
+    ]
+  },
+  {
+    "Id": "a825360499e88d51",
+    "Name": "wooden box gems",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 461
+      }
+    ]
+  },
+  {
+    "Id": "9c8488e9977c847e",
+    "Name": "wooden box items",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 462
+      }
+    ]
+  },
+  {
+    "Id": "02aa9b77c84b797a",
+    "Name": "oak chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 463
+      }
+    ]
+  },
+  {
+    "Id": "55e50569e5611813",
+    "Name": "oak chest items",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 464
+      }
+    ]
+  },
+  {
+    "Id": "b8daa600eef0e95a",
+    "Name": "massive wooden chest items",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 465
+      }
+    ]
+  },
+  {
+    "Id": "dddf1fc6d2832d5e",
+    "Name": "massive wooden chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 466
+      }
+    ]
+  },
+  {
+    "Id": "86d538da37292f2f",
+    "Name": "silver box",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 467
+      }
+    ]
+  },
+  {
+    "Id": "0f1e53a4f092a660",
+    "Name": "silver box gems",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 468
+      }
+    ]
+  },
+  {
+    "Id": "93c5473ba048d444",
+    "Name": "silver box items",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 469
+      }
+    ]
+  },
+  {
+    "Id": "3f377b7aaac1dfc7",
+    "Name": "iron-banded chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 470
+      }
+    ]
+  },
+  {
+    "Id": "39759bcafe2dca91",
+    "Name": "darkwood chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 471
+      }
+    ]
+  },
+  {
+    "Id": "394436ca863482e2",
+    "Name": "golden box",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 472
+      }
+    ]
+  },
+  {
+    "Id": "320c8f0c1d13c088",
+    "Name": "golden box gems",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 473
+      }
+    ]
+  },
+  {
+    "Id": "56c2a62e6ce318f0",
+    "Name": "golden box items",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 474
+      }
+    ]
+  },
+  {
+    "Id": "f207af1580ecc87e",
+    "Name": "steel chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 475
+      }
+    ]
+  },
+  {
+    "Id": "c602091c5bd42360",
+    "Name": "silverwood chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 476
+      }
+    ]
+  },
+  {
+    "Id": "187972c5d178599c",
+    "Name": "wild dog pack",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 480
+      }
+    ]
+  },
+  {
+    "Id": "231ee2600d0e421c",
+    "Name": "warlock bandit summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 481
+      }
+    ]
+  },
+  {
+    "Id": "8493a251a48309bd",
+    "Name": "bandit leader summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 482
+      }
+    ]
+  },
+  {
+    "Id": "63348e0d5354b030",
+    "Name": "bodyguard",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 483
+      }
+    ]
+  },
+  {
+    "Id": "26c2319d78213e62",
+    "Name": "inn rest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 484
+      }
+    ]
+  },
+  {
+    "Id": "5ce4f3a948e96cbc",
+    "Name": "summon gypsy",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 489
+      }
+    ]
+  },
+  {
+    "Id": "3261c455b0ec59f2",
+    "Name": "rinaldo",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 503
+      }
+    ]
+  },
+  {
+    "Id": "85a5ceb6b9b82fb8",
+    "Name": "troll regeneration",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 506
+      }
+    ]
+  },
+  {
+    "Id": "da4a957c3a1dfa38",
+    "Name": "holding breath",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 512
+      }
+    ]
+  },
+  {
+    "Id": "e56dbb95d450bbab",
+    "Name": "stop drowning",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 515
+      }
+    ]
+  },
+  {
+    "Id": "e36192fd6c788a3c",
+    "Name": "exit water",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 516
+      }
+    ]
+  },
+  {
+    "Id": "6838fbd3d52aaab5",
+    "Name": "summon kobold",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 517
+      }
+    ]
+  },
+  {
+    "Id": "8c2d3969aeedbad2",
+    "Name": "deadly spores",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 522
+      }
+    ]
+  },
+  {
+    "Id": "c526773b329b183e",
+    "Name": "king's summons",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 530
+      }
+    ]
+  },
+  {
+    "Id": "ff1bd6b5c7c44173",
+    "Name": "dragonfear",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 531
+      }
+    ]
+  },
+  {
+    "Id": "a60fe20d03eef984",
+    "Name": "summon troglodytes",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 534
+      }
+    ]
+  },
+  {
+    "Id": "c32aa18627e23e92",
+    "Name": "sweeps trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 536
+      }
+    ]
+  },
+  {
+    "Id": "f25896a880d74837",
+    "Name": "summon kai master",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 540
+      }
+    ]
+  },
+  {
+    "Id": "8cb95e97d7a7dbb8",
+    "Name": "kai master temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 541
+      }
+    ]
+  },
+  {
+    "Id": "5b277e5af2840923",
+    "Name": "summon brain eater",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 550
+      }
+    ]
+  },
+  {
+    "Id": "fa75129f5014ac17",
+    "Name": "summon shapeshifter",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 551
+      }
+    ]
+  },
+  {
+    "Id": "912f5e05836693c6",
+    "Name": "spectral temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 558
+      }
+    ]
+  },
+  {
+    "Id": "4d847d9598a14c20",
+    "Name": "spectral text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 559
+      }
+    ]
+  },
+  {
+    "Id": "033981ed18532561",
+    "Name": "gulguthra death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 560
+      }
+    ]
+  },
+  {
+    "Id": "b70865f28f230684",
+    "Name": "gulguthra portal",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 561
+      }
+    ]
+  },
+  {
+    "Id": "aa3500bedf175bf1",
+    "Name": "golden chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 564
+      }
+    ]
+  },
+  {
+    "Id": "a2f0c1a0420e3600",
+    "Name": "adamantite chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 565
+      }
+    ]
+  },
+  {
+    "Id": "0d73bcc247fd3b06",
+    "Name": "black iron chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 566
+      }
+    ]
+  },
+  {
+    "Id": "41d6c81dcaa92feb",
+    "Name": "crimson chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 567
+      }
+    ]
+  },
+  {
+    "Id": "c7571958db68860f",
+    "Name": "efreeti temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 568
+      }
+    ]
+  },
+  {
+    "Id": "6a0236ea9eeb3ba2",
+    "Name": "efreeti text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 569
+      }
+    ]
+  },
+  {
+    "Id": "7e845ffb28545c99",
+    "Name": "gemstone temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 570
+      }
+    ]
+  },
+  {
+    "Id": "a5bc63145d6787d9",
+    "Name": "gemstone text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 571
+      }
+    ]
+  },
+  {
+    "Id": "d0548a8d3ea52b4c",
+    "Name": "kai master text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 572
+      }
+    ]
+  },
+  {
+    "Id": "6efc4ed4a82661b2",
+    "Name": "small cloth pouch",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 573
+      }
+    ]
+  },
+  {
+    "Id": "a6ed39723391f7ba",
+    "Name": "kobold death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 574
+      }
+    ]
+  },
+  {
+    "Id": "d64e6d0b9283ffc2",
+    "Name": "kobold text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 575
+      }
+    ]
+  },
+  {
+    "Id": "9cc2c22842500060",
+    "Name": "giant troll temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 576
+      }
+    ]
+  },
+  {
+    "Id": "aa559d06b93bdfb8",
+    "Name": "giant troll text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 577
+      }
+    ]
+  },
+  {
+    "Id": "6fdc27acbd20261e",
+    "Name": "obsidian golem temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 578
+      }
+    ]
+  },
+  {
+    "Id": "57c6f59ebc0d0ea9",
+    "Name": "obsidian golem text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 579
+      }
+    ]
+  },
+  {
+    "Id": "97af00c065606b85",
+    "Name": "jail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 583
+      }
+    ]
+  },
+  {
+    "Id": "0b0ef5242092456d",
+    "Name": "fiend jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 586
+      }
+    ]
+  },
+  {
+    "Id": "ae765d122b452af6",
+    "Name": "asylum",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 596
+      }
+    ]
+  },
+  {
+    "Id": "056ade0e6022cc0d",
+    "Name": "cell north",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 597
+      }
+    ]
+  },
+  {
+    "Id": "f6955b3140006405",
+    "Name": "cell south",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 598
+      }
+    ]
+  },
+  {
+    "Id": "20ffd72798f43349",
+    "Name": "cell east",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 599
+      }
+    ]
+  },
+  {
+    "Id": "d4a7ab20b1a487e6",
+    "Name": "cell west",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 600
+      }
+    ]
+  },
+  {
+    "Id": "f0ca2079b02040f2",
+    "Name": "dread mystic temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 603
+      }
+    ]
+  },
+  {
+    "Id": "aea5b7eef6733737",
+    "Name": "dread mystic text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 604
+      }
+    ]
+  },
+  {
+    "Id": "8cc0ccb4b4eb0670",
+    "Name": "smuggler temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 605
+      }
+    ]
+  },
+  {
+    "Id": "ec1f0f82c92cbd91",
+    "Name": "smuggler text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 606
+      }
+    ]
+  },
+  {
+    "Id": "e8f4625d32982b48",
+    "Name": "potion of levitation",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 607
+      }
+    ]
+  },
+  {
+    "Id": "7bbc1ebae7e9df31",
+    "Name": "white jelly temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 608
+      }
+    ]
+  },
+  {
+    "Id": "ea07174238c45238",
+    "Name": "white jelly text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 609
+      }
+    ]
+  },
+  {
+    "Id": "7a2c00c4a7b5478a",
+    "Name": "ant queen temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 610
+      }
+    ]
+  },
+  {
+    "Id": "705ad826fe7a89e4",
+    "Name": "ant queen text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 611
+      }
+    ]
+  },
+  {
+    "Id": "aadcefa0bccac2f5",
+    "Name": "brigand lord temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 612
+      }
+    ]
+  },
+  {
+    "Id": "b66c9abaf3218df3",
+    "Name": "brigand lord text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 613
+      }
+    ]
+  },
+  {
+    "Id": "e73286fef4c0e593",
+    "Name": "morukai temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 614
+      }
+    ]
+  },
+  {
+    "Id": "be4ab5955a2b0060",
+    "Name": "necromancer temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 615
+      }
+    ]
+  },
+  {
+    "Id": "1488c90cc31ddb25",
+    "Name": "necromancer text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 616
+      }
+    ]
+  },
+  {
+    "Id": "66cdf75f7a553459",
+    "Name": "flesh golem temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 617
+      }
+    ]
+  },
+  {
+    "Id": "70a0c0bcfecb6b3c",
+    "Name": "flesh golem text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 618
+      }
+    ]
+  },
+  {
+    "Id": "90c896c695bd2ca6",
+    "Name": "summon duergar",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 622
+      }
+    ]
+  },
+  {
+    "Id": "8e8c3e8ff825b282",
+    "Name": "house trap trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 640
+      }
+    ]
+  },
+  {
+    "Id": "b47ec65e8210b6d8",
+    "Name": "villain jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 641
+      }
+    ]
+  },
+  {
+    "Id": "8b3cfab46f178f9c",
+    "Name": "criminal jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 642
+      }
+    ]
+  },
+  {
+    "Id": "61c279172a63c05a",
+    "Name": "outlaw jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 643
+      }
+    ]
+  },
+  {
+    "Id": "a0324e096d6305b4",
+    "Name": "seedy+ jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 644
+      }
+    ]
+  },
+  {
+    "Id": "9d6de2a339abb62c",
+    "Name": "portal dispel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 645
+      }
+    ]
+  },
+  {
+    "Id": "ee411fc3d11da7f7",
+    "Name": "flaming spawn",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 646
+      }
+    ]
+  },
+  {
+    "Id": "5933ba589c91c72c",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 647
+      }
+    ]
+  },
+  {
+    "Id": "10c421fc72571367",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 648
+      }
+    ]
+  },
+  {
+    "Id": "b7a13620ebe57e10",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 649
+      }
+    ]
+  },
+  {
+    "Id": "ebc5e745b07cde50",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 650
+      }
+    ]
+  },
+  {
+    "Id": "9d569a229a54f017",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 651
+      }
+    ]
+  },
+  {
+    "Id": "eddd0477355d57e5",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 652
+      }
+    ]
+  },
+  {
+    "Id": "c9cf4a7c8564d0d3",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 653
+      }
+    ]
+  },
+  {
+    "Id": "98ea9de8ad16d3cc",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 654
+      }
+    ]
+  },
+  {
+    "Id": "e2cc881c10235db0",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 655
+      }
+    ]
+  },
+  {
+    "Id": "98d66aa01173d0d3",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 656
+      }
+    ]
+  },
+  {
+    "Id": "35ba9cc86a15e1ad",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 657
+      }
+    ]
+  },
+  {
+    "Id": "ee8118bcbb1178c6",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 658
+      }
+    ]
+  },
+  {
+    "Id": "458408da8e96ccf0",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 659
+      }
+    ]
+  },
+  {
+    "Id": "333c83c1b1933399",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 660
+      }
+    ]
+  },
+  {
+    "Id": "24726fa7e72f7ed7",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 661
+      }
+    ]
+  },
+  {
+    "Id": "74b89a40212b6bba",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 662
+      }
+    ]
+  },
+  {
+    "Id": "2942df8259251156",
+    "Name": "sil_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 663
+      }
+    ]
+  },
+  {
+    "Id": "19056c3cd4130a28",
+    "Name": "jail heal",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 677
+      }
+    ]
+  },
+  {
+    "Id": "37ed2dc642f9bc11",
+    "Name": "darkwood_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 678
+      }
+    ]
+  },
+  {
+    "Id": "33e502c36d898d14",
+    "Name": "darkwood_tel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 679
+      }
+    ]
+  },
+  {
+    "Id": "5e6a69ad073361f1",
+    "Name": "exit muddy water",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 681
+      }
+    ]
+  },
+  {
+    "Id": "dd4786e7d2f11357",
+    "Name": "stop mud drown",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 682
+      }
+    ]
+  },
+  {
+    "Id": "8a4255d721f98e82",
+    "Name": "desert spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 683
+      }
+    ]
+  },
+  {
+    "Id": "e63369649f684981",
+    "Name": "desert spell 2",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 684
+      }
+    ]
+  },
+  {
+    "Id": "217515d77c9021e1",
+    "Name": "pyramid 1 teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 686
+      }
+    ]
+  },
+  {
+    "Id": "a155e32bc2f523f4",
+    "Name": "pyramid 1 exit",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 687
+      }
+    ]
+  },
+  {
+    "Id": "445450a91d2e1e61",
+    "Name": "pyramid 2 random",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 690
+      }
+    ]
+  },
+  {
+    "Id": "5ad4f8cb074df330",
+    "Name": "cleanup",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 691
+      }
+    ]
+  },
+  {
+    "Id": "395c8caf0afced9e",
+    "Name": "cleanup 2",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 692
+      }
+    ]
+  },
+  {
+    "Id": "3884b475b9067020",
+    "Name": "pyramid 3 random",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 699
+      }
+    ]
+  },
+  {
+    "Id": "5f9783ee7877aa78",
+    "Name": "cleanup 3",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 700
+      }
+    ]
+  },
+  {
+    "Id": "2b7b3b7556da87b8",
+    "Name": "pyramid 4 arch pass",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 701
+      }
+    ]
+  },
+  {
+    "Id": "b83f1081dd9b9dab",
+    "Name": "fruit",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 703
+      }
+    ]
+  },
+  {
+    "Id": "4f10420678cfa7ac",
+    "Name": "devour",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 723
+      }
+    ]
+  },
+  {
+    "Id": "feabd1b27dcdbd05",
+    "Name": "spit out temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 725
+      }
+    ]
+  },
+  {
+    "Id": "be37339a73b5f43f",
+    "Name": "hydra head",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 726
+      }
+    ]
+  },
+  {
+    "Id": "8cbc987921ed39f3",
+    "Name": "pharaoh death temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 727
+      }
+    ]
+  },
+  {
+    "Id": "094e039b6baa27e3",
+    "Name": "pharaoh death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 728
+      }
+    ]
+  },
+  {
+    "Id": "ef4cb4c3121c17ba",
+    "Name": "portal creation spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 730
+      }
+    ]
+  },
+  {
+    "Id": "5aa3eaecb66c569e",
+    "Name": "spit up",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 731
+      }
+    ]
+  },
+  {
+    "Id": "b41523ce91f33383",
+    "Name": "pyramid 1 exit temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 732
+      }
+    ]
+  },
+  {
+    "Id": "6f253ae9c53fca8a",
+    "Name": "out archway check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 733
+      }
+    ]
+  },
+  {
+    "Id": "c97e78f058ec47b6",
+    "Name": "out archway temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 734
+      }
+    ]
+  },
+  {
+    "Id": "6032c0ad9ec109b5",
+    "Name": "in archway check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 735
+      }
+    ]
+  },
+  {
+    "Id": "b43241fbb3f3b0ef",
+    "Name": "remove archway temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 736
+      }
+    ]
+  },
+  {
+    "Id": "0c1da8229d924a0b",
+    "Name": "dao death temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 740
+      }
+    ]
+  },
+  {
+    "Id": "19c378ab927c0501",
+    "Name": "dao death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 741
+      }
+    ]
+  },
+  {
+    "Id": "01e1b61af9f5197d",
+    "Name": "dao scatter",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 742
+      }
+    ]
+  },
+  {
+    "Id": "97ecd61282a28b8b",
+    "Name": "desert sandstorm temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 743
+      }
+    ]
+  },
+  {
+    "Id": "cc547ead711bf665",
+    "Name": "island landing",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 755
+      }
+    ]
+  },
+  {
+    "Id": "9347ebac50136e68",
+    "Name": "pastor box",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 756
+      }
+    ]
+  },
+  {
+    "Id": "f26705234a7d5008",
+    "Name": "shock",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 781
+      }
+    ]
+  },
+  {
+    "Id": "972ce2e9190bfda8",
+    "Name": "summon storm giant",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 784
+      }
+    ]
+  },
+  {
+    "Id": "d53371ea066f539d",
+    "Name": "summon stone giant",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 785
+      }
+    ]
+  },
+  {
+    "Id": "688dd0f49334b37c",
+    "Name": "tonfa spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 791
+      }
+    ]
+  },
+  {
+    "Id": "6dbcff1546cbf0ba",
+    "Name": "constrictor off",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 796
+      }
+    ]
+  },
+  {
+    "Id": "1da6c74162e7a62c",
+    "Name": "gorilla summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 800
+      }
+    ]
+  },
+  {
+    "Id": "856cce0d383ca4b8",
+    "Name": "jeweled viper bite",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 810
+      }
+    ]
+  },
+  {
+    "Id": "a023d600aa9733f1",
+    "Name": "mind flayer summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 814
+      }
+    ]
+  },
+  {
+    "Id": "b651867ad042a055",
+    "Name": "mamba fear spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 819
+      }
+    ]
+  },
+  {
+    "Id": "4e6c77073ce9f0b8",
+    "Name": "snake summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 843
+      }
+    ]
+  },
+  {
+    "Id": "c5c056c06fa2a518",
+    "Name": "bridge trigger spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 851
+      }
+    ]
+  },
+  {
+    "Id": "41862f46b82ea322",
+    "Name": "web spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 852
+      }
+    ]
+  },
+  {
+    "Id": "9000271e5c797a2d",
+    "Name": "golden idol teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 857
+      }
+    ]
+  },
+  {
+    "Id": "e5e119c47bd08fd7",
+    "Name": "dark phoenix death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 871
+      }
+    ]
+  },
+  {
+    "Id": "be897962fa483bb5",
+    "Name": "dark phoenix temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 877
+      }
+    ]
+  },
+  {
+    "Id": "002ca652457e58b2",
+    "Name": "remove forms",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 878
+      }
+    ]
+  },
+  {
+    "Id": "8c42f0707b4b0ebe",
+    "Name": "alder chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 885
+      }
+    ]
+  },
+  {
+    "Id": "62c588419216f0dc",
+    "Name": "orc warlord summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 886
+      }
+    ]
+  },
+  {
+    "Id": "8eb6a646eed030ff",
+    "Name": "orc captain summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 887
+      }
+    ]
+  },
+  {
+    "Id": "9f2a4d0161232adf",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 889
+      }
+    ]
+  },
+  {
+    "Id": "f6fd0ad5604fed6e",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 890
+      }
+    ]
+  },
+  {
+    "Id": "1012584055e92115",
+    "Name": "nanati dispel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 891
+      }
+    ]
+  },
+  {
+    "Id": "340b00fc182298ba",
+    "Name": "portal teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 892
+      }
+    ]
+  },
+  {
+    "Id": "f8a0458198caadc1",
+    "Name": "stealth trap",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 893
+      }
+    ]
+  },
+  {
+    "Id": "a64a1a4db9517d3b",
+    "Name": "storm mountain",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 898
+      }
+    ]
+  },
+  {
+    "Id": "d961046ba55e7889",
+    "Name": "dying assassin",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 902
+      }
+    ]
+  },
+  {
+    "Id": "cdb8ec3dae8c5fb0",
+    "Name": "ice chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 903
+      }
+    ]
+  },
+  {
+    "Id": "8bfae73aebc36065",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 906
+      }
+    ]
+  },
+  {
+    "Id": "8606a9019ce2acc9",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 907
+      }
+    ]
+  },
+  {
+    "Id": "4771308fa3ff73db",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 908
+      }
+    ]
+  },
+  {
+    "Id": "058c4c742b7eaa45",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 909
+      }
+    ]
+  },
+  {
+    "Id": "c2d411f3a9cbb9ac",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 910
+      }
+    ]
+  },
+  {
+    "Id": "e630404a9fc0bc59",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 911
+      }
+    ]
+  },
+  {
+    "Id": "1f70330ca7a43cdb",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 912
+      }
+    ]
+  },
+  {
+    "Id": "f707bdea9ec88196",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 913
+      }
+    ]
+  },
+  {
+    "Id": "7a7084548ece776f",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 914
+      }
+    ]
+  },
+  {
+    "Id": "64f332825681b2f1",
+    "Name": "darkwood forest spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 915
+      }
+    ]
+  },
+  {
+    "Id": "df50e7e3186a7f9e",
+    "Name": "silvermere spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 918
+      }
+    ]
+  },
+  {
+    "Id": "2f4e7b33e69e0cee",
+    "Name": "smoking blackwood chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 919
+      }
+    ]
+  },
+  {
+    "Id": "ec97188dbb02eb57",
+    "Name": "stone chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 920
+      }
+    ]
+  },
+  {
+    "Id": "bb629ea117c1efeb",
+    "Name": "frozen death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 921
+      }
+    ]
+  },
+  {
+    "Id": "cf99328b072d7881",
+    "Name": "necro summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 922
+      }
+    ]
+  },
+  {
+    "Id": "b7dfa365efe3ae04",
+    "Name": "glowing tunnel rgen",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 924
+      }
+    ]
+  },
+  {
+    "Id": "e8e0ba9e4682cb75",
+    "Name": "temple noise",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 925
+      }
+    ]
+  },
+  {
+    "Id": "8ee2f19c805447c6",
+    "Name": "necro summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 926
+      }
+    ]
+  },
+  {
+    "Id": "2a0774b4781ee990",
+    "Name": "sysop jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 935
+      }
+    ]
+  },
+  {
+    "Id": "ffcc476f0169e711",
+    "Name": "sys j",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 943
+      }
+    ]
+  },
+  {
+    "Id": "9d0ce368b4c5e5be",
+    "Name": "rosebush death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 962
+      }
+    ]
+  },
+  {
+    "Id": "b146713ad51e7816",
+    "Name": "random dmg",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 964
+      }
+    ]
+  },
+  {
+    "Id": "ab66d0384cac8e6f",
+    "Name": "vampire mist",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 989
+      }
+    ]
+  },
+  {
+    "Id": "c5e01fedbffc90e9",
+    "Name": "lord mist",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 990
+      }
+    ]
+  },
+  {
+    "Id": "a8e99b4c301742b3",
+    "Name": "vampire kill",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 993
+      }
+    ]
+  },
+  {
+    "Id": "ac628a0bc1973ab5",
+    "Name": "blackwood chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 997
+      }
+    ]
+  },
+  {
+    "Id": "e5c86b130995d09c",
+    "Name": "blank",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1017
+      }
+    ]
+  },
+  {
+    "Id": "e7df9b289866fdad",
+    "Name": "free",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1028
+      }
+    ]
+  },
+  {
+    "Id": "4fc651c3f7c549dc",
+    "Name": "zombie summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1032
+      }
+    ]
+  },
+  {
+    "Id": "fbe2f075ad46e492",
+    "Name": "zombie summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1034
+      }
+    ]
+  },
+  {
+    "Id": "fd2591c0071bfd0f",
+    "Name": "zombie summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1036
+      }
+    ]
+  },
+  {
+    "Id": "534053bd52cec0ca",
+    "Name": "plant summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1037
+      }
+    ]
+  },
+  {
+    "Id": "1c3e07abab5e917b",
+    "Name": "blackwood forest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1040
+      }
+    ]
+  },
+  {
+    "Id": "473903efc8cd56c2",
+    "Name": "pit",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1045
+      }
+    ]
+  },
+  {
+    "Id": "3001eb2e23f2e145",
+    "Name": "blank",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1049
+      }
+    ]
+  },
+  {
+    "Id": "010c1c11948945f6",
+    "Name": "gremlin summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1050
+      }
+    ]
+  },
+  {
+    "Id": "a34d9faeef2bd318",
+    "Name": "pris effect",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1052
+      }
+    ]
+  },
+  {
+    "Id": "8ed49bdb711175f2",
+    "Name": "master summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1054
+      }
+    ]
+  },
+  {
+    "Id": "fe899fff706e0db2",
+    "Name": "BCNS",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1055
+      }
+    ]
+  },
+  {
+    "Id": "1eecb624f95350cf",
+    "Name": "pris effect",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1075
+      }
+    ]
+  },
+  {
+    "Id": "1333f3e5f9a21c9f",
+    "Name": "sea 1",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1076
+      }
+    ]
+  },
+  {
+    "Id": "910b711ded821eff",
+    "Name": "sea 2",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1077
+      }
+    ]
+  },
+  {
+    "Id": "be1b10cf09410b27",
+    "Name": "sea 3",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1078
+      }
+    ]
+  },
+  {
+    "Id": "f0738ffc1bdd596a",
+    "Name": "white forest noise",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1079
+      }
+    ]
+  },
+  {
+    "Id": "86e878e873afc86c",
+    "Name": "animated summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1082
+      }
+    ]
+  },
+  {
+    "Id": "71fcfb0dfa6196f4",
+    "Name": "sea trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1085
+      }
+    ]
+  },
+  {
+    "Id": "d64d699bcfd9a3fa",
+    "Name": "sea trigger 2",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1086
+      }
+    ]
+  },
+  {
+    "Id": "d4ed4694fa0a7988",
+    "Name": "sea trigger 3",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1087
+      }
+    ]
+  },
+  {
+    "Id": "b984631ce3548377",
+    "Name": "sea tele 1",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1090
+      }
+    ]
+  },
+  {
+    "Id": "e1ab407377c9f7d6",
+    "Name": "sea tele 2",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1091
+      }
+    ]
+  },
+  {
+    "Id": "7ce763f5db406461",
+    "Name": "sea tele 3",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1092
+      }
+    ]
+  },
+  {
+    "Id": "54d3ba78f89daf78",
+    "Name": "blackwood chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1094
+      }
+    ]
+  },
+  {
+    "Id": "461aeb62ccf1dc1f",
+    "Name": "dragon summon tapestry",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1101
+      }
+    ]
+  },
+  {
+    "Id": "0ced7ed2803e239f",
+    "Name": "summon steed",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1105
+      }
+    ]
+  },
+  {
+    "Id": "00a72e4e6e4bf850",
+    "Name": "sabre",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1114
+      }
+    ]
+  },
+  {
+    "Id": "39e8003162c787fa",
+    "Name": "draka tomb",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1115
+      }
+    ]
+  },
+  {
+    "Id": "0c35d8b218ff05ca",
+    "Name": "too far",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1116
+      }
+    ]
+  },
+  {
+    "Id": "3d1319464aa4c566",
+    "Name": "gypsy",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1120
+      }
+    ]
+  },
+  {
+    "Id": "4fe706976f4707ff",
+    "Name": "tree",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1122
+      }
+    ]
+  },
+  {
+    "Id": "21d64a79a9c53ccb",
+    "Name": "heart",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1123
+      }
+    ]
+  },
+  {
+    "Id": "85c5e3885e77f5b5",
+    "Name": "vamp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1124
+      }
+    ]
+  },
+  {
+    "Id": "d95915cb1dbd2b43",
+    "Name": "gem",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1125
+      }
+    ]
+  },
+  {
+    "Id": "ed74f6790f5f4794",
+    "Name": "graveyard",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1126
+      }
+    ]
+  },
+  {
+    "Id": "e280e63c5b6208d3",
+    "Name": "dark mage temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1136
+      }
+    ]
+  },
+  {
+    "Id": "ae3bb8beb122ac43",
+    "Name": "dark mage text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1137
+      }
+    ]
+  },
+  {
+    "Id": "7b1cfaddf587ad02",
+    "Name": "card-draw",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1139
+      }
+    ]
+  },
+  {
+    "Id": "57025dfd17b7ca23",
+    "Name": "summon mayor",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1140
+      }
+    ]
+  },
+  {
+    "Id": "7fb47a1e1d0a8d50",
+    "Name": "ice fall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1142
+      }
+    ]
+  },
+  {
+    "Id": "908c9407f1cbd81a",
+    "Name": "ice cavern level 1",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1144
+      }
+    ]
+  },
+  {
+    "Id": "a4aed3aa273f4e01",
+    "Name": "ice cavern level 2",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1145
+      }
+    ]
+  },
+  {
+    "Id": "71eff75ad407ad10",
+    "Name": "church check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1147
+      }
+    ]
+  },
+  {
+    "Id": "e2c4da01e050b3b9",
+    "Name": "mind flayer slay",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1148
+      }
+    ]
+  },
+  {
+    "Id": "c94740122cc0b279",
+    "Name": "mind flayer kill",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1149
+      }
+    ]
+  },
+  {
+    "Id": "aef80d3a927eaba2",
+    "Name": "steak",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1151
+      }
+    ]
+  },
+  {
+    "Id": "bf3405e759bb5225",
+    "Name": "bone dock",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1152
+      }
+    ]
+  },
+  {
+    "Id": "68757a79fc550fdb",
+    "Name": "bloodwood chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1153
+      }
+    ]
+  },
+  {
+    "Id": "a1525dca3decca37",
+    "Name": "burnt iron chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1154
+      }
+    ]
+  },
+  {
+    "Id": "1e1ccddada3e17eb",
+    "Name": "bone chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1157
+      }
+    ]
+  },
+  {
+    "Id": "878e57d63818d54c",
+    "Name": "frost giant summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1158
+      }
+    ]
+  },
+  {
+    "Id": "415508d9048eb14f",
+    "Name": "enigma tele",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1166
+      }
+    ]
+  },
+  {
+    "Id": "11af31e8cb2fedbb",
+    "Name": "enigma temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1167
+      }
+    ]
+  },
+  {
+    "Id": "31f51f6dadfd6be3",
+    "Name": "enigma text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1168
+      }
+    ]
+  },
+  {
+    "Id": "dd81965b5653fd29",
+    "Name": "parrot",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1170
+      }
+    ]
+  },
+  {
+    "Id": "caf1c1afae5bee73",
+    "Name": "fear trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1177
+      }
+    ]
+  },
+  {
+    "Id": "2653620a26f5f0ec",
+    "Name": "fear random",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1181
+      }
+    ]
+  },
+  {
+    "Id": "a34abcee24cde3d4",
+    "Name": "fist death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1195
+      }
+    ]
+  },
+  {
+    "Id": "d05e853b594c2391",
+    "Name": "dark mage exp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1196
+      }
+    ]
+  },
+  {
+    "Id": "233dac6f774dedf6",
+    "Name": "lich temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1199
+      }
+    ]
+  },
+  {
+    "Id": "e20b88dfc2b53188",
+    "Name": "lich text",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1200
+      }
+    ]
+  },
+  {
+    "Id": "fd498d41e324af3e",
+    "Name": "cudgel random",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1201
+      }
+    ]
+  },
+  {
+    "Id": "e1c2a64aa8f45918",
+    "Name": "clean",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1202
+      }
+    ]
+  },
+  {
+    "Id": "5857e50a95897752",
+    "Name": "fungus spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1205
+      }
+    ]
+  },
+  {
+    "Id": "08549b07acf7bffa",
+    "Name": "tapestry summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1211
+      }
+    ]
+  },
+  {
+    "Id": "8ea17db7add53f97",
+    "Name": "cracked pit",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1213
+      }
+    ]
+  },
+  {
+    "Id": "e5974a7b423bb16f",
+    "Name": "summon demonling",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1216
+      }
+    ]
+  },
+  {
+    "Id": "1c9efd0839f53c30",
+    "Name": "summon astral shade",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1217
+      }
+    ]
+  },
+  {
+    "Id": "737de8a7fc90e7e3",
+    "Name": "lich scatter",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1218
+      }
+    ]
+  },
+  {
+    "Id": "ef570ea2b8f625fa",
+    "Name": "summon bugbear",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1219
+      }
+    ]
+  },
+  {
+    "Id": "39780cb1d5330dab",
+    "Name": "enigma tele self",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1223
+      }
+    ]
+  },
+  {
+    "Id": "f751e66d28d9203a",
+    "Name": "blink",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1225
+      }
+    ]
+  },
+  {
+    "Id": "d7de496f20af97c3",
+    "Name": "enigma summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1226
+      }
+    ]
+  },
+  {
+    "Id": "eff18d8a6618411c",
+    "Name": "tapestry check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1227
+      }
+    ]
+  },
+  {
+    "Id": "a74912aab0986049",
+    "Name": "tapestry fail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1228
+      }
+    ]
+  },
+  {
+    "Id": "54eb7570482eab45",
+    "Name": "tapestry room",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1229
+      }
+    ]
+  },
+  {
+    "Id": "6f6d5b7907aefd6e",
+    "Name": "island spell",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1231
+      }
+    ]
+  },
+  {
+    "Id": "fa347c6dd032764a",
+    "Name": "summon enigma lord",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1233
+      }
+    ]
+  },
+  {
+    "Id": "5f1b6a4e410630b4",
+    "Name": "face rgen",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1235
+      }
+    ]
+  },
+  {
+    "Id": "933e5b54aeca3a36",
+    "Name": "encumbrance",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1236
+      }
+    ]
+  },
+  {
+    "Id": "f7068faf46728869",
+    "Name": "destroy magic",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1239
+      }
+    ]
+  },
+  {
+    "Id": "f0109ce4eeaccb4f",
+    "Name": "magma rock chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1256
+      }
+    ]
+  },
+  {
+    "Id": "607919cf487ec771",
+    "Name": "gloomy teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1257
+      }
+    ]
+  },
+  {
+    "Id": "9da69f201545495b",
+    "Name": "large chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1258
+      }
+    ]
+  },
+  {
+    "Id": "c9fde47b3908ae7e",
+    "Name": "massive chest",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1260
+      }
+    ]
+  },
+  {
+    "Id": "9668d5fc5536dfd2",
+    "Name": "silver casket",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1263
+      }
+    ]
+  },
+  {
+    "Id": "c3ca9d31fdded2b1",
+    "Name": "sandstone chest open",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1264
+      }
+    ]
+  },
+  {
+    "Id": "565ccde710dfd0e6",
+    "Name": "fortress trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1267
+      }
+    ]
+  },
+  {
+    "Id": "78a3b02b3fe6f125",
+    "Name": "tele out of pit",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1303
+      }
+    ]
+  },
+  {
+    "Id": "9978c3086f6411d7",
+    "Name": "meadow trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1305
+      }
+    ]
+  },
+  {
+    "Id": "382d9697d2488d7d",
+    "Name": "cloud trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1306
+      }
+    ]
+  },
+  {
+    "Id": "3b2b83262d690ae9",
+    "Name": "fire trigger",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1307
+      }
+    ]
+  },
+  {
+    "Id": "e2c1f22119035b47",
+    "Name": "branch check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1308
+      }
+    ]
+  },
+  {
+    "Id": "e7ffe3a8838807db",
+    "Name": "great hydra head summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1309
+      }
+    ]
+  },
+  {
+    "Id": "1e5be7df25ce10c4",
+    "Name": "thief  filter",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1325
+      }
+    ]
+  },
+  {
+    "Id": "2bc2cf815a82f48e",
+    "Name": "battle  filter",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1326
+      }
+    ]
+  },
+  {
+    "Id": "5fff6aac84b8b796",
+    "Name": "magic filter",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1327
+      }
+    ]
+  },
+  {
+    "Id": "f8f0052f5ad67b87",
+    "Name": "level 10 teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1328
+      }
+    ]
+  },
+  {
+    "Id": "0f06da5781dd78c3",
+    "Name": "summon diamond cloak",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1329
+      }
+    ]
+  },
+  {
+    "Id": "04be04fec58c00eb",
+    "Name": "summon pearl cloak",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1330
+      }
+    ]
+  },
+  {
+    "Id": "1f7b7209326b5b11",
+    "Name": "summon moonstone cloak",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1331
+      }
+    ]
+  },
+  {
+    "Id": "5cf6cd4066041c93",
+    "Name": "summon marble cloak",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1332
+      }
+    ]
+  },
+  {
+    "Id": "789e82c732df4d54",
+    "Name": "thievry teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1333
+      }
+    ]
+  },
+  {
+    "Id": "e99ef52fe1a2d685",
+    "Name": "hallway teleport",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1335
+      }
+    ]
+  },
+  {
+    "Id": "dce911bbc004085a",
+    "Name": "spellcaster filter",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1337
+      }
+    ]
+  },
+  {
+    "Id": "66fd06c72384100d",
+    "Name": "all ball summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1347
+      }
+    ]
+  },
+  {
+    "Id": "417371f11cc0a463",
+    "Name": "red ball summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1348
+      }
+    ]
+  },
+  {
+    "Id": "3ad9cd75d47780ee",
+    "Name": "blue ball summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1349
+      }
+    ]
+  },
+  {
+    "Id": "1d663a4712edf103",
+    "Name": "green ball summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1350
+      }
+    ]
+  },
+  {
+    "Id": "86f52a5af62294fb",
+    "Name": "yellow ball summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1351
+      }
+    ]
+  },
+  {
+    "Id": "7c58bbdcd4c44614",
+    "Name": "tele out of pit",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1354
+      }
+    ]
+  },
+  {
+    "Id": "f6018dd45dd1d582",
+    "Name": "final nahr summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1356
+      }
+    ]
+  },
+  {
+    "Id": "7aceb37d3cbb46c7",
+    "Name": "rock check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1357
+      }
+    ]
+  },
+  {
+    "Id": "0fc9825e3dbcbf50",
+    "Name": "invoke staff",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1358
+      }
+    ]
+  },
+  {
+    "Id": "03eac4881dafff84",
+    "Name": "gather ore",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1359
+      }
+    ]
+  },
+  {
+    "Id": "441542783357cb39",
+    "Name": "phoenix boss check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1360
+      }
+    ]
+  },
+  {
+    "Id": "0fb32d4416ec1e35",
+    "Name": "hydra boss check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1361
+      }
+    ]
+  },
+  {
+    "Id": "beac38876925811f",
+    "Name": "tele out of pit",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1365
+      }
+    ]
+  },
+  {
+    "Id": "fed86cd4e9e54d92",
+    "Name": "roar cancel",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1368
+      }
+    ]
+  },
+  {
+    "Id": "2b3a09e65d312475",
+    "Name": "demon lord boss check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1370
+      }
+    ]
+  },
+  {
+    "Id": "ebfb000a2872f624",
+    "Name": "majestic boss check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1371
+      }
+    ]
+  },
+  {
+    "Id": "bb6ad240bdaccfcd",
+    "Name": "chess pieces",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1372
+      }
+    ]
+  },
+  {
+    "Id": "163bc763505e1c7d",
+    "Name": "solo trainer key check",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1375
+      }
+    ]
+  },
+  {
+    "Id": "c338a6fb7165899d",
+    "Name": "solo mage scatter",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1376
+      }
+    ]
+  },
+  {
+    "Id": "eec3b25082dfc8e7",
+    "Name": "duergar",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1386
+      }
+    ]
+  },
+  {
+    "Id": "79b3c07c060739e4",
+    "Name": "keyring summoner",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1390
+      }
+    ]
+  },
+  {
+    "Id": "34e357c4068926cc",
+    "Name": "blueberries",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1398
+      }
+    ]
+  },
+  {
+    "Id": "d2ae0fe597e0f000",
+    "Name": "devour",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5201
+      }
+    ]
+  },
+  {
+    "Id": "b02c972d64937d9f",
+    "Name": "spit out temp",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5203
+      }
+    ]
+  },
+  {
+    "Id": "1f66e11d13143cb7",
+    "Name": "spit up",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5204
+      }
+    ]
+  },
+  {
+    "Id": "2d28a21e96eceed7",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5206
+      }
+    ]
+  },
+  {
+    "Id": "3b88fb8e3e895599",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5207
+      }
+    ]
+  },
+  {
+    "Id": "670c4827f68da0ce",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5208
+      }
+    ]
+  },
+  {
+    "Id": "f1063dddaaebcd6e",
+    "Name": "deed give",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5209
+      }
+    ]
+  },
+  {
+    "Id": "6bfb58c512481c53",
+    "Name": "keyring summoner",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5212
+      }
+    ]
+  },
+  {
+    "Id": "d3f7b2bf7724a4d4",
+    "Name": "keyring summoner",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5213
+      }
+    ]
+  },
+  {
+    "Id": "ef0377eb95269ea4",
+    "Name": "jail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5431
+      }
+    ]
+  },
+  {
+    "Id": "92470d26d74c2f7b",
+    "Name": "fiend jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5434
+      }
+    ]
+  },
+  {
+    "Id": "e25ffc45f607f43f",
+    "Name": "villain jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5435
+      }
+    ]
+  },
+  {
+    "Id": "f7713107b0b75c72",
+    "Name": "criminal jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5436
+      }
+    ]
+  },
+  {
+    "Id": "5767362151602950",
+    "Name": "outlaw jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5437
+      }
+    ]
+  },
+  {
+    "Id": "175c7d23d1cb58b6",
+    "Name": "seedy+ jail time",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5438
+      }
+    ]
   }
 ]
