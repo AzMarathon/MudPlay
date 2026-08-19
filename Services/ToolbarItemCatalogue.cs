@@ -61,6 +61,8 @@ public static class ToolbarItemCatalogue
             "OpenConversationCommand", ShortcutHint: "Alt+C"),
         new("OpenParty",          "Party",                "IconParty",
             "OpenPartyCommand"),
+        new("OpenBuffWatchdog",   "Buff Watchdog",        "IconBuffWatchdog",
+            "OpenBuffWatchdogCommand", Tooltip: "Buff Watchdog — configured buffs, active timers, recast markers"),
         new("OpenWorkshop",       "Player Workshop",      "IconUser",
             "OpenWorkshopCommand",     ShortcutHint: "F1"),
         new("OpenSpellBook",      "Spell Book",           "IconBook",

@@ -19,4 +19,13 @@ public static class MonsterEngagement
             _                           => false,
         };
     }
+
+    // A monster instance the user MANUALLY engaged is engageable regardless of its
+    // species relationship — once you hand-attack a passive neutral it behaves like a
+    // hostile (keeps attacking you until dead), so the engine takes over killing it. The
+    // per-instance flag is keyed on RawName by the caller (species-keyed overlay + an
+    // instance-keyed override are different key spaces, so the flag can't live in the
+    // pure static — the OR-rule does).
+    public static bool IsEngageable(MonsterOverlay? overlay, bool userEngagedInstance)
+        => userEngagedInstance || IsEngageable(overlay);
 }

@@ -188,23 +188,26 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
                 // Trim the display past the leg already walked. While the
                 // walker is paused (combat, resting, user gate),
-                // OnTrackerStateChanged bails without advancing _index, so
-                // the index keeps pointing at a step whose ExpectedTarget the
-                // player has already reached — the drawn line would loop back
-                // through the room just entered until the walk resumes and
-                // TryReconcileIndexAfterResume fast-forwards _index. Skip
-                // forward to the first planned target the player hasn't
-                // reached yet so the overlay always starts at the CURRENT
-                // room, even mid-combat. (Earliest match, mirroring the
-                // resume reconciliation, so a route that revisits a room
-                // later still renders that later leg.)
-                for (int i = _index; i < _path.Count; i++)
+                // OnTrackerStateChanged bails without advancing _index, so the
+                // index keeps pointing at a step whose ExpectedTarget the player
+                // has already reached — the drawn line would loop back through
+                // the room just entered until the walk resumes and
+                // TryReconcileIndexAfterResume fast-forwards _index. If the step
+                // AT _index is exactly that already-reached step, skip it so the
+                // overlay starts at the CURRENT room, even mid-combat.
+                //
+                // Only _path[_index] is checked — the stale index lags by at most
+                // one completed move. Scanning further ahead (the old behaviour)
+                // would, on a go-act-return detour (RemoteActionPathExpander),
+                // match the return leg's arrival back at the current room and
+                // wrongly trim the whole out-and-back detour out of the drawn
+                // line and the ETA — leaving the route to render only straight-
+                // line segments that redraw as the walker loops out and back.
+                if (_index < _path.Count
+                    && _path[_index] is MoveStep atIndex
+                    && atIndex.ExpectedTarget.Equals(current.Key))
                 {
-                    if (_path[i] is MoveStep move && move.ExpectedTarget.Equals(current.Key))
-                    {
-                        start = i + 1;
-                        break;
-                    }
+                    start = _index + 1;
                 }
             }
 
@@ -940,7 +943,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
             else
             {
-                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter);
+                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter, _log);
             }
         }
         finally { gateScope?.Dispose(); }
@@ -948,6 +951,25 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (expanded.Count == 0)
         {
             Raise(new WalkEvent(WalkEventKind.Failed, "path expansion empty", destination));
+            return false;
+        }
+
+        // A remote-action detour that couldn't be routed truncates the expansion
+        // short of the destination. The expander solves nested action gates
+        // recursively, so this now only fires for a route past the nesting-depth
+        // cap, a lever-cycle, or a genuinely unroutable leg. Fail cleanly here —
+        // the program log (Walker/Debug) names the exit that stopped it — rather
+        // than walking the partial path and stranding, or mis-sending a bare move
+        // the send-side rejects. Boat plans stitch their own arrival legs, so only
+        // vet the plain expansion.
+        if (boatPlan is null && !RemoteActionPathExpander.ReachesDestination(expanded, destination))
+        {
+            _log?.Debug("Walker",
+                $"walk to {destination}: expansion truncated ({expanded.Count} step(s)) short of the destination — " +
+                "a remote-action detour on the route could not be routed (see the detour lines above)");
+            Raise(new WalkEvent(WalkEventKind.Failed,
+                "route needs an action-gated exit the walker can't auto-solve (too deeply nested, a lever-cycle, or unroutable) — see the program log",
+                destination));
             return false;
         }
 
@@ -1109,11 +1131,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         List<WalkStep> steps = new();
         if (plan.ToDock.Count > 0)
-            steps.AddRange(RemoteActionPathExpander.Expand(_graph, source, plan.ToDock, _bfs, _filter));
+            steps.AddRange(RemoteActionPathExpander.Expand(_graph, source, plan.ToDock, _bfs, _filter, _log));
         steps.Add(new BoatStep(plan.Passage));
         if (plan.FromArrival.Count > 0)
             steps.AddRange(RemoteActionPathExpander.Expand(
-                _graph, plan.Passage.ArrivalRoom, plan.FromArrival, _bfs, _filter));
+                _graph, plan.Passage.ArrivalRoom, plan.FromArrival, _bfs, _filter, _log));
         return steps;
     }
 
@@ -1195,6 +1217,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 foreach (ExitAction a in ma.Actions)
                     if (a.RequiredItemId > 0 && !into.Contains(a.RequiredItemId)) into.Add(a.RequiredItemId);
                 break;
+            case RoomExitHint.Teleport:
+                // An item-use teleport (`use potion of levitation`) carries the item
+                // it consumes as KeyItemId — name it so a blocked route says which
+                // item to go obtain rather than a bare "no path".
+                if (exit.KeyItemId > 0 && !into.Contains(exit.KeyItemId)) into.Add(exit.KeyItemId);
+                break;
         }
     }
 
@@ -1260,10 +1288,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 string? name = resolve(id);
                 if (!string.IsNullOrWhiteSpace(name)) names.Add(name);
             }
-            if (names.Count == 1) return $"a required item you're missing ({names[0]})";
-            if (names.Count > 1) return "required items you're missing (" + string.Join(", ", names) + ")";
+            if (names.Count == 1) return $"a required item to go obtain ({names[0]})";
+            if (names.Count > 1) return "required items to go obtain (" + string.Join(", ", names) + ")";
         }
-        return "a required item you're missing";
+        return "a required item to go obtain";
     }
 
     // Expand the planned route between two known rooms into the ordered RoomKeys the
@@ -1533,6 +1561,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
             if (sync == SpecialExitSend.Sent) return;
             if (sync == SpecialExitSend.Failed)
             {
+                _log?.Debug("Walker",
+                    $"special-exit dispatch rejected step {_index + 1}/{_path!.Count} " +
+                    $"({step.Direction} {exit.Hint} -> {exit.Target}): {syncFail}");
                 Raise(new WalkEvent(WalkEventKind.Failed, syncFail!, _destination));
                 Reset();
                 return;

@@ -1041,6 +1041,9 @@ public sealed class LoopRunner : IRecoverableEngine
         if (sync == SpecialExitSend.Sent) return;
         if (sync == SpecialExitSend.Failed)
         {
+            _log?.Debug("LoopRunner",
+                $"special-exit dispatch rejected step {_index + 1}/{_expandedSteps.Count} " +
+                $"({step.Direction} {exit.Hint} -> {exit.Target}): {syncFail}");
             FailStep(syncFail!);
             return;
         }

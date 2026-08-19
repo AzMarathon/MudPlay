@@ -61,6 +61,16 @@ public sealed class AppServices
     public void SetMonsterGameDataOpener(Action<int> opener) => _monsterGameDataOpener = opener;
     public void OpenMonsterGameData(int monsterNumber) => _monsterGameDataOpener?.Invoke(monsterNumber);
 
+    // Opens the monster record DIALOG (not the browser) by Number — the Navigation Room
+    // Info panel's monster links, so a click lands on the full record like the item link.
+    public System.Threading.Tasks.Task OpenMonsterRecordAsync(int monsterNumber)
+        => MonsterRecord.OpenAsync(monsterNumber);
+
+    // Opens the spell record DIALOG (Message / Game-Data tabs) by Number — the Room Info
+    // room-spell link, so a click lands on the full record like the item / monster links.
+    public System.Threading.Tasks.Task OpenSpellRecordAsync(int spellNumber)
+        => SpellRecord.OpenAsync(spellNumber);
+
     // Opens (or re-focuses) the Monsters section with an "Acc ≥ minAcc" filter
     // applied — the Hit Calculator's "Show me the Monsters" jumps here with the
     // accuracy that hits the player at the picked hit-%.
@@ -1182,8 +1192,9 @@ public sealed class AppServices
     // Auto-sell engine. When a shop `list` readout surfaces, sells each carried
     // item flagged Models.GameData.ItemOverlay.AutoSell down to its keep floor at
     // the merchant standing in — one sell <name> per unit, advancing off the live
-    // sold / can't-sell-here result. Gated by the AutoSell master toggle; a
-    // LoyalItem and LIGHT items are never sold.
+    // sold / can't-sell-here result. Gated by the Auto-Get Items auto-mode toggle
+    // (master) plus the per-item ItemOverlay.AutoSell flag; a LoyalItem and LIGHT
+    // items are never sold.
     public Game.Inventory.AutoSellManager AutoSell { get; private set; } = null!;
 
     // Auto-open engine. On every inventory change, sends open <name> once for
@@ -1232,6 +1243,10 @@ public sealed class AppServices
     // rooms). Builds lazily on first query and self-invalidates on a set swap (no
     // ActiveSetChanged subscription).
     public ItemSourceIndex ItemSources { get; private set; } = null!;
+
+    // Room→floor-item index (TBInfo `roomitem` placements) backing the Navigation
+    // Room Info panel. Lazy + self-invalidating like ItemSources.
+    public RoomFloorItemIndex RoomFloorItems { get; private set; } = null!;
 
     // Active fulfiller for NeedKind.PathItem needs an NPC / room hands over for
     // free: on a one-shot walk-to that needs an uncarried item a deterministic
@@ -1354,6 +1369,14 @@ public sealed class AppServices
     // Opens the item record (edit) dialog by Number from any surface — the Item
     // Finder double-click. Constructed once; single-instance dialog across callers.
     public ItemRecordDialogService ItemRecord { get; private set; } = null!;
+
+    // Opens the monster record (edit) dialog by Number from any surface — the
+    // Navigation Room Info panel's monster links. Single-instance across callers.
+    public MonsterRecordDialogService MonsterRecord { get; private set; } = null!;
+
+    // Opens the spell record (Message / Game-Data) dialog by Number from any surface —
+    // the Navigation Room Info panel's room-spell link. Single-instance across callers.
+    public SpellRecordDialogService SpellRecord { get; private set; } = null!;
 
     // Background audit comparing player-facing spells in the active
     // set against the Messages catalogue's Links field — surfaces a
@@ -2026,8 +2049,25 @@ public sealed class AppServices
         // no-profile case alike. The obtained set is restored separately in
         // the ProfileLoaded handler below (after this seeds the class list),
         // so the learned checkmarks survive across sessions.
-        void SeedSpellbook(Models.Profile.LastKnownStats? snap) =>
-            Spellbook.Refresh(snap is null ? 0 : SpellCatalog.ResolveClassNumber(snap.Class) ?? 0, snap?.Level ?? 0);
+        void SeedSpellbook(Models.Profile.LastKnownStats? snap, bool reseed = false)
+        {
+            int classNumber = snap is null ? 0 : SpellCatalog.ResolveClassNumber(snap.Class) ?? 0;
+            int level = snap?.Level ?? 0;
+            // reseed = the active game-data set changed under us: force a rebuild
+            // even when the class number is unchanged, since the Spells table
+            // itself was replaced. Refresh alone skips the rebuild on an
+            // unchanged class number and would leave Available stale.
+            if (reseed) Spellbook.Reseed(classNumber, level);
+            else Spellbook.Refresh(classNumber, level);
+        }
+
+        // A game-data set swap replaces the Spells / Classes tables under the
+        // live character. Re-resolve the class number from the persisted class
+        // NAME (a set may renumber classes) and reseed the Spell Book so
+        // Available and the learned checkmarks re-resolve against the new set
+        // instead of blanking. The obtained set is name-backed, so it survives
+        // the renumber — no need to re-apply the profile's persisted names here.
+        GameData.ActiveSetChanged += _ => SeedSpellbook(Profile.Current?.LastKnownStats, reseed: true);
 
         // Persist the learned-spell set with the rest of the profile. Snapshot
         // only when the book has a resolved class — with no class the obtained
@@ -2404,6 +2444,11 @@ public sealed class AppServices
         // entries, so it's constructed after the store above. Lazy and
         // self-invalidating, so there's no ActiveSetChanged subscription to wire.
         ItemSources = new ItemSourceIndex(GameData, TBInfo, Log);
+
+        // RoomFloorItemIndex — the room→floor-item (`roomitem`) mapping for the
+        // Navigation Room Info panel. Reads TBInfo's typed entries like ItemSources;
+        // lazy and self-invalidating, so no ActiveSetChanged subscription.
+        RoomFloorItems = new RoomFloorItemIndex(GameData, TBInfo, Log);
 
         // Shared item-record opener — opens the item edit dialog by Number from any
         // surface (the Item Finder's double-click), reusing the browser's read-only
@@ -2868,6 +2913,10 @@ public sealed class AppServices
             // "short orc lieutenant" matches this room's "orc lieutenant" record.
             RoomClassifier.ResolveBaseName,
             MonsterSpawns, MonsterSummonTargets);
+        // Pass 0 of the classifier resolves an observed name against the current room's monsters
+        // (NPC + lair + Summoned-By spawns + what those summon) so a homonym pins to the record
+        // actually here — engagement + per-monster overrides all inherit the right Number.
+        RoomClassifier.SetRoomAwareResolver(RoomAwareMonster.ResolveInCurrentRoom);
         SummonSettle = new Game.Combat.SummonOnDeathSettle(
             MonsterDeath, RoomClassifier, MovementCoordinator, MonsterDeathSummon,
             currentTargetName: () => Combat.CurrentTarget,
@@ -2917,7 +2966,10 @@ public sealed class AppServices
             log: Log,
             readPartySettings: () =>
                 ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
-            roomAwareResolve: RoomAwareMonster.ResolveInCurrentRoom);
+            roomAwareResolve: RoomAwareMonster.ResolveInCurrentRoom,
+            // Resolve a debuff slot's cast-code to its catalog row (energy cost +
+            // targeting scope) so a mis-slotted spell is rejected before it casts.
+            resolveSpellByCode: code => Spellbook.FindByCastCode(code));
 
         // Dark-room combat. A room too dark to show "Also here:" hides any
         // hostile sharing it — the only evidence is the mob's dark-cyan attack
@@ -3229,6 +3281,11 @@ public sealed class AppServices
         // ShortFromAppliedRecord maps a fired AppliedMessage record back
         // to the cast code so a confirmed self-buff starts its timer.
         CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord);
+        // A fresh character starts with no buffs assumed — clear any timers carried over
+        // (e.g. paused from a prior character's disconnect) so a character switch doesn't
+        // resurrect the old character's buffs. A same-character reconnect does NOT reload
+        // the profile, so its paused timers survive to be resumed.
+        Profile.ProfileLoaded += _ => CastDirector.ResetBuffTracking();
         // Party-bless slots store class numbers; PartyMember.Class is a
         // class name — resolve via the active set's Classes table.
         CastDirector.SetClassResolver(SpellCatalog.ResolveClassName);
@@ -3236,20 +3293,33 @@ public sealed class AppServices
         // cast once for the whole party; the picker checks this to skip the
         // per-member loop.
         CastDirector.SetPartyWideBuffCheck(IsPartyWideBuff);
+        // Self-buff supersession: in a party, a configured party-wide buff that removes a
+        // self-buff (RemovesSpell) covers us, so the director stops self-casting the
+        // removed one — the Buff Watchdog shows that slot "covered by" the party buff.
+        CastDirector.SetSelfBuffCoverage(SelfBuffCoverage);
         // Downed-ally rescue heal. A dropped ally leaves `par`, so PickPartyHeal's
         // roster walk can't see them — the AllyDroppedHandler feeds each aided
         // downed ally back in here as the top-priority name-targeted heal until
         // they recover / rejoin.
         CastDirector.SetDownedAllyProvider(() => AllyDropped.AidedDownedGivenNames());
+        // Free the once-per-round between-round cast slot on the combat ROUND TICK —
+        // TickEngine's 5s heartbeat (refreshed by damage lines), NOT *Combat Off*.
+        // *Combat Off* fires per kill, so in a multi-mob room it lands several times a
+        // round and would re-open the slot mid-round; the combat tick is the actual
+        // round cadence. Subscribed BEFORE CastDirector.OnCombatTick below so the slot
+        // is freed before this round's between-round evaluation runs.
+        Tick.CombatTickElapsed += CastDirector.NotifyRoundComplete;
         Tick.CombatTickElapsed += CastDirector.OnCombatTick;
 
         // Mana-regen roll-spell reroll (Paradigm only). AbilBreakdown parses
         // `abil 145`; ManaRegen reads its rolled `spells:` slice after each
         // nature-tap / mana-flux landing and recasts a below-threshold roll up
-        // to the cap, hard-stopping at the buff mana floor. The abil query + the
-        // deliberate cooldown-bypassing recast go out on the raw engine sender
-        // (bound in the main VM); the recast still notifies Cast so the
-        // one-cast-per-round cooldown bookkeeping stays honest.
+        // to the cap, hard-stopping at the buff mana floor. The abil query goes
+        // out on the raw engine sender (bound in the main VM); the RECAST is
+        // staged on CastDirector so it runs through the same between-round
+        // priority pass as every other 0-energy cast — it competes by
+        // PriorityBuffing against a due heal/cure and spends the one-cast-per-round
+        // slot, rather than firing directly on the wire and bypassing both.
         AbilBreakdown = new Game.AbilBreakdownParser(Log);
         ManaRegen = new Game.Spells.ManaRegenReroller(
             AbilBreakdown,
@@ -3262,12 +3332,7 @@ public sealed class AppServices
             },
             sendAbilQuery: () =>
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
-            recast: shortCode =>
-            {
-                _engineWireSend?.Invoke(
-                    System.Text.Encoding.Latin1.GetBytes(shortCode.Trim() + "\r"));
-                Cast.NotifyExternalCastSent();
-            },
+            recast: shortCode => CastDirector.RequestManaRegenReroll(shortCode),
             canAffordReroll: CanAffordManaRegenReroll,
             log: Log);
         CastDirector.SetSelfBuffLandedSink(OnSelfBuffLandedForReroll);
@@ -3298,6 +3363,7 @@ public sealed class AppServices
         // the attack spell" ordering). Only exercised when a debuff is actually
         // due, so a normal engage is untouched.
         Combat.SetInBetweenEvaluator(CastDirector.Evaluate);
+        Combat.SetBetweenRoundSlotMarker(CastDirector.MarkBetweenRoundSlotUsed);
         // A between-round survival cast stops our auto-attack; let the combat
         // engine resume the weapon attack on the resulting *Combat Off*
         // instead of idling until the next round.
@@ -3313,7 +3379,10 @@ public sealed class AppServices
         // class's available list.
         OutboundCast = new Game.Combat.OutboundCastObserver(
             isCastCode: c => Spellbook.FindByCastCode(c) is not null,
-            onManualCast: Combat.OnManualCastObserved);
+            // A hand-typed cast feeds BOTH the combat resume signal and the buff-recast
+            // clock: NoteManualBuffCast arms the timer (by cast code) for a hand-cast buff
+            // so the Buff Watchdog + recast engine track it the same as an engine cast.
+            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c); });
         // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
         // taking the round's attack — a user override — while an in-between spell (heal
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
@@ -3322,7 +3391,8 @@ public sealed class AppServices
         // A hand-typed PHYSICAL attack (a / at / att / aa / bash / smash / sm / sma / bs)
         // is likewise a user override — the observer forwards every recognised verb and
         // Combat drops its own swing's echo via a one-shot claim.
-        OutboundAttack = new Game.Combat.OutboundAttackObserver(Combat.NoteAttackCommandObserved);
+        OutboundAttack = new Game.Combat.OutboundAttackObserver(
+            (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a
@@ -3423,6 +3493,18 @@ public sealed class AppServices
         SpellShort = new Game.Combat.SpellShortIndex(GameData);
         Combat.SetSpellShortResolver(SpellShort.ShortByNumber, SpellShort.NumberByShort);
 
+        // Shared monster-record opener — opens the monster edit dialog by Number from any
+        // surface (the Navigation Room Info panel), reusing the browser's read-only "Other
+        // Info" assembly (MonsterMdbInfoBuilder). Constructed here so RoomGraph + SpellShort
+        // (both above) are ready.
+        MonsterRecord = new MonsterRecordDialogService(
+            GameData, Resolver, Dialogs, MonsterOverlaySeed, RoomGraph, TBInfo, SpellShort);
+
+        // Shared spell-record opener — opens the spell's Message / Game-Data dialog by Number
+        // (the Room Info room-spell link), reusing the Spells tab's message-link flow + the
+        // shared SpellInfoRowsBuilder. Messages (2366) is ready.
+        SpellRecord = new SpellRecordDialogService(GameData, Messages, Dialogs);
+
         // Light catalogue + live carried illumination. The snapshot provider is
         // deferred (Inventory is assigned later in this method), so reading
         // PlayerIllumination.Current at tooltip / route time sees the live dump.
@@ -3443,6 +3525,11 @@ public sealed class AppServices
         // standing in an unwinnable fight. Reuses CombatManager's deterministic
         // CanEngageMonster so the gate and the swing decision can't diverge.
         CombatTracker.SetActionabilityGate(n => Combat.CanEngageMonster(n));
+
+        // A passive neutral the user hand-engaged fights like a hostile until it dies —
+        // so the walker gate must hold for it too, matching CombatManager's attack
+        // takeover. Share CombatManager's per-instance set so the two can't disagree.
+        CombatTracker.SetUserEngagedInstanceGate(raw => Combat.IsUserEngagedInstance(raw));
 
         // Keep the walker gate's room-population read in sync with
         // CombatManager's own Min/Max monster skip, so a too-crowded room
@@ -3575,6 +3662,11 @@ public sealed class AppServices
         // suspended on the drop so nothing leaks into the login-menu nav.
         PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
         PromptScanner.PromptObserved += _ => PartyProbe.NotifyEnteredRealm();
+        // Same in-game gate resumes frozen buff timers after an unexpected drop: the
+        // disconnect handler paused them (kept the remaining), and this shifts each
+        // forward by the offline gap so the recast clock picks up where it left off.
+        // Idempotent — no-op unless a drop paused the timers.
+        PromptScanner.PromptObserved += _ => CastDirector.ResumeBuffTimers();
         // A fresh character starts disarmed: zero the counters, then Suspend so
         // accrual waits for that character's first in-game prompt. (Disconnect
         // disarms via MainWindowVM; @reset / the window button keep counting.)
@@ -4095,6 +4187,8 @@ public sealed class AppServices
             isDemandActive: () =>
                 PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
             hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
+            hasGetEngineArmed: () =>
+                ReadAutoModeFlag(d => d.AutoGetItems) || ReadAutoModeFlag(d => d.AutoGetCash),
             coordinator: MovementCoordinator,
             log: Log);
 
@@ -5213,9 +5307,13 @@ public sealed class AppServices
         if (SpellCatalog.GetFormulaByNumber(item.SpellNumber) is not { } formula)
             return null;
         // Duration is in spell rounds — convert to wall-clock seconds for the
-        // recast clock (CastingDirector treats the returned value as seconds).
+        // recast clock (CastingDirector treats the returned value as seconds). Uses
+        // the wall-clock per-round length so the recast window matches the buff's REAL
+        // remaining time, not the nominal Dur×3 (which recasts ~1-2 s early).
         long rounds = Game.Spells.SpellCalculator.Duration(formula, Spellbook.Level);
-        return rounds > 0 ? rounds * Game.Spells.SpellCalculator.SpellRoundSeconds : null;
+        return rounds > 0
+            ? (long)System.Math.Round(rounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock)
+            : null;
     }
 
     // Mana the item-cast buff named by token draws on use —
@@ -5254,9 +5352,20 @@ public sealed class AppServices
             if (!string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase)) continue;
             Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
             if (rec is null || string.IsNullOrWhiteSpace(rec.CasterMessage)) return null;
+            // An enemy-targeting spell (a debuff / attack scope) is never a self-buff,
+            // even if it has a positive duration — so a hand-cast one (e.g. vuln,
+            // Targets 8 Monster-or-User) must not arm a self-buff recast timer or show
+            // up as a phantom self-buff in the Buff Watchdog. This lookup feeds the
+            // self-buff recast-window logic only (report paradigm-20260817-205819).
+            if (Game.Combat.DebuffTargeting.IsSingleTargetEnemy(s.Targets)
+                || Game.Combat.DebuffTargeting.IsAreaEnemy(s.Targets))
+                return null;
             // Duration is in spell rounds; the recast clock wants wall-clock seconds.
-            long durSec = Game.Spells.SpellCalculator.Duration(s.Formula, Spellbook.Level)
-                          * Game.Spells.SpellCalculator.SpellRoundSeconds;
+            // Uses the wall-clock per-round length so "recast within N s" fires at the
+            // buff's REAL remaining time, not ~1-2 s early off the nominal Dur×3.
+            long durSec = (long)System.Math.Round(
+                Game.Spells.SpellCalculator.Duration(s.Formula, Spellbook.Level)
+                * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock);
             return (rec.CasterMessage, durSec);
         }
         return null;
@@ -5277,6 +5386,62 @@ public sealed class AppServices
             if (string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase))
                 return s.Targets is 10 or 13;
         return false;
+    }
+
+    // Self-buff cast code → the configured PARTY-WIDE party-buff cast code that removes
+    // (supersedes) it via RemovesSpell (Abil 122), while in a party. Empty when solo. In
+    // a party we let a party-wide buff that removes a self-buff cover us instead of self-
+    // casting the removed one — chant removes bless, so once chant is a party buff we stop
+    // self-casting bless. Only PARTY-WIDE covers count: a single-target party buff never
+    // lands on self, so it can't cover our self-cast. Drives the director's self-buff
+    // suppression and the Buff Watchdog "covered by" label.
+    public IReadOnlyDictionary<string, string> SelfBuffCoverage()
+    {
+        Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
+        if (!PartyState.IsInParty) return map;
+
+        Models.Profile.SpellsSettings spells = Resolver.Resolve<Models.Profile.SpellsSettings>("Spells");
+        Models.Profile.PartySettings party = Resolver.Resolve<Models.Profile.PartySettings>("Party");
+
+        // Configured self-buffs → (cast code, spell number). #item-cast tokens resolve to
+        // no spell and are skipped (an item buff isn't a RemovesSpell target).
+        List<(string Code, int Number)> selfBuffs = new();
+        void AddSelf(string? code)
+        {
+            if (string.IsNullOrWhiteSpace(code)) return;
+            if (Spellbook.FindByCastCode(code.Trim()) is { } s)
+                selfBuffs.Add((s.Short, s.Number));
+        }
+        foreach (string code in spells.BlessSlots.Values) AddSelf(code);
+        AddSelf(spells.HpRegenSpell);
+        AddSelf(spells.MaRegenSpell);
+        AddSelf(spells.WhenHpFullSpell);
+        AddSelf(spells.WhenMaFullSpell);
+        if (selfBuffs.Count == 0) return map;
+
+        foreach (Models.Profile.PartyBlessSlot pslot in party.BlessSlots)
+        {
+            if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
+            if (!IsPartyWideBuff(pslot.Spell)) continue;   // a single-target party buff never covers self
+            HashSet<int> removed = RemovedSpellNumbers(pslot.Spell);
+            if (removed.Count == 0) continue;
+            foreach ((string code, int number) in selfBuffs)
+                if (removed.Contains(number) && !map.ContainsKey(code))
+                    map[code] = pslot.Spell.Trim();
+        }
+        return map;
+    }
+
+    // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
+    // effect the Spell Book renders as "Removes <spell>").
+    private HashSet<int> RemovedSpellNumbers(string castCode)
+    {
+        const int RemovesSpellAbil = 122;
+        HashSet<int> nums = new();
+        if (Spellbook.FindByCastCode(castCode.Trim()) is { } s)
+            foreach (Game.Spells.SpellAbility a in s.Formula.Abilities)
+                if (a.Code == RemovesSpellAbil) nums.Add(a.Value);
+        return nums;
     }
 
     // Build the cure-confirmation matchers

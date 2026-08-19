@@ -93,6 +93,10 @@ public sealed class CombatStateTracker : IDisposable
     private Func<bool>? _isAutoSneakEnabled;
     private Func<int, bool>? _hasSeeHidden;
     private Func<int, bool>? _canEngage;
+    // RawName → did the user hand-engage this passive neutral? Wired from CombatManager
+    // so the walker gate (HasEngageableHostiles) also holds while the user's manually-
+    // engaged neutral is still alive, matching CombatManager's attack takeover.
+    private Func<string, bool>? _isUserEngagedInstance;
     private bool _seeHiddenClearLatch;
 
     private Action<byte[]>? _wireSender;
@@ -274,6 +278,17 @@ public sealed class CombatStateTracker : IDisposable
         _canEngage = canEngage;
     }
 
+    // Wire CombatManager's per-instance "user hand-engaged this passive neutral" set so
+    // the walker gate treats that neutral as an engageable hostile too. Without it the
+    // gate would release (the neutral is un-tagged, so not engageable on its own) and the
+    // walker could stroll off mid-fight while CombatManager is still killing it. Until
+    // set, no instance is user-engaged (fail-open — behaves exactly as before).
+    public void SetUserEngagedInstanceGate(Func<string, bool> isUserEngagedInstance)
+    {
+        ArgumentNullException.ThrowIfNull(isUserEngagedInstance);
+        _isUserEngagedInstance = isUserEngagedInstance;
+    }
+
     // Wire the CombatSettings.MinMonstersInRoom / MaxMonstersInRoom reader so
     // this tracker's gate agrees with CombatManager's own min/max skip
     // (OnEntitiesObserved's "min/max gate skip" branch) on whether a room is
@@ -434,7 +449,8 @@ public sealed class CombatStateTracker : IDisposable
         {
             if (e.Kind != EntityKind.Monster) continue;
             _anyNpcPresent = true;
-            if (IsEngageable(e))
+            bool engageable = IsEngageable(e);
+            if (engageable)
             {
                 targetable++;
                 if (IsActionable(e))
@@ -446,6 +462,7 @@ public sealed class CombatStateTracker : IDisposable
             // On-sight attackers only (Enemy relationship) — a passive KOS-neutral is
             // engageable but never attacks until we hit it, so it doesn't count here.
             if (IsAttackingHostile(e)) attacking++;
+            LogMonsterDecision(e, engageable);
             if (!roomHasSeeHidden && e.MonsterNumber is int n
                 && _hasSeeHidden?.Invoke(n) == true)
             {
@@ -602,20 +619,30 @@ public sealed class CombatStateTracker : IDisposable
         return targetable >= min && targetable <= max;
     }
 
-    // Engageable = Enemy (the default for un-tagged monsters) OR a Neutral flagged
-    // KillOnSight — see MonsterEngagement. Shopkeepers / quest-givers / friendly NPCs
-    // are marked Friend / Neutral / Hangup in the overlay seed; un-tagged monsters
-    // are treated as fightable so the engine doesn't sit through a respawn just
-    // because the data table is missing a DeathLine (152 of 1100 monsters in stock
-    // data ship with empty DeathLine — acid slime, etc.).
+    // Engageable = Enemy (the default for a resolved-but-untagged monster) OR a Neutral
+    // flagged KillOnSight — see MonsterEngagement. Shopkeepers / quest-givers / friendly NPCs
+    // are marked Friend / Neutral / Hangup in the overlay seed; a monster whose Number resolves
+    // but whose overlay is missing is treated as fightable so the engine doesn't sit through a
+    // respawn just because the data table is missing a DeathLine (152 of 1100 stock monsters
+    // ship with empty DeathLine — acid slime, etc.).
+    //
+    // A monster the classifier CANNOT resolve to a Number is NOT engaged — we never proactively
+    // hit something we can't identify, so a friendly / neutral NPC whose name didn't pin to its
+    // record (a greet-only "old man") is left alone rather than defaulting to a fightable enemy.
+    // This is a fail-CLOSED distinct from the resolved-but-untagged fail-open above; the
+    // reactive InCombat path still fights back if such a mob actually attacks us.
     private bool IsEngageable(RoomEntity e)
     {
-        if (e.MonsterNumber is not int n) return true;
+        if (e.MonsterNumber is not int n) return false;
+        // A passive neutral the user hand-engaged fights like a hostile until dead, so it
+        // holds the walker gate the same way an enemy does — even before its overlay says
+        // so, and regardless of the resolver being wired.
+        bool userEngaged = _isUserEngagedInstance?.Invoke(e.RawName) == true;
         if (_resolveOverlay is null) return true;        // legacy ctor — engage everything
         MonsterOverlay overlay;
         try { overlay = _resolveOverlay(n) ?? new MonsterOverlay(); }
         catch { return true; }
-        return MonsterEngagement.IsEngageable(overlay);
+        return MonsterEngagement.IsEngageable(overlay, userEngaged);
     }
 
     // On-sight attacker: an Enemy-relationship monster (the default for un-tagged
@@ -631,6 +658,31 @@ public sealed class CombatStateTracker : IDisposable
         try { overlay = _resolveOverlay(n) ?? new MonsterOverlay(); }
         catch { return true; }
         return (overlay.Relationship ?? MonsterRelationship.Enemy) == MonsterRelationship.Enemy;
+    }
+
+    // Per-monster Combat-level trace so a log read explains WHY the engine engaged or skipped
+    // each room occupant: the detection (name → resolved record Number), its user Relationship +
+    // Kill-on-sight, and the resulting engage / skip decision. Exactly what a "why did it attack
+    // the friendly NPC?" report needs. Combat severity — verbose per-observation detail.
+    private void LogMonsterDecision(RoomEntity e, bool engageable)
+    {
+        if (_log is null) return;
+
+        string record = e.MonsterNumber is int n ? $"#{n}" : "unresolved";
+        string relationship = "Enemy (default)";
+        bool killOnSight = false;
+        if (e.MonsterNumber is int mn && _resolveOverlay is not null)
+        {
+            MonsterOverlay? overlay;
+            try { overlay = _resolveOverlay(mn); } catch { overlay = null; }
+            relationship = (overlay?.Relationship ?? MonsterRelationship.Enemy).ToString();
+            killOnSight = overlay?.KillOnSight == true;
+        }
+
+        _log.Combat(LogCategory,
+            $"detected '{e.ResolvedName}' ({record}) · relationship {relationship}"
+            + (killOnSight ? " · kill-on-sight" : "")
+            + $" → {(engageable ? "engage" : "skip")}");
     }
 
     // Actionable = we can actually kill it (a weapon can hit it OR an eligible

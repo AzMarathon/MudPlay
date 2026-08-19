@@ -78,6 +78,13 @@ public sealed partial class CombatManager : IDisposable
     // current room so a display name shared across zones picks this room's variant.
     // Null (tests / legacy ctor) → the name→Number step keeps its first-match scan.
     private readonly Func<string, int?>? _roomAwareResolve;
+    // Resolves a debuff slot's cast-code to its catalog row so the between-round
+    // debuff dispatch can reject a mis-slotted spell (an attack spell with
+    // non-zero energy, or a targeting scope that doesn't fit single vs area).
+    private readonly Func<string, Game.Spells.KnownSpell?>? _resolveSpellByCode;
+    // Cast-codes already warned about as invalid debuff-slot configs, so the
+    // program log gets one line per bad slot rather than one per round.
+    private readonly HashSet<string> _warnedInvalidDebuffSlots = new(StringComparer.OrdinalIgnoreCase);
     private readonly PartyState _party;
     private readonly Func<CombatSettings> _readSettings;
     private readonly Func<PartySettings>? _readPartySettings;
@@ -455,6 +462,11 @@ public sealed partial class CombatManager : IDisposable
     private DateTimeOffset _lastExpGainAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ExpKillWindow = TimeSpan.FromSeconds(3);
 
+    // Exp lines seen this combat round. ≥2 means an AoE (ours or a hand-cast one) killed
+    // several mobs at once — the multi-kill signal the roster-wipe path keys on. Reset at
+    // the round boundary (OnCombatTick).
+    private int _expGainsThisRound;
+
     // The target a prompt exp-inferred kill just dropped, remembered so the kill's
     // *Combat Off* can still drop it from the live roster. The exp line lands BEFORE
     // *Combat Off* and nulls _currentTarget (so the round's alternate can't corpse-cast)
@@ -555,7 +567,8 @@ public sealed partial class CombatManager : IDisposable
         Action<Action> post,
         LogService? log = null,
         Func<PartySettings>? readPartySettings = null,
-        Func<string, int?>? roomAwareResolve = null)
+        Func<string, int?>? roomAwareResolve = null,
+        Func<string, Game.Spells.KnownSpell?>? resolveSpellByCode = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(classifier);
@@ -571,6 +584,7 @@ public sealed partial class CombatManager : IDisposable
         _monsters     = monsters;
         _resolveOverlay = resolveOverlay;
         _roomAwareResolve = roomAwareResolve;
+        _resolveSpellByCode = resolveSpellByCode;
         _party        = party;
         _readSettings = readSettings;
         _isEnabled    = isEnabled;
@@ -679,14 +693,19 @@ public sealed partial class CombatManager : IDisposable
         // drain override is the active action — the key runtime tell a drain report
         // needs alongside the resolved Combat settings + live HP.
         string? LastCastAction,
-        string? AnnouncedSpell);
+        string? AnnouncedSpell,
+        // Passive neutrals the user hand-engaged (turned hostile), which the engine is
+        // now finishing like enemies. A "why isn't it fighting the neutral I attacked?"
+        // report needs to see whether the instance actually got marked.
+        IReadOnlyList<string> UserEngagedInstances);
 
     // UI-thread only (router handlers + the capture both run there), so no lock.
     public DebugState Snapshot() => new(
         _currentTarget, _usingAlternateWeapon,
         _awaitingBackstabResolution, _pendingBackstabSpecies,
         _guardBlockedTarget, _alternationRound,
-        _lastCastAction?.ToString(), _announcedSpellCode);
+        _lastCastAction?.ToString(), _announcedSpellCode,
+        _userEngagedInstances.ToArray());
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
     // holds any stealth that opens a backstab — sneaking OR (optimistically) hidden
@@ -932,6 +951,19 @@ public sealed partial class CombatManager : IDisposable
         // engageable set (a re-observe of the SAME room re-arms it if still apt).
         _awaitingFollowAnnounce = false;
 
+        // Prune the user-engaged-neutral overrides for instances no longer in the
+        // room (killed, or we changed rooms) so the takeover can't leak onto a
+        // freshly-arrived same-named mob. Full-roster observations only — an arrival
+        // line never removes a monster, so pruning on it could wrongly drop a
+        // still-present engaged neutral mid-burst.
+        if (_userEngagedInstances.Count > 0 && obs.Source != RoomObservationSource.Arrival)
+        {
+            HashSet<string> present = new(StringComparer.OrdinalIgnoreCase);
+            foreach (RoomEntity e in obs.Entities)
+                if (e.Kind == EntityKind.Monster) present.Add(e.RawName);
+            _userEngagedInstances.RemoveWhere(r => !present.Contains(r));
+        }
+
         // An authoritative non-arrival observation (the room re-display, a room
         // change, a death resync) supersedes a pending simultaneous-arrival settle:
         // it carries the full roster, so it drives the decision now and the settle
@@ -1006,7 +1038,7 @@ public sealed partial class CombatManager : IDisposable
                 _speciesByNumber[n] = e.ResolvedName;
 
                 MonsterOverlay overlay = ResolveOverlay(n);
-                if (!MonsterEngagement.IsEngageable(overlay))
+                if (!MonsterEngagement.IsEngageable(overlay, _userEngagedInstances.Contains(e.RawName)))
                     continue;
                 // Engageability is Relationship-based ONLY. Earlier we
                 // also required MonsterMessageRecord.DeathLine non-empty
@@ -1069,7 +1101,7 @@ public sealed partial class CombatManager : IDisposable
                     else if (e.MonsterNumber is int mn)
                     {
                         MonsterOverlay ov = ResolveOverlay(mn);
-                        if (!MonsterEngagement.IsEngageable(ov))
+                        if (!MonsterEngagement.IsEngageable(ov, _userEngagedInstances.Contains(e.RawName)))
                             friendlyCount++;
                     }
                 }
@@ -1302,7 +1334,8 @@ public sealed partial class CombatManager : IDisposable
         // gate keeps the walker put. ResumeAfterRecovery re-picks once recovered.
         if (_recoveryPending?.Invoke() == true
             && _hasAttackingHostile?.Invoke() != true
-            && IsNeutral(picked))
+            && IsNeutral(picked)
+            && !_userEngagedInstances.Contains(picked.RawName))   // user chose to fight this one now — don't sit and rest
         {
             _log?.Combat(LogCategory,
                 $"combat held — recovering before engaging neutral {picked.RawName}");
@@ -2171,6 +2204,21 @@ public sealed partial class CombatManager : IDisposable
         if (!_isEnabled()) return;
         if (_wireSender is null) return;
 
+        // AoE room-wipe: ≥2 exp lines this round means an AoE (ours or a hand-cast one)
+        // killed several mobs at once. Peeling them off the roster one-by-one re-fires the
+        // re-pick against the still-cached survivors — which are ALSO dying this round — so
+        // the engine re-engages one and corpse-casts a single-target spell at it (report
+        // paradigm-20260817-105650: a manual `fbal` wiped 5 goblins, then `mmis dark goblin
+        // archer` went out at a corpse → "You don't see dark goblin archer here!"). Instead,
+        // drop all combat state and force ONE CR re-parse so the next observation is the
+        // TRUE roster — we re-pick from what's actually left (usually nothing) rather than a
+        // survivor the kills haven't cleared yet.
+        if (_expGainsThisRound >= 2)
+        {
+            ForceAoeMultiKillReparse("AoE multi-kill");
+            return;
+        }
+
         // Normally the corpse's identity is the still-set _currentTarget. But a prompt
         // exp-inferred kill (OnUserGainExperience) fires BEFORE this Off and already
         // nulled _currentTarget — fall back to the target it stashed so the roster
@@ -2331,10 +2379,11 @@ public sealed partial class CombatManager : IDisposable
 
     // A manually-typed cast-code (routed by OutboundCastObserver). A combat spell is the
     // user taking the round's attack (override); an in-between spell keeps the resume.
-    public void OnManualCastObserved(string castCode)
+    // The optional target lets the override mark a manually-engaged passive neutral.
+    public void OnManualCastObserved(string castCode, string? target = null)
     {
         if (_isCombatSpell?.Invoke(castCode) == true)
-            NoteUserAttackOverride($"manual combat spell '{castCode}'");
+            NoteUserAttackOverride($"manual combat spell '{castCode}'", target);
         else
             NoteManualBetweenRoundCast();
     }
@@ -2342,7 +2391,7 @@ public sealed partial class CombatManager : IDisposable
     // A manually-typed physical attack verb (routed by OutboundAttackObserver). The
     // observer sees the engine's own swings too, so drop the one we just sent (echo
     // claim) and treat anything else as the user taking the round's attack.
-    public void NoteAttackCommandObserved(string verb)
+    public void NoteAttackCommandObserved(string verb, string? target = null)
     {
         if (_pendingAttackEchoVerb is { } pending
             && string.Equals(pending, verb, StringComparison.OrdinalIgnoreCase))
@@ -2350,15 +2399,88 @@ public sealed partial class CombatManager : IDisposable
             _pendingAttackEchoVerb = null;   // our own send — consume the echo
             return;
         }
-        NoteUserAttackOverride($"manual physical attack '{verb}'");
+        NoteUserAttackOverride($"manual physical attack '{verb}'", target);
     }
 
-    private void NoteUserAttackOverride(string reason)
+    private void NoteUserAttackOverride(string reason, string? target = null)
     {
         _userAttackOverride = true;
         _log?.Combat(LogCategory,
             $"user attack override armed ({reason}) — holding the engine's auto attack until next round");
+        MarkUserEngagedNeutral(target);
     }
+
+    // A user who hand-attacks a PASSIVE neutral (Neutral relationship, not KillOnSight)
+    // turns it hostile — once hit it keeps swinging back until dead — so the engine takes
+    // over finishing it, exactly as if it were an enemy (see MonsterEngagement's
+    // per-instance override). Only passive neutrals are marked: enemies and KillOnSight
+    // neutrals already engage on their own, and a Friend/Flee target the user swung at is
+    // theirs to manage. Keyed by RawName to match the rest of the engine's target space,
+    // and set as _currentTarget so the takeover engages this instance next round.
+    private void MarkUserEngagedNeutral(string? target)
+    {
+        if (ResolveManualTarget(target) is not { } cand) return;
+        MonsterOverlay overlay = ResolveOverlay(cand.MonsterNumber);
+        bool passiveNeutral = (overlay.Relationship ?? MonsterRelationship.Enemy)
+                                  == MonsterRelationship.Neutral
+                              && overlay.KillOnSight != true;
+        if (!passiveNeutral) return;
+        if (_userEngagedInstances.Add(cand.RawName))
+            _log?.Combat(LogCategory,
+                $"user hand-engaged passive neutral '{cand.RawName}' — engine takes over killing it");
+        _currentTarget = cand.RawName;
+    }
+
+    // Resolve the room instance a manual attack/cast aimed at. The user types an
+    // ABBREVIATED target to engage as fast as possible ("a rat" for "giant rat"), so
+    // match the typed token against the full name, a name-prefix, or any word-prefix —
+    // mirroring how the server resolves a short attack. Falls back to the current engine
+    // target when the send carried no target (a bare "a" / self-targeting cast code).
+    private EngageableCandidate? ResolveManualTarget(string? typed)
+    {
+        if (_classifier.Current is not { } obs) return null;
+        string? name = string.IsNullOrWhiteSpace(typed) ? _currentTarget : typed.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        // Exact RawName/ResolvedName first — covers the engine's own full-name sends
+        // and the _currentTarget fallback (both RawNames).
+        if (TryBuildCandidate(obs, name) is { } exact) return exact;
+
+        for (int i = 0; i < obs.Entities.Count; i++)
+        {
+            RoomEntity e = obs.Entities[i];
+            if (e.Kind != EntityKind.Monster) continue;
+            if (e.MonsterNumber is not int n) continue;
+            if (!NameMatchesTyped(e.RawName, name) && !NameMatchesTyped(e.ResolvedName, name))
+                continue;
+            MonsterOverlay overlay = ResolveOverlay(n);
+            return new EngageableCandidate(
+                RawName:         e.RawName,
+                ResolvedName:    e.ResolvedName,
+                MonsterNumber:   n,
+                Priority:        overlay.Priority ?? MonsterAttackPriority.Normal,
+                AppearanceIndex: i,
+                DontBackstab:    overlay.DontBackstab ?? false);
+        }
+        return null;
+    }
+
+    private static bool NameMatchesTyped(string? name, string typed)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        if (name.StartsWith(typed, StringComparison.OrdinalIgnoreCase)) return true;
+        foreach (string word in name.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            if (word.StartsWith(typed, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    // RawNames the user hand-engaged this room (passive neutrals turned hostile). Cleared
+    // per-observation for names no longer present (prune-on-observe in OnEntitiesObserved)
+    // so the takeover ends when the instance dies or the room changes. Keyed on RawName to
+    // match _currentTarget and the overlay-vs-instance split MonsterEngagement documents.
+    private readonly HashSet<string> _userEngagedInstances = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool IsUserEngagedInstance(string rawName) => _userEngagedInstances.Contains(rawName);
 
     // Cleared at the top of each combat tick (the round boundary) so the engine resumes
     // its auto attack next round. Called from the Spells partial's OnCombatTick.
@@ -2397,6 +2519,7 @@ public sealed partial class CombatManager : IDisposable
     private void OnUserGainExperience(MatchResult _)
     {
         _lastExpGainAt = DateTimeOffset.Now;
+        _expGainsThisRound++;
         if (_currentTarget is not null
             && _attackSentSinceDeath
             && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
@@ -2404,6 +2527,40 @@ public sealed partial class CombatManager : IDisposable
             DropTargetForInferredKill(
                 "kill inferred from exp gain (prompt, pre-*Combat Off*) — dropping target so the round's alternate can't corpse-cast");
         }
+
+        // AoE multi-kill MID-ROUND: a 2nd+ exp gain in the same round means an AoE
+        // dropped several mobs at once. NoteUnattributedDeath's re-parse only fires on
+        // the trailing *Combat Off* — but when a survivor keeps combat continuously
+        // engaged, that Off never lands, so the stale EnemyCount keeps the engine (and
+        // the server's auto-repeat) firing the room spell at the lone survivor round
+        // after round (report paradigm-20260818-052120: "FBAL keeps rooming despite only
+        // Queen Ant left, until I hit enter"). Force the roster re-parse now so the next
+        // observation is the TRUE roster and the chooser drops to single-target once the
+        // live count falls below the room spell's MinEnemies. Debounced + reset per round,
+        // so this and the Off-path never double-CR and a normal one-kill-per-round fight
+        // (exp count 1) never trips it.
+        if (_expGainsThisRound >= 2)
+            ForceAoeMultiKillReparse("AoE multi-kill mid-round");
+    }
+
+    // AoE room-wipe recovery: drop all combat state and force ONE debounced CR
+    // re-parse so the next observation is the TRUE roster, re-picking from what's
+    // actually left rather than a survivor the kills haven't cleared yet. Shared by
+    // the *Combat Off* path (NoteUnattributedDeath) and the mid-round exp-gain path
+    // (OnUserGainExperience) — the latter catches the survivor-keeps-combat case
+    // where no Off ever lands.
+    private void ForceAoeMultiKillReparse(string context)
+    {
+        _lastDeathAt = DateTimeOffset.Now;
+        _attackSentSinceDeath = false;
+        _currentTarget = null;
+        _castingSpellTarget = null;
+        _inferredKillPendingRemoval = null;
+        ClearBackstabResolution();
+        if (TrySendRoomRefresh(context))
+            _log?.Combat(LogCategory,
+                $"AoE multi-kill ({_expGainsThisRound} exp this round) — re-parsing room with "
+                + "CR to re-pick from the true roster instead of firing at a survivor");
     }
 
     // Drop the current target for a kill inferred from an exp gain. Nulls both
@@ -2699,7 +2856,7 @@ public sealed partial class CombatManager : IDisposable
             if (e.Kind != EntityKind.Monster) continue;
             if (e.MonsterNumber is not int n) return true; // unknown → assume engageable
             MonsterOverlay overlay = ResolveOverlay(n);
-            if (MonsterEngagement.IsEngageable(overlay))
+            if (MonsterEngagement.IsEngageable(overlay, _userEngagedInstances.Contains(e.RawName)))
                 return true;
         }
         return false;

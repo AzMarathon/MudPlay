@@ -25,6 +25,12 @@ it isn't here and you're unsure, ask.
   duration of `N` rounds lasts `N × 3` seconds. A debuff falls off on the same 3s cadence.
 - A spell record's `Dur` field is therefore **spell rounds**: real seconds = `Dur × 3`.
   Boat-voyage length is the sum of the transit spells' `Dur` along the disembark chain, × 3s.
+- **[OBSERVED, report paradigm-20260816-222917]** The **real** spell round runs slightly LONG,
+  like the combat round is ~5.04s not 5.0 — a 50-round buff (`prev`, protection from evil) was
+  observed lasting **~151-152s**, i.e. ~**3.04s/round**, not the nominal 150s. So a "recast within
+  N s" slot, which is measured against the buff's **real** remaining seconds, must time off ~3.04s
+  or it recasts ~1-2s early. The client keeps the nominal 3s for spell-data displays but uses
+  `SpellCalculator.SpellRoundSecondsWallClock` (3.04) for the live recast clock + Buff Watchdog.
 - If a specific duration's unit is ever ambiguous, **ask the user** — they can give the correct
   value rather than us guessing.
 
@@ -561,7 +567,14 @@ Client mapping: the per-monster overlay `Relationship` (`Enemy` / `Neutral` / `F
 flag (Monster edit dialog, shown only for `Neutral`) makes auto-combat **engage a neutral like an
 enemy** — but because neutrals never open on you, the *other* un-engaged neutrals still don't block
 resting, so between kills the engine rests/meditates (only when below the rest trigger) before turning
-on the next one. `Enemy` and passive neutrals are unchanged.
+on the next one.
+
+There's one more path onto a passive neutral: **if *you* hand-attack one** (a manual swing or combat
+cast), it turns hostile per the mechanic above, so the client marks that instance user-engaged and the
+auto-combat engine **takes over finishing it** — treating it like an enemy until it dies (and holding
+the walker in the room) instead of stopping the moment you engaged it. It's keyed per-instance by name
+and pruned once the mob is gone, so it never leaks onto a freshly-arrived same-named passive neutral;
+the *other* un-engaged neutrals stay passive and rest-safe. `Enemy` monsters are unchanged.
 
 ## Monster aggression — who opens on you unprovoked
 
@@ -1506,6 +1519,26 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   - **Walker takeaway:** walk-to-action-room → send the command(s) in `StepNumber` order → walk-back to
     the exit's room → send the cardinal. The generous open window makes normal walk distances safe; do
     not gate on a data-supplied timer (there isn't one) or on parsing a confirmation line.
+- **[CONFIRMED, user 2026-08-17]** **A "specific order" multi-action exit tracks ONLY its own sequence
+  levers, in RELATIVE order — pulling unrelated levers in between does NOT break it; and nested
+  action gates can chain.** Two facts that let the walker solve *nested* lever vaults (a lever whose room
+  is itself behind another action-gated exit):
+  - **Relative order, own levers only.** For `Needs N Actions, specific order`, the gate only requires
+    that ITS OWN actions fire in relative order (#1 before #2, #2 before #3, …). Pulling a lever for a
+    *different* exit (e.g. the entrance lever of an alcove you must open to reach the next sequence lever)
+    between two of the gate's ordered steps does **not** reset the sequence. So the client may interleave:
+    open alcove *i*, pull sequence-lever *i*, repeat — the sequence stays valid.
+  - **Persistence covers the compound walk.** An opened action-gated exit stays passable for the same
+    minutes-long window (above), and opening several nested gates and re-crossing them all lands well
+    inside it — so a multi-gate compound detour is safe.
+  - **Grounding example (data-Paradigm-1.9.1): the 6/861 tomb vault → 6/924.** Descent
+    `6/861 →D→ 6/922 →D→ 6/923 →D→ 6/924`; `6/861` D needs 4 ordered levers, in alcoves 6/919 / 6/921 /
+    6/920 / 6/918. Each alcove is behind its own `Needs 1 Actions` entrance gate whose lever sits in a
+    freely-walked Ancestral Tomb room (6/889 / 6/917 / 6/903 / 6/875) — genuinely one level of nesting.
+  - **Client encoding:** `RemoteActionPathExpander` opens nested gates recursively (open the inner door,
+    then cross), bounded by a nesting-depth cap + a lever-cycle guard; past those it clean-fails. This is
+    fully generic off the exit graph — no per-area code (the Asylum + Pyramid remain the only bespoke
+    area solvers).
 - **[CONFIRMED, capture 2026-07-28 report 180730 — SUPERSEDES the earlier report-195552 "both needed" claim]**
   **Two guardroom levers with identical commands on one gate are REDUNDANT alternatives — one pull raises
   it.** Some `Door` exits are raised not by a same-room verb but by a `pull lever` performed in one or
@@ -1654,6 +1687,18 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
     random-teleport maze (the tracker sits at Suspect, not Confirmed), so the look-sweep is the only thing
     that can drive the asylum — Paradigm included. Implemented in `TeleportMazeIndex` (detection +
     signatures) and `TeleportMazeSolver` (the state machine).
+  - **[CONFIRMED, user 2026-08-16] Once relocalized into a "solvable" room, the plain route to the
+    goal is unhindered — drive it with no per-step re-location.** The initial teleport-landing
+    relocalization (the 1x2 look-sweep on stock, `rm` on Paradigm) still runs — that's how the solver
+    confirms which room it landed in. But the moment that relocalization yields a room from which a
+    plain BFS route to the goal exists (`FindPath(here, goal)` non-empty — the "solvable room" test),
+    that route is a **deterministic, teleport-free corridor with no cast end-casts on it**, so the
+    solver paces the moves straight out with **no per-step verification**: no `look` sweep on stock,
+    no `rm` on Paradigm. The per-step re-location only existed to catch surprise teleports / blocked
+    doors that this route is confirmed not to have, so it was pure spam. The concrete asylum instance:
+    **map 9, rooms 1200 / 1199 / 1197 / 1198** are the solvable rooms — from any of them the walk to
+    the **old man (NPC #499, phoenix-feather quest start)** is unhindered. The trigger stays structural
+    (any maze's plain-route rooms), with these four the confirmed real case.
   - **[CONFIRMED, user design 2026-07-17] Paradigm asylum pull-lever = pocket dimension.** Only the
     Paradigm 1.9.1 data (not stock v1.11p) gives room `9/1259` a `pull lever` CMD teleport back to the
     entry area `9/1180`. That one escape edge would otherwise defeat the one-way pocket test (reachability
@@ -1727,6 +1772,54 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
     refusing both `RoomExitHint.Teleport` and gateway-portal exits. Automated walks (loops, death
     recovery, deposits, party comeback, trainer routing) never prompt — they keep the default
     teleport-allowed shortest route.
+
+## `testskill` obstacle checks *([CONFIRMED] 2026-08-18, user + game-data trace, Paradigm 1.9.1)*
+
+A `testskill <stat> <difficulty> <failTextblock>` directive in a room-CMD / greet / spell action chain
+is a **stat check with a random roll**: the game rolls a die in a range tied to the difficulty and
+compares it to the character's `<stat>`. Roll **under** your stat → the check **passes** and the chain's
+follow-on action fires (a `remoteaction` reveal, a `teleport`, etc.); roll over → the **fail action**
+runs (jump to `<failTextblock>`), which often lands you somewhere unintended. Example that DOES roll: the
+Slums slaver-rooftop `jump` exits carry `testskill agility` and can drop you into the wrong room on a miss.
+
+**Difficulty `0` is the special case: it never actually checks anything — the action always fires.** So
+`clear rubble:testskill strength 0 …:remoteaction …` behaves like a plain lever/reveal, not a gamble.
+Client consequence: the walker treats a difficulty-0 `testskill` reveal as a deterministic action (send
+the keyword, then take the exit — no fail-handling). A non-zero `testskill` exit is NOT auto-traversed as
+a sure thing.
+
+## Special exits the walker can route through *([CONFIRMED] 2026-08-18, user + game-data trace, Paradigm 1.9.1)*
+
+Two exit shapes beyond ordinary cardinals / doors / CMD-teleports, both on the route to the Necromancer
+(9/1431, phoenix-feather quest):
+
+- **Room-command reveal (a lever whose opener is the room CMD).** A hidden exit (`(Hidden/Needs N
+  Actions)`) whose unlock isn't an exit `Action` cell but a `remoteaction` in the **room's CMD chain**.
+  Canonical: 9/1012 "Crumbling Ruin, Entrance" CMD 1422 = `clear rubble:testskill strength 0 …:
+  remoteaction 1012 … 0` (synonyms `move`/`push` × `rubble`/`mound`/`rock`; the trailing `0` = the N
+  exit). You type `clear rubble`, the N passage to 9/1013 opens. The reveal is **one-directional** — only
+  the closed side (9/1012→N) needs it; the reverse (9/1013→S→9/1012) is a normal always-open exit — and
+  the opened exit **stays open a few minutes**.
+- **Item-use teleport (an item whose USE transports you).** Distinct from CMD / greet / room-spell
+  teleports: the teleport lives entirely on the **item**, via the chain item `Abil 43 (CastsSp)` → spell
+  → spell `Abil 148 (TextBlock)` → TBInfo whose Action has a literal `teleport <room> <map>`. Canonical:
+  **potion of levitation** (item 992 → spell 607 → TBInfo 1421 `roomitem 993 …: teleport 1009 9`) — used
+  in **3/1** it transports you to **9/1009**. It is gated two ways: you must **carry** the item (it's a
+  single-use consumable, spent on use), and the TBInfo's `roomitem <fixture>` gate means it only fires in
+  the room that holds that fixture (item 993 "waterfall" lives in 3/1, which is why it "must be used
+  there"). The return trip is a normal exit (9/1009→D→3/1), so the potion is never needed to come back.
+  This is likely the ONLY item-only-anchored teleport in the data; the client anchors its graph edge on
+  the fixture item's own room (its `Obtained From`), since there's no exit / CMD / greet to hang it on.
+  **Partied:** every member needs their OWN potion, and the crossing is a party-relay — the leader must
+  tell the party to use theirs *before* using its own. The client already does this via its standard
+  teleport party-relay (a leader with followers sends `.@party use potion of levitation` on the party
+  channel, THEN uses its own `use potion of levitation`), because the item-use teleport is an ordinary
+  `Teleport`-hint edge. The one thing the client can't verify is whether each follower actually carries
+  a potion — a member without one is left behind (we don't track follower inventory).
+
+Quest items on such routes (the potion, plus the titanium fork / magical quartz rod that gate the ruin's
+barrier exits) are **never auto-obtained** — they're quest-locked, so a route missing one fails with a
+named "go obtain the &lt;item&gt;" message rather than trying to fetch it.
 
 ## Great Pyramid puzzle climb *([CONFIRMED] 2026-07-29, user + capture `follower log of going up the pyramid.log` + hand-drawn map + game-data trace, Paradigm 1.9.1)*
 
@@ -2547,6 +2640,18 @@ glass jug               5               2 gold crowns
   flag whenever a sibling with a specific wear-off never sees its matching line. (See
   `ConditionTracker`'s applied-line alias group-clear.)
 
+## Poison prevents resting *([CONFIRMED] 2026-08-17, user + report `paradigm-20260817-092945`)*
+
+- **While poisoned you cannot rest** — a `rest` (or meditate) issued while poisoned does
+  **not** put you into the `(Resting)` state (poison refuses / breaks it), so the position
+  never becomes Resting and the recovery you'd get from resting doesn't happen; you only
+  get the slow standing regen.
+- **Consequence for the auto-rest engine:** an optimistic "resting" latch armed on the send
+  (`HealthManager._restInFlight`) never confirms while poisoned, and the interruption latch
+  can't clear it (it needs a confirmed Resting first). So the client must **re-attempt the
+  rest once poison clears** (the poison falling edge drops the stale latch) — otherwise it
+  sits standing below the rest floor forever, which is what report 092945 hit.
+
 ## Confusion fumbles — actions fail and must be re-sent *([CONFIRMED] 2026-07-14, user)*
 
 - Confusion does **not** block attacking (or acting) outright. Instead each action
@@ -2573,6 +2678,90 @@ glass jug               5               2 gold crowns
   shriek that wore off left the co-latched `fumble` still holding `Confused`, keeping the nav
   ConfusionGate stuck. **Client encoding:** `ConditionTracker` clears every active `Confused` record when
   a `Confused`-carrying record's wear-off matches.
+
+## One BETWEEN-ROUND spell per combat round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
+
+- **You may cast only ONE 0-energy "between-round" spell per combat round — total, across heals, buffs,
+  debuffs, and use-item buffs.** These are the `EnergyCost = 0` spells (mageshield / holy armour, cures,
+  regen HoTs, etc.); they ride *between* the round's main action, so one is free each round on top of your
+  attack. A **second** between-round spell attempted the same round is rejected with **`You have already
+  cast a spell this round!`**, and **the spell you just sent does NOT fire** — success or failure of the
+  first doesn't matter, the round's single between-round slot is spent. **This line never appears for combat
+  spells** (lbol / mmis / deathtouch / fireball are 500–1000 energy — the round's main action, not
+  between-round), so it is purely the between-round coordinator's signal.
+  - **Client encoding:** the between-round coordinator (`CastingDirector`) casts at most one between-round
+    spell per round, gated on a latch cleared by the **combat round tick** — `TickEngine.CombatTickElapsed`
+    (`NotifyRoundComplete`), the 5s combat heartbeat refreshed by damage lines. It must NOT clear on
+    **`*Combat Off*`**: that fires per *kill*, so in a multi-mob room it lands several times a round and would
+    re-open the slot mid-round (the recast storm's door). The bug that produced the "4 mageshields in a short
+    span" storm was the coordinator's own one-per-round cooldown being cleared on every per-hit tick, letting
+    it send several between-round spells a round. On the rejection the just-sent spell didn't fire, so its
+    optimistic recast timer is dropped (it re-attempts next round) and the round's slot is latched spent
+    (`CastingDirector.OnCastFailed`).
+- **A self-buff's active/recast state is keyed to its own 4-letter cast code**, resolved from game data: the
+  success line (`Spells` → *user definitions* → CasterMessage / AppliedMessage) starts the duration timer,
+  and the buff's OWN wear-off (`AppliedEndsWith`) clears it. **Distinct buffs that merely share an applied /
+  onset line must NOT cross-clear.** Unlike confusion (one shared state, many sources — a group clear is
+  correct there), the five shields that all emit **`You feel protected!`** (mageshield #132, ethereal shield
+  #4, holy/unholy armour #148/#149, heros tabard #859) are *separate* effects with their *own* distinct
+  wear-offs. So a wear-off fires `ConditionTracker.ConditionEnded` only for the record whose own end-text
+  matched — a sibling sharing the applied line is dropped from the active set (keeping flags honest) but
+  does not fire the event, so it can't clear a different buff we actually cast.
+- **[CONFIRMED, user 2026-08-16 + report `paradigm-20260816-232454`] The `stat` screen's buff readout is
+  NEVER a fresh cast — ignore it for buff tracking.** On Paradigm, `stat` lists each active effect as
+  **`You feel <effect>! (<remaining>s)`** (e.g. `You feel lucky! (411s)`, `You feel safe from evil! (12s)`).
+  The effect text is *shared* across many records — one `You feel lucky!` line matched **11** catalogue
+  records (bless + chant + several weapons/items) — so a readout can neither identify **which** buff is up
+  nor legitimately "apply" one. Treating it as a cast falsely marked buffs active on **login** (the post-entry
+  `stat` refresh), and because the tracker only fires on a not-active→active transition, that stale "active"
+  state then **suppressed the confirm on the real manual cast** (a repeat applied line is no transition). The
+  client keys off the trailing **`(<remaining>s)`** parenthetical to skip these readouts entirely
+  (`ConditionTracker`); a genuine fresh-cast effect line has no parenthetical.
+- **A hand-typed buff is confirmed by the CAST CODE, not the shared success text.** You type the 4-letter
+  code (`bles`) → the client arms/refreshes that buff's timer anchored on the code (`CastingDirector.NoteManualBuffCast`,
+  fed by the `OutboundCastObserver`), exactly as an engine cast does. The following success line just
+  confirms it landed; identity comes from the code, never the ambiguous applied message.
+- **[user 2026-08-16] Session vs drop for buff timers.** **Any** disconnect — manual, hangup, or an unexpected
+  drop — **freezes** the buff timers (the buffs persist server-side through link-death); the Buff Watchdog
+  display freezes at the drop instant too (its 1s heartbeat is a wall clock that keeps ticking offline). The
+  first in-game prompt after reconnect **resumes** them shifted forward by the offline gap (same remaining),
+  instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
+  (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
+  the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
+- **[user 2026-08-17] Party-buff slots are party-only, and a superseding party buff covers self.**
+  The party-bless slots are cast **only while in a party** (`PartyState.IsInParty`); solo, none fire —
+  self-buffs come from the self-bless slots. A **single-target** party buff is cast per class-matched
+  member and **never targets self** (self uses the self-slots); only a **party-wide** buff (`Spells.Targets`
+  = Full/Divided Party Area, scope 13/10) lands on self. **Supersession:** a spell that carries **RemovesSpell
+  (Abil 122)** removes the named spell (the Spell Book renders it "Removes <spell>"). So when a configured
+  **party-wide** party buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop
+  self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff
+  "covered by <party buff>". Only party-wide covers count (a single-target party buff can't cover self).
+
+## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
+
+The Settings → Combat **debuff slots** (single-target debuff + AoE debuff) hold *between-round*
+spells, not combat attacks. Two hard rules distinguish a valid debuff from a misconfiguration:
+
+- **0 energy = between-round.** A debuff slot spell **must have `EnergyCost == 0`**. That's what
+  separates a debuff from a combat attack spell: attacks cost energy (Paradigm `lbol`/`mmis` = 500,
+  `fbal`/`dtch` = 1000), between-round spells cost 0 (`blin`/`frai`/`stnk`/`corr`-flesh = 0). Energy —
+  not targeting — is the discriminator: `blin` (debuff, 0) and `lbol` (attack, 500) share the SAME
+  `Targets` scope (8). A non-zero-energy spell in a debuff slot is an attack spell mis-slotted.
+- **Targeting must fit the slot** (`Spells.Targets` scope):
+  - **Single-target debuff** → a single-enemy scope: **Monster (4)** or **Monster or User (8)**
+    (e.g. `blin`/`frai`/`corr`-flesh are 8).
+  - **AoE debuff** → an area/room scope: **Divided Area not-self (3)**, **Divided Area incl-self (5)**,
+    **Divided Attack Area (9)**, **Full Area (11)**, **Full Attack Area (12)** (e.g. `stnk`/`fbal` are 12).
+  - The **party-area** scopes (Divided Party Area 10 / Full Party Area 13) are buffs/heals aimed at the
+    party, **never** enemy debuffs.
+
+  So a targeted spell can't be slotted as an AoE, nor an AoE as single-target (e.g. `stnk`, Targets 12,
+  belongs in the AoE slot, not single-target). The client rejects a mis-slotted debuff before it casts
+  and warns once in the program log.
+
+**Gating:** the **single-target** debuff is gated by **Auto-Combat** (it's a pre-attack debuff, part of
+the attack rotation); the **AoE** debuff is gated by **Auto-Nuke**.
 
 ## Guarded monsters redirect attacks *([CONFIRMED] 2026-07-14, user + wire capture)*
 

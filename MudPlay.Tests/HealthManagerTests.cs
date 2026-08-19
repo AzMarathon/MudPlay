@@ -59,6 +59,10 @@ public sealed class HealthManagerTests
         /// wires this to the running loop's current-room DoNotRest waypoint.</summary>
         public bool SkipRestHere { get; set; }
 
+        /// <summary>Local character poisoned — AppServices wires this to
+        /// ConditionTracker.IsPoisoned. Poison prevents a rest from taking.</summary>
+        public bool Poisoned { get; set; }
+
         /// <summary>The hangup-intent signal wired into the emergency-hangup
         /// path. Tests peek it (non-consuming) to assert an intentional drop was
         /// flagged, so the reactive-reconnect path stands down.</summary>
@@ -82,6 +86,10 @@ public sealed class HealthManagerTests
         /// this to MainWindowViewModel.RequestHangupDisconnect.</summary>
         public int HangupDisconnectCount { get; private set; }
 
+        /// <summary>Controllable clock for the reconfirm-hold timeout backstop.
+        /// Advance it to simulate the window elapsing with no room re-display.</summary>
+        public DateTimeOffset Clock = DateTimeOffset.UtcNow;
+
         public Harness(HealthSettings? settings = null)
         {
             Settings = settings ?? new HealthSettings();
@@ -98,7 +106,8 @@ public sealed class HealthManagerTests
                 readDeathFloor: () => DeathFloor,
                 log: Log,
                 hangupSignal: Hangup,
-                hasHostileInRoom: () => HostileInRoom);
+                hasHostileInRoom: () => HostileInRoom,
+                now: () => Clock);
             Health.SetWireSender(b => Sent.Add(b));
             Health.SetHangupDisconnect(() => HangupDisconnectCount++);
             Health.SetShadowRest(
@@ -107,6 +116,11 @@ public sealed class HealthManagerTests
                 isSolo: () => Solo,
                 onRecovered: () => ShadowRestResumeCount++);
             Health.SetDoNotRestSelector(() => SkipRestHere);
+            Health.SetPartyRoleSync(
+                isPartyFollower: () => false,
+                requestPartyWait: () => { },
+                requestPartyOk: () => { },
+                isSelfPoisoned: () => Poisoned);
         }
 
         /// <summary>
@@ -323,6 +337,38 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void PoisonCleared_ReRests_AfterUnconfirmedLatch()
+    {
+        // Repro (report paradigm-20260817-092945): below the rest floor + poisoned, a rest
+        // is sent but never confirms (poison keeps Position=Standing), so _restInFlight
+        // latches and the two-step interruption latch can't clear it (it needs a confirmed
+        // Resting first). Once poison wears off the stale latch blocked the re-send and the
+        // character stood below the floor forever. The poison falling edge must drop it.
+        using Harness h = new();
+        h.Poisoned = true;
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 50;                 // 25% — gate asserts, rest sent (never confirmed)
+
+        Assert.True(h.HealthGateHeld);
+        Assert.True(h.Health.RestInFlight);
+        Assert.Equal(1, h.SentLines.Count(x => x == "rest"));   // one send, then latched
+
+        // Still poisoned, HP ticks — no re-send (latched).
+        h.State.Hp = 52;
+        h.State.Hp = 51;
+        Assert.Equal(1, h.SentLines.Count(x => x == "rest"));
+
+        // Poison wears off; the next regen tick fires Evaluate.
+        h.Poisoned = false;
+        h.State.Hp = 53;
+
+        // Stale latch dropped → a fresh rest re-sent now that resting will take.
+        Assert.Equal(2, h.SentLines.Count(x => x == "rest"));
+        Assert.True(h.Health.RestInFlight);
+    }
+
+    [Fact]
     public void GateAsserted_HostilesInRoom_DoesNotRest()
     {
         // User direction: "if a room has hostiles it will break resting
@@ -401,6 +447,32 @@ public sealed class HealthManagerTests
         Assert.DoesNotContain("rest", h.SentLines);
 
         h.Health.NoteRoomEntitiesReconfirmed();   // room empty (HostilesPresent stays false)
+
+        Assert.True(h.Health.RestInFlight);
+        Assert.Contains("rest", h.SentLines);
+    }
+
+    [Fact]
+    public void ForceClear_EmptyStaticRoom_NeverReconfirms_TimeoutReleasesHoldAndRests()
+    {
+        // reports paradigm-20260818-050950 / -092532: an empty, static room emits no
+        // "Also here:" line and a stationary character triggers no room change, so the
+        // reconfirm hold never clears and auto-rest is stuck off — below the threshold,
+        // out of combat, yet never resting. The timeout backstop releases the hold so a
+        // genuinely clear room rests without waiting on a re-display that never comes.
+        using Harness h = new();
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.Health.NoteCombatForceCleared();   // hold armed at the current clock
+        h.State.Hp = 50;                      // breach → held, no rest yet
+
+        Assert.False(h.Health.RestInFlight);
+        Assert.DoesNotContain("rest", h.SentLines);
+
+        // No reconfirm ever arrives (empty static room, no hostiles). Time passes beyond
+        // the backstop; the next Evaluate tick releases the hold and rests.
+        h.Clock += TimeSpan.FromSeconds(5);
+        h.Health.Evaluate();
 
         Assert.True(h.Health.RestInFlight);
         Assert.Contains("rest", h.SentLines);

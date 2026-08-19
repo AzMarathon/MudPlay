@@ -47,8 +47,8 @@ public sealed class ItemMdbViewBuilder
     //      codes render raw. LearnSpell + CastSpell resolve their values to Spells.Name.
     //  10. Dropped By — comma-joined Monsters parsed from Obtained From.
     // AC Bonus follows MegaMUD's convention of ArmourClass/10 + "/" + DamageResist/10 (stock
-    // stores ArmourClass=20 → "2/0"). Bought/sold (left pane) picks the FIRST shop reference
-    // from Obtained From and resolves it to Shop.Name.
+    // stores ArmourClass=20 → "2/0"). Bought/sold (left pane) renders EVERY shop reference in
+    // Obtained From, one row per room each shop operates from (a shop can run from several).
     public ItemMdbView Build(string wccNoStr)
     {
         List<KeyValuePair<string, string>> otherInfo = new();
@@ -461,15 +461,13 @@ public sealed class ItemMdbViewBuilder
 
             string? flag = ExtractShopFlag(prefix);
 
-            // Resolve shop → room + markup.
-            (string? roomName, int mapNo, int roomNo, int markup) = LookupShopRoom(shopId);
+            // Resolve shop → markup + every room it operates from.
+            (int markup, var shopRooms) = LookupShopRooms(shopId);
             string suffix = flag is null ? string.Empty : $" ({flag.ToUpperInvariant()})";
-            string locator = mapNo > 0 ? $"{mapNo}/{roomNo}" : "?";
-            string name = string.IsNullOrEmpty(roomName) ? $"Shop #{shopId}" : roomName;
-            string location = $"{name}{suffix} - {locator}";
 
-            // Priced line under the shop — only meaningful when the item
-            // carries a value (Free items have no buy/sell figure).
+            // Priced line under the shop — only meaningful when the item carries a
+            // value (Free items have no buy/sell figure). BUY uses the shop's markup,
+            // which is the same across all of its rooms; SELL was computed once above.
             string price = string.Empty;
             if (baseCopper > 0)
             {
@@ -480,7 +478,20 @@ public sealed class ItemMdbViewBuilder
                         $"SELL: {ShopPriceCalculator.FormatCopper(sellCopper)}";
             }
 
-            rows.Add(new ShopSaleRow(location, price, mapNo, roomNo));
+            // One row per room the shop runs from — each is a distinct buy location.
+            // A shop that resolves no rooms still surfaces by id so the record isn't
+            // silently empty.
+            if (shopRooms.Count == 0)
+            {
+                rows.Add(new ShopSaleRow($"Shop #{shopId}{suffix} - ?", price, 0, 0));
+                continue;
+            }
+            foreach ((string? roomName, int mapNo, int roomNo) in shopRooms)
+            {
+                string locator = mapNo > 0 ? $"{mapNo}/{roomNo}" : "?";
+                string name = string.IsNullOrEmpty(roomName) ? $"Shop #{shopId}" : roomName;
+                rows.Add(new ShopSaleRow($"{name}{suffix} - {locator}", price, mapNo, roomNo));
+            }
         }
         return rows;
     }
@@ -502,13 +513,18 @@ public sealed class ItemMdbViewBuilder
         };
     }
 
-    // Resolves a Shop.Number → (Room.Name, map, room, markup%) via the active set's Shops.json
-    // (AssignedTo = "Room {map}/{room}", Markup% = the shop's buy surcharge) + Rooms.json.
-    // Returns (null, 0, 0, 0) when the shop lookup misses.
-    private (string? RoomName, int Map, int Room, int Markup) LookupShopRoom(int shopId)
+    // Resolves a Shop.Number → (markup%, all its assigned rooms) via the active set's
+    // Shops.json (Assigned To = "Room {map}/{room}[, Room {map}/{room}...]", Markup% =
+    // the shop's buy surcharge) + Rooms.json. A shop can host out of SEVERAL rooms —
+    // each is a real place the item is buyable, so ALL are returned, one buy location
+    // apiece (report paradigm-20260818-080337: the silverbark canoe's Boat Launch runs
+    // from two docks — Arlysia City Docks and the Pier — but only the first showed).
+    // Returns an empty room list when the shop id or its Assigned To misses.
+    private (int Markup, List<(string? RoomName, int Map, int Room)> Rooms) LookupShopRooms(int shopId)
     {
+        var rooms = new List<(string?, int, int)>();
         JsonDocument? shopsDoc = _cache.GetRawTable("Shops");
-        if (shopsDoc is null) return (null, 0, 0, 0);
+        if (shopsDoc is null) return (0, rooms);
 
         string? assigned = null;
         int markup = 0;
@@ -521,23 +537,28 @@ public sealed class ItemMdbViewBuilder
             markup = ReadInt(el, "Markup%");
             break;
         }
-        if (string.IsNullOrWhiteSpace(assigned)) return (null, 0, 0, markup);
+        if (string.IsNullOrWhiteSpace(assigned)) return (markup, rooms);
 
-        // AssignedTo format: "Room {map}/{room}" (e.g. "Room 1/2334"); a shop
-        // can host out of several rooms, listed comma-separated ("Room 1/169,
-        // Room 1/291"). Resolve the first — it's the canonical coordinate the
-        // game reports and what the bought/sold line shows.
-        string firstRoom = assigned.Split(',')[0].Trim();
-        if (!firstRoom.StartsWith("Room ", StringComparison.Ordinal)) return (null, 0, 0, markup);
-        string remainder = firstRoom[5..].Trim();
-        int slash = remainder.IndexOf('/');
-        if (slash <= 0) return (null, 0, 0, markup);
-        if (!int.TryParse(remainder[..slash], out int mapNo)) return (null, 0, 0, markup);
-        if (!int.TryParse(remainder[(slash + 1)..], out int roomNo)) return (null, 0, 0, markup);
+        foreach (string roomToken in assigned.Split(','))
+        {
+            string t = roomToken.Trim();
+            if (!t.StartsWith("Room ", StringComparison.Ordinal)) continue;
+            string remainder = t[5..].Trim();
+            int slash = remainder.IndexOf('/');
+            if (slash <= 0) continue;
+            if (!int.TryParse(remainder[..slash], out int mapNo)) continue;
+            if (!int.TryParse(remainder[(slash + 1)..], out int roomNo)) continue;
+            rooms.Add((ResolveRoomName(mapNo, roomNo), mapNo, roomNo));
+        }
+        return (markup, rooms);
+    }
 
+    // Map/room → the room's Name from the active set's Rooms.json, or null when
+    // the table is absent or the room isn't found.
+    private string? ResolveRoomName(int mapNo, int roomNo)
+    {
         JsonDocument? roomsDoc = _cache.GetRawTable("Rooms");
-        if (roomsDoc is null) return (null, mapNo, roomNo, markup);
-
+        if (roomsDoc is null) return null;
         foreach (JsonElement el in roomsDoc.RootElement.EnumerateArray())
         {
             if (!el.TryGetProperty("Map Number",  out JsonElement m)) continue;
@@ -545,9 +566,9 @@ public sealed class ItemMdbViewBuilder
             if (m.ValueKind != JsonValueKind.Number || r.ValueKind != JsonValueKind.Number) continue;
             if (m.GetInt32() != mapNo || r.GetInt32() != roomNo) continue;
             string name = ReadString(el, "Name");
-            return (string.IsNullOrEmpty(name) ? null : name, mapNo, roomNo, markup);
+            return string.IsNullOrEmpty(name) ? null : name;
         }
-        return (null, mapNo, roomNo, markup);
+        return null;
     }
 
     // One clickable DroppedByRow per "Monster #N(X%)" token in Obtained From,

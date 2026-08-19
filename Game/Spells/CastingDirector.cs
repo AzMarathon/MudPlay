@@ -110,7 +110,7 @@ public sealed class CastingDirector : IDisposable
     // recast lead (seconds before Until we re-cast). targetKey "" = self;
     // otherwise the member's given name lower-cased. The lead travels with the
     // timer so IsRecastDue and the "recast in Xs" logs use the slot's own value.
-    private readonly Dictionary<(string Target, string Short), (DateTime Until, int MarginSec)> _activeUntil = new();
+    private readonly Dictionary<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> _activeUntil = new();
     // The one outstanding party-buff cast awaiting CasterMessage
     // confirmation. CastCoordinator's cooldown guarantees ≤1 in flight.
     private (string Short, string Target, long DurationSec, int MarginSec, CasterMessageMatcher Matcher)? _pendingPartyCast;
@@ -121,10 +121,37 @@ public sealed class CastingDirector : IDisposable
     // dropped or the buff sits "active" for its whole assumed duration and never
     // re-attempts (an ~90s uptime hole after a single fizzle).
     private string? _pendingSelfBuffShort;
+
+    // True once we've cast a between-round spell (heal / cure / buff / debuff /
+    // item) THIS combat round. The game allows only ONE 0-energy between-round cast
+    // per round across all of them — a second draws "You have already cast a spell
+    // this round!" and does NOT fire. So while this is set we suppress further
+    // between-round casts (in combat) rather than send doomed ones. Cleared on the
+    // combat ROUND TICK (NotifyRoundComplete, wired to TickEngine.CombatTickElapsed —
+    // NOT *Combat Off*, which fires per kill and would re-open the slot mid-round in a
+    // multi-mob fight). Never consulted out of combat, where no per-round cap applies.
+    private bool _betweenRoundSlotUsed;
+
+    // A mana-regen roll-spell reroll the reroller staged (last roll below its
+    // threshold). It's offered by PickSelfBuff at PriorityBuffing and cast through
+    // the normal between-round pass — so it competes with a due heal/cure and
+    // spends the one-per-round slot, instead of firing on the raw wire — then
+    // cleared once it goes out. Null when no reroll is pending.
+    private string? _pendingManaRegenReroll;
+
+    // Set when the live buff timers are frozen on an unexpected drop (carrier lost /
+    // keep-alive timeout). While set, a reconnect shifts every Until forward by the
+    // offline gap so each buff keeps the remaining it had at the drop instead of the
+    // clock counting down (server-side link-death holds the buffs). null = running.
+    private DateTime? _pausedAt;
+
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
     private Func<MessageRecord, string?>? _shortFromAppliedRecord;
     private Func<int, string?>? _classNameByNumber;
     private Func<string, bool>? _isPartyWideBuff;
+    // Self-buff cast code → the party-wide party buff that removes (supersedes) it while
+    // in a party. PickSelfBuff skips a covered slot; the Buff Watchdog labels it.
+    private Func<IReadOnlyDictionary<string, string>>? _selfBuffCoverage;
     private Action<string>? _selfBuffLandedSink;
     private Func<DateTime> _now = () => DateTime.UtcNow;
     private LineExtractor? _lines;
@@ -378,6 +405,24 @@ public sealed class CastingDirector : IDisposable
         _isPartyWideBuff = isPartyWideBuff;
     }
 
+    // Wire the self-buff coverage source: self-buff cast code → the party-wide party buff
+    // that removes (supersedes) it while in a party. PickSelfBuff skips a covered slot so
+    // we let the party buff cover us instead of self-casting the removed spell.
+    public void SetSelfBuffCoverage(Func<IReadOnlyDictionary<string, string>> coverage)
+    {
+        ArgumentNullException.ThrowIfNull(coverage);
+        _selfBuffCoverage = coverage;
+    }
+
+    // The current self-buff coverage map (self code → covering party-buff code) — the
+    // Buff Watchdog reads this to label a superseded self-buff "covered by". Empty when
+    // solo or unwired.
+    public IReadOnlyDictionary<string, string> CurrentSelfBuffCoverage()
+        => _selfBuffCoverage?.Invoke() ?? _emptyCoverage;
+
+    private static readonly IReadOnlyDictionary<string, string> _emptyCoverage =
+        new Dictionary<string, string>();
+
     // Wire a sink notified with the 4-letter cast code every time one of OUR
     // self-buffs is confirmed to have landed (via the ConditionTracker AppliedMessage
     // path). The mana-regen reroll engine subscribes here to learn when a code-145
@@ -419,7 +464,98 @@ public sealed class CastingDirector : IDisposable
         _activeUntil.Clear();
         _pendingPartyCast = null;
         _pendingSelfBuffShort = null;
+        _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
+        _betweenRoundSlotUsed = false;
+        _pausedAt = null;
+    }
+
+    // The instant the timers were frozen on a disconnect, or null while running. The
+    // Buff Watchdog reads this so its display freezes at the drop (the heartbeat is a
+    // wall clock that keeps ticking while disconnected); the shift on resume then keeps
+    // the on-screen remaining continuous across the gap.
+    public DateTime? PausedAtUtc => _pausedAt;
+
+    // Freeze the live buff timers on a disconnect — record when so the reconnect can
+    // resume them with the same remaining. Used INSTEAD of clearing on ANY disconnect
+    // (the buffs persist server-side through link-death and an auto-reconnect is coming);
+    // a fresh character (ProfileLoaded) or a too-long gap on resume clears instead.
+    public void PauseBuffTimers()
+    {
+        _pausedAt = _activeUntil.Count > 0 ? _now() : null;
+        if (_pausedAt is not null)
+            _log?.Info(LogCategory, $"buff timers paused (drop) — {_activeUntil.Count} armed, frozen until reconnect");
+    }
+
+    // Resume after a reconnect: shift every armed Until forward by the offline gap so
+    // each buff keeps the remaining it had at the drop. If we were gone longer than the
+    // longest buff could possibly last, the buffs are certainly off server-side now —
+    // clear instead of resurrecting stale timers.
+    public void ResumeBuffTimers()
+    {
+        if (_pausedAt is not { } pausedAt) return;
+        _pausedAt = null;
+        System.TimeSpan gap = _now() - pausedAt;
+        if (gap <= System.TimeSpan.Zero || _activeUntil.Count == 0) return;
+
+        long maxTotal = 0;
+        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
+            maxTotal = System.Math.Max(maxTotal, kv.Value.TotalSec);
+        if (gap.TotalSeconds > maxTotal)
+        {
+            _log?.Info(LogCategory, $"buff timers cleared on resume — offline {(int)gap.TotalSeconds}s exceeds longest buff {maxTotal}s");
+            _activeUntil.Clear();
+            return;
+        }
+
+        foreach ((string Target, string Short) key in new List<(string, string)>(_activeUntil.Keys))
+        {
+            (DateTime Until, int MarginSec, int TotalSec) v = _activeUntil[key];
+            _activeUntil[key] = (v.Until + gap, v.MarginSec, v.TotalSec);
+        }
+        _log?.Info(LogCategory, $"buff timers resumed — shifted {_activeUntil.Count} by offline {(int)gap.TotalSeconds}s");
+    }
+
+    // A combat round tick elapsed (wired to TickEngine.CombatTickElapsed) — free the
+    // between-round cast slot so the new round can cast once. Keyed to the combat
+    // round cadence, NOT *Combat Off*: *Combat Off* fires per kill, so in a multi-mob
+    // room it would re-open the slot several times a round and let the storm back in.
+    public void NotifyRoundComplete() => _betweenRoundSlotUsed = false;
+
+    // An external between-round cast — the combat engine's pre-attack debuff,
+    // which fires directly rather than through Evaluate — just went out. Spend
+    // this round's single between-round slot so Evaluate won't queue a second one
+    // and draw "You have already cast a spell this round!". Cleared on the round
+    // tick by NotifyRoundComplete; no-op out of combat, where no per-round cap
+    // applies.
+    public void MarkBetweenRoundSlotUsed()
+    {
+        if (_state.InCombat) _betweenRoundSlotUsed = true;
+    }
+
+    // The mana-regen roll-spell reroller staged a reroll (its last roll came in
+    // below the configured threshold). Instead of firing it on the raw wire, stash
+    // it and run the between-round pass now: PickSelfBuff offers it at
+    // PriorityBuffing (bypassing the slot's recast timer — the point is to recast
+    // immediately), so a due heal/cure still wins and, in combat, it spends the
+    // one-cast-per-round slot like every other between-round cast. Cleared in
+    // RunDecisionPass when the reroll actually goes out.
+    public void RequestManaRegenReroll(string castCode)
+    {
+        if (string.IsNullOrWhiteSpace(castCode)) return;
+        _pendingManaRegenReroll = castCode.Trim();
+        Evaluate();
+    }
+
+    // Read-only snapshot of the live buff-duration timers for the Buff Watchdog
+    // window — a copy so the caller never holds the live dictionary. Read on the UI
+    // thread (same thread every _activeUntil write runs on), so no lock is needed.
+    public IReadOnlyList<ActiveBuffTimer> SnapshotActiveBuffs()
+    {
+        List<ActiveBuffTimer> list = new(_activeUntil.Count);
+        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
+            list.Add(new ActiveBuffTimer(kv.Key.Target, kv.Key.Short, kv.Value.Until, kv.Value.MarginSec, kv.Value.TotalSec));
+        return list;
     }
 
     // True when a buff on targetKey ("" = self) is due to be (re)cast: either never
@@ -428,7 +564,7 @@ public sealed class CastingDirector : IDisposable
     // actually expired).
     private bool IsRecastDue(string targetKey, string spellShort)
     {
-        if (!_activeUntil.TryGetValue((targetKey, spellShort), out (DateTime Until, int MarginSec) t))
+        if (!_activeUntil.TryGetValue((targetKey, spellShort), out (DateTime Until, int MarginSec, int TotalSec) t))
             return true;
         return (t.Until - _now()).TotalSeconds <= t.MarginSec;
     }
@@ -452,28 +588,63 @@ public sealed class CastingDirector : IDisposable
     // the true duration once the buff confirms.
     private void StartSelfBuffTimer(string spellShort, int marginSec)
     {
-        long seconds = _buffInfoByShort?.Invoke(spellShort) is { DurationSec: > 0 } info
-            ? info.DurationSec
-            : UnknownBuffRecastFallbackSec;
-        _activeUntil[("", spellShort)] = (_now().AddSeconds(seconds), marginSec);
+        (string Caster, long DurationSec)? info = _buffInfoByShort?.Invoke(spellShort);
+        bool resolved = info is { DurationSec: > 0 };
+        long seconds = resolved ? info!.Value.DurationSec : UnknownBuffRecastFallbackSec;
+        _activeUntil[("", spellShort)] = (_now().AddSeconds(seconds), marginSec, (int)seconds);
         _pendingSelfBuffShort = spellShort;   // awaiting land / fail — cleared by either
+        _log?.Combat(LogCategory,
+            $"self-buff {spellShort} sent — optimistic timer {seconds}s"
+            + (resolved ? "" : " (fallback — no resolved duration)")
+            + $", recast in {Math.Max(0L, seconds - marginSec)}s; awaiting applied-line confirm");
     }
 
-    // A cast the server rejected after it reached the wire (fizzle, interrupt,
-    // no-mana, already-cast-this-round) means an optimistically-timed self-buff never
-    // landed. Drop its phantom recast timer so the next tick re-attempts and the buff
-    // isn't left "active" for its whole assumed duration. Local Blocked rejections are
-    // ignored: they fire before the send / inside the same-round cooldown, so clearing
-    // on them would defeat the optimistic double-cast guard the timer exists for.
+    // A manually-typed self-buff cast (the user entered its 4-letter cast code) — arm /
+    // refresh its recast timer exactly as an engine cast does, anchored on the cast code.
+    // The typed code is the reliable identity; we never infer WHICH buff landed from the
+    // shared applied message (one Paradigm line names 11 records — bless / chant / …), so
+    // a hand-cast is caught here rather than left for the ambiguous applied-line path.
+    // A non-buff code (a combat / instant spell with no resolved duration) is inert.
+    public void NoteManualBuffCast(string castCode)
+    {
+        if (string.IsNullOrWhiteSpace(castCode)) return;
+        string code = castCode.Trim();
+        if (_buffInfoByShort?.Invoke(code) is not { DurationSec: > 0 }) return;
+        StartSelfBuffTimer(code, SelfBuffMargin(code));
+    }
+
+    // The configured recast lead for a self-buff cast code: its bless-slot override when
+    // the code occupies a slot, else the shared default (covers the regen / when-full
+    // buffs and any hand-cast buff that isn't in a slot).
+    private int SelfBuffMargin(string castCode)
+    {
+        SpellsSettings spells = _readSpells();
+        foreach (KeyValuePair<int, string> slot in spells.BlessSlots)
+            if (string.Equals(slot.Value?.Trim(), castCode, StringComparison.OrdinalIgnoreCase))
+                return BlessSlotMargin(spells, slot.Key);
+        return DefaultRecastMarginSec;
+    }
+
+    // A server rejection of a between-round cast we just sent. "You have already cast
+    // a spell this round!" (AlreadyCastThisRound) means the round's single 0-energy
+    // between-round slot was already spent, so the spell we JUST sent did NOT fire —
+    // latch the slot as spent (a backstop for the proactive one-per-round gate) so we
+    // stop retrying until the next round. Fizzle / no-mana / interrupt likewise mean
+    // the just-sent buff never landed. In every non-Blocked case drop the buff's
+    // optimistic recast timer so it re-attempts next round rather than sitting
+    // "active" un-cast. Local Blocked rejections fire before the send / inside the
+    // same-round cooldown (the buff never went out), so clearing on them would defeat
+    // the optimistic double-cast guard the timer exists for.
     private void OnCastFailed(CastFailureReason reason, string detail)
     {
         if (reason == CastFailureReason.Blocked) return;
+        if (reason == CastFailureReason.AlreadyCastThisRound)
+            _betweenRoundSlotUsed = true;
         if (_pendingSelfBuffShort is not { } shortCode) return;
         _activeUntil.Remove(("", shortCode));
         _pendingSelfBuffShort = null;
         _log?.Combat(LogCategory,
-            $"self-buff {shortCode} did not land (reason={reason}) — cleared optimistic " +
-            "recast timer for immediate retry");
+            $"self-buff {shortCode} did not cast (reason={reason}) — dropped optimistic recast timer");
     }
 
     private void OnConditionApplied(MessageRecord r)
@@ -488,10 +659,13 @@ public sealed class CastingDirector : IDisposable
                 // Preserve the recast lead armed on send (StartSelfBuffTimer ran
                 // first for a bless-slot cast); default it for anything confirmed
                 // without a prior optimistic timer (e.g. the HP-regen HoT).
-                int margin = _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec) prev)
+                int margin = _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec, int TotalSec) prev)
                     ? prev.MarginSec
                     : DefaultRecastMarginSec;
-                _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin);
+                _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin, (int)info.DurationSec);
+                _log?.Combat(LogCategory,
+                    $"self-buff {shortCode} confirmed active (applied line) — "
+                    + $"duration {info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - margin)}s");
             }
             // Landed — the real duration timer is now authoritative, so the pending
             // optimistic marker mustn't later be treated as an unlanded cast.
@@ -508,8 +682,10 @@ public sealed class CastingDirector : IDisposable
     {
         // Server-confirmed early wear-off — drop the self timer so the next
         // pass re-attempts immediately rather than waiting out a stale clock.
-        if (_shortFromAppliedRecord?.Invoke(r) is { } shortCode)
-            _activeUntil.Remove(("", shortCode));
+        if (_shortFromAppliedRecord?.Invoke(r) is { } shortCode
+            && _activeUntil.Remove(("", shortCode)))
+            _log?.Combat(LogCategory,
+                $"self-buff {shortCode} wore off (wear-off line) — recast timer cleared");
         Evaluate();
     }
 
@@ -519,7 +695,7 @@ public sealed class CastingDirector : IDisposable
         if (!p.Matcher.ConfirmsTarget(line.Text, p.Target)) return;
 
         string key = p.Target.Trim().ToLowerInvariant();
-        _activeUntil[(key, p.Short)] = (_now().AddSeconds(p.DurationSec), p.MarginSec);
+        _activeUntil[(key, p.Short)] = (_now().AddSeconds(p.DurationSec), p.MarginSec, (int)p.DurationSec);
         // Info, not Combat: the user wants to confirm the recast timer actually
         // armed and see when it will re-fire, and the combat-diagnostics channel is
         // off in normal play. Surface both the effect duration and the recast lead
@@ -577,6 +753,29 @@ public sealed class CastingDirector : IDisposable
         // the fixed cadence regardless of how the fight is going.
         if (_attackOwed?.Invoke() == true) return null;
 
+        // One between-round spell (heal / cure / buff / debuff / item) per combat
+        // round: the game allows a single 0-energy cast per round, so a second draws
+        // "You have already cast a spell this round!" and does NOT fire. Once this
+        // round's slot is spent, suppress further between-round attempts in combat
+        // instead of sending doomed casts — the mageshield recast storm came from the
+        // engine firing several buffs a round because the per-hit combat tick kept
+        // clearing the coordinator's one-per-round cooldown (report
+        // paradigm-20260816-101702). The slot frees at the true round boundary
+        // (NotifyRoundComplete). Out of combat no per-round cap applies, so the gate
+        // is combat-only.
+        if (_state.InCombat && _betweenRoundSlotUsed) return null;
+
+        string? cast = RunDecisionPass(healRestEnabled, blessEnabled);
+        // Mark the round's single between-round slot spent so a second Evaluate this
+        // round doesn't send another (doomed) cast; cleared at the round boundary.
+        if (cast is not null && _state.InCombat) _betweenRoundSlotUsed = true;
+        return cast;
+    }
+
+    // Walk the priority list and fire the first ready candidate. Returns the spell
+    // that was cast (for diagnostics / tests), or null if nothing matched.
+    private string? RunDecisionPass(bool healRestEnabled, bool blessEnabled)
+    {
         SpellsSettings spells = _readSpells();
         HealthSettings health = _readHealth();
 
@@ -661,6 +860,11 @@ public sealed class CastingDirector : IDisposable
             {
                 if (cand.Target is { } tgt) ArmPartyBuffConfirm(cand.Spell, tgt, cand.RecastMarginSec);
                 else StartSelfBuffTimer(cand.Spell, cand.RecastMarginSec);
+                // A staged mana-regen reroll just went out through the priority
+                // loop — consume it so it isn't re-offered next pass (the reroller
+                // re-stages one if the fresh roll is still below threshold).
+                if (string.Equals(cand.Spell, _pendingManaRegenReroll, StringComparison.OrdinalIgnoreCase))
+                    _pendingManaRegenReroll = null;
             }
 
             _log?.Combat(LogCategory,
@@ -692,7 +896,7 @@ public sealed class CastingDirector : IDisposable
         if (!_executeItemCast(token)) return false;
 
         _cast.NotifyExternalCastSent();
-        _activeUntil[("", token)] = (_now().AddSeconds(durationSec), marginSec);
+        _activeUntil[("", token)] = (_now().AddSeconds(durationSec), marginSec, (int)durationSec);
         // Same reasoning as the party-buff confirm: surface the armed recast timer
         // on the always-on Info channel, not combat diagnostics.
         long recastInSec = Math.Max(0L, durationSec - marginSec);
@@ -1062,6 +1266,19 @@ public sealed class CastingDirector : IDisposable
         // only during an active recovery unless the user opts in.
         if ((_isTriggeredRest?.Invoke() ?? false) && !spells.SelfBlessWhileResting) return null;
 
+        // A staged mana-regen reroll takes the front of the self-buff queue — it's
+        // an immediate recast (below-threshold roll), so it bypasses the slot's
+        // recast timer, but still honours the in-combat / resting gates above and
+        // the buff mana floor. Offered here at PriorityBuffing so a due heal/cure
+        // wins; if it can't be paid for right now, drop it (the reroller re-stages
+        // on the next landing if still below threshold) rather than stall the walk.
+        if (_pendingManaRegenReroll is { } reroll)
+        {
+            if (IsBuffAffordable(reroll, manaBuffsAllowed))
+                return new CastCandidate(reroll, Target: null, DefaultRecastMarginSec);
+            _pendingManaRegenReroll = null;
+        }
+
         // Bless slots first (in priority = slot-index order), each carrying its
         // per-slot recast lead; then the mana-regen / "when full" downtime buffs,
         // which have no picker and use the shared default.
@@ -1077,10 +1294,15 @@ public sealed class CastingDirector : IDisposable
                     (spells.WhenMaFullSpell,  _state.MaxMa > 0 && _state.Ma >= _state.MaxMa, DefaultRecastMarginSec),
                 });
 
+        // In a party, a self-buff a configured party-wide buff removes (e.g. chant removes
+        // bless) is left to that party buff — skip self-casting the superseded spell.
+        IReadOnlyDictionary<string, string>? covered = _selfBuffCoverage?.Invoke();
+
         foreach ((string? slot, bool eligible, int margin) in slots)
         {
             if (!eligible) continue;
             if (string.IsNullOrWhiteSpace(slot)) continue;
+            if (covered is not null && covered.ContainsKey(slot)) continue;
             if (!IsBuffAffordable(slot, manaBuffsAllowed)) continue;
             if (!IsRecastDue("", slot)) continue;
             return new CastCandidate(slot, Target: null, margin);
@@ -1106,7 +1328,8 @@ public sealed class CastingDirector : IDisposable
     {
         if (_party is null) return null;
         if (party is null) return null;
-        if (_party.Members.Count == 0) return null;
+        // Solo → the party-buff slots don't apply; only cast them once actually in a party.
+        if (!_party.IsInParty) return null;
 
         bool whileResting  = party.BlessWhileResting;
         bool duringCombat  = party.BlessDuringCombat;

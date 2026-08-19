@@ -88,10 +88,12 @@ public sealed class CombatCastingDirectorContentionTests
         }
 
         // Mirrors AppServices' tick order: Cast.OnCombatTick, then
-        // CastDirector.OnCombatTick (survival casts), then Combat.OnCombatTick.
+        // CastDirector.NotifyRoundComplete (frees the round's between-round cast slot),
+        // then CastDirector.OnCombatTick (survival casts), then Combat.OnCombatTick.
         public void Tick()
         {
             Cast.OnCombatTick();
+            Director.NotifyRoundComplete();
             Director.OnCombatTick();
             Combat.OnCombatTick();
         }

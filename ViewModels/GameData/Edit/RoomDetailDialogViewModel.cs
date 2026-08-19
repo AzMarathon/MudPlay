@@ -44,6 +44,12 @@ public sealed partial class RoomDetailDialogViewModel
     public ObservableCollection<RoomDetailLink> Exits { get; } = new();
     public bool HasExits => Exits.Count > 0;
 
+    // Other rooms hosting the same shop as the current room, shown as clickable siblings in
+    // brackets next to the title (a multi-branch bank, a tower's stacked shop floors). Clicking
+    // one re-roots the popup on it. Empty when the room has no shop or the shop lives only here.
+    public ObservableCollection<RoomDetailLink> ShopSiblingRooms { get; } = new();
+    public bool HasShopSiblings => ShopSiblingRooms.Count > 0;
+
     // Shop readout — a stock table (item · max · regen · buy · sell), rendered
     // only for merchant shops that actually carry stock. Banks fall back to the
     // plain "Shop: <name>" line in ExtrasText; trainers render a level band
@@ -135,6 +141,7 @@ public sealed partial class RoomDetailDialogViewModel
         _key = key;
         Monsters.Clear();
         Exits.Clear();
+        ShopSiblingRooms.Clear();
         ShopStock.Clear();
         TrainerCosts.Clear();
         TrainerCostsTruncated = false;
@@ -196,6 +203,7 @@ public sealed partial class RoomDetailDialogViewModel
         }
 
         bool richShop = PopulateShop(room);
+        PopulateShopSiblings(room);
 
         ExtrasText = RoomTooltipBuilder.BuildDetailExtras(
             room, _services.RoomGraph, _services.GameData, _services.TBInfo,
@@ -353,6 +361,27 @@ public sealed partial class RoomDetailDialogViewModel
         OnPropertyChanged(nameof(HasShop));
         OnPropertyChanged(nameof(HasShopSection));
         OnPropertyChanged(nameof(HasTrainerCosts));
+        OnPropertyChanged(nameof(HasShopSiblings));
+    }
+
+    // Other rooms hosting the SAME shop as the current room, resolved from each room's Shop
+    // field (the room graph is authoritative). A shop can span several rooms — a multi-branch
+    // bank, a tower's stacked floors; clicking a sibling re-roots the popup on it (reusing the
+    // exit-click re-root). Each label carries a trailing comma except the last so the title
+    // reads "Room [sibling, sibling]". Empty when the room has no shop or the shop lives here only.
+    private void PopulateShopSiblings(Room room)
+    {
+        if (room.Shop <= 0) return;
+        List<Room> siblings = _services.RoomGraph.Rooms
+            .Where(r => r.Shop == room.Shop && r.Key != room.Key)
+            .OrderBy(r => r.Key.Map).ThenBy(r => r.Key.Room)
+            .ToList();
+        for (int i = 0; i < siblings.Count; i++)
+        {
+            RoomKey sibKey = siblings[i].Key;
+            string label = i < siblings.Count - 1 ? $"{siblings[i].DisplayName}," : siblings[i].DisplayName;
+            ShopSiblingRooms.Add(new RoomDetailLink(label, null, new RelayCommand(() => OnExitClicked(sibKey))));
+        }
     }
 
     // Exit click — walk the popup to the neighbour and let an already-open map

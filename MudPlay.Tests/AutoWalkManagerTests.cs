@@ -50,6 +50,36 @@ public sealed class AutoWalkManagerTests : IDisposable
         ]
         """;
 
+    // A route with a cross-room lever detour: reaching 1/3 from 1/2 crosses
+    // 1/2's N exit, gated by a lever in 1/4 (one E hop off 1/2). So the planned
+    // path is the go-act-return round-trip E→1/4, pull, W→1/2, then N→1/3 — the
+    // current room (1/2) is revisited on the return leg.
+    //
+    //   1/1 ─N─ 1/2 ─N (Hidden/Needs 1 Actions)─ 1/3
+    //            │E
+    //           1/4  (D slot → Action#1 for 1/2's N exit)
+    private const string LeverDetourGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3 (Hidden/Needs 1 Actions, any order)", "S": "1/1", "E": "1/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "LeverRoom",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+            "D": "Action#1 [on the N exit of room 1/2]: pull lever" }
+        ]
+        """;
+
     private sealed class Harness : IDisposable
     {
         public required RoomGraphManager Graph { get; init; }
@@ -577,6 +607,32 @@ public sealed class AutoWalkManagerTests : IDisposable
         // C — not [B, B, C], which would redraw the leg already walked.
         Assert.Equal(
             new[] { new RoomKey(1, 2), new RoomKey(1, 3) },
+            h.Walker.RemainingRoomKeys);
+    }
+
+    [Fact]
+    public void RemainingRoomKeys_RendersFullOutAndBackDetour_NotJustStraightLine()
+    {
+        // Report paradigm-20260818-000725: on a lever-vault route the planned
+        // path loops out to a lever room and back, so the current room recurs
+        // later in the path. The old trim scanned the whole path for the current
+        // room and matched that return leg, collapsing the entire detour out of
+        // the drawn line + the ETA (which then oscillated). The overlay must
+        // render the full out-and-back round-trip.
+        Harness h = NewHarness(LeverDetourGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+
+        // Path from 1/2 to 1/3: E→1/4, pull lever, W→1/2, N→1/3. The walker
+        // stands at 1/2 (current) with _index at the outbound E step.
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+
+        // Full detour: out to the lever room (1/4), back to 1/2, then on to 1/3
+        // — NOT the collapsed straight line [1/2, 1/3].
+        Assert.Equal(
+            new[]
+            {
+                new RoomKey(1, 2), new RoomKey(1, 4), new RoomKey(1, 2), new RoomKey(1, 3),
+            },
             h.Walker.RemainingRoomKeys);
     }
 
@@ -1620,7 +1676,7 @@ public sealed class AutoWalkManagerTests : IDisposable
 
         WalkEvent failed = events.Single(e => e.Kind == WalkEventKind.Failed);
         Assert.Contains("obsidian key", failed.Detail);
-        Assert.Contains("a required item you're missing (obsidian key)", failed.Detail);
+        Assert.Contains("a required item to go obtain (obsidian key)", failed.Detail);
     }
 
     [Fact]
@@ -1631,7 +1687,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.False(walker.WalkTo(new RoomKey(1, 2)));
 
         WalkEvent failed = events.Single(e => e.Kind == WalkEventKind.Failed);
-        Assert.Contains("a required item you're missing", failed.Detail);
+        Assert.Contains("a required item to go obtain", failed.Detail);
         Assert.DoesNotContain("(", failed.Detail);            // no name parenthetical
     }
 
@@ -1690,7 +1746,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.False(walker.WalkTo(new RoomKey(1, 4)));
 
         WalkEvent failed = events.Single(e => e.Kind == WalkEventKind.Failed);
-        Assert.Contains("a required item you're missing (gate key)", failed.Detail);
+        Assert.Contains("a required item to go obtain (gate key)", failed.Detail);
         Assert.DoesNotContain("a level requirement", failed.Detail);
     }
 

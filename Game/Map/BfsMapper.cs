@@ -205,6 +205,20 @@ public sealed class BfsMapper
                 // always preferred (see FindPath).
                 if (exit.GatewayTeleport && !allowGateway) continue;
 
+                // A hidden action-gated exit the client can't actually open — no
+                // imported action data at all, or fewer steps than the "Needs N"
+                // count — is a guaranteed runtime failure: the walker would send a
+                // plain cardinal move the server refuses ("no exit in that
+                // direction"), then fail the whole walk. Route AROUND it (or fail
+                // cleanly with "no route") instead of planning through it. Like the
+                // teleport skips above, this is ruled out by missing/insufficient
+                // DATA, not a satisfiable gate, so it's skipped unconditionally
+                // even when exit gates are being ignored. (Some fork/lever passages
+                // carry the opener only on the reciprocal exit — e.g. Paradigm
+                // 9/1050 W reads MultiActionHidden but has no MultiAction.)
+                if (exit.Hint == RoomExitHint.MultiActionHidden
+                    && exit.MultiAction is not { IsSatisfiable: true }) continue;
+
                 // "Walk it, don't teleport" pass: refuse the item/CMD-cast
                 // teleport exits (a plain cardinal edge to BFS, so normally
                 // taken as a shortcut) and the gateway portals, so the search
@@ -274,6 +288,10 @@ public sealed class BfsMapper
                 if (dist.ContainsKey(next)) continue;
                 if (exit.CastTeleportRandom) continue; // unpredictable landing — not routable
                 if (exit.GatewayTeleport) continue;    // last-resort crossing — keep badge distances deterministic
+                // Un-openable hidden action exit (no / insufficient action data) —
+                // not routable (see FindPathCore).
+                if (exit.Hint == RoomExitHint.MultiActionHidden
+                    && exit.MultiAction is not { IsSatisfiable: true }) continue;
                 if (filter is not null && filter.IsAvoided(next)) continue;
                 if (filter is not null && filter.IsExitBlocked(exit)) continue;
                 if (_graph.GetRoom(next) is null) continue;

@@ -239,6 +239,29 @@ public sealed class CombatStateTrackerTests
         Assert.True(h.CombatGateHeld);
     }
 
+    // A passive neutral doesn't hold the walker gate — until the user hand-engages it,
+    // at which point it fights like a hostile and the gate must hold so the walker can't
+    // stroll off mid-fight (report paradigm-20260814).
+    [Fact]
+    public void UserEngagedPassiveNeutral_HoldsGate()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "townsperson", killable: true);
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);   // passive — no KillOnSight
+
+        HashSet<string> engaged = new(StringComparer.OrdinalIgnoreCase);
+        h.Tracker.SetUserEngagedInstanceGate(raw => engaged.Contains(raw));
+
+        h.Feed("Also here: townsperson.");
+        Assert.False(h.Tracker.HasEngageableHostiles);   // passive neutral left alone
+        Assert.False(h.CombatGateHeld);
+
+        engaged.Add("townsperson");
+        h.Feed("Also here: townsperson.");
+        Assert.True(h.Tracker.HasEngageableHostiles);    // now fights like a hostile
+        Assert.True(h.CombatGateHeld);
+    }
+
     // ----- HasHostileMonster — auto-attack-independent danger signal ----
 
     [Fact]
@@ -305,6 +328,23 @@ public sealed class CombatStateTrackerTests
 
         Assert.False(h.Tracker.HasEngageableHostiles);
         Assert.False(h.Tracker.HasHostileMonster);
+    }
+
+    [Fact]
+    public void UnresolvableMonster_NoRecordNumber_NotEngaged()
+    {
+        // A name that matches a message record with no Monsters link (a greet-only NPC like an
+        // "old man" quest-giver), with no Monsters table to fall back to, resolves to no Number.
+        // The engine must NOT proactively attack something it can't identify — fail closed —
+        // rather than defaulting the unresolved entity to a fightable enemy. Regression: the
+        // neutral-NPC on-sight-attack bug.
+        using Harness h = new();
+        h.Monsters.Messages.Add(new MonsterMessageRecord(Id: "OM", Name: "old man", Links: null));
+
+        h.Feed("Also here: old man.");
+
+        Assert.False(h.Tracker.HasEngageableHostiles);
+        Assert.False(h.CombatGateHeld);
     }
 
     [Fact]

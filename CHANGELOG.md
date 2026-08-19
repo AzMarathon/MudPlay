@@ -2,7 +2,7 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.19.0
+## 3.23.0
 
 - New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: configurable silent recon laps (default 2) search every room traversed by the circuit, then misfiled items are carried to their labeled destination. Built on the same loop engine every saved Loop runs on
 - GH room labels support multiple rules per room (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail), including equip-slot rules (Neck / Wrist / Off-Hand / etc.) for jewelry-style rooms that aren't classified by material or weapon type, and an optional catch-all room for anything matching no explicit rule
@@ -13,6 +13,104 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - After inventory verifies a pickup or drop, Roomba routes directly to the nearest carried destination (then the nearest remaining source) instead of blindly completing the original one-way circuit; failed pickups stay queued without double-moving delivered items
 - Roomba no longer stops after a no-progress lap or a fixed number of sorting laps, and no longer defers pickups to avoid the Heavy bracket; queued work stays live until every item has a verified delivery (or the user stops the run)
 - bug reports addressed: paradigm-20260816-172828, paradigm-20260816-175656, paradigm-20260816-191039, paradigm-20260816-193418
+
+## 3.22.0
+
+- Navigation: the walker now routes through two special exits it couldn't before — an **item-use teleport** (an item whose use transports you, e.g. `use potion of levitation` to reach the far side) and a **room-command reveal** (a hidden exit opened by typing a room command, e.g. `clear rubble`) — so quest routes gated on them, like the trek to the Necromancer at 9/1431, now plan and walk on their own instead of failing with "No path"
+- Navigation: a route blocked **only** because you lack a required action-exit item now fails with a named **"a required item to go obtain (…)"** message that names the item, instead of a bare "No path"; these quest items are never auto-fetched
+- Navigation: fixed a latent case where an item-gated command teleport (an emblem / chime that ports you past a locked door) dropped its inventory check — it no longer routes you through as if you held the item
+- bug reports addressed: paradigm-20260818-061428
+
+## 3.21.11
+
+- Reconnect: after an unexpected drop, first profile load, or a cleanup relog, the client now **enters the realm even if your logon steps don't cleanly reach the game** — the realm-entry command fires the moment the entry menu appears, so a mis-authored or holdover nav step no longer strands you at the menu (it still won't auto-enter right after a deliberate `@hangup` / hang-up-on-low-HP / when-naked, by design)
+- BBS settings: the logon-steps editor now says to add **only log-in steps, never a log-out/quit step** — a MegaMUD-holdover "log off? (Y/N)" step never matches on login and stalls the sequence
+- bug reports addressed: paradigm-20260818-142340
+
+## 3.21.10
+
+- Combat: when you hand-attack a **passive neutral** (one the engine normally leaves alone), the auto-combat engine now **takes over and keeps killing it** — hitting a neutral turns it hostile, so the engine treats that instance like an enemy until it dies instead of stopping the moment you engaged it; the walker also holds in the room until it's dead
+- bug reports addressed: paradigm-20260818-081214
+
+## 3.21.9
+
+- Navigation: position recovery in same-named mazes now replays your move chain from the room the chain **started** at (not the newest confirmed room), so after fast manual movement outruns the tracker it re-derives where you are instead of aborting the replay and going Lost
+
+## 3.21.8
+
+- Combat: debuff casting reworked — the AoE debuff now casts **once** and "tags" the mobs present, re-firing (up to its per-room cap) only when a **new** mob enters/is summoned rather than every round; and the single-target debuff now correctly takes over whenever the AoE isn't covering the room (Auto-Nuke off, unconfigured, or the room below its minimum-enemy count), fixing a case where a configured AoE debuff with Auto-Nuke off left the single-target debuff never firing
+- Recovery: auto-rest no longer gets stuck off after a fight ends in an empty room — a post-combat "wait for the room to re-confirm" hold could sit forever when the room stays empty and you don't move (an empty room never re-announces its contents), leaving you below your HP/mana rest threshold yet never resting; the hold now releases on a short timeout once nothing has re-asserted a hostile
+- Combat: a room/AoE attack spell now drops to single-target the same round the room thins below its minimum-enemy count, even when a lone survivor keeps the fight going — previously it kept re-casting the AoE at the last mob (which the server auto-repeats) until a `*Combat Off*` landed or you pressed Enter, because the room roster only re-parsed on the trailing Off
+- Navigation: Auto-Search no longer stalls the walker with a per-room settle pause when nothing is set to collect what it reveals — with Auto-Get Items / Auto-Get Cash off and no path-item hunt active, it releases the walker the moment the `sea` goes out instead of idling ~⅓ second in every room, so travelling with Auto-Search on is markedly faster
+- Combat: a capped attack spell no longer fires an extra round against a lone monster — the engine's cap-switch to the alternate was landing one round late when a solo fight's first round arrived quickly (under ~4s), so e.g. LBOL set to cast **1** fired twice before switching to MMIS; the per-round tally now counts a solo fight's first round instead of mistaking it for a multi-mob premature tick
+- Combat: a hand-cast attack/drain spell that draws "no effect" (e.g. probing an immune elemental with `dtch`) no longer marks the engine's **own** last auto-cast spell immune — a manual probe used to wrongly drop the auto-attack cascade to melee instead of trying the next attack spell
+- Combat: a hand-cast enemy debuff (a monster-targeting spell such as `vuln`) no longer arms a phantom self-buff recast timer or shows up as a bogus self-buff in the Buff Watchdog
+- Game Data: an item's "bought / sold" list now shows **every** room a shop operates from — a shop that runs from several rooms (e.g. the silverbark canoe's Boat Launch, at both Arlysia City Docks and the Pier) previously surfaced only its first room
+- bug reports addressed: paradigm-20260818-055820, paradigm-20260818-055955, paradigm-20260818-080337, paradigm-20260818-060742, paradigm-20260818-052120, paradigm-20260818-050950, paradigm-20260818-092532, paradigm-20260817-205819
+
+## 3.21.0
+
+- Navigation: the walker now **solves nested action-gated exits** — a lever whose alcove is itself behind another action-gated door — by opening each inner door first (walk in, pull, return) before crossing, so routes through multi-level lever vaults (e.g. Paradigm's 6/861 tomb → 6/924) complete on their own; fully generic off game data, no per-area code (Asylum + Pyramid stay the only bespoke solvers)
+- Navigation: only a very deep (4+ level) or cyclic nest, or a genuinely unroutable one, still fails — now cleanly at plan time ("route needs an action-gated exit the walker can't auto-solve") instead of the old misleading "not supported on loop circuits" block
+- Navigation: the walker and loop engines log their remote-action detour and special-exit dispatch decisions on the debug side, so a blocked or nested walk is diagnosable from the program log
+- Navigation: the blue walk-to route line (and its "steps to arrive" ETA) now draws the **full planned path** including go-act-return lever detours, instead of collapsing each out-and-back into a straight line that redrew segment-by-segment as the walker looped out and back
+- bug reports addressed: paradigm-20260817-233052, paradigm-20260818-000725
+
+## 3.20.10
+
+- Navigation: the walker no longer plans a route through a hidden, action-gated exit it can't actually open — some game-data exports annotate a fork/lever passage's opener on only one side (e.g. Paradigm 9/1050's West exit), leaving the reciprocal exit with no action data. The router now routes **around** such an un-openable exit (or fails cleanly with "no route") instead of sending a doomed move that the server refuses and stranding the walker
+- bug reports addressed: paradigm-20260817-125209
+
+## 3.20.9
+
+- Combat: the mana-regen roll-spell **reroll** now runs through the same between-round priority pass as every other 0-energy cast — it competes by your Settings → Spells priority (a due heal/cure wins) and spends the one-cast-per-round slot, instead of firing straight to the wire and bypassing both
+- Spell records now list **Negated by** — the items that cancel a spell while carried (the inverse of the item side's *Negates*), shown in the Game Data Browser Spells record and the Room Info room-spell dialog
+- Spell records: the **Summons / Casts / Casted By / Negated by** (plus Learned From, Requires/Avoided carrying) record references are now clickable blue links that open the monster / spell / item record
+- Remote commands: an @-word matching no command is now ignored silently — a stray "@because" in gang chat no longer draws an "invalid command" reply; the warn-on-invalid setting now governs only recognized-but-denied commands
+- Combat: single-target debuff spells now actually fire — they were wrongly gated by Auto-Nuke (single-target debuff is now gated by **Auto-Combat**, the AoE debuff by **Auto-Nuke**); the debuff-cast path was also brought up to parity with the attack cascade — a corpse-cast guard (won't debuff a just-killed target) and the one-between-round-cast-per-round slot (a pre-attack debuff no longer draws a second cast → "already cast this round")
+- Combat: a debuff slot now rejects a mis-configured spell — it must be a 0-energy between-round spell with slot-appropriate targeting (single-target vs AoE); enforced at cast time (program-log warning) and flagged live in Settings → Combat
+- Reconnect: richer login-automation diagnostics — the log names each step matched and the prompt the next step awaits, and when the automator stalls (e.g. a carrier-lost relog whose final menu differs from a fresh login) names the exact step + prompt that never arrived, so a capture shows why auto-entry didn't fire
+- bug reports addressed: paradigm-20260817-135739
+
+## 3.20.3
+
+- Auto-rest: after poison wears off, the client now goes back to resting when still below the rest-HP floor — a rest sent while poisoned never took (poison blocks it) and left a stale "resting" latch that wrongly suppressed the re-rest, so the character stood there regenerating slowly instead of resting
+- Combat: an AoE that wipes a room in one round (several exp lines at once — e.g. a hand-cast fireball) no longer corpse-casts a single-target spell at a "survivor" the kills hadn't cleared yet; the engine now re-parses the room with a carriage return and re-picks from what's actually left
+- Spell book: learned spells now survive a game-data set swap — the obtained set is keyed by spell name instead of the set's row numbers, so switching sets (which renumbers rows) no longer blanks every configured spell to "unlearned" until you re-poll `spells` or reload the profile; the Buff Watchdog's learned flags stay correct across a swap
+- bug reports addressed: paradigm-20260817-092945, paradigm-20260817-105650, paradigm-20260817-114209
+
+## 3.20.0
+
+- New **Buff Watchdog** window (View menu, after Party): lists every buff you have configured — self-bless slots, HP/MA-regen, when-full, `#item`-cast, and party-bless slots — each with a live timer bar and a marker showing where its recast window opens, so you can see at a glance which buffs are up, which are due, and which aren't up at all
+- Combat buffing: the between-round spell coordinator (heals / buffs / debuffs / item buffs) now casts at most ONE per combat round, matching the game's one-between-round-cast-per-round rule — fixes a self-buff (e.g. mageshield) re-casting every round during a fight and spamming "already cast this round"
+- Combat buffing: a buff's recast timer is now cleared only by its OWN wear-off line — spells that merely share an "applied" message (the five "you feel protected" shields) can no longer clear each other's timers
+- Combat buffing: program logging for the buff manager — timer armed (duration + recast-in), confirmed active, worn off, and dropped when a cast didn't fire — so a log read explains what it's doing and why
+- Combat buffing: buff recast timers now measure the buff's REAL remaining seconds (server spell rounds run slightly long, ~3.04s not 3.0s), so a "recast within N seconds" slot fires at N seconds left instead of ~1-2 seconds early
+- Buff tracking: a manually-cast buff is now caught — armed by the 4-letter cast code you typed (like an engine cast), so the Buff Watchdog and recast engine track hand-casts
+- Buff tracking: Paradigm's `stat` "You feel X! (Ns)" status readout is ignored — it no longer gets mistaken for a fresh cast (which falsely marked buffs active on login and then suppressed the real cast's confirm)
+- Buff tracking: any disconnect now freezes the buff timers (display included) and reconnecting resumes them with the same remaining, instead of clearing and recasting from full; switching characters or a gap longer than the buff could last starts fresh with no buffs assumed
+- Buff Watchdog: taller, full-width timer bars with a larger label — a light-green outline over a flat darker-green fill (name left-aligned inside, remaining time after it); the fill and recast marker stretch to the bar's real width so the outline bounds exactly the actual bar (no dead space at the ends)
+- Party buffs: the party-buff slots are cast only while you're actually in a party — solo, none of them fire (your self-buff slots still do)
+- Party buffs: a party-wide buff that supersedes a self-buff (RemovesSpell — e.g. chant removes bless) now suppresses that self-cast while in a party, and the Buff Watchdog shows the self-buff "covered by" the party buff instead of a timer
+- Game Data Browser: a message claimed by a spell in the set no longer appears on the Messages tab (you edit it by double-clicking the spell) — no more seeing the same record listed twice; an orphan-linked message whose spell isn't in the set stays listed
+- Messages seed: pruned inert MegaMUD carry-over entries the engine never reads — every `monster entry` and `trap disarm` record (monster arrivals are recognized directly off the wire) and the standalone "you are shockshielded" shockshield record (the spell-linked shockshield is kept); further pruning tracked in #349
+- bug reports addressed: paradigm-20260816-101702, paradigm-20260816-222917, paradigm-20260816-232454
+
+## 3.19.4
+
+- Navigation: the Warped Asylum teleport-maze solver now stops the per-room position-checking once it lands in a solvable room — the initial landing still relocalizes to confirm the room, but from there the unhindered route to the goal is driven straight through with no `look`-sweep (stock) or `rm` (Paradigm) spam per step
+
+## 3.19.3
+
+- Combat: **room-aware monster identification** — an observed monster name is now resolved against the monsters the current room actually places or summons here (its NPC + lair members + Summoned-By spawns + the monsters those summon) before any global name match, so a homonym pins to the variant in THIS room and per-monster overrides (spell overrides, relationship, Kill-on-sight) land on the right record
+- Combat: the program log now traces each room occupant at **Combat** severity — the detection (name → resolved record number), its relationship + Kill-on-sight, and the engage/skip decision — so a log read explains exactly why the engine did (or didn't) attack something
+- Combat: a friendly / neutral NPC whose name the classifier couldn't pin to its monster record (e.g. a greet-only "old man" quest-giver) is no longer attacked on sight — such records also resolve to their Monsters-table row by name so their Relationship / Kill-on-sight setting is honoured, and the engagement gate never proactively attacks a monster it can't identify (fixes a regression from the v3.15.0 neutral kill-on-sight work)
+
+## 3.19.0
+
+- Navigation: new **ROOM INFO** rail section — left-click any room on the map to list clickable links to everything attached to it: the room itself (its name links to the room record), each monster (lair / summoned / placed), each floor item, the shop, and the cast-on-enter room spell. A monster or room-spell link opens its full record dialog, the shop opens the room-detail popup (its stock menu), and the room / item links open the record in the Game Data Browser. Left-clicking never forces the panel open — expand it when you like and it shows the last room you clicked
+- New room→floor-item index (`roomitem` placements) backing the floor-item links; monster and spell records can now be opened by number from anywhere (shared MonsterRecordDialogService / SpellRecordDialogService)
+- Game Data Browser: double-clicking a **Shops** row opens the room-detail popup for the shop's room directly (was: a hop to the Rooms tab); a shop that spans several rooms opens on the first and lists the others as clickable siblings in the popup's title
 
 ## 3.18.18
 

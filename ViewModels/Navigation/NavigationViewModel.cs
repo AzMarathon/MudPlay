@@ -21,10 +21,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _services;
 
+    // Always-present child VM backing the ROOM INFO rail section; populated on any
+    // left-click of a room (see OnRoomLeftClicked).
+    public RoomInfoViewModel RoomInfo { get; }
+
     public NavigationViewModel(AppServices services)
     {
         ArgumentNullException.ThrowIfNull(services);
         _services = services;
+        RoomInfo = new RoomInfoViewModel(services);
 
         // Seed the nav-line appearance from the Global settings and stay live off
         // it — a Settings → General Apply raises GlobalSettingsChanged and repaints
@@ -1117,6 +1122,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isCurrentNavExpanded;
     [ObservableProperty] private bool _isGotoExpanded;
     [ObservableProperty] private bool _isLoopsExpanded;
+    [ObservableProperty] private bool _isRoomInfoExpanded;
 
     public bool HasQueuedDestination => QueuedDestination is not null;
 
@@ -2650,6 +2656,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     //   - Idle — no-op (the click already moved SelectedRoomKey upstream).
     public void OnRoomLeftClicked(RoomKey key)
     {
+        // Any left-click refreshes the ROOM INFO panel's contents (it's informational
+        // and doesn't consume the click), but never forces the panel open — its expand
+        // state is the user's to set. Collapsed stays collapsed; when the user expands
+        // it, it already shows the last-clicked room.
+        RoomInfo.Show(key);
+
         switch (CurrentMode)
         {
             case NavigationMode.LoopBuild:

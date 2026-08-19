@@ -17,18 +17,22 @@ namespace MudPlay.Game;
 // happens to look like the main menu (a malicious player could gossip or
 // telepath `[E] . Enter the Realm` to trick a naive client into auto-entering
 // when the player wanted to stay out-of-realm). To prevent that, the engine is
-// latched closed by default and is only briefly armed when the LoginAutomator
-// reports its final step completed. The arm window has a short TTL (ArmWindow,
-// default 15 s): if the menu doesn't appear in time, the latch closes and
-// in-game lines can't trip it later.
+// latched closed by default and is only armed inside an active BBS-login window.
+// The arm window has a short TTL (ArmWindow, default 15 s) that KeepArmed
+// refreshes on each login-step advance; if the menu doesn't appear before the
+// window lapses with no further login progress, the latch closes and in-game
+// lines can't trip it later.
 //
-// On a typical connect: TelnetClient connects → LoginAutomator walks the
-// menu-nav sequence → final step's LoggedIntoGame event fires → main-window VM
-// calls Arm → the next MainMenuEnterRealm pattern match (the actual menu screen)
-// sends the entry command + closes the latch + arms the room-display gate; the
-// startup refresh fires only when the first in-game room display appears.
-// Mid-session navigation to menu (user types X to exit realm) doesn't re-arm —
-// only a fresh login automation completion does.
+// Arming lifecycle: the main-window VM calls Arm() at the START of a login
+// (when the LoginAutomator is started for a fresh connect / reconnect / cleanup
+// relog), then KeepArmed() on every step the automator matches, and again on
+// LoggedIntoGame. So the entry command fires when the realm-entry menu appears
+// even if a trailing (mis-authored or MegaMUD-holdover) nav step never matches
+// and LoggedIntoGame never comes — the reported "did not re-enter on
+// disconnect" case. Arm() decides authorization ONCE per login by consuming the
+// hangup-suppression flag (below): a login that follows a health/manual hangup
+// is not authorized, and KeepArmed can't re-open it. Mid-session navigation to
+// menu (user types X to exit realm) doesn't arm — only a fresh login does.
 //
 // Hangup suppression: if a HangupSignal.SignalHangup fired before the current
 // connect (intentional `@hangup` or a hang-up-if-naked / hang-up-if-low-HP
@@ -61,6 +65,11 @@ public sealed class MainMenuEntryAutomation : IDisposable
     private readonly WireSender _wire = new();
     private Action? _suppressNextMove;
     private DateTime _armedUntilUtc = DateTime.MinValue;
+    // Latched once per login by Arm(): true when this login is authorized to
+    // auto-enter (not hangup-suppressed), gating KeepArmed's window refresh so a
+    // hangup-suppressed login can't be re-armed by later step progress. Cleared
+    // when a menu line is handled (one auto-entry per login).
+    private bool _entryAuthorized;
     private Avalonia.Threading.DispatcherTimer? _startupTimer;
     private int _startupIndex;
     private bool _awaitingFirstRoom;
@@ -148,11 +157,33 @@ public sealed class MainMenuEntryAutomation : IDisposable
         _awaitingFirstRoom = false;
         if (_hangup.ConsumeSuppressEntry())
         {
+            _entryAuthorized = false;
             _log?.Log(LogSeverity.Info, "MainMenuEntry",
                 "Skipping auto-entry — prior hangup intent; user types entry command manually.");
             return;
         }
+        _entryAuthorized = true;
         _armedUntilUtc = NowProvider() + ArmWindow;
+        // Log the arm so a reconnect capture shows auto-entry was actually
+        // primed. Its ABSENCE is the tell that this login wasn't authorized
+        // (hangup-suppressed) or the automator never started, so Arm was never
+        // called.
+        _log?.Log(LogSeverity.Info, "MainMenuEntry",
+            $"Armed auto-entry (window {ArmWindow.TotalSeconds:0}s) — will send '{_commands.EntryCommand}' on the next main-menu line.");
+    }
+
+    // Refresh the arm window while a login is still progressing (each matched
+    // nav step, and on LoggedIntoGame). No-ops unless this login's Arm()
+    // authorized entry — so a hangup-suppressed login stays closed no matter how
+    // many steps advance. Keeps auto-entry primed across a slow multi-step login,
+    // and — crucially — keeps it primed when a trailing holdover step never
+    // matches, so the realm-entry menu still fires the entry command.
+    public void KeepArmed()
+    {
+        if (_disposed || !_entryAuthorized) return;
+        _armedUntilUtc = NowProvider() + ArmWindow;
+        _log?.Log(LogSeverity.Debug, "MainMenuEntry",
+            "Re-armed auto-entry — login still progressing.");
     }
 
     public void Dispose()
@@ -182,6 +213,10 @@ public sealed class MainMenuEntryAutomation : IDisposable
         // (gossip, telepath, room description) can't re-fire.
         if (NowProvider() >= _armedUntilUtc) return;
         _armedUntilUtc = DateTime.MinValue;
+        // One auto-entry per login: close authorization so a later KeepArmed
+        // (a trailing step advancing, or a second menu line) can't re-open the
+        // latch after we've already sent (or deliberately skipped) the entry.
+        _entryAuthorized = false;
 
         // Master gate: auto-responses off → no auto-entry, regardless of
         // first connect or relog after cleanup. The latch is already

@@ -1941,17 +1941,20 @@ public partial class MainWindowViewModel : ObservableObject
         {
             AppServices.Current.Log.Info("LoginAuto", $"Login automation complete for '{bbsName}'.");
             DetachLoginKillSwitch();
-            // Arm the main-menu-entry automation NOW — the BBS-login
-            // sequence just completed, so we expect the MajorMUD main
-            // menu to render shortly. If it does, the engine sends the
-            // configured GameEntryCommand. If it doesn't render in the
-            // arm window, the latch closes — protects against in-game
-            // chat that happens to look like the menu line.
-            AppServices.Current.MainMenuEntry.Arm();
+            // Keep the main-menu-entry latch primed for the menu that renders
+            // right after the final step. Auto-entry was ARMED at login start
+            // (below) and refreshed on each step; here we just extend the window
+            // once more for the imminent menu.
+            AppServices.Current.MainMenuEntry.KeepArmed();
             // Once the post-entry refresh (stat / inventory / who) has printed, dump the
             // quests this character can now start — once, at the tail of the login sequence.
             _ = AnnounceAvailableQuestsAfterLoginAsync();
         };
+        // Keep auto-entry armed while the login actively progresses, so the
+        // realm-entry menu still fires the entry command even if a trailing
+        // (mis-authored / MegaMUD-holdover) step never matches and LoggedIntoGame
+        // never comes — the reported "did not re-enter on disconnect" case.
+        automator.StepAdvanced += () => AppServices.Current.MainMenuEntry.KeepArmed();
         automator.Aborted += reason =>
         {
             AppServices.Current.Log.Warn("LoginAuto", $"'{bbsName}': {reason}");
@@ -1977,14 +1980,31 @@ public partial class MainWindowViewModel : ObservableObject
             if (a is null) { DetachLoginKillSwitch(); return; }
             int stepsRun = a.CurrentStepIndex;
             int stepsTotal = a.StepCount;
+            string? pending = a.PendingWaitPattern;
             a.Dispose();
             _automator = null;
             DetachLoginKillSwitch();
+            // When the automator was still MID-sequence at this point (common on a
+            // carrier-lost relog whose final menu prompt differs from a fresh
+            // login), name the step it stalled on and the prompt it never saw — so
+            // a capture explains why auto-entry didn't fire, instead of just "5/6".
             AppServices.Current.Log.Info("LoginAuto",
-                $"In-game prompt observed — force-disposed automator for '{bbsName}' after {stepsRun}/{stepsTotal} step(s).");
+                stepsRun >= stepsTotal
+                    ? $"In-game prompt observed — force-disposed automator for '{bbsName}' after {stepsRun}/{stepsTotal} step(s) (all steps had matched)."
+                    : $"In-game prompt observed — force-disposed automator for '{bbsName}' after {stepsRun}/{stepsTotal} step(s); it was still awaiting step {stepsRun + 1}/{stepsTotal} (waiting for: \"{pending}\") — that menu prompt never arrived on this connect, so auto-entry never armed.");
         };
         scanner.PromptObserved += handler;
         _loginKillSwitch = handler;
+
+        // Arm auto-entry at the START of the login (not on completion). This is
+        // the single point that decides authorization for the connect: Arm()
+        // consumes the hangup-suppression flag, so a login that follows a
+        // health/manual hangup is NOT authorized and no later step can re-open
+        // it. On an authorized login (fresh profile load, reconnect after an
+        // unexpected drop, cleanup relog) the window stays primed via KeepArmed
+        // as steps advance, so the realm-entry menu fires the entry command even
+        // when the user's nav steps don't cleanly end at "in game".
+        AppServices.Current.MainMenuEntry.Arm();
 
         automator.Start();
     }
@@ -2610,13 +2630,12 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.PartyPoller.NotifyDisconnected();
                 AppServices.Current.PartyProbe.NotifyDisconnected();
 
-                // Drop per-session condition + buff-duration state so a
-                // fresh login starts clean: any non-auto-clearing
-                // condition (no AppliedEndsWith) and any live buff timer
-                // must not survive the disconnect and suppress a recast
-                // on the next session.
+                // Drop per-session condition state so a fresh login starts clean: any
+                // non-auto-clearing condition (no AppliedEndsWith) must not survive the
+                // disconnect. Buff-duration timers are handled below, AFTER the cause is
+                // known — an unexpected drop freezes them (resume on reconnect) rather
+                // than clearing, so a brief drop doesn't lose the recast clock.
                 AppServices.Current.Conditions.ClearAll("disconnect");
-                AppServices.Current.CastDirector.ResetBuffTracking();
                 AppServices.Current.ManaRegen.Reset();
 
                 // Categorise: if the user clicked Disconnect, the flag was
@@ -2652,6 +2671,13 @@ public partial class MainWindowViewModel : ObservableObject
                     if (_lastDisconnectCause is DisconnectCause.CarrierLost or DisconnectCause.NoResponse)
                         AppServices.Current.HangupSignal.AllowNextEntry();
                 }
+
+                // Buff timers: ANY disconnect freezes them (the buffs persist server-side
+                // through link-death) — the first in-game prompt after reconnect resumes
+                // them with the same remaining. A fresh character clears via ProfileLoaded,
+                // and a resume gap longer than the longest buff clears them then; so a
+                // brief manual disconnect keeps the recast clock instead of restarting it.
+                AppServices.Current.CastDirector.PauseBuffTimers();
 
                 // A remote @relog forces the dial-back unconditionally —
                 // the sender explicitly asked to relog, so we bypass the
@@ -3139,6 +3165,26 @@ public partial class MainWindowViewModel : ObservableObject
         };
         window.Closed += (_, _) => _partyWindow = null;
         _partyWindow = window;
+        window.Show(main);
+    }
+
+    // Singleton handle for the live Buff Watchdog window — re-press toggles closed.
+    private BuffWatchdogWindow? _buffWatchdog;
+
+    [RelayCommand]
+    private void OpenBuffWatchdog()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_buffWatchdog is { } existing) { existing.Close(); return; }
+
+        BuffWatchdogWindow window = new()
+        {
+            DataContext = new BuffWatchdogViewModel(),
+        };
+        window.Closed += (_, _) => _buffWatchdog = null;
+        _buffWatchdog = window;
         window.Show(main);
     }
 
@@ -4365,6 +4411,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     public string ConversationGesture     => GetGesture(Models.Profile.BuiltInAction.OpenConversation);
     public string PartyGesture            => GetGesture(Models.Profile.BuiltInAction.OpenParty);
+    public string BuffWatchdogGesture     => GetGesture(Models.Profile.BuiltInAction.OpenBuffWatchdog);
     public string WorkshopGesture         => GetGesture(Models.Profile.BuiltInAction.OpenWorkshop);
     public string NavigationGesture       => GetGesture(Models.Profile.BuiltInAction.OpenNavigation);
     public string SpellBookGesture        => GetGesture(Models.Profile.BuiltInAction.OpenSpellBook);
@@ -4388,6 +4435,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ConversationGesture));
         OnPropertyChanged(nameof(PartyGesture));
+        OnPropertyChanged(nameof(BuffWatchdogGesture));
         OnPropertyChanged(nameof(WorkshopGesture));
         OnPropertyChanged(nameof(NavigationGesture));
         OnPropertyChanged(nameof(SpellBookGesture));

@@ -53,6 +53,7 @@ public sealed class AutoSearchManager : IDisposable
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _isDemandActive;
     private readonly Func<bool> _hasEngageableHostiles;
+    private readonly Func<bool> _hasGetEngineArmed;
     private readonly MovementCoordinator? _coordinator;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
@@ -71,6 +72,7 @@ public sealed class AutoSearchManager : IDisposable
         Func<bool> isEnabled,
         Func<bool>? isDemandActive = null,
         Func<bool>? hasEngageableHostiles = null,
+        Func<bool>? hasGetEngineArmed = null,
         MovementCoordinator? coordinator = null,
         LogService? log = null)
     {
@@ -78,6 +80,7 @@ public sealed class AutoSearchManager : IDisposable
         _isEnabled = isEnabled;
         _isDemandActive = isDemandActive ?? (static () => false);
         _hasEngageableHostiles = hasEngageableHostiles ?? (static () => false);
+        _hasGetEngineArmed = hasGetEngineArmed ?? (static () => false);
         _coordinator = coordinator;
         _log = log;
         _classify = new DispatcherTimer { Interval = ClassifyDelay };
@@ -94,6 +97,12 @@ public sealed class AutoSearchManager : IDisposable
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
     private bool ShouldSearch() => _isEnabled() || _isDemandActive();
+
+    // Whether anything will collect what the search reveals: a get engine
+    // (AutoGetItems / AutoGetCash) or an active path-item demand. When nothing is
+    // armed the post-search settle hold has no hand-off target, so the walker is
+    // released the moment the `sea` goes out rather than idling a full window for it.
+    private bool HasLootConsumer() => _hasGetEngineArmed() || _isDemandActive();
 
     // Genuine room change. Reset per-room state, discard any pending / held search
     // from the room we left, and — when a search is armed — start the classify
@@ -189,11 +198,23 @@ public sealed class AutoSearchManager : IDisposable
                            : "sent 'sea' on room entry (path-item demand)");
 
         // Keep the walker held through the reveal round-trip so the get engines
-        // collect what the search surfaces before the loop sneaks / steps on. Both
-        // the clear-room and post-fight paths now hold the Search gate (asserted in
-        // OnRoomChanged / OnRoomObserved), so both settle before releasing it.
-        _settle.Stop();
-        _settle.Start();
+        // collect what the search surfaces before the loop sneaks / steps on — but
+        // ONLY while a get engine (or path-item demand) is actually armed to collect.
+        // With them off, the settle window has no hand-off target and is just dead
+        // time on every room (report paradigm-20260818-060742: auto-search made travel
+        // ~30-50% slower even though the `sea` resolves instantly). Release the moment
+        // the search is sent instead, so a bare "reveal the room" scan doesn't stall
+        // the walk. Both the clear-room and post-fight paths reach here holding the
+        // Search gate (asserted in OnRoomChanged / OnRoomObserved).
+        if (HasLootConsumer())
+        {
+            _settle.Stop();
+            _settle.Start();
+        }
+        else
+        {
+            ReleaseGate("search sent — no loot consumer to settle for");
+        }
     }
 
     private void AssertGate(string reason)

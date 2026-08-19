@@ -63,6 +63,9 @@ public sealed partial class CombatManager
 
     private CombatSpellDecision? _pendingDebuff;
     private string? _pendingDebuffTarget;
+    // The room roster captured with the pending debuff, so an AoE debuff tags the mobs
+    // that were present when it was PICKED (not whenever the coordinator confirms it).
+    private IReadOnlyList<string>? _pendingDebuffRoomKeys;
 
     // Optional bridge to the CastingDirector's in-between window (Evaluate). Used
     // by TryPreAttackInBetween to let a due survival cast — or, failing that, the
@@ -70,6 +73,10 @@ public sealed partial class CombatManager
     // Spells+Ailments priority. Returns the spell cast this pass, or null. Until
     // wired, the pre-attack pass no-ops and engage dispatches the attack as before.
     private Func<string?>? _inBetweenEvaluator;
+    // Spends the CastingDirector's one-between-round-cast slot when the pre-attack
+    // debuff fires directly (bypassing Evaluate), so the director can't queue a
+    // second between-round cast the same round. Optional — no-ops until set.
+    private Action? _markBetweenRoundSlotUsed;
 
     // ----- Deterministic magic eligibility (game-data gated) ----------
     // Optional, like the spell caster. Until SetMagicEligibility runs, the
@@ -200,6 +207,16 @@ public sealed partial class CombatManager
         _inBetweenEvaluator = evaluate;
     }
 
+    // Wire the callback that spends the CastingDirector's one-between-round-cast
+    // slot when the pre-attack debuff fires directly (bypassing Evaluate).
+    // Optional — the pre-attack debuff still fires without it, but the director
+    // won't know the slot is used.
+    public void SetBetweenRoundSlotMarker(Action marker)
+    {
+        ArgumentNullException.ThrowIfNull(marker);
+        _markBetweenRoundSlotUsed = marker;
+    }
+
     // True once SetCombatSpellCaster has wired both the coordinator and the mana
     // reader. Gates every chooser call.
     private bool CombatSpellsWired => _cast is not null && _readMana is not null;
@@ -226,20 +243,27 @@ public sealed partial class CombatManager
             _spellChooser.ResetForNewTarget();
             _alternationRound = 0;
             _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
-            // Anchor the tally clock at the engage moment, NOT MinValue. MaxCasts
-            // counts real rounds and the engage announce is round 0 — the attack
-            // spell fires on a LATER server round. In a MULTI-mob room the other
-            // mobs' swing lines trip the damage-driven combat tick within ~100ms of
-            // the engage; a MinValue reset let that premature tick tally the spell
-            // before it ever fired, so a MaxCasts-1 nuke cap-switched to the
-            // alternate the same round and the normal spell never went out ("LBOL →
-            // MMIS without firing LBOL", report paradigm-20260815-202241 —
-            // engageable=2, sinceAttack≈79ms). Anchoring here makes AttackTallyMinGap
-            // reject that premature tick; the first genuine round tick (~a round
-            // later) tallies. Single-mob rooms already behaved (their first tick IS a
-            // real round, sinceAttack≈5000ms), so this only closes the multi-mob
-            // early-swap.
-            _lastAttackTallyAt = _now();
+            // Anchor the tally clock at the engage moment ONLY in a MULTI-mob room.
+            // MaxCasts counts real rounds and the engage announce is round 0 — the
+            // attack spell fires on a LATER server round. In a multi-mob room the
+            // OTHER mobs' swing lines trip the damage-driven combat tick within ~100ms
+            // of the engage; a MinValue reset let that premature tick tally the spell
+            // before it ever fired, so a MaxCasts-1 nuke cap-switched to the alternate
+            // the same round and the normal spell never went out ("LBOL → MMIS without
+            // firing LBOL", report paradigm-20260815-202241 — engageable=2,
+            // sinceAttack≈79ms). Anchoring makes AttackTallyMinGap reject that
+            // premature tick; the first genuine round tick tallies.
+            //
+            // A SINGLE-mob room has no other mob to produce a premature tick — its
+            // first damage tick IS round 1. But that tick can land UNDER
+            // AttackTallyMinGap after the engage (the server delivered round 1 ~3.3s
+            // out), and anchoring at engage wrongly rejected it too, slipping the first
+            // tally to round 2. A MaxCasts-1 spell then auto-repeated one extra round
+            // before the cap-switch fired (report paradigm-20260818-055820: engine cast
+            // lbol, cap-switch lbol→mmis at sinceAttack≈9333ms, engageable=1). So only
+            // anchor when there's another mob to guard against; leave solo fights at
+            // MinValue so the first genuine tick always tallies.
+            _lastAttackTallyAt = enemyCount > 1 ? _now() : DateTimeOffset.MinValue;
         }
 
         // A per-monster forced attack COMMAND wins over the entire normal flow
@@ -407,6 +431,9 @@ public sealed partial class CombatManager
         // engine resumes its auto attack this round. A hand-typed attack suppresses the
         // engine's re-send only for the round it landed in.
         ClearUserAttackOverrideForNewRound();
+
+        // New round — reset the per-round exp-line tally the AoE-wipe path reads.
+        _expGainsThisRound = 0;
 
         // New round — re-arm the once-per-round attack-immunity handler so the next
         // round's "no effect" burst can drive the next cascade step.
@@ -728,11 +755,17 @@ public sealed partial class CombatManager
     private bool TryPreAttackInBetween(
         CombatSettings settings, EngageableCandidate picked, RoomEntitiesObservation obs)
     {
-        if (!CombatSpellsWired || _cast is null) return false;
+        // Auto-Combat gate — mirrors PickInBetweenDebuff's own !_isEnabled() check.
+        // The single-target debuff is gated by Auto-Combat (see CombatSpellChooser
+        // .TryDebuffing); without this, the see-hidden force-clear override — which
+        // engages hostiles with Auto-Combat OFF and reaches here — would leak the
+        // debuff now that the Auto-Nuke gate no longer blocks the single rung.
+        if (!CombatSpellsWired || _cast is null || !_isEnabled()) return false;
 
         CombatSpellContext ctx = BuildContext(
             settings, obs, picked.RawName, CountEngageable(obs), picked.MonsterNumber);
         if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return false;
+        if (!DebuffDecisionAllowed(decision, ctx)) return false;
 
         // A debuff is due. Let the director's in-between window fire a
         // higher-priority survival cast first (it can't fire the debuff itself
@@ -767,12 +800,17 @@ public sealed partial class CombatManager
         if (!_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
             return false;
 
-        _spellChooser.MarkCast(decision, picked.RawName);
+        _spellChooser.MarkCast(decision, picked.RawName, ctx.RoomMobKeys);
         _currentTarget = picked.RawName;
         // Arm the attack resume: the debuff's *Combat Off* re-announces the combat
         // action through the combat-off resume path — mirroring the director's own
         // debuff, whose CastFired arms this same signal.
         NoteBetweenRoundCast();
+        // Spend the round's between-round slot in the director too — this cast
+        // fired directly (not via Evaluate), so without this the director could
+        // queue a SECOND between-round cast this round and draw the "already cast
+        // this round" rejection.
+        _markBetweenRoundSlotUsed?.Invoke();
         _log?.Combat(LogCategory,
             $"pre-attack debuff {decision.Spell} at {picked.RawName} — " +
             "attack resumes after its *Combat Off*");
@@ -797,10 +835,21 @@ public sealed partial class CombatManager
         if (_classifier.Current is not { } obs) return null;
         if (!TargetPresent(obs, target)) return null;
 
+        // Corpse-cast guard, mirroring the attack heartbeat's death window
+        // (CombatManager.cs, _lastDeathAt / _attackSentSinceDeath): the recurring
+        // debuff is evaluated on the killing damage-line tick — before the exp
+        // line nulls _currentTarget and before the death line drops the roster —
+        // so within the death-interrupt window after an inferred kill, and before
+        // an attack has confirmed a live survivor, _currentTarget may be a corpse
+        // the roster hasn't dropped yet. Hold rather than dispatch a debuff at it.
+        if (DateTimeOffset.Now - _lastDeathAt < DeathInterruptWindow && !_attackSentSinceDeath)
+            return null;
+
         CombatSettings settings = _readSettings();
         CombatSpellContext ctx = BuildContext(
             settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
         if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return null;
+        if (!DebuffDecisionAllowed(decision, ctx)) return null;
 
         // An area debuff (e.g. stinking cloud) blankets the room and MUST be cast
         // bare — `stnk`, never `stnk <mob>`. A single-target debuff keeps its mob.
@@ -808,8 +857,54 @@ public sealed partial class CombatManager
         // existing combat-off resume path.
         _pendingDebuff = decision;
         _pendingDebuffTarget = target;
+        _pendingDebuffRoomKeys = ctx.RoomMobKeys;
         return (decision.Spell!,
             decision.Action == CombatSpellAction.AreaDebuff ? null : target);
+    }
+
+    // Guard the Settings → Combat debuff slots: the chosen spell must be a
+    // between-round (0-energy) spell — that's what separates a debuff from an
+    // attack spell (lbol/mmis cost 500-1000 energy) — AND its targeting scope must
+    // fit the slot (single-enemy for the single-target slot, an area/room scope
+    // for the AoE slot). Blocks a mis-slotted spell before it reaches the wire
+    // (an attack spell as a debuff, or a targeted spell as an AoE / vice-versa)
+    // rather than letting the server reject a malformed cast and the engine churn.
+    // Fails OPEN when the cast-code can't be resolved (unknown / no catalog yet) —
+    // the guard is about a resolvable mismatch, not a resolution gap. The
+    // per-monster pre-attack OVERRIDE is exempt: it's the user's explicit per-mob
+    // choice and already bypasses the level gate.
+    private bool DebuffDecisionAllowed(CombatSpellDecision decision, in CombatSpellContext ctx)
+    {
+        if (decision.Spell is not { } code) return false;
+        if (ctx.OverridePreAttackSpell is { } ov
+            && decision.Action == CombatSpellAction.SingleDebuff
+            && string.Equals(code, ov, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (_resolveSpellByCode?.Invoke(code) is not { } spell) return true;
+
+        int energy = spell.Formula.EnergyCost;
+        int targets = spell.Targets;
+        bool ok = decision.Action switch
+        {
+            CombatSpellAction.SingleDebuff =>
+                DebuffTargeting.IsBetweenRound(energy) && DebuffTargeting.IsSingleTargetEnemy(targets),
+            CombatSpellAction.AreaDebuff =>
+                DebuffTargeting.IsBetweenRound(energy) && DebuffTargeting.IsAreaEnemy(targets),
+            _ => true,
+        };
+        if (!ok) WarnInvalidDebuffSlot(code, decision.Action, energy, targets);
+        return ok;
+    }
+
+    private void WarnInvalidDebuffSlot(string code, CombatSpellAction action, int energy, int targets)
+    {
+        if (!_warnedInvalidDebuffSlots.Add(code)) return;   // one line per bad slot, not per round
+        string slot = action == CombatSpellAction.AreaDebuff ? "AoE" : "single-target";
+        string why = !DebuffTargeting.IsBetweenRound(energy)
+            ? $"it costs {energy} energy — a debuff slot needs a 0-energy between-round spell (an attack spell can't be a debuff)"
+            : $"its targeting scope ({targets}) doesn't fit the {slot} slot";
+        _log?.Warn(LogCategory,
+            $"debuff slot misconfigured: '{code}' won't cast as the {slot} debuff — {why}. Fix it in Settings → Combat.");
     }
 
     // Confirm the in-between debuff the director just sent. Marks the stashed
@@ -820,9 +915,10 @@ public sealed partial class CombatManager
     public void CommitInBetweenDebuff()
     {
         if (_pendingDebuff is not { } decision) return;
-        _spellChooser.MarkCast(decision, _pendingDebuffTarget ?? string.Empty);
+        _spellChooser.MarkCast(decision, _pendingDebuffTarget ?? string.Empty, _pendingDebuffRoomKeys);
         _pendingDebuff = null;
         _pendingDebuffTarget = null;
+        _pendingDebuffRoomKeys = null;
     }
 
     // Count engageable monsters in the observation, matching the candidate build in
@@ -846,10 +942,28 @@ public sealed partial class CombatManager
                 continue;
             }
             MonsterOverlay overlay = ResolveOverlay(n);
-            if (MonsterEngagement.IsEngageable(overlay))
+            if (MonsterEngagement.IsEngageable(overlay, _userEngagedInstances.Contains(e.RawName)))
                 count++;
         }
         return count;
+    }
+
+    // The RawNames of the engageable monsters in the room — the roster the AoE debuff
+    // tags on cast and checks for new arrivals against. Mirrors CountEngageable's filter
+    // exactly (unknown number → engageable, else the overlay), so EnemyCount and
+    // RoomMobKeys never disagree about which mobs count.
+    private List<string> CollectEngageableMobKeys(RoomEntitiesObservation obs)
+    {
+        var keys = new List<string>();
+        for (int i = 0; i < obs.Entities.Count; i++)
+        {
+            RoomEntity e = obs.Entities[i];
+            if (e.Kind != EntityKind.Monster) continue;
+            if (e.MonsterNumber is not int n) { keys.Add(e.RawName); continue; }
+            if (MonsterEngagement.IsEngageable(ResolveOverlay(n), _userEngagedInstances.Contains(e.RawName)))
+                keys.Add(e.RawName);
+        }
+        return keys;
     }
 
     private static bool TargetPresent(RoomEntitiesObservation obs, string rawTarget)
@@ -903,7 +1017,8 @@ public sealed partial class CombatManager
             AlternationPreferSpell: AlternationPreferSpell(settings),
             HpBelowDrainTrigger: hpBelowDrain,
             DrainTargetEligible: drainEligible,
-            HpBelowDrainRelease: hpBelowDrainRelease);
+            HpBelowDrainRelease: hpBelowDrainRelease,
+            RoomMobKeys:         CollectEngageableMobKeys(obs));
     }
 
     // Resolve the drain spell's two live gates for a target: whether HP has fallen
@@ -1379,6 +1494,16 @@ public sealed partial class CombatManager
         // comment on _immunityHandledThisRound); the rest of the burst is a leftover
         // from the primary and must not tear down the fallback we just switched to.
         if (_immunityHandledThisRound) return;
+
+        // A manual user cast (the user hand-typed an attack / drain spell to probe a
+        // target) draws this same "no effect" line — but _lastCastAction /
+        // _castingSpellTarget still point at the engine's PRIOR auto cast, so
+        // attributing the immunity here would blame the wrong spell (report
+        // paradigm-20260818-055955: a hand-typed `dtch` at an elemental marked the
+        // engine's `mmis` immune, dropping the cascade straight to melee). The engine
+        // holds its own attack during an override round, so the only cast in flight
+        // is the user's — a manual probe must not mutate the auto-cascade immune maps.
+        if (_userAttackOverride) return;
 
         // Command mode: a spell placed in the ATTACK-COMMAND slot (NormalAttackCommand
         // = "harm") reaches the wire via SendAttack, not a chooser cast — no spell is

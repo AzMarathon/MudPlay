@@ -58,6 +58,12 @@ public sealed class LoginAutomator : IDisposable
     // Fired after the final step matches and its response is sent.
     public event Action? LoggedIntoGame;
 
+    // Fired after ANY step matches and its response is sent (not just the last).
+    // Lets the main-menu auto-entry keep its arm window fresh while a login is
+    // actively progressing, so realm entry still fires if a trailing (mis-authored
+    // or MegaMUD-holdover) step never matches and LoggedIntoGame never comes.
+    public event Action? StepAdvanced;
+
     // Fired when a step's send fails (no value to substitute, send IO error,
     // etc.). Payload is a short reason.
     public event Action<string>? Aborted;
@@ -132,15 +138,30 @@ public sealed class LoginAutomator : IDisposable
     }
 
     // Begin the automation.
+    // The substring the current (not-yet-matched) step is waiting for, or null
+    // when every step has matched / the automator is done. Surfaced so a
+    // diagnostic caller can log WHAT the automator is stalled on when a reconnect
+    // leaves it incomplete (a carrier-lost relog whose final menu prompt differs
+    // from a fresh login never matches its last step).
+    public string? PendingWaitPattern
+    {
+        get { lock (_lock) { return _stepIndex < _steps.Count ? _steps[_stepIndex].WaitForPattern : null; } }
+    }
+
     public void Start()
     {
         bool done;
+        string? firstPattern = null;
         lock (_lock)
         {
             if (_started || _disposed) return;
             _started = true;
             done = _steps.Count == 0;
+            if (!done) firstPattern = _steps[0].WaitForPattern;
         }
+        _log?.Invoke(done
+            ? "LoginAutomator: started with 0 menu-nav steps (nothing to navigate)"
+            : $"LoginAutomator: started — {_steps.Count} step(s); awaiting step 1/{_steps.Count} (waiting for: \"{firstPattern}\")");
         if (done) FireDone();
     }
 
@@ -287,14 +308,24 @@ public sealed class LoginAutomator : IDisposable
         if (_disposed) return;
 
         bool done;
+        string? nextPattern = null;
         lock (_lock)
         {
             if (_disposed) return;
-            _log?.Invoke($"LoginAutomator: matched step {indexAtDispatch + 1}/{_steps.Count}");
             _stepIndex++;
             _resolving = false;
             done = _stepIndex >= _steps.Count;
+            if (!done) nextPattern = _steps[_stepIndex].WaitForPattern;
         }
+        // Log the step just sent AND what the next step now waits for, so a
+        // capture pins exactly which prompt a stalled reconnect never received.
+        _log?.Invoke(done
+            ? $"LoginAutomator: matched step {indexAtDispatch + 1}/{_steps.Count} — final step sent"
+            : $"LoginAutomator: matched step {indexAtDispatch + 1}/{_steps.Count}; awaiting step {_stepIndex + 1}/{_steps.Count} (waiting for: \"{nextPattern}\")");
+
+        // A step just matched + sent — a login is actively progressing. Signal it
+        // so the auto-entry arm window stays fresh even if a later step stalls.
+        StepAdvanced?.Invoke();
 
         if (done) { FireDone(); return; }
         TryAdvance();

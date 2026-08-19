@@ -1,0 +1,204 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="380" d:DesignHeight="420"
+        x:Class="MudPlay.Views.BuffWatchdogWindow"
+        x:DataType="vm:BuffWatchdogViewModel"
+        Title="Buff Watchdog"
+        Width="380" Height="440"
+        MinWidth="320" MinHeight="120"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <!-- Section header (Self buffs / Party buffs). -->
+        <Style Selector="TextBlock.SectionHeader">
+            <Setter Property="Margin" Value="10,10,10,4"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+        </Style>
+
+        <!-- Buff active-timer bar frame: a LIGHT-green outline over a very-dark-green
+             track, stretched to the full row width so the outline bounds the real bar
+             exactly (the star-weighted fill fills whatever width it's given). -->
+        <Style Selector="Border.BuffBarFrame">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <!-- The elapsed-time fill — a DARKER green than the outline, kept flat across the
+             whole bar (no bright fill); amber once the fill crosses the recast marker. -->
+        <Style Selector="Border.BuffFill">
+            <Setter Property="Background" Value="#FF456644"/>
+        </Style>
+        <Style Selector="Border.BuffFill.recast">
+            <Setter Property="Background" Value="{StaticResource AccentYellowBrush}"/>
+        </Style>
+
+        <!-- Remaining-time label inside the bar, offset after the name. -->
+        <Style Selector="TextBlock.BarTime">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+        </Style>
+
+        <!-- 4-letter buff code / #item label, rendered left-aligned INSIDE the bar. -->
+        <Style Selector="TextBlock.BarName">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+        </Style>
+        <!-- Superseded (covered-by-a-party-buff) self-buff rows read deemphasised, so an
+             empty bar labelled "covered by chan" reads as intentional, not missing. -->
+        <Style Selector="TextBlock.BarName.covered">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.BarTime.covered">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+
+        <!-- "unlearned" chip on a configured buff the character hasn't learned. -->
+        <Style Selector="Border.UnlearnedChip">
+            <Setter Property="Padding" Value="3,0"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="CornerRadius" Value="2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
+        <Style Selector="Border.UnlearnedChip > TextBlock">
+            <Setter Property="FontSize" Value="8"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <DockPanel LastChildFill="True">
+
+        <TextBlock DockPanel.Dock="Top"
+                   Margin="10,12,10,10"
+                   Text="No buffs configured. Set up bless slots / regen / party buffs in the Player Workshop and Party windows."
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding IsEmpty}"/>
+
+        <ScrollViewer>
+            <StackPanel>
+
+                <!-- ===== Self buffs ===== -->
+                <TextBlock Classes="SectionHeader" Text="Self buffs" IsVisible="{Binding HasSelfBuffs}"/>
+                <ItemsControl ItemsSource="{Binding SelfBuffs}"
+                              Background="{StaticResource ChromeBgSunkenBrush}"
+                              Margin="6,0"
+                              Padding="2"
+                              IsVisible="{Binding HasSelfBuffs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:BuffWatchdogRowViewModel">
+                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="6,4">
+                                <!-- Full-width bar: the light-green frame bounds it, the
+                                     star-weighted fill fills the elapsed fraction, and the
+                                     recast marker sits on the fill/rest boundary. Name + time
+                                     read left-aligned over the dark-green interior. -->
+                                <Border Classes="BuffBarFrame">
+                                    <Grid Height="20" Background="#FF1B2A1D" ClipToBounds="True">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="{Binding FillStar}"/>
+                                                <ColumnDefinition Width="{Binding FillRestStar}"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Classes="BuffFill"
+                                                    Classes.recast="{Binding InRecastWindow}"/>
+                                        </Grid>
+                                        <Grid IsVisible="{Binding ShowRecastMarker}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="{Binding MarkerStar}"/>
+                                                <ColumnDefinition Width="{Binding MarkerRestStar}"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="1" Width="2" HorizontalAlignment="Left"
+                                                    Background="{StaticResource AccentYellowBrush}"/>
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center" Margin="6,0,0,0">
+                                            <TextBlock Classes="BarName" Classes.covered="{Binding IsCovered}"
+                                                       Text="{Binding Name}"/>
+                                            <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
+                                                <TextBlock Text="unlearned"/>
+                                            </Border>
+                                            <TextBlock Classes="BarTime" Classes.covered="{Binding IsCovered}"
+                                                       Text="{Binding TimeText}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- ===== Party buffs ===== -->
+                <TextBlock Classes="SectionHeader" Text="Party buffs" IsVisible="{Binding HasPartyBuffs}"/>
+                <ItemsControl ItemsSource="{Binding PartyBuffs}"
+                              Background="{StaticResource ChromeBgSunkenBrush}"
+                              Margin="6,0,6,8"
+                              Padding="2"
+                              IsVisible="{Binding HasPartyBuffs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:BuffWatchdogRowViewModel">
+                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="6,4">
+                                <StackPanel VerticalAlignment="Center">
+                                    <Border Classes="BuffBarFrame">
+                                        <Grid Height="20" Background="#FF1B2A1D" ClipToBounds="True">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="{Binding FillStar}"/>
+                                                    <ColumnDefinition Width="{Binding FillRestStar}"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Classes="BuffFill"
+                                                        Classes.recast="{Binding InRecastWindow}"/>
+                                            </Grid>
+                                            <Grid IsVisible="{Binding ShowRecastMarker}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="{Binding MarkerStar}"/>
+                                                    <ColumnDefinition Width="{Binding MarkerRestStar}"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="1" Width="2" HorizontalAlignment="Left"
+                                                        Background="{StaticResource AccentYellowBrush}"/>
+                                            </Grid>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
+                                                        VerticalAlignment="Center" Margin="6,0,0,0">
+                                                <TextBlock Classes="BarName" Text="{Binding Name}"/>
+                                                <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
+                                                    <TextBlock Text="unlearned"/>
+                                                </Border>
+                                                <TextBlock Classes="BarTime" Text="{Binding TimeText}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                    <!-- Party target (member / class) as a caption under the bar. -->
+                                    <TextBlock Text="{Binding TargetText}"
+                                               FontSize="9"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="2,1,0,0"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

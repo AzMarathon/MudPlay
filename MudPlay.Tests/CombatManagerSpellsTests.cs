@@ -181,6 +181,16 @@ public sealed class CombatManagerSpellsTests
             Combat.OnCombatTick();
         }
 
+        // A genuine round-1 boundary tick that lands FAST — under AttackTallyMinGap
+        // after the engage (the server delivered round 1's damage line ~3s out). A
+        // solo fight must still tally this as round 1, not reject it as premature.
+        public void TickFast()
+        {
+            _clock += TimeSpan.FromSeconds(3);
+            Cast.OnCombatTick();
+            Combat.OnCombatTick();
+        }
+
         public string LastSent => Sent.Count == 0
             ? string.Empty
             : Encoding.Latin1.GetString(Sent[^1]).TrimEnd('\r');
@@ -512,6 +522,30 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("mmis rotworm", h.LastSent);
     }
 
+    // Report paradigm-20260818-055820: the engine cast lbol (MaxCasts=1) and the server
+    // auto-repeated it, but the cap-switch to mmis fired one round late (cap-switch logged
+    // at sinceAttack≈9333ms, engageable=1), so lbol fired twice. Cause: the tally clock was
+    // anchored at engage to reject a MULTI-mob premature tick, but a SINGLE-mob fight's
+    // genuine round-1 tick can land under AttackTallyMinGap (~3s) and got rejected too,
+    // slipping the first tally to round 2. The anchor is now multi-mob only.
+    [Fact]
+    public void MaxCasts1_SingleMobEngage_FastFirstRound_TalliesRound1_NoLateSwap()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "small animated tree");
+
+        h.Feed("Also here: small animated tree.");
+        Assert.Equal("lbol small animated tree", h.LastSent);   // engage → lbol (round 0)
+
+        // Round 1 lands fast — under AttackTallyMinGap after the engage. A solo fight has
+        // no premature tick to guard against, so it must still tally round 1, reach
+        // MaxCasts=1, and switch to mmis so lbol doesn't auto-repeat a second round.
+        h.TickFast();
+        Assert.Equal("mmis small animated tree", h.LastSent);
+    }
+
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even
     // with an exp gain sitting nearby, e.g. party share-exp) is NOT a kill — the
     // resume must still re-announce the spell rather than dropping a live target.
@@ -764,6 +798,36 @@ public sealed class CombatManagerSpellsTests
         h.Combat.NoteBetweenRoundCast();
         h.Feed("*Combat Off*");
         Assert.True(h.Sent.Count > afterTick);          // resumed after the utility cast
+    }
+
+    [Fact]
+    public void ManualCast_NoEffect_DoesNotMarkEngineSpellImmune()
+    {
+        // report paradigm-20260818-055955: a hand-typed spell that draws "no effect"
+        // must not be blamed on the engine's last AUTO cast. The engine's
+        // _lastCastAction still points at its own prior spell, so attributing the
+        // immunity there wrongly marked the engine's attack spell immune and dropped
+        // the cascade straight to melee. The override guard keeps a manual probe from
+        // mutating the auto-cascade immune map.
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "zap", MinEnemies = 0 };
+        h.Combat.SetCombatSpellPredicate(code => string.Equals(code, "dtch", StringComparison.OrdinalIgnoreCase));
+        h.AddMonster(1, "earth elemental");
+
+        h.Feed("Also here: earth elemental.");            // engine engages with "harm earth elemental"
+        Assert.Equal("harm earth elemental", h.LastSent);
+
+        // The user hand-casts a probe (dtch) at the elemental; the server says it has no
+        // effect. The override holds the engine's send THIS round, so the wrong immune
+        // mark only surfaces next round — pre-fix, "harm" was marked immune and the engine
+        // switched to the alternate "zap" once the override cleared.
+        h.Combat.OnManualCastObserved("dtch");
+        h.Feed("Your spell has no effect on earth elemental.");
+        h.Tick();   // clears the override; engine re-decides
+
+        Assert.DoesNotContain("zap earth elemental", h.AllSent);   // harm NOT marked immune
     }
 
     // ----- Auto-Nuke auto-engine gate ----------------------------------
@@ -1595,5 +1659,72 @@ public sealed class CombatManagerSpellsTests
         h.Tick();
 
         Assert.Equal("turn large zombie", h.LastSent);
+    }
+
+    // ----- user-engaged passive-neutral takeover (report paradigm-20260814) -----
+
+    // A passive neutral (Neutral relationship, not KillOnSight) is left alone by the
+    // engine — until the user hand-attacks it, which turns it hostile. The manual attack
+    // marks that instance so the engine takes over killing it.
+    [Fact]
+    public void PassiveNeutral_LeftAlone_ManualAttackMarksItEngaged()
+    {
+        using Harness h = new(wireCaster: false);
+        h.AddMonster(1, "townsperson");
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);   // passive — no KillOnSight
+
+        h.Feed("Also here: townsperson.");
+        Assert.False(h.Combat.IsUserEngagedInstance("townsperson"));
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("townsperson"));   // engine ignores it
+
+        h.Combat.NoteAttackCommandObserved("a", "townsperson");             // user swings
+        Assert.True(h.Combat.IsUserEngagedInstance("townsperson"));          // engine takes over
+    }
+
+    // The user types an abbreviated target to engage fast ("a towns" for "townsperson");
+    // the mark must resolve the room instance from that prefix.
+    [Fact]
+    public void ManualAttack_AbbreviatedTarget_ResolvesAndMarks()
+    {
+        using Harness h = new(wireCaster: false);
+        h.AddMonster(1, "townsperson");
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);
+        h.Feed("Also here: townsperson.");
+
+        h.Combat.NoteAttackCommandObserved("a", "towns");
+        Assert.True(h.Combat.IsUserEngagedInstance("townsperson"));
+    }
+
+    // An enemy needs no per-instance override — it already engages on its own — so a
+    // manual swing at one must NOT add it to the user-engaged set (which would only ever
+    // matter for a passive neutral).
+    [Fact]
+    public void ManualAttack_OnEnemy_DoesNotAddInstanceOverride()
+    {
+        using Harness h = new(wireCaster: false);
+        h.AutoCombatEnabled = false;   // engine won't swing → no echo-claim to consume the manual verb
+        h.AddMonster(1, "giant rat");  // default relationship = Enemy
+        h.Feed("Also here: giant rat.");
+
+        h.Combat.NoteAttackCommandObserved("a", "giant rat");
+        Assert.False(h.Combat.IsUserEngagedInstance("giant rat"));
+    }
+
+    // The takeover is per-room: once the marked neutral is gone (killed, or we changed
+    // rooms), a full-roster observation prunes it so the flag can't leak onto a freshly
+    // arrived same-named mob.
+    [Fact]
+    public void UserEngagedNeutral_ClearedWhenItLeavesRoom()
+    {
+        using Harness h = new(wireCaster: false);
+        h.AddMonster(1, "townsperson");
+        h.SetOverlay(1, relationship: MonsterRelationship.Neutral);
+        h.AddMonster(2, "giant rat");
+        h.Feed("Also here: townsperson.");
+        h.Combat.NoteAttackCommandObserved("a", "townsperson");
+        Assert.True(h.Combat.IsUserEngagedInstance("townsperson"));
+
+        h.Feed("Also here: giant rat.");   // full-roster observe — townsperson gone
+        Assert.False(h.Combat.IsUserEngagedInstance("townsperson"));
     }
 }

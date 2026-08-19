@@ -126,6 +126,56 @@ public sealed class SpellbookStateTests : IDisposable
         Assert.Equal(0, book.ObtainedCount);
     }
 
+    [Fact]
+    public void Reseed_AfterDataSetRenumber_KeepsObtainedByName()
+    {
+        // The set-swap bug: obtained spells were keyed by Spells.Number, so
+        // swapping to a set that renumbers the rows (and the class) emptied the
+        // book until a full profile reload. The obtained set is now name-backed
+        // and Reseed re-resolves it against the new set — so the same spells stay
+        // obtained under their new numbers.
+        string root = Path.Combine(_root, "renum");
+        Directory.CreateDirectory(root);
+        WriteRenumberSet(root, "A", mageClass: 12, starNum: 100, highNum: 101);
+        WriteRenumberSet(root, "B", mageClass: 8, starNum: 500, highNum: 501);
+
+        GameDataCache cache = new(root);
+        cache.SwitchSet("A");
+        KnownSpellCatalog catalog = new(cache);
+        SpellbookState book = new(catalog);
+
+        book.Refresh(catalog.ResolveClassNumber("Mage") ?? 0, 5);
+        book.SetObtainedByNames(new[] { "starlight", "high arc" });
+        Assert.True(book.IsObtained(100));
+        Assert.True(book.IsObtained(101));
+
+        // Swap the active set to B (renumbered) and reseed, as the ActiveSetChanged
+        // handler does — resolving the class number from the persisted class NAME.
+        cache.SwitchSet("B");
+        book.Reseed(catalog.ResolveClassNumber("Mage") ?? 0, 5);
+
+        Assert.False(book.IsObtained(100));  // old set's numbers are gone
+        Assert.False(book.IsObtained(101));
+        Assert.True(book.IsObtained(500));   // re-resolved by name to B's numbers
+        Assert.True(book.IsObtained(501));
+        Assert.Equal(2, book.ObtainedCount);
+        Assert.Equal(new[] { "starlight", "high arc" }, book.ObtainedNames);
+    }
+
+    private void WriteRenumberSet(string root, string setName, int mageClass, int starNum, int highNum)
+    {
+        string dir = Path.Combine(root, setName);
+        Directory.CreateDirectory(dir);
+        object[] classes = [ClassRow(mageClass, "Mage", magery: 1, mageryLvl: 3)];
+        object[] spells =
+        [
+            SpellRow(starNum, "starlight", "star", magery: 1, mageryLvl: 1, reqLevel: 2),
+            SpellRow(highNum, "high arc", "high", magery: 1, mageryLvl: 3, reqLevel: 5),
+        ];
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), JsonSerializer.Serialize(spells));
+        File.WriteAllText(Path.Combine(dir, "Classes.json"), JsonSerializer.Serialize(classes));
+    }
+
     // ----- AvailablePicks (Settings spell-picker suggestion source) -----
 
     [Fact]

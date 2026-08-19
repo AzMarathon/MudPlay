@@ -292,20 +292,59 @@ public sealed class TeleportMazeSolverTests : IDisposable
         h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.D));  // look E → 1/30
         h.Solver.OnRoomObserved(Asylum(Direction.E, Direction.D));  // look D → 1/10
 
-        // Relocalized to 1/31 → plain route E to 1/30 → the solver drives the step
-        // itself: the cardinal move, then a self-look to render the landing.
+        // Relocalized to 1/31 → a plain route to the goal exists, so we're in a
+        // solvable room: the solver drives the step E with NO per-step re-location
+        // (no self-look after the move) — the last wire byte is the move, not `look`.
         Assert.Equal(new RoomKey(1, 31), h.Tracker.State.CurrentRoom!.Key);
-        Assert.Contains("e\r", h.SentText);
-        Assert.Equal("look\r", h.SentText[^1]);
+        Assert.Equal("e\r", h.SentText[^1]);
 
-        // Feed 1/30's self-look landing render, then settle → the step verifies by
-        // name + exit-mask and finishes on the goal.
-        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.D));  // 1/30's display
+        // One settle tick (pure pacing) finishes the one-step route deterministically.
         h.Solver.FireSettleForTests();
 
         Assert.False(h.Solver.Active);
         Assert.Equal(0, h.Solver.Attempts);
         Assert.Equal(new RoomKey(1, 30), h.Tracker.State.CurrentRoom!.Key);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    [Fact]
+    public void FastWalk_MultiStep_SendsAllMoves_NoInterleavedRelocalize()
+    {
+        // Once relocalized into a solvable room, the whole plain route is a verified-
+        // unhindered corridor, so the solver paces out EVERY move with no `look` /
+        // `rm` between them. Goal 1/12 is a 2-step plain route from 1/10 (E then S).
+        Harness h = NewHarness(SplitMaze);
+
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 12)));
+        Assert.True(h.Solver.Active);
+
+        // Self-look renders 1/10 (own exits E, D); settle, then sweep to relocalize.
+        h.Solver.OnRoomObserved(Asylum(Direction.E, Direction.D));
+        h.Solver.FireSettleForTests();
+        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.S, Direction.D));  // look E → 1/11
+        // Snapshot before the final look reply, which resolves the sweep and fires
+        // the first drive move synchronously — everything from here on is the drive.
+        int afterSweep = h.Sent.Count;
+        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.D));               // look D → 1/30
+
+        // Relocalized to 1/10 → 2-step plain route; first move E goes out at once,
+        // with no self-look after it.
+        Assert.Equal(new RoomKey(1, 10), h.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal("e\r", h.SentText[^1]);
+
+        // Pacing tick → the second move S. No `look` / `rm` interleaved between them.
+        h.Solver.FireSettleForTests();
+        Assert.Equal("s\r", h.SentText[^1]);
+
+        // Final pacing tick → deterministic arrival at the goal cell 1/12.
+        h.Solver.FireSettleForTests();
+
+        Assert.False(h.Solver.Active);
+        Assert.Equal(new RoomKey(1, 12), h.Tracker.State.CurrentRoom!.Key);
+        // The only bytes sent from the resolve onward were the two cardinal moves.
+        List<string> drive = h.SentText.Skip(afterSweep).ToList();
+        Assert.Equal(new[] { "e\r", "s\r" }, drive);
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
         Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
     }
@@ -336,25 +375,22 @@ public sealed class TeleportMazeSolverTests : IDisposable
         Assert.DoesNotContain("look\r", h.SentText);
 
         // The game's `Location:` reply re-anchors to 1/31 (what ParadigmPositionResolver
-        // does off the rm reply, then fires PositionResolved) → the solver plans the
-        // plain route and takes ONE step E, settling before the next `rm`.
+        // does off the rm reply, then fires PositionResolved) → a plain route to the
+        // goal exists, so we're in a solvable room: the solver drives the route with
+        // NO per-step `rm`. The first move E goes out at once — not a second `rm`.
         FeedRm(h, new RoomKey(1, 31));
 
-        Assert.DoesNotContain("look east\r", h.SentText);
-        Assert.DoesNotContain("look\r", h.SentText);
-        Assert.Contains("e\r", h.SentText);
-        Assert.NotEqual("rm\r", h.SentText[^1]);   // still settling on the step's landing
+        Assert.DoesNotContain(h.SentText, s => s.StartsWith("look"));
+        Assert.Equal("e\r", h.SentText[^1]);
+        Assert.Equal(1, h.SentText.Count(s => s == "rm\r"));   // only the landing `rm`
 
-        // The step's landing redisplays; settle → the next `rm`.
-        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.D));
+        // One pacing tick finishes the one-step route deterministically — no more `rm`.
         h.Solver.FireSettleForTests();
-        Assert.Equal("rm\r", h.SentText[^1]);
-
-        // `rm` after the step reports 1/30 (the goal) → Finish.
-        FeedRm(h, new RoomKey(1, 30));
 
         Assert.False(h.Solver.Active);
         Assert.Equal(0, h.Solver.Attempts);
+        Assert.Equal(1, h.SentText.Count(s => s == "rm\r"));   // still just the landing `rm`
+        Assert.DoesNotContain(h.SentText, s => s.StartsWith("look"));
         Assert.Equal(new RoomKey(1, 30), h.Tracker.State.CurrentRoom!.Key);
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
         Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
@@ -381,26 +417,27 @@ public sealed class TeleportMazeSolverTests : IDisposable
         Assert.Equal(2, h.SentText.Count(s => s == "rm\r"));
         Assert.DoesNotContain(h.SentText, s => s.StartsWith("look"));
 
-        // The retry's reply finally arrives → the solve proceeds by `rm` and finishes.
-        FeedRm(h, new RoomKey(1, 31));                             // relocalized to 1/31 → step E, settle
-        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.D)); // the step's landing redisplays
-        h.Solver.FireSettleForTests();                             // → `rm`
-        FeedRm(h, new RoomKey(1, 30));                             // plain step E landed the goal
+        // The retry's reply finally arrives → we're in a solvable room, so the solver
+        // drives the plain route with NO per-step `rm` and finishes on one pacing tick.
+        FeedRm(h, new RoomKey(1, 31));                             // relocalized → step E
+        Assert.Equal("e\r", h.SentText[^1]);
+        h.Solver.FireSettleForTests();                             // pacing → arrive goal 1/30
 
         Assert.False(h.Solver.Active);
         Assert.DoesNotContain(h.SentText, s => s.StartsWith("look"));
+        Assert.Equal(new RoomKey(1, 30), h.Tracker.State.CurrentRoom!.Key);
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
         Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
     }
 
     [Fact]
-    public void DrivesIntoDeadEndGoal_RecognizesArrivalByName()
+    public void DrivesIntoDeadEndGoal_DeterministicArrival()
     {
-        // The goal cell is a dead-end Padded Cell whose 1x2 signature collides
-        // with a sibling cell, so the index omits it (non-relocatable). Reaching
-        // it must work off the driven step's name + mask check — NOT a look-sweep
-        // relocalize, which would fail to identify the cell and walk back out (the
-        // "made it to the old man then walked out" report).
+        // The goal cell is a dead-end Padded Cell whose 1x2 signature collides with
+        // a sibling cell, so the index omits it (non-relocatable). The fast walk
+        // reaches it by driving the plain step deterministically — it never tries to
+        // relocalize onto the cell, so it can't mis-ID and walk back out (the "made
+        // it to the old man then walked out" report).
         Harness h = NewHarness(DeadEndMaze);
         // A teleport dropped us in 1/11 (Lost); the goal 1/12 hangs plain-south.
 
@@ -415,15 +452,13 @@ public sealed class TeleportMazeSolverTests : IDisposable
         h.Solver.OnRoomObserved(Asylum(Direction.S, Direction.E));  // look N → 1/10
         h.Solver.OnRoomObserved(PaddedCell(Direction.N));           // look S → 1/12
 
-        // Relocalized to 1/11 → plain route S to the cell → solver drives the step.
+        // Relocalized to 1/11 → plain route S to the cell → solver drives the step
+        // with no self-look after it.
         Assert.Equal(new RoomKey(1, 11), h.Tracker.State.CurrentRoom!.Key);
-        Assert.Equal("s\r", h.SentText[^2]);
-        Assert.Equal("look\r", h.SentText[^1]);
+        Assert.Equal("s\r", h.SentText[^1]);
         int sentBeforeArrival = h.Sent.Count;
 
-        // The step lands in the Padded Cell. Its name matches the goal, so the
-        // solver finishes — without emitting any further look-sweep or reshuffle.
-        h.Solver.OnRoomObserved(PaddedCell(Direction.N));
+        // One pacing tick finishes on the goal cell — no further sends, no reshuffle.
         h.Solver.FireSettleForTests();
 
         Assert.False(h.Solver.Active);

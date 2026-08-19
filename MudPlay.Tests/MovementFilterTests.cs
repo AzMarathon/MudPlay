@@ -764,6 +764,39 @@ public sealed class MovementFilterTests
         filter.ItemCarriedProbe = id => held.Contains(id);
     }
 
+    // A synthesised item-use teleport edge: crosses by using the held item.
+    private static RoomExit ItemUseTeleportExit(int keyItemId) =>
+        new(new RoomKey(9, 1009), RoomExitHint.Teleport, RawHint: "item-use teleport",
+            KeyItemId: keyItemId, TextCommands: new[] { "use potion of levitation" });
+
+    [Fact]
+    public void IsExitBlocked_ItemUseTeleport_Lacking_Blocks()
+    {
+        (_, MovementFilter filter) = NewPair();
+        SetInventory(filter);                                   // carrying nothing
+        Assert.True(filter.IsExitBlocked(ItemUseTeleportExit(992)));
+    }
+
+    [Fact]
+    public void IsExitBlocked_ItemUseTeleport_Carried_Allows()
+    {
+        (_, MovementFilter filter) = NewPair();
+        SetInventory(filter, 992);                              // carrying the potion
+        Assert.False(filter.IsExitBlocked(ItemUseTeleportExit(992)));
+    }
+
+    [Fact]
+    public void IsExitBlocked_Teleport_NoKeyItem_NeverBlocks()
+    {
+        // A plain CMD / greet teleport (no possession requirement) must not be gated
+        // by the new item-use case — KeyItemId 0 means "no item needed".
+        (_, MovementFilter filter) = NewPair();
+        SetInventory(filter);
+        RoomExit plain = new(new RoomKey(9, 1009), RoomExitHint.Teleport, RawHint: "CMD teleport",
+            TextCommands: new[] { "go hole" });
+        Assert.False(filter.IsExitBlocked(plain));
+    }
+
     [Fact]
     public void IsExitBlocked_Item_InventoryUnknown_DoesNotBlock()
     {

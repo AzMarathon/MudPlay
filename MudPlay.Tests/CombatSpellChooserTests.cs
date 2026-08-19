@@ -28,8 +28,10 @@ public sealed class CombatSpellChooserTests
 
     private static CombatSpellContext Ctx(
         int enemies = 1, string target = "a rat", int mana = 100, int maxMana = 100,
-        bool backstabPending = false) =>
-        new(enemies, target, mana, maxMana, backstabPending);
+        bool backstabPending = false, bool allowNukes = true,
+        System.Collections.Generic.IReadOnlyList<string>? roomMobKeys = null) =>
+        new(enemies, target, mana, maxMana, backstabPending, AllowNukes: allowNukes,
+            RoomMobKeys: roomMobKeys);
 
     // ----- 1. Backstab gate ---------------------------------------------
 
@@ -271,6 +273,107 @@ public sealed class CombatSpellChooserTests
         Assert.Null(sut.ChooseDebuff(settings, Ctx(target: "a rat")));
     }
 
+    // ----- 2c. Debuff redesign: AoE covering vs single fall-through -----
+
+    [Fact]
+    public void ChooseDebuff_AreaConfigured_ButAutoNukeOff_FiresSingleTarget()
+    {
+        // report paradigm-20260817-205819: with the AoE debuff configured but Auto-Nuke
+        // OFF the AoE isn't "covering" the room, so the single-target rung takes over
+        // instead of being short-circuited by the configured-but-inactive AoE.
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 1),
+            SingleTargetDebuffSpell = Slot("vuln"),
+            NormalAttackSpell = Slot("lbol"),
+        };
+
+        CombatSpellDecision? d = sut.ChooseDebuff(settings, Ctx(enemies: 2, allowNukes: false));
+        Assert.Equal(CombatSpellAction.SingleDebuff, d?.Action);
+        Assert.Equal("vuln", d?.Spell);
+    }
+
+    [Fact]
+    public void ChooseDebuff_Area_CastsOnce_NoReFire_ForTheSameRoster()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 1, maxCasts: 3),
+            SingleTargetDebuffSpell = Slot("vuln"),
+        };
+        string[] roster = { "ant one", "ant two", "ant three" };
+
+        CombatSpellDecision? first = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: roster));
+        Assert.Equal(CombatSpellAction.AreaDebuff, first?.Action);
+        sut.MarkCast(first!.Value, "ant one", roster);
+
+        // Same mobs next round: all tagged → no re-fire (cap still has room), and the
+        // single rung must NOT fire while the AoE is covering.
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: roster)));
+    }
+
+    [Fact]
+    public void ChooseDebuff_Area_ReFires_ForANewArrival_UpToCap()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 1, maxCasts: 2),
+        };
+        string[] roster1 = { "ant one", "ant two" };
+        CombatSpellDecision? c1 = sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster1));
+        Assert.Equal(CombatSpellAction.AreaDebuff, c1?.Action);
+        sut.MarkCast(c1!.Value, "ant one", roster1);      // casts = 1
+
+        // A new mob arrives → re-fire (still under the cap of 2).
+        string[] roster2 = { "ant one", "ant two", "ant three" };
+        CombatSpellDecision? c2 = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: roster2));
+        Assert.Equal(CombatSpellAction.AreaDebuff, c2?.Action);
+        sut.MarkCast(c2!.Value, "ant one", roster2);      // casts = 2 = cap
+
+        // Yet another new mob, but the AoE is at its per-room cap → skip (not single).
+        string[] roster3 = { "ant one", "ant two", "ant three", "ant four" };
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 4, roomMobKeys: roster3)));
+    }
+
+    [Fact]
+    public void ChooseDebuff_RoomThinsBelowMinEnemies_SingleTakesOver()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 2, maxCasts: 1),
+            SingleTargetDebuffSpell = Slot("vuln"),
+        };
+        string[] roster = { "ant one", "ant two" };
+        CombatSpellDecision? aoe = sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster));
+        Assert.Equal(CombatSpellAction.AreaDebuff, aoe?.Action);
+        sut.MarkCast(aoe!.Value, "ant one", roster);
+
+        // Room thins to one mob (below the AoE MinEnemies 2) → single-target on the survivor.
+        CombatSpellDecision? single = sut.ChooseDebuff(
+            settings, Ctx(enemies: 1, target: "queen ant", roomMobKeys: new[] { "queen ant" }));
+        Assert.Equal(CombatSpellAction.SingleDebuff, single?.Action);
+        Assert.Equal("vuln", single?.Spell);
+    }
+
+    [Fact]
+    public void ChooseDebuff_Area_ManaShort_WhileCovering_Skips_NotSingle()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 1, minMana: 90),
+            SingleTargetDebuffSpell = Slot("vuln"),
+        };
+        // AoE covers (configured, nukes on, min met) but mana is below its floor → skip;
+        // the single rung must NOT fire while the AoE covers the room.
+        Assert.Null(sut.ChooseDebuff(
+            settings, Ctx(enemies: 3, mana: 50, roomMobKeys: new[] { "a", "b", "c" })));
+    }
+
     [Fact]
     public void ChooseDebuff_Single_HonoursMaxCastsPerRoom()
     {
@@ -302,6 +405,39 @@ public sealed class CombatSpellChooserTests
         };
 
         Assert.Null(sut.ChooseDebuff(settings, Ctx(target: "a rat")));
+    }
+
+    [Fact]
+    public void ChooseDebuff_Single_FiresWithNukesOff()
+    {
+        // The single-target debuff is gated by Auto-Combat, NOT Auto-Nuke, so it
+        // still fires with nukes off (report paradigm-20260817-135739: the debuff
+        // never fired at all because it was wrongly under the Auto-Nuke gate).
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            SingleTargetDebuffSpell = Slot("weaken"),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        CombatSpellDecision? d = sut.ChooseDebuff(settings, Ctx(target: "a rat", allowNukes: false));
+        Assert.Equal(CombatSpellAction.SingleDebuff, d?.Action);
+    }
+
+    [Fact]
+    public void ChooseDebuff_Area_RequiresNukesOn()
+    {
+        // The AoE debuff stays gated by Auto-Nuke — off means it never offers.
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("blindall", minEnemies: 2),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, allowNukes: false)));
+        Assert.Equal(CombatSpellAction.AreaDebuff,
+            sut.ChooseDebuff(settings, Ctx(enemies: 3, allowNukes: true))?.Action);
     }
 
     [Fact]
@@ -413,6 +549,34 @@ public sealed class CombatSpellChooserTests
         CombatSpellDecision r3 = sut.Choose(settings, Ctx());
         Assert.Equal(CombatSpellAction.WeaponAttack, r3.Action);
         Assert.Null(r3.Spell);
+    }
+
+    [Fact]
+    public void Choose_ManaGatedNormal_DoesNotBurnCount_PrefersNormalWhenManaRecovers()
+    {
+        // A mana-gated normal attack (lbol, MinMana 70%, MaxCasts 1) must not burn its
+        // per-target cast count while the alternate covers the round — so the moment
+        // mana recovers above the gate, the normal is re-preferred (count still 0 of
+        // 1). This is why a fight that momentarily "opened on MMIS" (mana a hair under
+        // the floor) self-corrects to LBOL the next round once mana regenerates
+        // (reports paradigm-20260816-103418 / -103515).
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("lbol", maxCasts: 1, minMana: 70),
+            AlternateAttackSpell = Slot("mmis", maxCasts: 99, minMana: 0),
+        };
+
+        // Round 1 — mana 68 (< 70% floor): the normal is gated, the alternate fires.
+        CombatSpellDecision r1 = sut.Choose(settings, Ctx(mana: 68, maxMana: 100));
+        Assert.Equal(CombatSpellAction.AlternateAttackSpell, r1.Action);
+        Assert.Equal("mmis", r1.Spell);
+        sut.MarkCast(r1, "a rat");   // only the ALTERNATE's count advances
+
+        // Round 2 — mana recovered to 84: the normal (count still 0 of 1) is preferred.
+        CombatSpellDecision r2 = sut.Choose(settings, Ctx(mana: 84, maxMana: 100));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, r2.Action);
+        Assert.Equal("lbol", r2.Spell);
     }
 
     [Fact]
