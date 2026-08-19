@@ -703,6 +703,12 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
 - For a **loop**, an instant mob still yields only once per lap (bounded by lap time); only a
   stay-in-room **rooming** setup kills it every round.
 
+**`Summoned By` field — three room-reference token kinds *([CONFIRMED] 2026-08-19, data cross-ref)*.** A monster's `Summoned By` lists the rooms it appears in, each token tagged by *how* it spawns there. Verified by the room side: a `Group(lair)` token always points at a room **with** a `Lair` tag, a `Group:` token at one **without**.
+- **`Room m/r`** — the room's `NPC` fixture: a **placed** boss / unique (the NPC-placed mechanic above). Nav tooltip labels these **`Placed:`**.
+- **`Group: m/r`** (no `(lair)`) — an **assigned** roam / rare-random spawn; the room carries no `Lair` tag for it. Tooltip label **`Assigned:`**.
+- **`Group(lair): m/r`** — a **lair** spawn; the room's `Lair` tag lists the same monster. Tooltip label **`Lair:`** (sourced from the room's own `Lair` tag, which also carries the `(Max N)` simultaneous cap).
+- A monster can carry more than one kind for the *same* room (a placed boss that also has a `Group:` roam token — e.g. Aiken `1/398` has both `Room 1/398` and `Group: 1/398`), so the three tooltip lines may legitimately repeat a name. The nav tooltip / Room Info panel split these into Placed / Assigned / Lair; `MonsterSpawnIndex` parses the token kinds, while the combat resolver keeps a permissive union of all of them.
+
 **Boss monsters — a game-limited / long-regen singleton.** *([CONFIRMED] 2026-08-03, user + reports `paradigm-20260803-035136`, `-094657`)*
 - A monster is a **boss** if its **`GameLimit` is 1** (only one exists in the game at a time) OR its
   **`RegenTime` is ≥ 1 hour** — and this holds whether it's a **lair** member OR a **placed** monster

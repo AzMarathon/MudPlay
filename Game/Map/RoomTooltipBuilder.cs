@@ -126,6 +126,19 @@ public static class RoomTooltipBuilder
     // A monster present in a room, resolved to its record Number + display name.
     public readonly record struct RoomMonsterRef(int Id, string Name);
 
+    // The three distinct ways a room hosts monsters, kept apart so the tooltip
+    // and panels can label them (a monster can appear in more than one group —
+    // e.g. a placed boss also assigned to roam — which is intentional):
+    //   Placed   — the room's NPC fixture + "Room m/r" Summoned-By tokens (bosses).
+    //   Assigned — non-lair "Group:" tokens (roam / rare-random spawns).
+    //   Lair     — the room's own Lair tag members (consistent spawners); LairMax
+    //              is that tag's "(Max N)" simultaneous cap.
+    public readonly record struct RoomMonsters(
+        IReadOnlyList<RoomMonsterRef> Placed,
+        IReadOnlyList<RoomMonsterRef> Assigned,
+        IReadOnlyList<RoomMonsterRef> Lair,
+        int? LairMax);
+
     // Resolves the "Also Here" set — lair-tag members plus boss / script-spawn
     // monsters whose presence lives on the monster's "Summoned By" field — into
     // ordered, name-deduped refs. `max` carries the lair tag's Max-N (null when
@@ -163,15 +176,67 @@ public static class RoomTooltipBuilder
         return refs;
     }
 
+    // Split the room's monsters into Placed / Assigned / Lair groups (see
+    // RoomMonsters). Placed = the NPC fixture + "Room m/r" Summoned-By tokens;
+    // Assigned = non-lair "Group:" tokens; Lair = the room's Lair tag. Each group
+    // is name-deduped internally, but a monster may legitimately appear in more
+    // than one group. Shared by the map tooltip and the interactive panels so the
+    // labelling never drifts.
+    public static RoomMonsters ResolveRoomMonsters(
+        Room room, GameDataCache? data, MonsterSpawnIndex? spawnIndex)
+    {
+        ArgumentNullException.ThrowIfNull(room);
+
+        List<RoomMonsterRef> Group(IEnumerable<int> ids)
+        {
+            var refs = new List<RoomMonsterRef>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (int id in ids)
+            {
+                string? name = LookupName(data, "Monsters", id);
+                if (string.IsNullOrEmpty(name) || !seen.Add(name)) continue;
+                refs.Add(new RoomMonsterRef(id, name));
+            }
+            return refs;
+        }
+
+        // Placed — the room's NPC fixture (a boss / unique lives on Room.Npc)
+        // plus any "Room m/r" Summoned-By tokens (usually the same monster).
+        var placedIds = new List<int>();
+        if (room.Npc > 0) placedIds.Add(room.Npc);
+        if (spawnIndex is not null) placedIds.AddRange(spawnIndex.PlacedMonsterIdsAt(room.Key));
+
+        IEnumerable<int> assignedIds = spawnIndex?.AssignedMonsterIdsAt(room.Key) ?? Array.Empty<int>();
+
+        int? max = null;
+        var lairIds = new List<int>();
+        if (!string.IsNullOrEmpty(room.RawLairTag))
+        {
+            ParseLairTag(room.RawLairTag, out max, out IReadOnlyList<int> ids);
+            lairIds.AddRange(ids);
+        }
+
+        return new RoomMonsters(Group(placedIds), Group(assignedIds), Group(lairIds), max);
+    }
+
     private static string BuildAlsoHere(Room room, GameDataCache? data, MonsterSpawnIndex? spawnIndex)
     {
-        IReadOnlyList<RoomMonsterRef> refs = ResolveAlsoHere(room, data, spawnIndex, out int? max);
-        if (refs.Count == 0) return string.Empty;
+        RoomMonsters rm = ResolveRoomMonsters(room, data, spawnIndex);
 
-        string prefix = max is { } m ? $"Also Here ({m}): " : "Also Here: ";
+        StringBuilder sb = new();
         // Append each monster's Monsters-table record number so the tooltip
         // doubles as a quick lookup key — "Dark Goblin Archer(#48)".
-        return prefix + string.Join(", ", refs.Select(r => $"{r.Name}(#{r.Id})"));
+        void Line(string label, IReadOnlyList<RoomMonsterRef> refs)
+        {
+            if (refs.Count == 0) return;
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append(label).Append(": ")
+              .Append(string.Join(", ", refs.Select(r => $"{r.Name}(#{r.Id})")));
+        }
+        Line("Placed", rm.Placed);
+        Line("Assigned", rm.Assigned);
+        Line("Lair", rm.Lair);
+        return sb.ToString();
     }
 
     // ----- Light description ---------------------------------------

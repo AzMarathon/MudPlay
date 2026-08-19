@@ -144,7 +144,9 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Room room = graph.GetRoom(new RoomKey(1, 2))!;
         string text = RoomTooltipBuilder.Build(room, graph, cache);
 
-        Assert.Contains("Also Here (2): Sewer Rat(#100), Sewer Snake(#101)", text);  // record numbers appended
+        // Lair-tag members render under the "Lair:" line (the Max-N moves to the
+        // Max Regen line below).
+        Assert.Contains("Lair: Sewer Rat(#100), Sewer Snake(#101)", text);  // record numbers appended
         Assert.Contains("Max Regen: 2 @ 4m 30s", text);     // Delay=5 → 4m 30s
     }
 
@@ -261,12 +263,12 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
-    public void Build_AlsoHere_IncludesSummonedBossNotInLairTag()
+    public void Build_Placed_IncludesSummonedBossNotInLairTag()
     {
         // Live repro: 1/1678 Darkwood Forest, Webbed Clearing has no
         // lair tag entry for "giant spider" (Monster 52), but the
-        // monster's "Summoned By" reads "Room 1/1678". The tooltip's
-        // Also Here line used to omit the boss entirely.
+        // monster's "Summoned By" reads "Room 1/1678" — a "Room" token, so it
+        // renders under the "Placed:" line (a placed boss / fixture).
         const string spawnRooms = """
             [
               { "Map Number": 1, "Room Number": 1678, "Name": "Darkwood Forest, Webbed Clearing",
@@ -293,7 +295,49 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Room room = graph.GetRoom(new RoomKey(1, 1678))!;
         string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo: null, spawnIndex: spawnIndex);
 
-        Assert.Contains("Also Here: giant spider(#52)", text);   // boss spawn, with record number
+        Assert.Contains("Placed: giant spider(#52)", text);   // boss spawn, with record number
+    }
+
+    [Fact]
+    public void Build_SeparatesPlacedAssignedAndLair()
+    {
+        // One room hosting all three kinds: a "Room" token (placed boss), a
+        // non-lair "Group:" token (assigned roam), and a lair-tag member. Each
+        // lands under its own labelled line.
+        const string rooms = """
+            [
+              { "Map Number": 2, "Room Number": 50, "Name": "Crossroads",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "(Max 1): 300", "Delay": 5, "CMD": 0,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string monsters = """
+            [
+              { "Number": 100, "Name": "ogre chief",  "Summoned By": "Room 2/50" },
+              { "Number": 200, "Name": "grey wolf",   "Summoned By": "Group: 2/50" },
+              { "Number": 300, "Name": "cave lizard", "Summoned By": "[9-9-9][2]Group(lair): 2/50" }
+            ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    rooms);
+        File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), monsters);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        MonsterSpawnIndex spawnIndex = new(cache);
+
+        Room room = graph.GetRoom(new RoomKey(2, 50))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo: null, spawnIndex: spawnIndex);
+
+        Assert.Contains("Placed: ogre chief(#100)", text);
+        Assert.Contains("Assigned: grey wolf(#200)", text);
+        Assert.Contains("Lair: cave lizard(#300)", text);
+        // The Group(lair) token must NOT leak the lair member into Placed/Assigned.
+        Assert.DoesNotContain("Placed: cave lizard", text);
+        Assert.DoesNotContain("Assigned: cave lizard", text);
     }
 
     [Fact]
@@ -751,12 +795,13 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Room dark = graph.GetRoom(new RoomKey(1, 2))!;     // dark lair room
         string text = RoomTooltipBuilder.Build(dark, graph, cache);
 
-        // Sequential order: Name → Also Here → exits → Room Light → light desc → Max Regen.
+        // Sequential order: Name → monster group(s) → exits → Room Light → light desc → Max Regen.
+        // 1/2's monsters are lair-tag members, so they render under "Lair:".
         // The light-description phrase now sits BELOW the numeric
         // "Room Light: -N" line (per the user's request); 1/2 has
         // no Shop / Spell, so no shop section.
         int posName   = text.IndexOf("North Square (1/2)");
-        int posAlso   = text.IndexOf("Also Here (2):");
+        int posAlso   = text.IndexOf("Lair:");
         int posExits  = text.IndexOf("Obvious exits:");
         int posRLight = text.IndexOf("Room Light: -180");
         int posDesc   = text.IndexOf("very dark");

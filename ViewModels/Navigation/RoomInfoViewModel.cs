@@ -78,21 +78,19 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         RoomName = room.DisplayName;
         RoomKeyLabel = $"Map {key.Map} · Room {key.Room}";
 
-        // Monsters — lair + summoned (shared resolver), then the placed NPC the
-        // resolver omits (a boss / shopkeeper lives on the room's Npc field).
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (RoomTooltipBuilder.RoomMonsterRef mref in
-                 RoomTooltipBuilder.ResolveAlsoHere(room, _services.GameData, _services.MonsterSpawns, out _))
-        {
-            seen.Add(mref.Name);
-            Monsters.Add(MakeMonsterLink(mref.Id, mref.Name, note: null));
-        }
-        if (room.Npc > 0)
-        {
-            string placed = _services.GameData.FindNameByNumber("Monsters", room.Npc) ?? $"#{room.Npc}";
-            if (seen.Add(placed))
-                Monsters.Add(MakeMonsterLink(room.Npc, placed, note: "placed"));
-        }
+        // Monsters — split into Placed (the room's NPC fixture / a boss),
+        // Assigned (roam / rare-random spawns), and Lair (consistent lair
+        // spawners); each link is tagged with its category. A monster may appear
+        // under more than one group (a placed boss that also roams) — the
+        // distinction is intentional, not a duplicate.
+        RoomTooltipBuilder.RoomMonsters rm =
+            RoomTooltipBuilder.ResolveRoomMonsters(room, _services.GameData, _services.MonsterSpawns);
+        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Placed)
+            Monsters.Add(MakeMonsterLink(m.Id, m.Name, note: "placed"));
+        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Assigned)
+            Monsters.Add(MakeMonsterLink(m.Id, m.Name, note: "assigned"));
+        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Lair)
+            Monsters.Add(MakeMonsterLink(m.Id, m.Name, note: "lair"));
 
         // Floor items — TBInfo `roomitem` placements.
         foreach (int itemId in _services.RoomFloorItems.FloorItemsOf(key))
