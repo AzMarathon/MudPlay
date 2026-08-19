@@ -680,12 +680,36 @@ public sealed partial class CombatManager
     // switch during the delay window is itself gated by AttackTallyMinGap (one tally per
     // round), so no double-schedule. Falls back to a bare _post when no scheduler is
     // wired (tests that don't opt in).
+    // Pending deferred switch (target→spell). While one is armed, a re-tick during
+    // the dispatch delay can't schedule the same switch again — the double-cast in
+    // reports paradigm-20260819-121003 / -142147 (mmis fired twice after lbol
+    // capped). Cleared when the dispatch runs, so the next round may re-arm.
+    private (string Target, string Spell)? _pendingSwitch;
+
     private void DeferSwitchDispatch(
         CombatSettings settings, string target, string reason, string? from, string? to)
     {
+        // Idempotency guard: while a switch to the SAME target→spell is already
+        // scheduled, don't arm a second. During SwitchDispatchDelay the announce is
+        // still the pre-switch spell, so a re-tick recomputes sameSpell=false and
+        // would re-arm the identical switch — the double-cast this fixes.
+        string toKey = to ?? string.Empty;
+        if (_pendingSwitch is { } pend
+            && string.Equals(pend.Target, target, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(pend.Spell, toKey, StringComparison.OrdinalIgnoreCase))
+            return;
+        _pendingSwitch = (target, toKey);
+
         void Dispatch()
         {
+            _pendingSwitch = null;   // consumed — the next round may re-arm if needed
             if (_disposed || !_isEnabled() || _combatOff) return;
+            // The announce already IS the switch target — e.g. a between-round-cast
+            // resume re-announced it while this deferral sat pending. Firing again
+            // double-casts the alternate (report paradigm-20260819-121003). No-op.
+            if (to is { } toSpell
+                && string.Equals(_announcedSpellCode, toSpell, StringComparison.OrdinalIgnoreCase))
+                return;
             // A same-burst / adjacent-packet kill / departure nulls both target latches;
             // either mismatch means the switch would land on a corpse (or a re-picked mob).
             if (!string.Equals(_castingSpellTarget, target, StringComparison.OrdinalIgnoreCase)

@@ -417,6 +417,32 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("mmis giant rat", h.LastSent);
     }
 
+    // Reports paradigm-20260819-121003 / -142147: after lbol caps and the switch to
+    // mmis is DEFERRED, a second tick during the delay window recomputed the switch
+    // (the announce is still the stale lbol, so sameSpell=false takes the ungated
+    // decision-changed branch) and scheduled it AGAIN — the alternate fired twice.
+    // The pending-switch latch must collapse the re-arm so it dispatches exactly once.
+    [Fact]
+    public void CapSwitch_RetickDuringDeferWindow_DispatchesAlternateOnce()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);
+
+        h.Tick();                       // cap-switch to mmis, deferred (queued)
+        Assert.Single(h.Posted);        // one dispatch armed
+        h.TickSameRound();              // re-tick while the switch is still pending
+        Assert.Single(h.Posted);        // still ONE — the latch blocked the double-schedule
+
+        h.DrainPosted();
+        Assert.Equal("mmis giant rat", h.LastSent);
+        Assert.Equal(1, h.AllSent.Count(s => s == "mmis giant rat"));   // exactly one mmis
+    }
+
     // Report paradigm-20260815-202319 ("not re-engaging combat after buffing mid-combat"):
     // a between-round self-buff (armr) fires, then the round's nuke (lbol, MaxCasts=1)
     // KILLS one mob in a multi-mob room. The death→re-observe re-picks the live survivor
