@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.10**
-> - Combat: fixed the **attack-spell level lookup clobbered by duplicate short cast-codes** — a monster/item-triggered spell sharing a player spell's short command (e.g. `disr`) could silently overwrite its ReqLevel with an unrelated one, making the real spell look blocked by a monster's spell immunity when it would actually land; the player's own learnable spell now wins the lookup over any same-code duplicate
+> **Version 3.22.11**
+> - Remote: `@have <item>` now reports the **true carried quantity** — a stack of 25 counts as 25, not 1 (it was counting inventory *entries*, and a stack is one entry) — and the reply reads `yes - Nx 'item'` instead of `yes - Nx matching 'item'`
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

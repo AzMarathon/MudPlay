@@ -107,12 +107,21 @@ public sealed class InventoryQueryHandler : IDisposable
 
         InventorySnapshot snap = _inventory.Snapshot;
         int count = 0;
+        // Sum the QUANTITY, not the number of matching entries. A stack prints as a
+        // single "N item" line ("25 black diamonds" is one CarriedItems entry), so
+        // counting entries reported 1x when the sender actually held 25 (bug: @have
+        // black diamond → "1x" with 25 carried). SplitLeadingCount pulls the stack
+        // count off the token (a lone item with no leading number counts as 1).
         foreach (string item in snap.CarriedItems)
-            if (item.Contains(query, StringComparison.OrdinalIgnoreCase)) count++;
+            if (item.Contains(query, StringComparison.OrdinalIgnoreCase))
+                count += CountedCommand.SplitLeadingCount(item).Count;
         foreach (EquippedItem item in snap.EquippedItems)
-            if (item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) count++;
+            if (item.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                count++;   // a worn piece is a single item
 
-        ctx.Reply(count > 0 ? $"yes - {count}x matching '{query}'" : $"no - nothing matching '{query}'");
+        // "yes - Nx '<item>'" — echoes the queried name (kept for the @party
+        // inventory probe's per-item reply correlation) with the true carried count.
+        ctx.Reply(count > 0 ? $"yes - {count}x '{query}'" : $"no - nothing matching '{query}'");
     }
 
     // @inv — the carried pack + keys, the inventory an onlooker can't see. Reads
