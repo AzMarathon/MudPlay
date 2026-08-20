@@ -282,10 +282,23 @@ public sealed partial class CombatManager : IDisposable
     private static readonly TimeSpan AlternationAdvanceMinGap = TimeSpan.FromSeconds(4);
 
     // Real-time stamp of the last attack-spell MaxCasts tally in the spell heartbeat,
-    // gated by AttackTallyMinGap. Reset to MinValue wherever the per-target cascade
-    // resets (alongside _lastAlternationAdvanceAt) so a fresh fight's first cast round
-    // always tallies rather than being blocked by a stale stamp.
+    // gated by AttackTallyMinGap. LEGACY FALLBACK — only used when ReadRoundCount is
+    // unwired (tests that don't opt in). Reset to MinValue wherever the per-target
+    // cascade resets (alongside _lastAlternationAdvanceAt).
     private DateTimeOffset _lastAttackTallyAt = DateTimeOffset.MinValue;
+
+    // Robust round-count tally. When wired, MaxCasts counts one cast per REAL combat
+    // round (RoundDamageTracker's timer-driven RoundCount, one per 5s round) instead
+    // of the fragile AttackTallyMinGap wall-clock on the damage-line heartbeat — the
+    // heartbeat trips several times a round (our multi-hit + the mob's swing + a
+    // stale interval), and no single wall-clock threshold separates a genuine round
+    // tick (~3.3-5s) from a premature one (~0.5-2s): reports paradigm-20260819-120938
+    // (premature tally → capped before lbol fired) vs -055820 (genuine fast tick
+    // rejected → tallied a round late) are that exact tension. One round = one tally.
+    // Set to the current round on engage so the first tally waits for the next round
+    // CLOSE; unwired leaves it -1 and the legacy wall-clock path runs.
+    internal Func<int>? ReadRoundCount { get; set; }
+    private int _lastTalliedRound = -1;
 
     // Minimum real time between two MaxCasts tallies — the SAME round-spacing guard
     // AlternationAdvanceMinGap applies to the phase advance, for the same reason: the

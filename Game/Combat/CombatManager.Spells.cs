@@ -264,6 +264,13 @@ public sealed partial class CombatManager
             // anchor when there's another mob to guard against; leave solo fights at
             // MinValue so the first genuine tick always tallies.
             _lastAttackTallyAt = enemyCount > 1 ? _now() : DateTimeOffset.MinValue;
+            // Round-count anchor: the first MaxCasts tally waits for the NEXT round to
+            // CLOSE, so a premature tick — a solo mob's counter-swing or a stale
+            // interval projection right after the engage — can't cap the spell before
+            // it fires (report paradigm-20260819-120938). This makes the solo/multi
+            // distinction above moot when a round-count source is wired. Unwired leaves
+            // it -1 and the legacy wall-clock gate runs.
+            _lastTalliedRound = ReadRoundCount?.Invoke() ?? -1;
         }
 
         // A per-monster forced attack COMMAND wins over the entire normal flow
@@ -622,8 +629,24 @@ public sealed partial class CombatManager
             // paradigm-20260815-130957: "hamm set to 2, swapped after the first cast").
             // Gate the tally to once per real round so MaxCasts counts rounds cast, not
             // tick fires — the cap-preempt still fires on the genuine capping-round tick.
-            if (_now() - _lastAttackTallyAt < AttackTallyMinGap) return;
-            _lastAttackTallyAt = _now();
+            // Robust count: tally at most ONCE per real combat round. The round
+            // boundary is RoundDamageTracker's timer-driven RoundCount (one per 5s
+            // round), so multiple damage-line ticks inside one round — our multi-hit,
+            // the mob's counter-swing, a stale interval — collapse to a single tally,
+            // and a genuine round that lands fast still counts (fixes the -055820 vs
+            // -120938 wall-clock tension). Falls back to the wall-clock gate only when
+            // no round-count source is wired (legacy tests).
+            if (ReadRoundCount is { } readRound)
+            {
+                int round = readRound();
+                if (round == _lastTalliedRound) return;
+                _lastTalliedRound = round;
+            }
+            else
+            {
+                if (_now() - _lastAttackTallyAt < AttackTallyMinGap) return;
+                _lastAttackTallyAt = _now();
+            }
 
             _spellChooser.MarkCast(decision, target);   // tally this round's fired cast
 
