@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.22.16
+
+- Remote: `@exp` now reads `4,500,000 EXP to level, making 1.1m/hr ~4h 10m to level.` — it leads with the **exp still needed to level**, abbreviates the rate (exact under 100k, `853k` in the hundred-thousands, `1.1m`/`30m` in the millions), and keeps the time-to-level
+- Time-to-level formatting (the `@exp` reply and the status-bar TNL) now shows **plain minutes under 90m** (`89m`, not `1h 29m`) and **rolls up to days past 25h** (`1d 1h 0m`)
+
 ## 3.22.15
 
 - Bug report: new **Room combat assessment** section — the engine's live engageability verdict for every monster in the current room (Magical level, spell-immunity, each weapon's hit-magic, and the **CanAct / StuckOnMana / Unkillable** call with its reason), so a "won't attack this monster" report is self-diagnosing without combat logging being on

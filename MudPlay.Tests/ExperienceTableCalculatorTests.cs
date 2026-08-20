@@ -92,4 +92,16 @@ public sealed class ExperienceTableCalculatorTests
         Assert.NotNull(t);
         Assert.Equal(2.0, t!.Value.TotalHours, 3);
     }
+
+    [Theory]
+    [InlineData(0, 0, 30, "30s")]            // sub-minute → seconds
+    [InlineData(0, 45, 0, "45m")]            // < 90m → plain minutes
+    [InlineData(0, 89, 0, "89m")]            // 60–89m stays minutes, not "1h 29m"
+    [InlineData(0, 90, 0, "1h 30m")]         // 90m → h/m cutover
+    [InlineData(4, 10, 0, "4h 10m")]
+    [InlineData(24, 59, 0, "24h 59m")]       // just under the day cutover
+    [InlineData(25, 0, 0, "1d 1h 0m")]       // 25h → days
+    [InlineData(26, 30, 0, "1d 2h 30m")]
+    public void FormatTimeToLevel_TiersByMagnitude(int h, int m, int s, string expected)
+        => Assert.Equal(expected, ExperienceTableCalculator.FormatTimeToLevel(new TimeSpan(h, m, s)));
 }
