@@ -1143,7 +1143,7 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 ### Minor heal / Major heal
 
 **Default:** unset
-**What it does:** Your primary self-heal spell (Minor) and your emergency self-heal spell (Major). Minor fires at the Health tab's Minor thresholds; Major fires at the (lower) Major/life-threat threshold. If you haven't set a Major heal, MudPlay uses Minor heal at the Major threshold instead of doing nothing.
+**What it does:** Your primary self-heal spell (Minor) and your emergency self-heal spell (Major). Minor fires in the band between its own threshold and the Major threshold; once your HP drops into the (lower) Major/life-threat band the Major heal **takes over** — Minor yields to it there by severity, so you don't have to re-order priorities to get the big heal at low HP. If you can't afford the Major heal, it falls back to Minor rather than skipping the heal. If you haven't set a Major heal at all, MudPlay uses Minor heal at the Major threshold. The same severity rule applies to the party Minor/Major heal slots.
 
 ### HP Regen
 

@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.3**
-> - Navigation: the **Room Info** panel now mirrors the map tooltip — monsters are shown in three labelled groups, **Placed** / **Assigned** / **Lair**, instead of one flat tagged list, with the lair's **Max Regen** line beneath the Lair group
+> **Version 3.22.9**
+> - Combat: attack-spell **MaxCasts are now counted once per real combat round** (off the round timer) instead of per damage-line tick — so a spell no longer switches to its alternate before it fires, or blows past its cast cap
+> - Combat: the cap-switch to the alternate attack now fires **exactly once** (idempotent deferred switch) — no more double-fired magic-missile after the primary caps or after a between-round buff
+> - Healing: the **major heal now takes precedence over the minor heal below its threshold** (self and party), with a fallback to the configured minor when major is unaffordable, respecting the HP triggers + "heal if above" mana floors
+> - Navigation: the **pass-through stash hides coins in the actual stash room** (not the next one), and **auto-collect is suppressed in a stash room while looping** so a search can't re-grab the just-stashed pile
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
