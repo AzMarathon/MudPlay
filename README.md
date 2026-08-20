@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.16**
-> - Remote: `@exp` now reads `4,500,000 EXP to level, making 1.1m/hr ~4h 10m to level.` — it leads with the **exp still needed to level**, abbreviates the rate (exact under 100k, `853k` in the hundred-thousands, `1.1m`/`30m` in the millions), and keeps the time-to-level
-> - Time-to-level formatting (the `@exp` reply and the status-bar TNL) now shows **plain minutes under 90m** (`89m`, not `1h 29m`) and **rolls up to days past 25h** (`1d 1h 0m`)
+> **Version 3.22.19**
+> - Navigation: the search-box dropdown now **groups results by source** — saved GOTO locations first, then boss-table targets, then rooms — instead of interleaving them by relevance
+> - Navigation: **door bashing is now rest-aware and uncapped** — a bashable door is bashed until it opens (no fixed attempt cap), pausing to rest to your rest-max whenever HP dips to the rest trigger; the old "Max bash attempts" setting is removed (picking keeps its cap)
+> - Combat: the **"clear hostiles when sneak broken by see-hidden monster"** toggle now force-clears the room with **Auto-Combat on or off** (previously combat-off only)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
