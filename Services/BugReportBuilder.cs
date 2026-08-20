@@ -64,6 +64,7 @@ public static class BugReportBuilder
             new("Auto-mode", SafeSection(() => BuildAutoMode(svc))),
             new("Keybindings", SafeSection(() => BuildKeybindings(svc))),
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
+            new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
             new("Effective settings (resolved)", SafeSection(() => BuildEffectiveSettings(svc))),
             new("Settings overrides (deltas, excluding BBS + Display)", SafeSection(() => BuildSettings(svc))),
             new("Program log", SafeSection(() => BuildLog(svc))),
@@ -357,6 +358,69 @@ public static class BugReportBuilder
 
         return sb.ToString();
     }
+
+    // Per-monster game-data overlays the user has customized in the active set —
+    // the deltas written via the Game Data Browser's Monster edit dialog (per-
+    // monster attack command / attack spell / pre-attack spell, relationship,
+    // priority, flags), shown as the EFFECTIVE overlay (realm seed + tier
+    // overrides merged) with the tier that owns each record. A "won't attack this
+    // monster" report hinges on whether a per-monster attack override is wired
+    // (e.g. a physical-immune mob whose only kill means is a configured attack
+    // spell) — that state lived nowhere in the capture before. Only records the
+    // user actually overrode appear (the tier side-files hold deltas only), so
+    // this stays a short list, not the whole realm seed.
+    private static string BuildMonsterOverrides(AppServices svc)
+    {
+        StringBuilder sb = new();
+
+        List<(int Number, string Id)> records = new();
+        foreach (string id in svc.Resolver.GameDataOverrideIds("Monsters"))
+            if (int.TryParse(id, out int n) && n > 0) records.Add((n, id));
+        records.Sort((a, b) => a.Number.CompareTo(b.Number));
+
+        sb.Append("Per-monster overlay deltas in the active game-data set — effective overlay (realm seed + tier overrides merged), tagged with the tier that owns each record (")
+          .Append(records.Count).Append(")\n\n");
+        if (records.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
+
+        foreach ((int n, string id) in records)
+        {
+            Models.GameData.MonsterOverlay o = svc.Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
+                "Monsters", id, svc.MonsterOverlaySeed.GetOverlay(n));
+            SettingsTier tier = svc.Resolver.GetGameDataSourceTier("Monsters", id);
+            string name = svc.GameData.FindNameByNumber("Monsters", n) ?? "(unknown)";
+
+            List<string> parts = new();
+            if (!string.IsNullOrWhiteSpace(o.Name)) parts.Add($"name \"{o.Name}\"");
+            if (o.Relationship is { } rel) parts.Add($"relationship {rel}");
+            if (o.Priority is { } prio) parts.Add($"priority {prio}");
+            if (!string.IsNullOrWhiteSpace(o.OverrideAttackCommand))
+                parts.Add($"attack-cmd \"{o.OverrideAttackCommand}\"");
+            if (o.OverrideAttackSpellId is { } atk and > 0)
+                parts.Add($"attack-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}");
+            if (o.OverridePreAttackSpellId is { } pre and > 0)
+                parts.Add($"pre-attack {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}");
+            if (o.DontBackstab == true) parts.Add("dontBackstab");
+            if (o.KillOnSight == true) parts.Add("killOnSight");
+            if (parts.Count == 0) parts.Add("(no live fields)");
+
+            sb.Append("- #").Append(n).Append(' ').Append(name)
+              .Append(" [").Append(tier).Append("] — ")
+              .Append(string.Join(", ", parts)).Append('\n');
+        }
+
+        return sb.ToString();
+    }
+
+    // "151 (disrupt)" — an override stores a Spell.Number; annotate it with the
+    // Spells-table display name so a triager needn't cross-reference the id.
+    private static string SpellLabel(AppServices svc, int spellNumber)
+    {
+        string? name = svc.GameData.FindNameByNumber("Spells", spellNumber);
+        return string.IsNullOrWhiteSpace(name) ? $"{spellNumber}" : $"{spellNumber} ({name})";
+    }
+
+    // " x20" for a positive per-room cast cap; blank for null/0 (unlimited).
+    private static string CountSuffix(int? count) => count is > 0 ? $" x{count}" : string.Empty;
 
     private static string BuildPlayerState(AppServices svc)
     {

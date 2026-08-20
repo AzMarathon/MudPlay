@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.22.12
+
+- Bug report: added a **Monster overrides** section listing every monster you've customized in the active game-data set — per-monster **attack command / attack spell / pre-attack spell** (with counts), relationship, priority, and flags — with the tier each override comes from, so a "won't attack this monster" report shows at a glance whether a per-monster attack override is wired
+
 ## 3.22.11
 
 - Remote: `@have <item>` now reports the **true carried quantity** — a stack of 25 counts as 25, not 1 (it was counting inventory *entries*, and a stack is one entry) — and the reply reads `yes - Nx 'item'` instead of `yes - Nx matching 'item'`

@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.11**
-> - Remote: `@have <item>` now reports the **true carried quantity** — a stack of 25 counts as 25, not 1 (it was counting inventory *entries*, and a stack is one entry) — and the reply reads `yes - Nx 'item'` instead of `yes - Nx matching 'item'`
+> **Version 3.22.12**
+> - Bug report: added a **Monster overrides** section listing every monster you've customized in the active game-data set — per-monster **attack command / attack spell / pre-attack spell** (with counts), relationship, priority, and flags — with the tier each override comes from, so a "won't attack this monster" report shows at a glance whether a per-monster attack override is wired
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
