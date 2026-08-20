@@ -1343,6 +1343,47 @@ public sealed partial class CombatManager
     public bool CanEngageMonster(int monsterNumber) =>
         AssessEngage(_readSettings(), monsterNumber, species: null) == EngageAssessment.CanAct;
 
+    // One monster the engine has seen in the current room, with the exact
+    // engageability verdict + weapon/spell magic data behind it. Frozen for the
+    // bug report so a "skip un-actionable … Unkillable" decision is diagnosable
+    // from the capture without combat logging being on or the scrollback still
+    // holding the line.
+    internal readonly record struct RoomEngageSnapshot(
+        int MonsterNumber,
+        string Species,
+        int Magical,
+        int SpellImmu,
+        int NormalWeaponHit,
+        int AltWeaponHit,
+        EngageAssessment Assessment,
+        string? UnengageableReason);
+
+    // Snapshot every monster known in the current room (the room-scoped
+    // _speciesByNumber map, cleared on room change) with its live EngageAssessment
+    // and the raw magic numbers the gate weighs. Reuses the same _readSettings() /
+    // magic indexes the live path uses, so the report shows precisely what the
+    // engine decided.
+    internal IReadOnlyList<RoomEngageSnapshot> SnapshotRoomEngage()
+    {
+        List<RoomEngageSnapshot> list = new(_speciesByNumber.Count);
+        if (_speciesByNumber.Count == 0) return list;
+
+        CombatSettings settings = _readSettings();
+        int normalHit = _itemMagic?.HitMagic(settings.NormalWeapon) ?? -1;
+        int altHit = _itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1;
+        foreach ((int number, string species) in _speciesByNumber)
+        {
+            int magical = _monsterMagic?.MagicalLevel(number) ?? -1;
+            int immu = _monsterMagic?.SpellImmunity(number) ?? -1;
+            list.Add(new RoomEngageSnapshot(
+                number, species, magical, immu, normalHit, altHit,
+                AssessEngage(settings, number, species),
+                UnengageableReason(settings, number)));
+        }
+        list.Sort((a, b) => a.MonsterNumber.CompareTo(b.MonsterNumber));
+        return list;
+    }
+
     // How the engine can act against a monster THIS round.
     internal enum EngageAssessment
     {

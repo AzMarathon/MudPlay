@@ -2,9 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.22.12
+## 3.22.15
 
-- Bug report: added a **Monster overrides** section listing every monster you've customized in the active game-data set — per-monster **attack command / attack spell / pre-attack spell** (with counts), relationship, priority, and flags — with the tier each override comes from, so a "won't attack this monster" report shows at a glance whether a per-monster attack override is wired
+- Bug report: new **Room combat assessment** section — the engine's live engageability verdict for every monster in the current room (Magical level, spell-immunity, each weapon's hit-magic, and the **CanAct / StuckOnMana / Unkillable** call with its reason), so a "won't attack this monster" report is self-diagnosing without combat logging being on
+- Bug report: new **Spell resolution** section — every configured combat/heal/cure/bless slot resolved to its **Spell number, name, learned flag, ReqLevel, EnergyCost, and mana cost**, so a mis-cast or "spell looks blocked" report shows the bad value at a glance
+- Bug report: new **Monster overrides** section — per-monster attack command / attack spell / pre-attack spell (with counts), relationship, priority, and flags you've customized, tagged with the tier each comes from
+- Bug report: new **Item overrides** section — per-item loot-automation flags (collect / discard / buy / sell / stash / keep-minimum, etc.) you've customized, tagged with the owning tier
 
 ## 3.22.11
 
