@@ -1,3 +1,4 @@
+using System.Globalization;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Combat;
 using MudPlay.Models.GameData;
@@ -6,8 +7,9 @@ using MudPlay.Services;
 namespace MudPlay.Game.Remote;
 
 // Read-only handler for the two QueryExperience commands:
-//   - @exp — session experience earned, the exp-per-hour rate, and an estimated
-//     time-to-level.
+//   - @exp — exp remaining to level, the compact exp-per-hour rate, and an
+//     estimated time-to-level ("4,500,000 EXP to level, making 1.1m/hr ~4h 10m
+//     to level").
 //   - @level — current level, total accumulated experience, and experience still
 //     needed for the next level.
 // Both reply on the sender's channel and never touch the wire, so no wire-sender
@@ -67,36 +69,51 @@ public sealed class ExperienceQueryHandler : IDisposable
         ctx.Reply($"Level {_stats.Level}, {_stats.Exp:N0} exp, {toNext}");
     }
 
-    // @exp — session exp earned + exp/hour + ETA to next level. The ETA reuses
-    // ExperienceTableCalculator.CalcTimeToLevel with the already-remaining
-    // PlayerStats.ExpToNext as the "needed" figure (current exp 0), so a
-    // zero/negative remaining reads as "ready to level". Rate comes from the
-    // whole-session average the Session Stats panel prints — same figure, so the
-    // two stay consistent.
+    // @exp — "N EXP to level, making <rate>/hr ~<time> to level". Leads with the
+    // exp still needed (PlayerStats.ExpToNext), then the compact whole-session
+    // rate the Session Stats panel prints (kept in sync), then the ETA. The ETA
+    // reuses ExperienceTableCalculator.CalcTimeToLevel with ExpToNext as the
+    // "needed" figure (current exp 0), so a zero/negative remaining reads as
+    // "ready to level". Exp-to-level + ETA both need the game's exp line
+    // (LevelExpSpan is 0 until it's parsed), so before that we report only the
+    // rate and point the sender at `exp`.
     private void OnExp(RemoteCommandContext ctx)
     {
         SessionActivityStats snap = _activity.Snapshot();
         double rate = snap.ExperiencePerHour;
-        string ratePart = rate > 0 ? $"{rate:N0}/hr" : "rate unknown";
+        string ratePart = rate > 0 ? $"making {FormatExpRate(rate)}/hr" : "rate unknown";
 
-        string? etaPart = null;
-        if (rate > 0)
+        if (_stats.LevelExpSpan <= 0)
         {
-            if (_stats.LevelExpSpan <= 0)
-            {
-                etaPart = "type exp for ETA";
-            }
-            else
-            {
-                TimeSpan? eta = ExperienceTableCalculator.CalcTimeToLevel(_stats.ExpToNext, 0, (long)rate);
-                etaPart = eta is null
-                    ? null
-                    : eta.Value <= TimeSpan.Zero ? "ready to level"
-                        : $"~{ExperienceTableCalculator.FormatTimeToLevel(eta.Value)} to level";
-            }
+            ctx.Reply(rate > 0
+                ? $"{ratePart} (type exp for time to level)"
+                : "exp rate + time to level unknown (type exp)");
+            return;
         }
 
-        string body = $"{snap.ExperienceEarned:N0} exp this session, {ratePart}";
-        ctx.Reply(etaPart is null ? body : $"{body}, {etaPart}");
+        string toLevel = $"{_stats.ExpToNext:N0} EXP to level";
+        if (rate <= 0) { ctx.Reply($"{toLevel}, rate unknown."); return; }
+
+        TimeSpan? eta = ExperienceTableCalculator.CalcTimeToLevel(_stats.ExpToNext, 0, (long)rate);
+        string etaPart = eta is null ? string.Empty
+            : eta.Value <= TimeSpan.Zero ? "ready to level"
+                : $"~{ExperienceTableCalculator.FormatTimeToLevel(eta.Value)} to level";
+
+        ctx.Reply(etaPart.Length == 0
+            ? $"{toLevel}, {ratePart}."
+            : $"{toLevel}, {ratePart} {etaPart}.");
+    }
+
+    // Compact exp/hr for the @exp reply: exact comma-grouped below 100k, whole
+    // thousands 100k–999k ("853k"), millions with one decimal above ("1.1m",
+    // "10.1m", "30m"). ~30m/hr is the game's ceiling, so there's no need for
+    // billions/trillions tiers. Deliberately distinct from RateText.Compact (the
+    // narrow status-chip format, which abbreviates from 1k with a decimal and an
+    // uppercase M) — the chat reply keeps small rates exact and reads lowercase.
+    internal static string FormatExpRate(double rate)
+    {
+        if (rate < 100_000) return rate.ToString("N0", CultureInfo.InvariantCulture);
+        if (rate < 1_000_000) return string.Create(CultureInfo.InvariantCulture, $"{(long)(rate / 1000)}k");
+        return string.Create(CultureInfo.InvariantCulture, $"{rate / 1_000_000d:0.#}m");
     }
 }

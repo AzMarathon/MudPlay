@@ -225,7 +225,7 @@ Active party members get a few things for free regardless of the grid: the party
 | `@health` | — | HP / MA / Kai and resting-or-meditating state |
 | `@status` | — | what you're doing (walking / looping / fighting / resting), your room, and any ailments |
 | `@lives` | — | lives remaining |
-| `@exp` | — | session exp earned, exp/hour, and time-to-level |
+| `@exp` | — | exp remaining to level, the compact exp/hour rate, and time-to-level (e.g. `4,500,000 EXP to level, making 1.1m/hr ~4h 10m to level`) |
 | `@level` | — | level, current exp, and exp to next |
 | `@where` | — | room name, map/room, and exits |
 | `@path` | — | the movement engine's activity and step progress; when stopped/idle, names the last loop or auto-lair that was run (so you can help a dead player resume their circuit) |
