@@ -51,12 +51,6 @@ public sealed class OtherSettings
 
     // ----- Door / lock handling --------------------------------------
 
-    // Walker's max bash <dir> retries before giving up on a single door. Hits
-    // when the player's strength is below the door's requirement and the server
-    // keeps replying with "attempts to bash through fail". Default 10 per user
-    // direction.
-    public int MaxBashAttempts { get; set; } = 10;
-
     // Walker's max pick <dir> retries before giving up on a single door. Picking
     // is probabilistic — the skill can fail even when the value meets the door
     // requirement. Default 10 per user direction.

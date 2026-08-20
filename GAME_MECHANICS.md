@@ -1104,6 +1104,14 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   door.`** (not "The door is now open."). `DoorOpenManager` keys on all three; matching only
   present-tense "unlock(s)" or "is now open" stranded the walker at a picked door
   (report stock-20260730-182812).
+- **[CONFIRMED]** **Bashing a door drains the basher's HP.** Each `bash <dir>` swing at a door
+  costs HP (a bashable door opens after some number of swings, gated by RNG, not a single hit),
+  so sustained bashing whittles the character down. `DoorOpenManager` therefore bashes a
+  *bashable* door (per `DoorPolicy`) **uncapped** — no fixed attempt limit — but interleaves
+  rest: once HP falls to the Health-tab **rest-if-below** trigger it pauses bashing so
+  `HealthManager` can rest to **rest-max**, then resumes. (Confirmed by user direction; replaced
+  the old fixed `MaxBashAttempts` cap.) Picking, by contrast, does **not** drain HP and keeps its
+  `MaxPickAttempts` retry cap.
 - **Corollary the tracker relies on:** *a room redisplay that still matches the room you moved
   from is never the result of a refused move.* While a move is pending, seeing the source room
   again can only be a **passive re-look** — a combat-clear, a monster/player arrival or

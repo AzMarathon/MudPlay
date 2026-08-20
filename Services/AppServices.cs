@@ -2211,13 +2211,19 @@ public sealed class AppServices
         // restarting an engine. Wire-sender is bound by MainWindowVM
         // alongside the trap one (gate-wrapped SendUserInput).
         Door = new Game.Map.DoorOpenManager(Router, PlayerStats,
-            maxBashAttemptsProvider:       () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").MaxBashAttempts,
             maxPickAttemptsProvider:       () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").MaxPickAttempts,
             picklocksOverBashProvider:     () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").PicklocksOverBash,
             itemNameLookup:                id => ItemNames.GetName(id),
             maxBashableStrengthProvider:   () => MaxStrength.MaxAchievableStrength,
             // Read lazily at door-open time — Inventory is constructed after Door.
             holdsKeyItem:                  HoldsKeyItem,
+            // Rest-interleave for bashing (bashing drains HP): pause a bash once HP
+            // falls to the Health-tab rest-if-below trigger, resume once it climbs
+            // back to rest-max. HealthManager owns the actual rest/stand cycle — the
+            // door FSM only gates its swings on these. Reuses PoolThreshold so the
+            // percentage/absolute mode matches the rest engine exactly.
+            bashRestNeeded:                () => BashRestGate(recovered: false),
+            bashRestRecovered:             () => BashRestGate(recovered: true),
             log: Log,
             // UI-thread one-shot so the door FSM's response watchdog fires on the
             // same thread its router-driven handlers run on; keeps Game/Map UI-free
@@ -2229,6 +2235,12 @@ public sealed class AppServices
                 timer.Start();
                 return new DispatcherTimerHandle(timer);
             });
+        // Resume a bash rest-pause the moment live HP climbs back to rest-max,
+        // rather than waiting on the door FSM's periodic watchdog re-check.
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PlayerState.Hp)) Door.NotifyHealthChanged();
+        };
         // LeaderDoorAssistManager — observes the leader failing to bash a
         // door and pitches in. Reads the Party-tab toggle + the Other-tab
         // pick/bash preference live. Wire-sender bound by MainWindowVM
@@ -5956,6 +5968,22 @@ public sealed class AppServices
             return (long)Math.Ceiling(copper);
         }
         return null;
+    }
+
+    // HP rest gate for DoorOpenManager's bash-interleave. recovered=false → "HP has
+    // fallen to the Health-tab rest-if-below trigger, pause bashing"; recovered=true
+    // → "HP has climbed back to rest-max, resume". Reuses PoolThreshold so the
+    // percentage/absolute mode matches HealthManager's own rest cycle exactly. No
+    // vitals yet (MaxHp<=0) reads as not-needed / already-recovered so a fresh login
+    // never stalls a bash.
+    private bool BashRestGate(bool recovered)
+    {
+        int max = PlayerState.MaxHp;
+        if (max <= 0) return recovered;
+        Models.Profile.HealthSettings hs = Resolver.Resolve<Models.Profile.HealthSettings>("Health");
+        return recovered
+            ? PlayerState.Hp >= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestMaxHp, max)
+            : PlayerState.Hp <= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestIfBelowHp, max);
     }
 
     // Live key-possession check for DoorOpenManager's opportunistic floor grab:

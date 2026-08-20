@@ -1005,27 +1005,21 @@ public sealed partial class CombatManager : IDisposable
             _guardBlockedTarget = null;
         }
 
-        // Combat-off override for stealth runners. Normally combat-off
-        // means we don't engage at all. But a stealth character sprinting
-        // a walk-to route (AutoSneak on, combat off) that hits a room with
-        // a SeeHidden monster can't re-sneak there — and running onward
-        // would drag/stack monsters across rooms, lethal when solo.
-        // CombatStateTracker owns the decision + latch (and holds the
-        // walker gate so we actually stop); when it has force-clear
-        // latched, we engage anyway and bypass the Min/Max gate to clear
-        // EVERYTHING so the route can resume sneaking.
-        bool seeHiddenOverride = false;
-        if (!_isEnabled())
+        // See-hidden force-clear override for stealth runners — honoured with
+        // auto-attack ON or OFF. A stealth character sprinting a walk-to route
+        // (AutoSneak on) that hits a room with a SeeHidden monster can't re-sneak
+        // there, and running onward would drag/stack monsters across rooms (lethal
+        // solo). CombatStateTracker owns the decision + latch (and holds the walker
+        // gate so we actually stop); when it's force-clear latched we bypass the
+        // Min/Max gate below to clear EVERYTHING so the route can resume sneaking.
+        // With combat OFF the latch additionally makes us engage despite being
+        // disabled; with combat ON we'd engage anyway, and the latch's job is only
+        // the Min/Max bypass.
+        bool seeHiddenOverride = _seeHiddenClearActive?.Invoke() == true;
+        if (!_isEnabled() && !seeHiddenOverride)
         {
-            if (_seeHiddenClearActive?.Invoke() == true)
-            {
-                seeHiddenOverride = true;
-            }
-            else
-            {
-                _currentTarget = null;
-                return;
-            }
+            _currentTarget = null;
+            return;
         }
 
         // Score every Monster entity once. We need BOTH names:
