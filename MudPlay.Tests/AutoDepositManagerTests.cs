@@ -300,6 +300,10 @@ public sealed class AutoDepositManagerTests : IDisposable
             lightShop: lightShop,
             carriedCount: id => h.CountCarried(id),
             post: action => action());
+        // Production drives OnRoomEntered from AppServices' early StateChanged
+        // handler (registered ahead of LoopRunner) rather than a self-subscription;
+        // mirror that here so Arrive() still triggers the pass-through stash.
+        tracker.StateChanged += autoDeposit.OnRoomEntered;
 
         h = new Harness
         {

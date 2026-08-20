@@ -979,6 +979,22 @@ public sealed class CastingDirector : IDisposable
         //    single-target heal for the immediate top-up while it ticks.
         int majorTrigger = PoolThreshold.Resolve(
             health.HpThresholdMode, health.MajorHealCombatTrigger, _state.MaxHp);
+
+        // Two exclusive bands. Once HP falls into the major-heal band, yield to
+        // MajorSelfHeal instead of firing minor again. Minor is walked BEFORE major
+        // (lower priority int by default), and without this lower bound minor
+        // matched the whole Hp<=minorTrigger range and fired even at single-digit
+        // HP — major was dead code in combat and the player died (report
+        // paradigm-20260819-121247: minor cast at 13/142 HP with mana to spare).
+        // Yield only when a major spell is configured AND affordable, so a
+        // mana-starved caster still falls back to the cheaper minor heal rather
+        // than healing nothing (the decision pass would skip an unaffordable major
+        // and, with minor yielded, leave no heal at all).
+        if (_state.Hp <= majorTrigger
+            && !string.IsNullOrWhiteSpace(spells.MajorHealSpell)
+            && SpellAffordable(spells.MajorHealSpell))
+            return null;
+
         if (_state.Hp > majorTrigger
             && !string.IsNullOrWhiteSpace(spells.HpRegenSpell)
             && IsRecastDue("", spells.HpRegenSpell))
@@ -986,6 +1002,12 @@ public sealed class CastingDirector : IDisposable
 
         return string.IsNullOrWhiteSpace(spells.MinorHealSpell) ? null : spells.MinorHealSpell;
     }
+
+    // Mirrors the decision-pass affordability skip (an unknown cost never blocks):
+    // a spell is castable when we don't know its cost or the pool covers it. Used
+    // so a minor heal only yields to major when major could actually fire.
+    private bool SpellAffordable(string spell)
+        => _manaCostLookup?.Invoke(spell) is not { } cost || _state.Ma >= cost;
 
     // Mana-floor gate for self heals: only cast a heal when the caster pool sits at
     // or above HealIfAboveMaCombat (in combat) or HealIfAboveMaResting (resting /
@@ -1120,11 +1142,23 @@ public sealed class CastingDirector : IDisposable
     // MinorHealMemberThresholdPercent. When AoeMinMembers or more members are below
     // the threshold AND a group spell is configured, fire the AOE variant instead
     // (no target).
-    private CastCandidate? PickMinorPartyHeal(PartySettings? settings) =>
-        PickPartyHeal(settings,
+    private CastCandidate? PickMinorPartyHeal(PartySettings? settings)
+    {
+        // Severity precedence (same two-band rule as the self heal): if a member
+        // has dropped into the major-party band, yield to MajorPartyHeal instead
+        // of firing the minor party heal — otherwise minor, walked first, would
+        // keep a critically-low member on minor heals while major stayed dead
+        // code (report paradigm-20260819-121247, party-side). Yield only when the
+        // major party heal can actually fire (configured + affordable), so a
+        // mana-starved healer still falls back to the cheaper minor party heal.
+        if (PickMajorPartyHeal(settings) is { } major && SpellAffordable(major.Spell))
+            return null;
+
+        return PickPartyHeal(settings,
             threshold: settings?.MinorHealMemberThresholdPercent ?? 70,
             singleSpell: settings?.MinorPartyHealSpell,
             aoeSpell:    settings?.MinorPartyHealAoeSpell);
+    }
 
     // Symmetric to PickMinorPartyHeal at the major / critical threshold.
     private CastCandidate? PickMajorPartyHeal(PartySettings? settings) =>

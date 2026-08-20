@@ -3385,6 +3385,12 @@ public sealed class AppServices
         OutboundAttack = new Game.Combat.OutboundAttackObserver(
             (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
         Tick.CombatTickElapsed += Combat.OnCombatTick;
+        // Count attack-spell MaxCasts off RoundDamageTracker's timer-driven round
+        // count (one per real 5s round) instead of the damage-line heartbeat + a
+        // wall-clock gate — the robust round counter the recurring miscount /
+        // double-fire reports need (RoundDamage's tick is wired above, so its count
+        // is fresh when the combat heartbeat reads it).
+        Combat.ReadRoundCount = () => RoundDamage.RoundCount;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a
         // second of its threshold — a final kill that never triggered a resync
@@ -4195,6 +4201,10 @@ public sealed class AppServices
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();
             Cash.OnRoomChanged();
+            // Pass-through stash runs here — ahead of LoopRunner's StateChanged
+            // handler — so its `hide` reaches the wire before the loop's next move
+            // (else the coins hide in the NEXT room; report paradigm-20260819-054200).
+            AutoDeposit?.OnRoomEntered(t);
         };
 
         Walker = new Game.Map.AutoWalkManager(RoomGraph, Bfs, RoomTracker,
@@ -4844,6 +4854,12 @@ public sealed class AppServices
         // its own bank -> shop -> origin light detour and needs the `i` dump to
         // notice the bought copy land.
         Inventory.Changed += AutoDeposit.OnInventoryChanged;
+        // In a stash room mid-loop, suppress cash + item auto-collect so a search
+        // there can't re-expose and re-grab the pile the pass-through stash just
+        // hid (report paradigm-20260819-121516). AutoDeposit owns the room/stash/
+        // running-engine state; the lambda reads it live per survey line.
+        Cash.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
+        AutoGetItems.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
         // Bank deposits (already a copper value) join stash hides in the Session
         // Stats stashed/deposited figure. The transaction-history ledger is fed
         // separately from the `You deposit …` echo (InventoryManager.BankDeposited,

@@ -2,6 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.22.9
+
+- Combat: attack-spell **MaxCasts are now counted once per real combat round** (off the round timer) instead of per damage-line tick — so a spell no longer switches to its alternate before it fires, or blows past its cast cap (the recurring miscount reports)
+- Combat: the cap-switch to the alternate attack now fires **exactly once** — the deferred switch is idempotent, so an alternate like magic-missile can't double-fire after the primary caps or after a between-round buff
+- Healing: the **major heal now takes precedence over the minor heal below its threshold** (self and party) — minor no longer keeps firing while you fall through the major band; if the major heal is unaffordable it falls back to the configured minor, and both respect the HP triggers + the "heal if above" mana floors
+- Navigation: the **pass-through stash now hides your coins in the actual stash room**, not the next one — the stash fires before the loop steps out
+- Navigation: **auto-collect is suppressed in a stash room while looping** — a search there no longer re-exposes and re-grabs the pile you just stashed
+- bug reports addressed: paradigm-20260819-120938, paradigm-20260819-121003, paradigm-20260819-121247, paradigm-20260819-121516, paradigm-20260819-142147, paradigm-20260819-054200
+
 ## 3.22.3
 
 - Navigation: the **Room Info** panel now mirrors the map tooltip — monsters are shown in three labelled groups, **Placed** / **Assigned** / **Lair**, instead of one flat tagged list, with the lair's **Max Regen** line beneath the Lair group
