@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.22.10
+
+- Combat: fixed the **attack-spell level lookup clobbered by duplicate short cast-codes** — a monster/item-triggered spell sharing a player spell's short command (e.g. `disr`) could silently overwrite its ReqLevel with an unrelated one, making the real spell look blocked by a monster's spell immunity when it would actually land; the player's own learnable spell now wins the lookup over any same-code duplicate
+- bug reports addressed: paradigm-20260819-195419
+
 ## 3.22.9
 
 - Combat: attack-spell **MaxCasts are now counted once per real combat round** (off the round timer) instead of per damage-line tick — so a spell no longer switches to its alternate before it fires, or blows past its cast cap (the recurring miscount reports)
