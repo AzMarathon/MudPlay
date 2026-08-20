@@ -2,6 +2,19 @@ using MudPlay.Game.Map;
 
 namespace MudPlay.ViewModels.Navigation;
 
+// Which source surfaced a search result. Drives the PRIMARY grouping of the
+// dropdown — saved GOTO favourites first, then boss-table targets, then rooms
+// found by name / coordinate / raw game data, then bare monster labels — ahead
+// of the within-group relevance/distance sort. The enum's declaration order IS
+// the group order (sorted by its int value), so keep it intentional.
+public enum SearchResultKind
+{
+    Favorite = 0,
+    Boss     = 1,
+    Room     = 2,
+    Monster  = 3,
+}
+
 // One entry in the Navigation right-rail search results list. Carries just
 // enough to render a row (primary + secondary line + optional step distance)
 // and the key the user-pick callback needs.
@@ -23,7 +36,11 @@ public sealed record RoomSearchResult(
     // whole-word match, higher = the query only appears as a buried substring (e.g.
     // "aged" inside "Ravaged"). Set by RoomSearchService's token tiers; coordinate /
     // acronym matches keep the default 0 so they lead.
-    int MatchRank = 0)
+    int MatchRank = 0,
+    // Source group for the primary dropdown ordering. Defaults to Room so the
+    // room-name / coordinate tiers need no explicit stamp; the favourite / boss /
+    // monster tiers set their own.
+    SearchResultKind Kind = SearchResultKind.Room)
 {
     // Legacy alias for older bindings — same as PrimaryLine's room form.
     public string DisplayName => $"{Key.Map}/{Key.Room} - {Name}";

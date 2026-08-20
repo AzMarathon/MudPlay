@@ -1069,7 +1069,7 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 ### Clear hostiles when sneak broken by see-hidden monster
 
 **Default:** Off
-**What it does:** A safety valve for stealth routes: if Auto-Combat is off and Auto-Sneak is on (you're trying to sneak through a route untouched) and you stumble into a room with a see-hidden monster, your stealth breaks. With this on, MudPlay fights and clears that one room instead of continuing to walk while exposed and dragging monsters behind you — bypassing the Min/Max room-skip gate for just that room.
+**What it does:** A safety valve for stealth routes: while Auto-Sneak is on (you're trying to sneak through a route untouched) and you stumble into a room with a see-hidden monster, your stealth breaks. With this on, MudPlay fights and clears that one room instead of continuing to walk while exposed and dragging monsters behind you — bypassing the Min/Max room-skip gate for just that room, then re-sneaks and carries on. This works whether **Auto-Combat is on or off**: the whole point is to clear the room and get moving again, so it force-clears regardless of your combat toggle (with Auto-Combat off it engages just for that room; with it on, it overrides the Min/Max gate so the room can't be skipped and left to drag).
 
 ### Run distance
 
@@ -1656,10 +1656,10 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **Default:** 20 / 5
 **What it does:** Caps how many times MudPlay retries searching for a trap (in response to a remote `@trap` command), and separately how many times it retries actually disarming one, before giving up.
 
-### Door max bash / Door max pick
+### Door max pick
 
-**Default:** 10 / 10
-**What it does:** Caps how many times the walker retries bashing or picking a locked door before giving up on it.
+**Default:** 10
+**What it does:** Caps how many times the walker retries **picking** a locked door before giving up (picking is probabilistic — it can fail even when your skill meets the requirement). **Bashing has no cap**: bashing a door drains HP, so instead of a fixed retry count the walker bashes a genuinely bashable door until it opens, pausing to **rest to your rest-max** whenever HP dips to your Health-tab rest trigger, then resuming. A door that isn't actually bashable (strength/requirement too high) still falls through to picking or a key rather than bashing forever.
 
 ### Pick locks instead of bashing
 

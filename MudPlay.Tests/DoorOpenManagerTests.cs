@@ -25,9 +25,13 @@ public sealed class DoorOpenManagerTests
         public DoorOpenManager Mgr { get; }
         public List<byte[]> Sent { get; } = new();
         public Dictionary<int, string> Items { get; } = new();
-        public int MaxBash { get; set; } = 10;
         public int MaxPick { get; set; } = 10;
         public bool PicklocksOverBash { get; set; }
+        // Bash rest gates (see DoorOpenManager): BashRestNeeded=true simulates HP at
+        // the rest trigger (pause bashing); BashRestRecovered=true simulates HP back
+        // at rest-max (resume). Defaults never pause — bash proceeds uncapped.
+        public bool BashRestNeeded { get; set; }
+        public bool BashRestRecovered { get; set; } = true;
 
         public Harness(Func<int, bool>? holdsKeyItem = null)
         {
@@ -39,12 +43,17 @@ public sealed class DoorOpenManagerTests
             Items[172] = "black star key";
             Items[1980] = "ancient brass key";
             Mgr = new DoorOpenManager(Router, Stats,
-                () => MaxBash, () => MaxPick, () => PicklocksOverBash,
+                () => MaxPick, () => PicklocksOverBash,
                 itemNameLookup: id => Items.TryGetValue(id, out string? name) ? name : null,
                 holdsKeyItem: holdsKeyItem,
+                bashRestNeeded: () => BashRestNeeded,
+                bashRestRecovered: () => BashRestRecovered,
                 scheduleDelay: Schedule);
             Mgr.SetWireSender(Sent.Add);
         }
+
+        // Simulate a live-HP change notification (AppServices subscribes PlayerState.Hp).
+        public void NotifyHealth() => Mgr.NotifyHealthChanged();
 
         // Controllable stand-in for the UI-thread one-shot. Captures the latest
         // armed watchdog callback; FireTimeout runs it, simulating a door command
@@ -107,29 +116,24 @@ public sealed class DoorOpenManagerTests
     // ----- response watchdog (no-hang) ------------------------------
 
     [Fact]
-    public void Watchdog_BashNoResponse_RetriesToCapThenFallsBackThenFails()
+    public void Watchdog_BashNoResponse_ReBashesUncapped_NeverFallsBack()
     {
-        // A bash that draws NO recognised response used to sit in WaitingBash
-        // forever (the walker hangs waiting on our callback). The watchdog now
-        // treats the silence as a miss: retry to the cap, fall back to pick, then
-        // fail — so the walker gets a reply and replans instead of stalling.
-        using Harness h = new() { MaxBash = 2, MaxPick = 1 };
+        // A bash that draws NO recognised response is re-sent on each watchdog miss.
+        // Bashing is uncapped (a bashable door opens eventually), so it never falls
+        // back to pick and never fails — it just keeps swinging.
+        using Harness h = new();
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.E, 0, canBash: true, "walker", r => result = r);
 
         Assert.Equal("bash e", h.LastSent);              // attempt 1
         Assert.True(h.HasWatchdogArmed);
 
-        h.FireTimeout();                                 // silence → retry
-        Assert.Equal(new[] { "bash e", "bash e" }, h.AllSent);
-
-        h.FireTimeout();                                 // bash cap → fall back to pick
-        Assert.Equal("pick e", h.LastSent);
-
-        h.FireTimeout();                                 // pick silent too → give up
-        Assert.IsType<DoorOpenResult.Failed>(result);    // a reply, not a hang
-        Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
-        Assert.False(h.HasWatchdogArmed);
+        h.FireTimeout();                                 // silence → re-bash
+        h.FireTimeout();                                 // silence → re-bash
+        Assert.Equal(new[] { "bash e", "bash e", "bash e" }, h.AllSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBash, h.Mgr.CurrentState);
+        Assert.Null(result);                             // still trying, no failure
+        Assert.True(h.HasWatchdogArmed);
     }
 
     [Fact]
@@ -205,37 +209,73 @@ public sealed class DoorOpenManagerTests
     }
 
     [Fact]
-    public void Bash_RetriesOnFailure_UpToCap_ThenFallsBackToPick()
+    public void Bash_RetriesOnFailure_Uncapped_NeverFallsBackToPick()
     {
-        using Harness h = new() { MaxBash = 2, MaxPick = 2 };
+        // A bashable door is bashed until it opens — each failure re-bashes, never
+        // falling back to pick (no attempt cap), then a success ends it.
+        using Harness h = new();
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.N, 0, canBash: true, "walker", r => result = r);
 
         Assert.Equal("bash n", h.LastSent);
+        for (int i = 0; i < 5; i++) h.Line("Your attempts to bash through fail.");
+        Assert.Equal("bash n", h.LastSent);              // still bashing, not "pick n"
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBash, h.Mgr.CurrentState);
+        Assert.Null(result);
 
-        h.Line("Your attempts to bash through fail.");
-        Assert.Equal(2, h.Sent.Count);
-
-        h.Line("Your attempts to bash through fail.");
-        // Bash exhausted — manager falls back to pick.
-        Assert.Equal("pick n", h.LastSent);
-        Assert.Equal(DoorOpenManager.DoorState.WaitingPick, h.Mgr.CurrentState);
+        h.Line("With a roar, you bashed the door open!");
+        Assert.IsType<DoorOpenResult.Opened>(result);
     }
 
     [Fact]
-    public void BothVerbsExhausted_RepliesFailed()
+    public void Bash_HpBelowRestTrigger_PausesForRest_ResumesAtRestMax()
     {
-        using Harness h = new() { MaxBash = 1, MaxPick = 1 };
+        // Bashing drains HP: once HP hits the rest trigger the bash pauses (no wire
+        // send) so HealthManager can rest to rest-max; the HP-change notification
+        // then resumes the swing.
+        using Harness h = new() { BashRestNeeded = true, BashRestRecovered = false };
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.E, 0, canBash: true, "walker", r => result = r);
 
-        h.Line("Your attempts to bash through fail.");
-        // Bash exhausted (1 of 1) → fall back to pick.
-        Assert.Equal("pick e", h.LastSent);
+        // Arrived at the door already below the rest trigger — paused, nothing sent.
+        Assert.Empty(h.AllSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBashRest, h.Mgr.CurrentState);
 
-        h.Line("Your lockpicking skill fails you.");
-        // Pick also exhausted → terminal failure.
-        Assert.IsType<DoorOpenResult.Failed>(result);
+        // A HP tick while still below rest-max doesn't resume.
+        h.NotifyHealth();
+        Assert.Empty(h.AllSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBashRest, h.Mgr.CurrentState);
+
+        // Recovered to rest-max → resume bashing.
+        h.BashRestNeeded = false;
+        h.BashRestRecovered = true;
+        h.NotifyHealth();
+        Assert.Equal("bash e", h.LastSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBash, h.Mgr.CurrentState);
+
+        h.Line("With a roar, you bashed the door open!");
+        Assert.IsType<DoorOpenResult.Opened>(result);
+    }
+
+    [Fact]
+    public void Bash_FailureBelowRestTrigger_PausesInsteadOfReBashing()
+    {
+        // A bash fails and HP is now at the rest trigger — the retry pauses for rest
+        // rather than immediately re-bashing.
+        using Harness h = new();
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.N, 0, canBash: true, "walker", r => result = r);
+        Assert.Equal("bash n", h.LastSent);
+
+        h.BashRestNeeded = true;                         // HP dropped over that swing
+        h.Line("Your attempts to bash through fail.");   // retry → sees low HP → pause
+        Assert.Single(h.AllSent);                        // no second bash yet
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBashRest, h.Mgr.CurrentState);
+
+        h.BashRestNeeded = false;                         // rested up
+        h.NotifyHealth();
+        Assert.Equal(new[] { "bash n", "bash n" }, h.AllSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBash, h.Mgr.CurrentState);
     }
 
     // ----- viability gates ------------------------------------------
@@ -389,20 +429,21 @@ public sealed class DoorOpenManagerTests
     }
 
     [Fact]
-    public void KeyedDoor_StatAltExhausted_FallsBackToKey()
+    public void KeyedDoor_PickAltExhausted_FallsBackToKey()
     {
-        // Player meets stats; bash tried first; bash exhausts → key.
-        using Harness h = new() { MaxBash = 1, MaxPick = 1 };
-        h.Stats.Strength = 100;
-        h.Stats.Picklocks = 100;
+        // Keyed door whose only stat-alt is picking (not bashable). Pick is tried
+        // first and exhausts (cap 1); with no bash fallback available it uses the
+        // key. (Bash has no cap, so a bashable keyed door would bash until it opens
+        // and never reach the key — covered by KeyedDoor_StatAltMet_TriesBashFirst.)
+        using Harness h = new() { MaxPick = 1 };
+        h.Stats.Strength = 0;      // can't bash
+        h.Stats.Picklocks = 100;   // can pick
         DoorOpenResult? result = null;
-        h.Mgr.Enqueue(Direction.S, 50, canBash: true, keyItemId: 172, "walker", r => result = r);
+        h.Mgr.Enqueue(Direction.S, 50, canBash: false, keyItemId: 172, "walker", r => result = r);
 
-        Assert.Equal("bash s", h.LastSent);
-        h.Line("Your attempts to bash through fail.");
         Assert.Equal("pick s", h.LastSent);
         h.Line("Your lockpicking skill fails you.");
-        // Bash + pick both exhausted → key fallback.
+        // Pick exhausted, no bash alt → key fallback.
         Assert.Equal("use black star key s", h.LastSent);
     }
 
