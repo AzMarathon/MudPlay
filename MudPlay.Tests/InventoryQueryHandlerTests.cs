@@ -183,7 +183,23 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@have DAGGER"));
 
-        Assert.Equal("yes - 2x matching 'DAGGER'", Assert.Single(Replies(engine)));
+        Assert.Equal("yes - 2x 'DAGGER'", Assert.Single(Replies(engine)));
+    }
+
+    [Fact]
+    public void Have_StackedItem_ReportsTheStackQuantity_NotOne()
+    {
+        // Report: another user @have'd an item the sender held 25 of (a stack prints
+        // as one "25 black diamonds" line) and got "1x". The reply must report the
+        // real quantity, echoing the queried name: "yes - 25x 'black diamond'".
+        var (engine, _, lines, players, _, _) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryInventory);
+        Feed(lines, "You are carrying a rusty dagger, 25 black diamonds, a healing potion.");
+        Feed(lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        engine.DispatchForTests(Telepath("Bob", "@have black diamond"));
+
+        Assert.Equal("yes - 25x 'black diamond'", Assert.Single(Replies(engine)));
     }
 
     [Fact]

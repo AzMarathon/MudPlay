@@ -16,10 +16,10 @@ namespace MudPlay.Game.Remote;
 //
 // The round-trip rides the existing remote-command plumbing: the query goes out
 // through PartyBroadcaster.Broadcast (one /<given> @have <item> per member), and
-// each member's InventoryQueryHandler.OnHave replies "yes - Nx matching '<q>'" /
+// each member's InventoryQueryHandler.OnHave replies "yes - Nx '<q>'" /
 // "no - nothing matching '<q>'" back over an incoming telepath. We subscribe to
-// ChatRouter.EntryClassified and correlate each reply by the echoed
-// matching '<q>' substring, so several per-item queries can be in flight at once
+// ChatRouter.EntryClassified and correlate each reply by the echoed '<q>' item
+// name, so several per-item queries can be in flight at once
 // without their replies crossing wires.
 //
 // A query completes early once every expected responder has replied, or when the
@@ -79,7 +79,7 @@ public sealed partial class PartyInventoryProbe : IDisposable
     // `cur` count is always positive; the echoed query is captured greedily so
     // an item name with a trailing space still round-trips. IgnoreCase because
     // @have echoes the sender's verbatim casing while we normalize both sides.
-    [GeneratedRegex(@"^yes - (\d+)x matching '(.+)'\s*$",
+    [GeneratedRegex(@"^yes - (\d+)x '(.+)'\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex HaveYesReply();
 
