@@ -262,6 +262,34 @@ public sealed class SettingsResolver
         return SettingsTier.Defaults;
     }
 
+    // Every record-id that has an override for `table` at any writable tier
+    // (Global / BBS / Character) in the active set, unioned across tiers. Empty
+    // when no set is active. Lets a caller enumerate the game-data records the
+    // user has actually customized (e.g. per-monster attack overrides for the bug
+    // report) without scanning the whole base table — the override side-files hold
+    // deltas only, so their keys ARE the customized ids.
+    public IReadOnlyCollection<string> GameDataOverrideIds(string table)
+    {
+        string? set = _activeSetProvider?.Invoke();
+        if (set is null) return Array.Empty<string>();
+
+        HashSet<string> ids = new(StringComparer.OrdinalIgnoreCase);
+        CollectOverrideIds(ids, SettingsTier.Global,    string.Empty,                table, set);
+        CollectOverrideIds(ids, SettingsTier.Bbs,       _activeBbs?.Name,            table, set);
+        CollectOverrideIds(ids, SettingsTier.Character, _profile.CurrentProfileName, table, set);
+        return ids;
+    }
+
+    private void CollectOverrideIds(
+        HashSet<string> ids, SettingsTier tier, string? scope, string table, string set)
+    {
+        // Mirror ReadOverride's guard: a tier with no usable scope (BBS unpinned,
+        // no named profile) has no override file to read.
+        if (tier != SettingsTier.Global && string.IsNullOrEmpty(scope)) return;
+        foreach (string id in LoadOverrideFile(tier, scope ?? string.Empty, table, set).Keys)
+            ids.Add(id);
+    }
+
     // ----- Active-BBS tracking -------------------------------------------
 
     private void OnProfileLoaded(CharacterProfile profile) => RefreshActiveBbs();

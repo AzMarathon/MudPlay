@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.11**
-> - Remote: `@have <item>` now reports the **true carried quantity** — a stack of 25 counts as 25, not 1 (it was counting inventory *entries*, and a stack is one entry) — and the reply reads `yes - Nx 'item'` instead of `yes - Nx matching 'item'`
+> **Version 3.22.15**
+> - Bug report: new **Room combat assessment** section — the engine's live engageability verdict for every monster in the current room (Magical level, spell-immunity, each weapon's hit-magic, and the **CanAct / StuckOnMana / Unkillable** call with its reason), so a "won't attack this monster" report is self-diagnosing without combat logging being on
+> - Bug report: new **Spell resolution** section — every configured combat/heal/cure/bless slot resolved to its **Spell number, name, learned flag, ReqLevel, EnergyCost, and mana cost**
+> - Bug report: new **Monster overrides** section — per-monster attack command / attack spell / pre-attack spell (with counts), relationship, priority, and flags, tagged with the tier each comes from
+> - Bug report: new **Item overrides** section — per-item loot-automation flags (collect / discard / buy / sell / stash / keep-minimum, etc.), tagged with the owning tier
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

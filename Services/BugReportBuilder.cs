@@ -64,6 +64,10 @@ public static class BugReportBuilder
             new("Auto-mode", SafeSection(() => BuildAutoMode(svc))),
             new("Keybindings", SafeSection(() => BuildKeybindings(svc))),
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
+            new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
+            new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
+            new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
+            new("Item overrides", SafeSection(() => BuildItemOverrides(svc))),
             new("Effective settings (resolved)", SafeSection(() => BuildEffectiveSettings(svc))),
             new("Settings overrides (deltas, excluding BBS + Display)", SafeSection(() => BuildSettings(svc))),
             new("Program log", SafeSection(() => BuildLog(svc))),
@@ -356,6 +360,262 @@ public static class BugReportBuilder
         Kv(sb, "ShadowRest holding", svc.Health.ShadowRestHolding.ToString());
 
         return sb.ToString();
+    }
+
+    // Per-monster game-data overlays the user has customized in the active set —
+    // the deltas written via the Game Data Browser's Monster edit dialog (per-
+    // monster attack command / attack spell / pre-attack spell, relationship,
+    // priority, flags), shown as the EFFECTIVE overlay (realm seed + tier
+    // overrides merged) with the tier that owns each record. A "won't attack this
+    // monster" report hinges on whether a per-monster attack override is wired
+    // (e.g. a physical-immune mob whose only kill means is a configured attack
+    // spell) — that state lived nowhere in the capture before. Only records the
+    // user actually overrode appear (the tier side-files hold deltas only), so
+    // this stays a short list, not the whole realm seed.
+    private static string BuildMonsterOverrides(AppServices svc)
+    {
+        StringBuilder sb = new();
+
+        List<(int Number, string Id)> records = new();
+        foreach (string id in svc.Resolver.GameDataOverrideIds("Monsters"))
+            if (int.TryParse(id, out int n) && n > 0) records.Add((n, id));
+        records.Sort((a, b) => a.Number.CompareTo(b.Number));
+
+        sb.Append("Per-monster overlay deltas in the active game-data set — effective overlay (realm seed + tier overrides merged), tagged with the tier that owns each record (")
+          .Append(records.Count).Append(")\n\n");
+        if (records.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
+
+        foreach ((int n, string id) in records)
+        {
+            Models.GameData.MonsterOverlay o = svc.Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
+                "Monsters", id, svc.MonsterOverlaySeed.GetOverlay(n));
+            SettingsTier tier = svc.Resolver.GetGameDataSourceTier("Monsters", id);
+            string name = svc.GameData.FindNameByNumber("Monsters", n) ?? "(unknown)";
+
+            List<string> parts = new();
+            if (!string.IsNullOrWhiteSpace(o.Name)) parts.Add($"name \"{o.Name}\"");
+            if (o.Relationship is { } rel) parts.Add($"relationship {rel}");
+            if (o.Priority is { } prio) parts.Add($"priority {prio}");
+            if (!string.IsNullOrWhiteSpace(o.OverrideAttackCommand))
+                parts.Add($"attack-cmd \"{o.OverrideAttackCommand}\"");
+            if (o.OverrideAttackSpellId is { } atk and > 0)
+                parts.Add($"attack-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}");
+            if (o.OverridePreAttackSpellId is { } pre and > 0)
+                parts.Add($"pre-attack {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}");
+            if (o.DontBackstab == true) parts.Add("dontBackstab");
+            if (o.KillOnSight == true) parts.Add("killOnSight");
+            if (parts.Count == 0) parts.Add("(no live fields)");
+
+            sb.Append("- #").Append(n).Append(' ').Append(name)
+              .Append(" [").Append(tier).Append("] — ")
+              .Append(string.Join(", ", parts)).Append('\n');
+        }
+
+        return sb.ToString();
+    }
+
+    // "151 (disrupt)" — an override stores a Spell.Number; annotate it with the
+    // Spells-table display name so a triager needn't cross-reference the id.
+    private static string SpellLabel(AppServices svc, int spellNumber)
+    {
+        string? name = svc.GameData.FindNameByNumber("Spells", spellNumber);
+        return string.IsNullOrWhiteSpace(name) ? $"{spellNumber}" : $"{spellNumber} ({name})";
+    }
+
+    // " x20" for a positive per-room cast cap; blank for null/0 (unlimited).
+    private static string CountSuffix(int? count) => count is > 0 ? $" x{count}" : string.Empty;
+
+    // The engine's live engageability verdict for every monster seen in the
+    // current room — the reasoning behind a "skip un-actionable … Unkillable"
+    // decision, frozen so a "won't attack this monster" report is self-diagnosing
+    // (no dependency on combat logging being on or the scrollback still holding
+    // the line). Per hostile: the Magical level (weapon-hit gate), SpellImmu
+    // (attack-spell gate), each configured weapon's HitMagic, and the resolved
+    // CanAct / StuckOnMana / Unkillable assessment with its reason.
+    private static string BuildRoomCombatAssessment(AppServices svc)
+    {
+        StringBuilder sb = new();
+        var rows = svc.Combat.SnapshotRoomEngage();
+
+        sb.Append("Engine engageability of monsters known in the current room (weapon/spell magic gates + verdict) (")
+          .Append(rows.Count).Append(")\n\n");
+        if (rows.Count == 0) { sb.Append("_(no monsters tracked in the current room)_\n"); return sb.ToString(); }
+
+        // -1 from the magic indexes means "unknown → fail open" — spell it out so a
+        // triager doesn't read the sentinel as a real level.
+        static string Lvl(int v) => v < 0 ? "?" : v.ToString();
+
+        foreach (var r in rows)
+        {
+            string name = svc.GameData.FindNameByNumber("Monsters", r.MonsterNumber) ?? r.Species;
+            sb.Append("- #").Append(r.MonsterNumber).Append(' ').Append(name)
+              .Append(" — **").Append(r.Assessment).Append("**")
+              .Append(", Magical ").Append(Lvl(r.Magical))
+              .Append(", SpellImmu ").Append(Lvl(r.SpellImmu))
+              .Append(", weapon HitMagic normal=").Append(Lvl(r.NormalWeaponHit))
+              .Append(" alt=").Append(Lvl(r.AltWeaponHit));
+            if (!string.IsNullOrWhiteSpace(r.UnengageableReason))
+                sb.Append(" — ").Append(r.UnengageableReason);
+            sb.Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    // Every configured spell slot resolved against the active game-data set:
+    // cast-code → Spell.Number, name, learned?, ReqLevel, EnergyCost, mana cost.
+    // A spell whose ReqLevel / EnergyCost / learned flag reads wrong here explains
+    // a mis-cast or a "spell never fires / looks blocked" report at a glance (the
+    // duplicate-short-code ReqLevel corruption would have jumped straight out).
+    private static string BuildSpellResolution(AppServices svc)
+    {
+        var combat = svc.Resolver.Resolve<Models.Profile.CombatSettings>("Combat");
+        var spells = svc.Resolver.Resolve<Models.Profile.SpellsSettings>("Spells");
+        var party = svc.Resolver.Resolve<Models.Profile.PartySettings>("Party");
+
+        StringBuilder sb = new();
+        Kv(sb, "Current mana", $"{svc.PlayerState.Ma}/{svc.PlayerState.MaxMa}");
+        sb.Append('\n');
+
+        int shown = 0;
+        void Group(string title, IEnumerable<(string Label, string? Code)> slots)
+        {
+            List<string> lines = new();
+            foreach ((string label, string? code) in slots)
+            {
+                if (string.IsNullOrWhiteSpace(code)) continue;
+                lines.Add("- " + SpellResolutionLine(svc, label, code));
+                shown++;
+            }
+            if (lines.Count == 0) return;
+            sb.Append("**").Append(title).Append("**\n\n");
+            foreach (string l in lines) sb.Append(l).Append('\n');
+            sb.Append('\n');
+        }
+
+        Group("Combat", new (string, string?)[]
+        {
+            ("normal-attack", combat.NormalAttackSpell.SpellName),
+            ("alternate-attack", combat.AlternateAttackSpell.SpellName),
+            ("multi-attack", combat.MultiAttackSpell.SpellName),
+            ("area-debuff", combat.AreaDebuffSpell.SpellName),
+            ("single-debuff", combat.SingleTargetDebuffSpell.SpellName),
+            ("drain", combat.DrainSpell.SpellName),
+        });
+        Group("Heal & regen", new (string, string?)[]
+        {
+            ("minor-heal", spells.MinorHealSpell),
+            ("major-heal", spells.MajorHealSpell),
+            ("hp-regen", spells.HpRegenSpell),
+            ("ma-regen", spells.MaRegenSpell),
+            ("when-hp-full", spells.WhenHpFullSpell),
+            ("when-ma-full", spells.WhenMaFullSpell),
+        });
+        Group("Cures", new (string, string?)[]
+        {
+            ("holds", spells.CureHoldsSpell),
+            ("poison", spells.CurePoisonSpell),
+            ("disease", spells.CureDiseaseSpell),
+            ("blindness", spells.CureBlindnessSpell),
+        });
+        Group("Self bless", SlotList(spells.BlessSlots, i => $"bless {i}"));
+        Group("Party heal", new (string, string?)[]
+        {
+            ("minor-party-heal", party.MinorPartyHealSpell),
+            ("minor-party-heal-aoe", party.MinorPartyHealAoeSpell),
+            ("major-party-heal", party.MajorPartyHealSpell),
+            ("major-party-heal-aoe", party.MajorPartyHealAoeSpell),
+        });
+
+        int partyBless = 0;
+        Group("Party bless", party.BlessSlots.Select(s => ($"party-bless {++partyBless}", s.Spell)));
+
+        if (shown == 0) sb.Append("_(no spells configured)_\n");
+        return sb.ToString();
+    }
+
+    // "code → #num name [learned] ReqLevel=X Energy=Y Mana=Z" for one slot's cast-
+    // code, resolved against the active set. Unknowns render as "?" (fail-open in
+    // the engine) rather than a sentinel number.
+    private static string SpellResolutionLine(AppServices svc, string label, string code)
+    {
+        int? number = svc.SpellShort.NumberByShort(code);
+        string head = $"{label}: `{code}`";
+        if (number is not { } n)
+            return $"{head} → (no Spells row with this short-code)";
+
+        string name = svc.GameData.FindNameByNumber("Spells", n) ?? "(unnamed)";
+        bool learned = svc.Spellbook.IsObtained(n);
+        int req = svc.SpellReqLevel.ReqLevel(code);
+        int? energy = svc.SpellCatalog.GetFormulaByNumber(n)?.EnergyCost;
+        int? mana = svc.Spellbook.ManaCostOf(code);
+        return $"{head} → #{n} {name} [{(learned ? "learned" : "NOT learned")}]"
+             + $" ReqLevel={(req < 0 ? "?" : req.ToString())}"
+             + $" Energy={(energy is { } e ? e.ToString() : "?")}"
+             + $" Mana={(mana is { } m ? m.ToString() : "?")}";
+    }
+
+    // Dictionary-keyed slot map (self-bless) → labelled (label, code) pairs in key
+    // order, so a numbered slot in the report matches the editor's slot index.
+    private static IEnumerable<(string Label, string? Code)> SlotList(
+        IReadOnlyDictionary<int, string> slots, Func<int, string> label)
+    {
+        foreach (int key in slots.Keys.OrderBy(k => k))
+            yield return (label(key), slots[key]);
+    }
+
+    // Per-item overlay deltas the user set in the active set — the loot-automation
+    // flags written via the Game Data Browser's Item edit dialog. Symmetric to the
+    // Monster overrides section; targets "why didn't it collect / sell / stash this
+    // item" reports, which were blind to per-item flags before.
+    private static string BuildItemOverrides(AppServices svc)
+    {
+        StringBuilder sb = new();
+
+        List<(int Number, string Id)> records = new();
+        foreach (string id in svc.Resolver.GameDataOverrideIds("Items"))
+            if (int.TryParse(id, out int n) && n > 0) records.Add((n, id));
+        records.Sort((a, b) => a.Number.CompareTo(b.Number));
+
+        sb.Append("Per-item overlay deltas in the active game-data set — effective overlay (seed + tier overrides merged), tagged with the owning tier (")
+          .Append(records.Count).Append(")\n\n");
+        if (records.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
+
+        foreach ((int n, string id) in records)
+        {
+            Models.GameData.ItemOverlay o = svc.Resolver.ResolveGameData<Models.GameData.ItemOverlay>(
+                "Items", id, svc.ItemOverlaySeed.GetOverlay(n));
+            SettingsTier tier = svc.Resolver.GetGameDataSourceTier("Items", id);
+            string name = svc.GameData.FindNameByNumber("Items", n) ?? "(unknown)";
+
+            List<string> parts = new();
+            if (!string.IsNullOrWhiteSpace(o.Name)) parts.Add($"name \"{o.Name}\"");
+            Flag(parts, "autoCollect", o.AutoCollect);
+            Flag(parts, "autoDiscard", o.AutoDiscard);
+            Flag(parts, "autoFind", o.AutoFind);
+            Flag(parts, "autoOpen", o.AutoOpen);
+            Flag(parts, "autoBuy", o.AutoBuy);
+            Flag(parts, "autoSell", o.AutoSell);
+            Flag(parts, "autoStash", o.AutoStash);
+            Flag(parts, "cannotBeTaken", o.CannotBeTaken);
+            Flag(parts, "mustHaveMinimum", o.MustHaveMinimum);
+            Flag(parts, "loyalItem", o.LoyalItem);
+            Flag(parts, "autoObtainForPath", o.AutoObtainForPath);
+            if (!string.IsNullOrWhiteSpace(o.MinToKeep)) parts.Add($"minToKeep {o.MinToKeep}");
+            if (!string.IsNullOrWhiteSpace(o.MaxToGet)) parts.Add($"maxToGet {o.MaxToGet}");
+            if (parts.Count == 0) parts.Add("(no live fields)");
+
+            sb.Append("- #").Append(n).Append(' ').Append(name)
+              .Append(" [").Append(tier).Append("] — ")
+              .Append(string.Join(", ", parts)).Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    // Append "flag" (on) / "!flag" (off) for a set tri-state bool; skip when null
+    // (not overridden at any tier).
+    private static void Flag(List<string> parts, string name, bool? value)
+    {
+        if (value is { } v) parts.Add(v ? name : "!" + name);
     }
 
     private static string BuildPlayerState(AppServices svc)
