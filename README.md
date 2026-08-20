@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.19**
-> - Navigation: the search-box dropdown now **groups results by source** — saved GOTO locations first, then boss-table targets, then rooms — instead of interleaving them by relevance
-> - Navigation: **door bashing is now rest-aware and uncapped** — a bashable door is bashed until it opens (no fixed attempt cap), pausing to rest to your rest-max whenever HP dips to the rest trigger; the old "Max bash attempts" setting is removed (picking keeps its cap)
-> - Combat: the **"clear hostiles when sneak broken by see-hidden monster"** toggle now force-clears the room with **Auto-Combat on or off** (previously combat-off only)
+> **Version 3.22.20**
+> - Fixed max HP/mana drifting stale when equipping/removing gear that grants a flat pool bonus (e.g. severed head of Goru-Nezar's +50 mana) — the health engine's rest and "pool is full" checks now track the change immediately instead of waiting on a manual stat-screen check
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
