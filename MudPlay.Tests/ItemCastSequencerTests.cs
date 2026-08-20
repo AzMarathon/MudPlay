@@ -45,6 +45,15 @@ public sealed class ItemCastSequencerTests
         return (seq, seq.LastSentForTests);
     }
 
+    private static (ItemCastSequencer Seq, List<byte[]> Sent) NewSeqWithOffHandNames(
+        InventorySnapshot inv, params string[] offHandNames)
+    {
+        ItemCastSequencer seq = new(() => Items, () => inv, isOffHandItem:
+            name => System.Array.Exists(offHandNames, n => string.Equals(n, name, System.StringComparison.OrdinalIgnoreCase)));
+        seq.SetWireSender(_ => { });
+        return (seq, seq.LastSentForTests);
+    }
+
     private static List<string> Decode(IEnumerable<byte[]> sent)
         => sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
 
@@ -111,6 +120,49 @@ public sealed class ItemCastSequencerTests
             "use Shimmering Greatsword",
             "eq long sword",
             "eq medium shield",
+        }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_TwoHandedItem_WornSlotBlocksIt_RemovesAndRestoresWornItem()
+    {
+        // Report paradigm-20260819-234712: a red skull sits in "Worn" (not
+        // "Off-Hand") but still occupies the off-hand mechanically — the game
+        // refuses the 2H wield until it comes off. isOffHandItem recognizes it.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeqWithOffHandNames(
+            InvWith(
+                new EquippedItem("throwing hammers", "Weapon Hand"),
+                new EquippedItem("severed head of Goru-Nezar", "Worn"),
+                new EquippedItem("red skull", "Worn")),
+            "red skull");
+
+        Assert.True(seq.Execute("#shimmering greatsword"));
+        Assert.Equal(new[]
+        {
+            "remove red skull",
+            "eq Shimmering Greatsword",
+            "use Shimmering Greatsword",
+            "eq throwing hammers",
+            "eq red skull",
+        }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_TwoHandedItem_WornSlotItemNotOffHandBlocking_LeftAlone()
+    {
+        // A Worn-slot item that ISN'T an off-hand occupant (e.g. a plain trophy)
+        // must never be removed just because it shares the generic "Worn" bucket.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeqWithOffHandNames(
+            InvWith(
+                new EquippedItem("throwing hammers", "Weapon Hand"),
+                new EquippedItem("severed head of Goru-Nezar", "Worn")));
+
+        Assert.True(seq.Execute("#shimmering greatsword"));
+        Assert.Equal(new[]
+        {
+            "eq Shimmering Greatsword",
+            "use Shimmering Greatsword",
+            "eq throwing hammers",
         }, Decode(sent));
     }
 

@@ -3797,7 +3797,12 @@ public sealed class AppServices
             // Stand auto-equip off the slot the item-cast borrows so its own restore
             // isn't doubled by the rest-break the swap triggers (AutoEquip is built
             // just below; this lambda reads it at fire time). See NoteItemCastSwap.
-            onSwap: () => AutoEquip?.NoteItemCastSwap());
+            onSwap: () => AutoEquip?.NoteItemCastSwap(),
+            // A "(Worn)"-bucketed item can still occupy the off-hand mechanically
+            // (Items.Worn == Off-Hand); OffHandNames is built straight from every
+            // Items.json row (not the collision-prone by-name index), so it answers
+            // correctly even for a display name shared with a non-wearable item.
+            isOffHandItem: name => ItemNames.OffHandNames.Contains(name, StringComparer.OrdinalIgnoreCase));
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
 

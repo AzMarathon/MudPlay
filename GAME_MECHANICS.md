@@ -107,6 +107,14 @@ it isn't here and you're unsure, ask.
 - **[OBSERVED]** A two-handed weapon needs both hands free; the game rejects the wield while an
   off-hand is occupied (it isn't "usable" until the off-hand is gone), so the off-hand must be
   `rem`'d first.
+- **[CONFIRMED 2026-08-19, user report paradigm-20260819-234712]** The off-hand-occupied block
+  above isn't limited to items the `i` listing prints as `(Off-Hand)` — an item whose MDB `Worn`
+  code is Off-Hand (12) can still print under the generic `(Worn)` bucket in the game's own `i`
+  text (e.g. a *red skull*, a worn charm/skull item), yet it mechanically fills the off-hand and
+  blocks a 2H wield exactly the same: `You may not ready a 2-handed weapon with your <item>
+  worn!`, naming the blocking item. The client's own `EquippedItems.Slot` label (taken verbatim
+  from the game's `i` text) can therefore disagree with what actually blocks a 2H equip — the
+  item's declared MDB `Worn` code is the authoritative signal, not its display bucket.
 - **[OBSERVED]** Re-equipping an item that's already worn draws
   `You do not have <X> left unequipped.`
 - **[CONFIRMED]** Worn gear **persists across logins** — you log back in wearing whatever you
