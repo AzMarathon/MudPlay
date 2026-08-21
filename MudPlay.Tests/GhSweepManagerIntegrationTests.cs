@@ -60,7 +60,6 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2),
             new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
-        labels.SetReconLaps(1);
         labels.SetSearchesPerRoom(1);
         labels.SetSearchForHidden(true);   // this run exercises the hidden-item search path
 
@@ -177,9 +176,12 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
         FeedRouter(router, "You dropped war hammer.");
         FeedRouter(router, "You dropped mace.");
-        Assert.Equal(GhSweepManager.SweepPhase.Idle, sweep.Phase);
+        // Everything is delivered — sorting is done and a final recon pass begins to
+        // refresh each room's inventory before the sweep finishes.
+        Assert.Equal(GhSweepManager.SweepPhase.FinalRecon, sweep.Phase);
+        Assert.Equal(0, sweep.PendingMoveCount);
 
-        // The whole sweep completed on the tracked ledger — never a single `i`.
+        // The whole sort completed on the tracked ledger — never a single `i`.
         Assert.DoesNotContain("i", sent);
 
         sweep.Dispose();
@@ -224,7 +226,6 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GhRoomLabelStore labels = new(profile);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
-        labels.SetReconLaps(1);
         // SearchForHidden left at its default (off) — the point of this test.
 
         MessageRouter router = new();
@@ -319,7 +320,6 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GhRoomLabelStore labels = new(profile);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
-        labels.SetReconLaps(1);
         labels.SetSearchesPerRoom(1);
         labels.SetSearchForHidden(true);
 
@@ -428,7 +428,6 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GhRoomLabelStore labels = new(profile);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
-        labels.SetReconLaps(1);
         labels.SetSearchesPerRoom(1);
         labels.SetSearchForHidden(true);
 

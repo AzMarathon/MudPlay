@@ -18,6 +18,11 @@ public sealed partial class GhRoomLabelRowViewModel : ObservableObject
     public string RoomKeyText => Key.ToString();
     public string CategoryText { get; }
 
+    // Live sweep status for this room: "Scanning" during recon, "Cleaning" while it
+    // still has items to move out, "Complete" once cleared (or after a run). Blank
+    // before the first sweep. Written by GhManagementSectionViewModel.
+    [ObservableProperty] private string _status = string.Empty;
+
     private readonly Action<GhRoomLabelRowViewModel> _onRemove;
 
     public GhRoomLabelRowViewModel(GhRoomLabel label, string? roomName, Action<GhRoomLabelRowViewModel> onRemove)

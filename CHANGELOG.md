@@ -4,7 +4,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.24.0
 
-- New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: configurable recon laps (default 2) walk the circuit, then misfiled items are carried to their labeled destination. Built on the same loop engine every saved Loop runs on
+- New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: it scans the circuit once, carries misfiled items to their labeled destination in the fewest trips, then scans once more to refresh each room. Built on the same loop engine every saved Loop runs on
+- Roomba: one scan lap (the recon-laps picker is gone), a live per-room **Status** column (Scanning / Cleaning / Complete), double-click a room to see its current floor contents, and a **Roomba Log** window with the full move record + an end-of-run summary (rooms sorted, items sorted, and the explicit unmovable list)
 - Roomba: a per-character **Search rooms for hidden items** toggle (off by default) — normally it sorts only the visible floor; tick it to also `sea` each room and sort what's hidden
 - Roomba: a pickup for an item that's **gone by sort time** (`You don't see X here.`) is dropped from the queue and left in place, instead of being retried every lap forever
 - Roomba: a refused **Start** (fewer than 2 labeled rooms, another engine running, no route) now says why on the GH Management tab instead of doing nothing; a finished sweep prints `[Ganghouse roomba complete]` and shows a moved/left/carried summary

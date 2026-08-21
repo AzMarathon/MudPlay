@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Avalonia.Controls;
@@ -5,20 +6,23 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
+using MudPlay.Views;
 using MudPlay.Views.CharacterWorkshop;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // GH MANAGEMENT section — Roomba Mode's control surface. Lists the character's
 // labeled gang-house rooms (right-click "Label as GH room…" on the map is the
-// editor; this tab reviews + removes and starts/stops the sweep), a live phase
-// readout, and the moved / left-in-place report as the sweep progresses.
+// editor; this tab reviews + removes and starts/stops the sweep) with a live
+// per-room Status, a phase readout, and a double-click room-inventory view. The
+// per-move record + end-of-run summary live in the separate Roomba Log window.
 public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewModel
 {
     private readonly GhRoomLabelStore _labels;
     private readonly GhSweepManager _sweep;
     private readonly RoomGraphManager _roomGraph;
     private Control? _view;
+    private RoombaLogWindow? _logWindow;
 
     public override string Id => "ghmanagement";
     public override string Title => "GH Management";
@@ -36,23 +40,19 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchesEditable))]
     private bool _isRunning;
-    [ObservableProperty] private string _movedText = string.Empty;
-    [ObservableProperty] private string _leftInPlaceText = string.Empty;
-    [ObservableProperty] private string _strandedText = string.Empty;
-    [ObservableProperty] private bool _hasStranded;
 
-    // Recon tuning, editable here — see GhRoomLabelStore for persistence /
-    // defaults (2 laps, 3 searches per room). _suppressSettingsWrite guards
-    // the constructor's initial assignment from the [ObservableProperty]
-    // change hooks below, which persist on every user edit but shouldn't
-    // fire while just seeding the current value from the store.
+    // Double-click a room row → its current floor inventory (post-sweep, from the
+    // final recon pass). Null title keeps the detail panel hidden.
+    [ObservableProperty] private string? _roomContentsTitle;
+    [ObservableProperty] private string _roomContentsText = string.Empty;
+
+    // The per-room hidden-search count, editable here. _suppressSettingsWrite guards
+    // the constructor's initial seed from the change hook that persists user edits.
     private bool _suppressSettingsWrite = true;
-    [ObservableProperty] private int _reconLaps;
     [ObservableProperty] private int _searchesPerRoom;
 
     // Whether recon searches (`sea`) each room for hidden items. Off by default —
-    // Roomba sorts the visible floor only unless the user opts in. Persisted
-    // per-character via the store.
+    // Roomba sorts the visible floor only unless the user opts in. Per-character.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchesEditable))]
     private bool _searchForHidden;
@@ -70,7 +70,6 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         _sweep = sweep;
         _roomGraph = roomGraph;
 
-        ReconLaps = _labels.ReconLaps;
         SearchesPerRoom = _labels.SearchesPerRoom;
         SearchForHidden = _labels.SearchForHidden;
         _suppressSettingsWrite = false;
@@ -80,12 +79,6 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         _sweep.SweepCompleted += OnSweepCompleted;
         RebuildRooms();
         RefreshStatus();
-    }
-
-    partial void OnReconLapsChanged(int value)
-    {
-        if (_suppressSettingsWrite) return;
-        _labels.SetReconLaps(value);
     }
 
     partial void OnSearchesPerRoomChanged(int value)
@@ -109,6 +102,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
             string? name = _roomGraph.GetRoom(key)?.Name;
             Rooms.Add(new GhRoomLabelRowViewModel(label, name, OnRemoveRow));
         }
+        RefreshRoomStatuses();
     }
 
     private void OnRemoveRow(GhRoomLabelRowViewModel row) => _labels.ClearLabel(row.Key);
@@ -118,50 +112,73 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         IsRunning = _sweep.Phase != GhSweepManager.SweepPhase.Idle;
         PhaseText = _sweep.Phase switch
         {
-            GhSweepManager.SweepPhase.Reconning => $"Reconning (lap {_sweep.CompletedReconLaps}/{_labels.ReconLaps})",
+            GhSweepManager.SweepPhase.Reconning => "Scanning rooms…",
             GhSweepManager.SweepPhase.Sorting => $"Sorting ({_sweep.MovedSoFar.Count} moved so far)",
+            GhSweepManager.SweepPhase.FinalRecon => "Final scan…",
             _ => "Idle",
         };
-        MovedText = _sweep.MovedSoFar.Count == 0
-            ? "(none yet)"
-            : string.Join("\n", _sweep.MovedSoFar.Select(m => $"{m.ItemName}: {m.From} -> {m.To}"));
-        LeftInPlaceText = _sweep.LeftInPlace.Count == 0
-            ? "(none)"
-            : string.Join("\n", _sweep.LeftInPlace.Select(f => $"{f.ItemName} at {f.Room} ({DescribeReason(f.Reason)})"));
-        HasStranded = _sweep.Stranded.Count > 0;
-        StrandedText = _sweep.Stranded.Count == 0
-            ? "(none)"
-            : string.Join("\n", _sweep.Stranded.Select(s => $"{s.ItemName}: carrying from {s.CarriedFrom}, meant for {s.IntendedDestination}"));
+        RefreshRoomStatuses();
     }
 
-    private static string DescribeReason(GhLeftReason reason) => reason switch
+    private void RefreshRoomStatuses()
     {
-        GhLeftReason.TooHeavy => "too heavy to carry",
-        GhLeftReason.GoneBySortTime => "gone by sort time",
-        _ => "no matching room",
+        foreach (GhRoomLabelRowViewModel row in Rooms) row.Status = RoomStatus(row.Key);
+    }
+
+    private string RoomStatus(RoomKey key) => _sweep.Phase switch
+    {
+        GhSweepManager.SweepPhase.Reconning => "Scanning",
+        GhSweepManager.SweepPhase.Sorting or GhSweepManager.SweepPhase.FinalRecon
+            => _sweep.HasPendingPickupAt(key) ? "Cleaning" : "Complete",
+        _ => CompletionSummary is null ? string.Empty : "Complete", // Idle: blank until a run finishes
     };
 
     [RelayCommand]
     private void Start()
     {
+        RoomContentsTitle = null;
         if (_sweep.Start()) { StartHint = null; CompletionSummary = null; }
         else StartHint = _sweep.LastStartError;
     }
 
     // SweepCompleted fires on the UI thread (GhSweepManager is UI-thread-confined),
-    // so setting the observable directly is safe.
+    // so setting the observables directly is safe.
     private void OnSweepCompleted(GhSweepReport report)
-        => CompletionSummary =
-            $"Sweep complete — {report.Moved.Count} moved, {report.LeftInPlace.Count} left in place, "
+    {
+        CompletionSummary =
+            $"Sweep complete — {report.Moved.Count} move(s), {report.LeftInPlace.Count} left in place, "
             + $"{report.Stranded.Count} still carried.";
+        RefreshRoomStatuses();
+    }
 
     [RelayCommand]
     private void Stop() => _sweep.Stop("user stop from GH Management tab");
+
+    // Invoked from the view's double-tap handler: show the room's current floor
+    // inventory (from the final recon pass) in the detail panel.
+    public void ShowRoomContents(GhRoomLabelRowViewModel row)
+    {
+        IReadOnlyList<string> items = _sweep.ObservedItemsAt(row.Key);
+        RoomContentsTitle = $"{row.RoomName} ({row.RoomKeyText})";
+        RoomContentsText = items.Count == 0
+            ? "(nothing scanned here yet — run a sweep, or the floor is empty)"
+            : string.Join("\n", items);
+    }
+
+    [RelayCommand]
+    private void OpenRoombaLog()
+    {
+        if (_logWindow is { } open) { open.Activate(); return; }
+        _logWindow = new RoombaLogWindow { DataContext = new RoombaLogViewModel(_sweep) };
+        _logWindow.Closed += (_, _) => _logWindow = null;
+        _logWindow.Show();
+    }
 
     public override void Dispose()
     {
         _labels.Changed -= RebuildRooms;
         _sweep.PhaseChanged -= RefreshStatus;
         _sweep.SweepCompleted -= OnSweepCompleted;
+        _logWindow?.Close();
     }
 }

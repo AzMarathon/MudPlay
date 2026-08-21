@@ -20,7 +20,7 @@ namespace MudPlay.Game.Map;
 // recon circuit and every shortest-work shuttle used during sorting.
 //
 // The two phases share the same LoopRunner, but Sorting can replace its route:
-//   - Reconning (GhRoomLabelStore.ReconLaps laps): pure observation. On
+//   - Reconning (one lap): pure observation. On
 //     arrival at every room in the expanded circuit this manager holds GhSortGate and
 //     sends `sea` directly SearchesPerRoom times (settling between each),
 //     the same way Sorting sends get/drop directly rather than delegating to
@@ -79,7 +79,7 @@ public sealed class GhSweepManager : IDisposable
 
     private const string SweepLoopName = "Roomba sweep";
 
-    public enum SweepPhase { Idle, Reconning, Sorting }
+    public enum SweepPhase { Idle, Reconning, Sorting, FinalRecon }
 
     private sealed class PendingSortMove
     {
@@ -199,6 +199,21 @@ public sealed class GhSweepManager : IDisposable
     public int WorkingWeightBudget => WorkingBudget();
     public int LedgerCarriedWeightNow => LedgerCarriedWeight();
     public int CarryHeadroomNow => CurrentHeadroom();
+
+    // A room's most-recently-observed floor inventory (refreshed by the final recon
+    // pass after sorting). Empty when the room wasn't observed. Fed to the GH tab's
+    // double-click "what's in this room now" view.
+    public IReadOnlyList<string> ObservedItemsAt(RoomKey room) =>
+        _observedByRoom.TryGetValue(room, out List<string>? items)
+            ? items.ToList()
+            : Array.Empty<string>();
+
+    // True while `room` still has a queued item on its floor waiting to be picked up
+    // (the tab's "Cleaning" status). A carried or delivered move no longer keeps the
+    // room dirty, and a stranded item is dropped from the queue, so this reads false
+    // once the room's movable clutter is gone.
+    public bool HasPendingPickupAt(RoomKey room) =>
+        _pending.Any(m => !m.Delivered && !m.IsCarried && m.From.Equals(room));
 
     // Fires once, when a sweep finishes (queue exhausted or stopped early).
     public event Action<GhSweepReport>? SweepCompleted;
@@ -335,36 +350,41 @@ public sealed class GhSweepManager : IDisposable
         _baseCarryWeight = 0;
         _maxCarryWeight = int.MaxValue;
 
-        // Order the labeled rooms into a sane walking route rather than handing
-        // LoopRunner raw label-insertion order (whatever order the user
-        // happened to right-click the rooms in) — an arbitrary order zigzags
-        // the sweep back and forth across the house instead of sweeping
-        // through it. Anchor from the player's current room when known;
-        // otherwise the ordering still works, it's just a less meaningful
-        // starting anchor (an arbitrary labeled room).
-        IReadOnlyList<RoomKey> allRooms =
-            _labels.Labels.Select(l => new RoomKey(l.Map, l.Room)).ToList();
-        RoomKey startRoom = _tracker.State.CurrentRoom?.Key ?? allRooms[0];
-        IReadOnlyList<RoomKey> orderedRooms =
-            GhRouteOrderer.OrderNearestNeighbor(startRoom, allRooms, _bfs);
-
-        Loop loop = new(SweepLoopName, orderedRooms);
-        if (!_loopRunner.Start(loop))
+        if (!PlotAndStartCircuit())
         {
             LastStartError = "Couldn't plot a walkable route through the labeled rooms.";
             _log?.Warn(LogCategory, "start refused: LoopRunner declined the sweep circuit");
             return false;
         }
 
-        RoomKey circuitStart = _loopRunner.CircleStartRoom ?? startRoom;
-        _sweepRooms.UnionWith(_loopRunner.ResolveLoopRoomKeys(circuitStart));
-        _sweepRooms.UnionWith(allRooms);
-
         Phase = SweepPhase.Reconning;
         _log?.Info(LogCategory,
             $"sweep started: {_labels.Labels.Count} labeled destination(s), "
             + $"{_sweepRooms.Count} circuit room(s), recon phase begins");
         PhaseChanged?.Invoke();
+        return true;
+    }
+
+    // Plot a nearest-neighbour walking route through the labeled rooms and hand it
+    // to LoopRunner, then record the full circuit's room set. Shared by the initial
+    // recon start and the post-sort final recon pass. Ordering the rooms (rather
+    // than raw label-insertion order, whatever order the user right-clicked them in)
+    // keeps the sweep from zigzagging across the house. Anchors from the player's
+    // current room when known.
+    private bool PlotAndStartCircuit()
+    {
+        IReadOnlyList<RoomKey> allRooms =
+            _labels.Labels.Select(l => new RoomKey(l.Map, l.Room)).ToList();
+        if (allRooms.Count == 0) return false;
+        RoomKey startRoom = _tracker.State.CurrentRoom?.Key ?? allRooms[0];
+        IReadOnlyList<RoomKey> orderedRooms =
+            GhRouteOrderer.OrderNearestNeighbor(startRoom, allRooms, _bfs);
+
+        if (!_loopRunner.Start(new Loop(SweepLoopName, orderedRooms))) return false;
+
+        RoomKey circuitStart = _loopRunner.CircleStartRoom ?? startRoom;
+        _sweepRooms.UnionWith(_loopRunner.ResolveLoopRoomKeys(circuitStart));
+        _sweepRooms.UnionWith(allRooms);
         return true;
     }
 
@@ -390,10 +410,19 @@ public sealed class GhSweepManager : IDisposable
             case LoopEventKind.RepeatStarted:
                 if (Phase == SweepPhase.Reconning)
                 {
+                    // One recon lap is enough — walk the circuit once, observe every
+                    // room, then sort. (No configurable lap count: a second lap of the
+                    // same rooms tells us nothing new.)
                     CompletedReconLaps = _loopRunner.CompletedLaps;
-                    _log?.Info(LogCategory, $"recon lap {CompletedReconLaps}/{_labels.ReconLaps} complete");
+                    _log?.Info(LogCategory, $"recon lap {CompletedReconLaps} complete");
                     PhaseChanged?.Invoke();
-                    if (CompletedReconLaps >= _labels.ReconLaps) BeginSortPhase();
+                    BeginSortPhase();
+                    return;
+                }
+                if (Phase == SweepPhase.FinalRecon)
+                {
+                    _log?.Info(LogCategory, "final recon lap complete; sweep done");
+                    FinishSweep();
                     return;
                 }
                 if (Phase == SweepPhase.Sorting) OnSortingLapCompleted();
@@ -689,7 +718,7 @@ public sealed class GhSweepManager : IDisposable
     // assume a specific caller's pre-filtering.
     public void OnRoomChanged(RoomTransition t)
     {
-        if (Phase != SweepPhase.Reconning && Phase != SweepPhase.Sorting) return;
+        if (Phase == SweepPhase.Idle) return;
 
         // Diagnostic visibility for a reported-but-unreproduced failure mode
         // (a circuit room's arrival silently produces zero dispatch — no
@@ -740,6 +769,9 @@ public sealed class GhSweepManager : IDisposable
             if (_labels.SearchForHidden) BeginRoomSearches(here);
             return;
         }
+        // Final recon just refreshes each room's floor (the arrival survey above
+        // already merged it) — observe-only, no search and no get/drop.
+        if (Phase == SweepPhase.FinalRecon) return;
         DispatchAtRoom(here);
     }
 
@@ -976,7 +1008,7 @@ public sealed class GhSweepManager : IDisposable
         if (isDrop)
         {
             match.Delivered = true;
-            _movedSoFar.Add(new GhSweepMove(match.From, match.To, match.ItemName));
+            _movedSoFar.Add(new GhSweepMove(match.From, match.To, match.ItemName, match.Count));
             _log?.Info(LogCategory, $"delivered {match.Count}x {match.ItemName} -> {match.To}");
         }
         else
@@ -1153,7 +1185,7 @@ public sealed class GhSweepManager : IDisposable
     {
         if (_pending.All(p => p.Delivered))
         {
-            FinishSweep();
+            BeginFinalRecon();
             return;
         }
 
@@ -1165,6 +1197,34 @@ public sealed class GhSweepManager : IDisposable
 
         ReleaseGate(reason);
         MaybeFinish();
+    }
+
+    // Sorting is done — every queued move delivered (or stranded). Before finishing,
+    // walk the circuit one more time, observe-only, so each room's shown inventory
+    // reflects the post-sweep floor rather than the pre-sort recon snapshot. On the
+    // lap's completion (RepeatStarted) FinishSweep runs. Guarded to Sorting so it
+    // fires exactly once at the sort/finish boundary.
+    private void BeginFinalRecon()
+    {
+        if (Phase != SweepPhase.Sorting) return;
+        Phase = SweepPhase.FinalRecon;
+        ReleaseGate("final recon begins");
+        _observedByRoom.Clear();
+        _visibleByRoom.Clear();
+        _hiddenByRoom.Clear();
+        _pendingArrivalSurvey = null;
+        _log?.Info(LogCategory, "sort complete; final recon pass to refresh room inventories");
+        PhaseChanged?.Invoke();
+
+        bool started;
+        _reroutingSortLoop = true; // suppress the supersede Stopped event as we swap loops
+        try { started = PlotAndStartCircuit(); }
+        finally { _reroutingSortLoop = false; }
+        if (!started)
+        {
+            _log?.Warn(LogCategory, "final recon couldn't plot a circuit; finishing");
+            FinishSweep();
+        }
     }
 
     private bool TryRerouteToNextWork()
@@ -1237,7 +1297,7 @@ public sealed class GhSweepManager : IDisposable
 
     private void MaybeFinish()
     {
-        if (_pending.All(p => p.Delivered)) FinishSweep();
+        if (_pending.All(p => p.Delivered)) BeginFinalRecon();
     }
 
     private void FinishSweep()

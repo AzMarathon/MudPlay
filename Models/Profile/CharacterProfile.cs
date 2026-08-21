@@ -177,9 +177,9 @@ public sealed class CharacterProfile
     // empty = GH not set up yet.
     public List<GhRoomLabel>? GhRoomLabels { get; set; }
 
-    // Roomba Mode's recon tuning — null = use GhRoomLabelStore's defaults
-    // (2 laps, 3 searches per room). Adjustable from the GH Management tab.
-    public int? GhReconLaps { get; set; }
+    // Roomba Mode's per-room hidden-search count — null = GhRoomLabelStore's
+    // default (3). Only applies when hidden-item search is on. Recon always walks
+    // the circuit exactly once (no lap-count setting). Adjustable from the tab.
     public int? GhSearchesPerRoom { get; set; }
 
     // Whether Roomba searches (`sea`) each room for hidden items during recon.

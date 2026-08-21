@@ -17,14 +17,6 @@ public sealed class GhRoomLabelStoreTests
     }
 
     [Fact]
-    public void ReconLaps_DefaultsToTwo_WhenProfileFieldUnset()
-    {
-        GhRoomLabelStore store = NewStore();
-        Assert.Equal(2, store.ReconLaps);
-        Assert.Equal(GhRoomLabelStore.DefaultReconLaps, store.ReconLaps);
-    }
-
-    [Fact]
     public void SearchesPerRoom_DefaultsToThree_WhenProfileFieldUnset()
     {
         GhRoomLabelStore store = NewStore();
@@ -33,30 +25,11 @@ public sealed class GhRoomLabelStoreTests
     }
 
     [Fact]
-    public void SetReconLaps_PersistsAndReadsBack()
-    {
-        GhRoomLabelStore store = NewStore();
-        store.SetReconLaps(5);
-        Assert.Equal(5, store.ReconLaps);
-    }
-
-    [Fact]
     public void SetSearchesPerRoom_PersistsAndReadsBack()
     {
         GhRoomLabelStore store = NewStore();
         store.SetSearchesPerRoom(1);
         Assert.Equal(1, store.SearchesPerRoom);
-    }
-
-    [Fact]
-    public void SetReconLaps_ClampsBelowOneToOne()
-    {
-        GhRoomLabelStore store = NewStore();
-        store.SetReconLaps(0);
-        Assert.Equal(1, store.ReconLaps);
-
-        store.SetReconLaps(-5);
-        Assert.Equal(1, store.ReconLaps);
     }
 
     [Fact]
@@ -81,13 +54,13 @@ public sealed class GhRoomLabelStoreTests
     }
 
     [Fact]
-    public void SetReconLaps_FiresChanged()
+    public void SetSearchesPerRoom_FiresChanged()
     {
         GhRoomLabelStore store = NewStore();
         int fires = 0;
         store.Changed += () => fires++;
 
-        store.SetReconLaps(4);
+        store.SetSearchesPerRoom(4);
 
         Assert.Equal(1, fires);
     }

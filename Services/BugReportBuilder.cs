@@ -727,8 +727,7 @@ public static class BugReportBuilder
         // report needs the phase, lap count, and how much of the sort queue
         // is still outstanding.
         Kv(sb, "Roomba sweep phase", svc.GhSweep.Phase.ToString());
-        Kv(sb, "Roomba recon laps",
-            $"{svc.GhSweep.CompletedReconLaps}/{svc.GhRoomLabels.ReconLaps}");
+        Kv(sb, "Roomba recon laps done", svc.GhSweep.CompletedReconLaps.ToString());
         Kv(sb, "Roomba completed sort laps", svc.GhSweep.CompletedSortLaps.ToString());
         Kv(sb, "Roomba searches per room", svc.GhRoomLabels.SearchesPerRoom.ToString());
         Kv(sb, "Roomba labeled destinations / circuit rooms",

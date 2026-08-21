@@ -13,8 +13,7 @@ namespace MudPlay.Game.Map;
 // StashRooms.
 public sealed class GhRoomLabelStore
 {
-    // Defaults when CharacterProfile.GhReconLaps / GhSearchesPerRoom are unset.
-    public const int DefaultReconLaps = 2;
+    // Default when CharacterProfile.GhSearchesPerRoom is unset.
     public const int DefaultSearchesPerRoom = 3;
 
     private readonly ProfileService _profile;
@@ -39,25 +38,15 @@ public sealed class GhRoomLabelStore
     // Read-only snapshot of the currently-labeled rooms.
     public IReadOnlyCollection<GhRoomLabel> Labels => _labels.Values;
 
-    // Recon tuning — how many laps of pure observation before sorting starts,
-    // and how many times each room on the expanded circuit is searched per recon visit.
-    // Backed by CharacterProfile so a retune persists per-character like the
-    // room labels themselves; unset (null on the profile) reads as the default.
-    public int ReconLaps => Math.Max(1, _profile.Current?.GhReconLaps ?? DefaultReconLaps);
+    // How many times each room on the expanded circuit is searched per recon visit
+    // (only used when hidden-item search is on). Backed by CharacterProfile so a
+    // retune persists per-character; unset reads as the default. Recon always walks
+    // the circuit exactly once — there is no lap-count setting.
     public int SearchesPerRoom => Math.Max(1, _profile.Current?.GhSearchesPerRoom ?? DefaultSearchesPerRoom);
 
     // Whether recon searches (`sea`) each room for hidden items. Off by default:
     // Roomba sorts only the visible floor unless the user opts in.
     public bool SearchForHidden => _profile.Current?.GhSearchForHidden ?? false;
-
-    public void SetReconLaps(int laps)
-    {
-        if (_profile.Current is not { } current) return;
-        current.GhReconLaps = Math.Max(1, laps);
-        _profile.Save();
-        _log?.Info("GhSweep", $"recon laps set to {current.GhReconLaps}");
-        Changed?.Invoke();
-    }
 
     public void SetSearchesPerRoom(int count)
     {
