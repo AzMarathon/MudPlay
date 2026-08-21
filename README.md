@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.23.1**
-> - Combat settings: fixed the **Debuff (single target)**, **Normal attack spell**, and **Alternate attack spell** cast-cap tooltips claiming "casts per room" when the engine has always enforced them per-target (a fresh mob gets its own allowance) — misled players into thinking the cap wasn't being honored when many mobs died in quick succession
+> **Version 3.23.0**
+> - New **Sprint Mode** toolbar toggle (running-figure icon) — a transient "just get me there" movement mode: while on, movement never pauses to rest/heal-wait (configured heal spells still cast), and **Auto-Combat / Get-Items / Search / Get-Cash are forced off** and restored when it ends. It **turns itself off** (restoring those engines) when a go-to walk arrives, a loop begins looping, or an auto-lair is about to enter the next lair; manually re-enabling any of those four engines ends it too
+> - The **EXP** button is no longer on the default toolbar (still available to add via the toolbar editor)
+> - Combat settings: fixed the per-target cast-cap tooltips (Debuff / Normal attack / Alternate attack) that mislabeled the cap as "casts per room"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
