@@ -274,19 +274,31 @@ public partial class MainWindowViewModel : ObservableObject
     // disconnects, not auto-engines.
     [ObservableProperty] private bool _isDisableHangupsActive;
 
-    // Sprint Mode. When on, HealthManager never pauses movement to rest/heal-wait
-    // (still casts configured heal spells) and Auto Combat is temporarily forced
-    // off (restored on turning Sprint back off) since no known mechanic blocks
-    // movement due to being engaged — see OnIsSprintModeActiveChanged. Persisted
-    // in Models.Profile.GeneralSettings.SprintMode and reseeded on profile load
-    // like the auto-mode toggles. Not part of IsAllAutoOff — it's a movement
-    // mode, not an auto-engine.
+    // Sprint Mode. A transient "just get me there" movement mode. While on:
+    // HealthManager never pauses movement to rest/heal-wait (still casts
+    // configured heal spells), and Auto-Combat / Get-Items / Search / Get-Cash
+    // are forced off (nothing to fight / loot / search for). It auto-turns-off
+    // — restoring exactly the engines it silenced — the instant a go-to walk
+    // arrives, a loop starts its next lap, or an auto-lair is about to enter the
+    // next lair; and manually turning any of those four engines back on ends it
+    // too. See OnIsSprintModeActiveChanged + the nav-event handlers. Persisted
+    // in Models.Profile.GeneralSettings.SprintMode, reseeded on profile load.
+    // Not part of IsAllAutoOff — it's a movement mode, not an auto-engine.
     [ObservableProperty] private bool _isSprintModeActive;
 
-    // Auto Combat's state captured the moment Sprint Mode turned it off, so
-    // turning Sprint back off can restore it. Session-only (not persisted) —
-    // null when Sprint isn't the one holding Auto Combat off.
-    private bool? _autoCombatBeforeSprint;
+    // The auto-engines Sprint Mode forced off when it turned on — remembered so
+    // ending Sprint restores exactly those (and only those). Sprint forces off
+    // only engines that were ON, so one the user later re-enables by hand is
+    // never in this set and its state is preserved. Session-only, not persisted.
+    private bool _sprintTurnedOffCombat;
+    private bool _sprintTurnedOffGetItems;
+    private bool _sprintTurnedOffSearch;
+    private bool _sprintTurnedOffGetCash;
+
+    // True while Sprint is programmatically flipping those engines (force-off on
+    // start, restore on end), so their change handlers don't misread Sprint's
+    // own writes as a manual re-enable and recurse.
+    private bool _sprintDrivingEngines;
 
     // True when every wired auto-engine is off — drives the "Auto-All" master
     // toggle's depressed/checked state. Mirrors
@@ -364,11 +376,21 @@ public partial class MainWindowViewModel : ObservableObject
     public bool EngineActionIsLooping => !_autoLairOn &&  _loopRunning;
     public bool EngineActionIsLair    =>  _autoLairOn;
 
-    private void OnWalkerEngineEvent(Game.Map.WalkEvent _)
+    private void OnWalkerEngineEvent(Game.Map.WalkEvent e)
         => Dispatcher.UIThread.Post(() =>
         {
             _walkerState = AppServices.Current.Walker.State;
             RefreshEngineActionChip();
+            // A go-to walk arriving ends Sprint Mode (restoring the engines it
+            // silenced). Only a STANDALONE walk-to counts — during a loop or
+            // auto-lair the walker also fires Finished on each sub-path, and those
+            // are ended by the lap-boundary / pre-lair hooks instead. Guard on the
+            // live engine state, not cached flags, to avoid a stale-field race.
+            if (e.Kind == Game.Map.WalkEventKind.Finished
+                && IsSprintModeActive
+                && AppServices.Current.LoopRunner.State == Game.Map.LoopState.Idle
+                && !AppServices.Current.AutoLair.IsActive)
+                IsSprintModeActive = false;
         });
 
     private void OnLoopRunnerEngineEvent(Game.Map.LoopEvent e)
@@ -385,6 +407,10 @@ public partial class MainWindowViewModel : ObservableObject
             // once per run (the event itself is one-shot), never on lap wraps.
             if (e.Kind == Game.Map.LoopEventKind.ReachedFirstWaypoint)
                 ReconcileAutoModeToBase("loop start");
+            // A new lap starting ends Sprint Mode: you sprinted the rest of this
+            // lap, and the next lap runs normally with the engines restored.
+            if (e.Kind == Game.Map.LoopEventKind.RepeatStarted && IsSprintModeActive)
+                IsSprintModeActive = false;
         });
 
     private void OnAutoLairActiveChanged(bool active)
@@ -404,6 +430,12 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnAutoLairPhaseChangedForBase(Game.Map.AutoLairPhase phase)
         => Dispatcher.UIThread.Post(() =>
         {
+            // About to step into the next lair — end Sprint so we cross the
+            // threshold with the engines (combat especially) restored and fight it
+            // normally. Sprint got us here fast; it doesn't enter the lair.
+            if (phase == Game.Map.AutoLairPhase.Entering && IsSprintModeActive)
+                IsSprintModeActive = false;
+
             if (phase != Game.Map.AutoLairPhase.Engaging) return;
             if (_autoLairBaseReconciled) return;
             _autoLairBaseReconciled = true;
@@ -4793,6 +4825,7 @@ public partial class MainWindowViewModel : ObservableObject
         // manual room re-display. Re-emit the current observation once the fight is
         // disengaged so every gate-holder re-evaluates together.
         if (!value) AppServices.Current.RoomClassifier?.ReemitCurrent();
+        MaybeEndSprintOnManualEngineEnable(value);
     }
 
     partial void OnIsAutoNukeActiveChanged(bool value)
@@ -4818,10 +4851,16 @@ public partial class MainWindowViewModel : ObservableObject
         => PersistAutoModeFlag("AutoLight", value, d => d.AutoLight = value);
 
     partial void OnIsAutoGetItemsActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
+    {
+        PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
+        MaybeEndSprintOnManualEngineEnable(value);
+    }
 
     partial void OnIsAutoGetCashActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoGetCash", value, d => d.AutoGetCash = value);
+    {
+        PersistAutoModeFlag("AutoGetCash", value, d => d.AutoGetCash = value);
+        MaybeEndSprintOnManualEngineEnable(value);
+    }
 
     partial void OnIsAutoSneakActiveChanged(bool value)
         => PersistAutoModeFlag("AutoSneak", value, d => d.AutoSneak = value);
@@ -4830,7 +4869,10 @@ public partial class MainWindowViewModel : ObservableObject
         => PersistAutoModeFlag("AutoHide", value, d => d.AutoHide = value);
 
     partial void OnIsAutoSearchActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoSearch", value, d => d.AutoSearch = value);
+    {
+        PersistAutoModeFlag("AutoSearch", value, d => d.AutoSearch = value);
+        MaybeEndSprintOnManualEngineEnable(value);
+    }
 
     partial void OnIsDisableHangupsActiveChanged(bool value)
         => PersistGeneralFlag("DisableHangups", value, g => g.DisableHangups = value);
@@ -4838,23 +4880,64 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnIsSprintModeActiveChanged(bool value)
     {
         PersistGeneralFlag("SprintMode", value, g => g.SprintMode = value);
-        // A profile reseed sets this without a real user toggle — skip the Auto
-        // Combat coupling so loading a character with Sprint already on doesn't
-        // stomp Auto Combat's own independently-reseeded value.
+        // A profile reseed sets this without a real user toggle — skip the engine
+        // coupling so loading a Sprint-on character doesn't stomp the engines'
+        // own independently-reseeded values.
         if (_suppressAutoEngineWriteback > 0) return;
-        if (value)
+        if (value) ForceEnginesOffForSprint();
+        else RestoreEnginesAfterSprint();
+    }
+
+    // Sprint forces Auto-Combat / Get-Items / Search / Get-Cash off for the
+    // duration (a "just keep moving" mode has nothing to fight / loot / search
+    // for) and remembers which it actually turned off so it can restore exactly
+    // those. Guarded so the engines' own change handlers don't read these writes
+    // as a manual re-enable.
+    private void ForceEnginesOffForSprint()
+    {
+        _sprintDrivingEngines = true;
+        try
         {
-            // No known MajorMUD mechanic blocks movement due to being engaged, so
-            // a "never stop moving" mode has nothing to fight for — force Auto
-            // Combat off for the duration. Remember the prior state to restore it.
-            _autoCombatBeforeSprint = IsAutoCombatActive;
-            if (IsAutoCombatActive) IsAutoCombatActive = false;
+            _sprintTurnedOffCombat   = IsAutoCombatActive;
+            _sprintTurnedOffGetItems = IsAutoGetItemsActive;
+            _sprintTurnedOffSearch   = IsAutoSearchActive;
+            _sprintTurnedOffGetCash  = IsAutoGetCashActive;
+            if (IsAutoCombatActive)   IsAutoCombatActive   = false;
+            if (IsAutoGetItemsActive) IsAutoGetItemsActive = false;
+            if (IsAutoSearchActive)   IsAutoSearchActive   = false;
+            if (IsAutoGetCashActive)  IsAutoGetCashActive  = false;
         }
-        else if (_autoCombatBeforeSprint is { } prior)
+        finally { _sprintDrivingEngines = false; }
+    }
+
+    // Turn back on exactly the engines Sprint forced off. One the user re-enabled
+    // by hand was never in the turned-off set, so it's left as the user set it.
+    private void RestoreEnginesAfterSprint()
+    {
+        _sprintDrivingEngines = true;
+        try
         {
-            _autoCombatBeforeSprint = null;
-            if (prior != IsAutoCombatActive) IsAutoCombatActive = prior;
+            if (_sprintTurnedOffCombat)   IsAutoCombatActive   = true;
+            if (_sprintTurnedOffGetItems) IsAutoGetItemsActive = true;
+            if (_sprintTurnedOffSearch)   IsAutoSearchActive   = true;
+            if (_sprintTurnedOffGetCash)  IsAutoGetCashActive  = true;
         }
+        finally
+        {
+            _sprintTurnedOffCombat = _sprintTurnedOffGetItems =
+                _sprintTurnedOffSearch = _sprintTurnedOffGetCash = false;
+            _sprintDrivingEngines = false;
+        }
+    }
+
+    // Sprint Mode and its four suppressed engines are mutually exclusive: turning
+    // any of them back on by hand ends Sprint. Ending Sprint restores the others
+    // it silenced; the one just re-enabled is already on, so restore leaves it on.
+    // Ignored while Sprint itself is driving the engine and during a profile reseed.
+    private void MaybeEndSprintOnManualEngineEnable(bool value)
+    {
+        if (!value || _sprintDrivingEngines || _suppressAutoEngineWriteback > 0) return;
+        if (IsSprintModeActive) IsSprintModeActive = false;
     }
 
     // Reset the LIVE auto-engine state (AutoMode) to the character's BASE modes —

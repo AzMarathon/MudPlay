@@ -737,8 +737,14 @@ See the [Keybindings](#keybindings) section below — the rebind dialog is launc
 ### Sprint Mode (toolbar toggle)
 
 **Default:** Off
-**What it does:** Another toolbar-only toggle (fast-forward chevrons icon, next to the movement Start/Pause/Stop buttons) — not a settings-tab checkbox. When on, movement **never pauses to rest or wait for HP/MA to recover**, no matter how low they get; your configured heal spells still fire normally on their usual thresholds while you keep moving. Turning it on also **forces Auto Combat off** for as long as Sprint Mode stays on (whatever Auto Combat was set to comes back the moment you turn Sprint Mode back off) — there's no known mechanic where being engaged in combat blocks you from walking away, so a "never stop" mode has nothing to gain by fighting. Every other safety pause (avoid rooms, hazard/trap detours, teleport-maze solving, party sync, mortally-wounded) is untouched. The only thing that actually stops a sprinting character is death.
-**Important notes:** This is an "arrive or die" mode — use it deliberately, for a route you're confident the character can survive taking hits on the whole way. Because it forces Auto Combat off, a hostile room is walked straight through rather than fought.
+**What it does:** A transient "just get me there" movement toggle (running-figure icon, next to the movement Start/Pause/Stop buttons) — not a settings-tab checkbox. When on, movement **never pauses to rest or wait for HP/MA to recover**, no matter how low they get; your configured heal spells still fire normally on their usual thresholds while you keep moving. Turning it on also **forces off Auto-Combat, Auto-Get Items, Auto-Search, and Auto-Get Cash** for the duration — a "never stop" run has nothing to fight, loot, or search for — and remembers exactly which of those were on so it can put them **back** when Sprint ends. Every other safety pause (avoid rooms, hazard/trap detours, teleport-maze solving, party sync, mortally-wounded) is untouched. The only thing that force-stops a sprinting character is death.
+**It turns itself off** — restoring the engines it silenced — the moment it has done its job:
+- a **go-to walk** reaches its destination;
+- a **loop** starts its next lap (you sprint the rest of the current lap, then it resumes normally);
+- an **auto-lair** circuit is about to enter the next lair (you sprint the travel there, then cross the threshold with combat back on to fight it).
+
+Manually turning **any of those four engines back on** while Sprint is running also ends it (the two are mutually exclusive) — the engine you clicked stays on and the others it had silenced come back too.
+**Important notes:** While active it's an "arrive or die" mode — use it for a route you're confident the character survives taking hits the whole way, since a hostile room is walked straight through rather than fought. It's designed to be flipped on for a single leg (a go-to, one loop lap, one hop between lairs) and clean up after itself.
 
 ---
 
