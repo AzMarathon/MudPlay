@@ -785,6 +785,17 @@ public sealed class CashManager : IDisposable
     // yet confirmed.
     private void CollectCoins(int count, string currency)
     {
+        // Stash-room guard at the shared funnel so EVERY collect path is covered —
+        // the "You notice N here" room-survey path (what auto-search's `sea`
+        // re-render drives) reached here without passing the per-handler guards, so
+        // a just-stashed pile got grabbed right back while looping (report
+        // paradigm-20260820-055720).
+        if (SuppressCollectInStashRoom())
+        {
+            _log?.Info(LogCategory, $"stash room (looping) — not collecting {count} {currency}");
+            return;
+        }
+
         CashSettings settings = _readSettings();
         int slot = SlotForCurrency(currency);
         InventorySnapshot snap = _getSnapshot();

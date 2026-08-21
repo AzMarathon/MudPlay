@@ -87,7 +87,13 @@ public sealed class RoundDamageTracker : IDisposable
         _userHitsSub     = router.Subscribe(KnownPatterns.UserHits,    OnUserHits);
         _mobHitsSub      = router.Subscribe(KnownPatterns.MobHits,     OnMobHits);
         _mobMissesSub    = router.Subscribe(KnownPatterns.MobMisses,   OnMobMisses);
-        _combatStatusSub = router.Subscribe(KnownPatterns.CombatStatus, OnCombatStatus);
+        // TieBreak ahead of CombatManager's CombatStatus handler: on a *Combat Off*
+        // that closes a round, this must CloseCurrent (bump RoundCount + fire
+        // RoundComplete) BEFORE CombatManager's between-round-cast resume re-decides,
+        // so the interrupted attack-spell round is tallied toward MaxCasts first and
+        // the resume doesn't re-announce the same spell uncapped (LBOL 2x, report
+        // paradigm-20260820-063541).
+        _combatStatusSub = router.Subscribe(KnownPatterns.CombatStatus, OnCombatStatus, tieBreak: 100);
     }
 
     private void OnUserHits(MatchResult match)

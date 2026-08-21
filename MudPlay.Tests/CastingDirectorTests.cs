@@ -1930,6 +1930,30 @@ public sealed class CastingDirectorTests
         Assert.Equal("heal Tank", h.CastsSent[0]);
     }
 
+    // Report paradigm-20260820-122341 ("party heal fires a round late"): the heal
+    // picker reads each member's HpPercent, but that value is refreshed by the `par`
+    // poll on its own cadence. Before the member-watch, a member falling below the
+    // heal threshold wasn't acted on until the next self-state change or combat tick —
+    // a full round of the member sitting hurt. The director now watches each member's
+    // HpPercent and re-runs the pipeline the instant it drops, with NO self-state
+    // change and NO tick.
+    [Fact]
+    public void PartyHeal_MemberHpDrops_HealsImmediately_NoTickOrSelfChange()
+    {
+        using PartyHarness h = new();
+        h.PartySettings.MinorPartyHealSpell = "heal";
+        h.PartySettings.MinorHealMemberThresholdPercent = 70;
+        PartyMember tank = h.AddMember("Tank", hpPercent: 100);   // joined, healthy
+
+        Assert.Empty(h.CastsSent);                                // nothing due yet
+
+        tank.HpPercent = 50;                                      // `par` refresh drops it below 70
+
+        // Driven purely by the member-watch — no Evaluate()/tick/SetPrompt call.
+        Assert.Single(h.CastsSent);
+        Assert.Equal("heal Tank", h.CastsSent[0]);
+    }
+
     [Fact]
     public void PartyHeal_SelfIsLowest_CastsBareCode_NotOwnParName()
     {

@@ -165,6 +165,18 @@ public sealed class CombatManagerSpellsTests
             Router.Dispatch(emitted);
         }
 
+        // A between-round cast's *Combat Off* that closes the open attack-spell
+        // round. In production RoundDamageTracker (CombatStatus tieBreak 100)
+        // CloseCurrent's that round — RoundCount++ — BEFORE CombatManager's resume
+        // reads the count. RoundDamageTracker isn't wired here (the int _roundCount
+        // is its stand-in), so bump first, then dispatch the Off — mirroring that
+        // ordering so the resume tallies the interrupted spell toward MaxCasts.
+        public void FeedOffClosingRound()
+        {
+            _roundCount++;
+            Feed("*Combat Off*");
+        }
+
         /// <summary>One combat round. Mirrors the AppServices tick-subscription
         /// order: the coordinator clears its cooldown first, then the combat
         /// heartbeat re-decides. (CastingDirector sits between them in production but
@@ -518,6 +530,36 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal(sentBeforeOff + 1, h.Sent.Count);
         Assert.Equal("lbol thin leprous outcast", h.LastSent);
+    }
+
+    // Report paradigm-20260820-063541 ("LBOL cast twice"): a between-round survival
+    // cast interrupts an attack spell (lbol, MaxCasts=1) mid-round and drops *Combat
+    // Off*. The heartbeat can't tally the interrupted round (OnCombatTick bails while
+    // _combatOff), so the spell-resume used to re-announce the STILL-current lbol
+    // uncapped — a second lbol before the cascade advanced. RoundDamageTracker now
+    // tie-breaks ahead of CombatManager on that Off and closes the round first; the
+    // resume tallies lbol's cast toward its cap before re-deciding, so it cascades to
+    // the alternate (mmis) instead of firing lbol a second time.
+    [Fact]
+    public void BetweenRoundInterrupt_TalliesAttackSpellRound_ResumeRespectsMaxCasts()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);          // engage → lbol (spell mode)
+
+        // A between-round survival cast interrupts lbol's round and drops *Combat Off*.
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteBetweenRoundCast();
+        h.FeedOffClosingRound();                             // round closes (tieBreak) → resume tallies lbol
+
+        // lbol hit MaxCasts=1 on the interrupted round → the resume cascades to the
+        // alternate, NOT a second lbol.
+        Assert.Equal("mmis giant rat", h.LastSent);
+        Assert.Equal(1, h.AllSent.Count(s => s == "lbol giant rat"));   // exactly one lbol
     }
 
     // MaxCasts must count real rounds, not damage-line ticks. A multi-hit attack spell

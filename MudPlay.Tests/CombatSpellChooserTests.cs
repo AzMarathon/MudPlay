@@ -1426,14 +1426,16 @@ public sealed class CombatSpellChooserTests
     private static CombatSpellContext DrainCtx(
         int enemies = 1, int mana = 100, int maxMana = 100,
         bool hpBelow = true, bool eligible = true,
-        IReadOnlySet<CombatSpellAction>? immune = null, bool? hpRelease = null) =>
+        IReadOnlySet<CombatSpellAction>? immune = null, bool? hpRelease = null,
+        System.Func<string, int?>? manaCostOf = null) =>
         new(enemies, "a rat", mana, maxMana, BackstabPending: false,
             ImmuneAttackSpells: immune,
             HpBelowDrainTrigger: hpBelow, DrainTargetEligible: eligible,
             // The release threshold is higher than the trigger, so HP below the
             // trigger is also below the release; default it to hpBelow unless a test
             // exercises the in-between band (above trigger, below release).
-            HpBelowDrainRelease: hpRelease ?? hpBelow);
+            HpBelowDrainRelease: hpRelease ?? hpBelow,
+            ManaCostOf: manaCostOf);
 
     [Fact]
     public void Drain_FiresWhenHurtAndEligible_OverridesAttackSpell()
@@ -1449,6 +1451,30 @@ public sealed class CombatSpellChooserTests
 
         Assert.Equal(CombatSpellAction.DrainSpell, d.Action);
         Assert.Equal("vamp", d.Spell);
+    }
+
+    [Fact]
+    public void Drain_NotChosen_BelowRealManaCost_EvenWithZeroReserve()
+    {
+        // Report paradigm-20260820-082741: a DrainSpell with MinManaPerCast=0 was cast
+        // at 5 mana vs its 25 cost — a silent no-op. The chooser now treats the spell's
+        // real cost as a hard floor beneath the reserve, so it's skipped when unaffordable
+        // and fires once affordable.
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("mmis"),   // cheap fallback
+            DrainSpell = Slot("dtch"),          // MinManaPerCast defaults to 0
+        };
+        System.Func<string, int?> cost = code => code == "dtch" ? 25 : 2;
+
+        // Below cost → drain skipped, cascade falls to the affordable normal attack.
+        CombatSpellDecision below = sut.Choose(settings, DrainCtx(mana: 5, manaCostOf: cost));
+        Assert.NotEqual(CombatSpellAction.DrainSpell, below.Action);
+
+        // At/above cost → drain fires as before.
+        CombatSpellDecision ok = sut.Choose(settings, DrainCtx(mana: 25, manaCostOf: cost));
+        Assert.Equal(CombatSpellAction.DrainSpell, ok.Action);
     }
 
     [Fact]

@@ -2069,7 +2069,15 @@ public sealed class AppServices
         {
             if (Spellbook.ClassNumber < 1) return;
             IReadOnlyList<string> learned = Spellbook.ObtainedNames;
-            p.LearnedSpells = learned.Count > 0 ? new List<string>(learned) : null;
+            // Only persist when we actually have names. Never overwrite a populated
+            // saved set with null just because the live obtained set is transiently
+            // empty — the immediate save that runs right after a profile-schema
+            // migration fires before the game-data set is active and the first
+            // `spells` poll, so ObtainedNames is momentarily empty; the old code
+            // wrote null there and wiped the learned set on upgrade (report
+            // paradigm-20260820-055007). A genuine reroll-to-zero clears via its own
+            // explicit path, not this passive save.
+            if (learned.Count > 0) p.LearnedSpells = new List<string>(learned);
         };
 
         Stats.ScreenParsed += snapshot =>
@@ -2112,10 +2120,13 @@ public sealed class AppServices
             // which ApplyStatScreenMax ignores.
             Player.ApplyStatScreenMax(p.LastKnownStats?.MaxHits ?? 0, p.LastKnownStats?.MaxMana ?? 0);
             SeedSpellbook(p.LastKnownStats);
-            // Restore the learned checkmarks now the class's available list is
-            // built. Resolves by name against Available, so entries the current
-            // class can't learn (a cross-set carryover) are harmlessly dropped.
-            if (learned is not null) Spellbook.SetObtainedByNames(learned);
+            // Restore the learned checkmarks. Seed the names AUTHORITATIVELY (not
+            // resolve-and-drop): profile load can run before the game-data set is
+            // active (Available still empty), where SetObtainedByNames would drop
+            // everything and the ensuing migration save would persist the wipe
+            // (report paradigm-20260820-055007). The numbers re-derive on the
+            // ActiveSetChanged reseed once Available is built.
+            if (learned is not null) Spellbook.SeedObtainedNames(learned);
         };
         // Persist + restore the last-known carry weight across sessions.
         // Encumbrance only changes in the realm, so the value the client last saw
@@ -3262,6 +3273,10 @@ public sealed class AppServices
         // via the live spellbook. Combat-tab spells keep their own
         // MinManaPerCast threshold and aren't gated here.
         CastDirector.SetManaCostLookup(Spellbook.ManaCostOf);
+        // Combat chooser affordability floor — same cost source, so an attack/drain
+        // spell whose slot has MinManaPerCast=0 still won't be cast below its real
+        // mana cost (report paradigm-20260820-082741).
+        Combat.SetSpellManaCost(Spellbook.ManaCostOf);
         // Auto-Bless auto-engine gate — when off, the Buffing category is
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));
@@ -4026,6 +4041,12 @@ public sealed class AppServices
         {
             Cash.OnRoomObserved();
             AutoGetItems.OnRoomObserved();
+            // AutoSearch defers its per-room search "until combat clears" the same way;
+            // without this it never fires the deferred `sea` and the Search gate sticks
+            // held, wedging the walker on "waiting — searching the room" when combat
+            // ended via the idle-stall watchdog rather than a clean room re-display
+            // (report paradigm-20260820-090254).
+            AutoSearch.OnRoomObserved();
         };
 
         // The force-clear is optimistic (a resync CR re-display re-confirms a beat
@@ -4223,9 +4244,16 @@ public sealed class AppServices
             isEnabled: () => ReadAutoModeFlag(d => d.AutoSearch),
             isDemandActive: () =>
                 PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
-            hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
+            // Probe THIS room's live roster (not CombatTracker.HasEngageableHostiles —
+            // the sticky cross-room gate, which stays asserted while combat winds down
+            // on a left-behind target and made AutoSearch skip empty rooms; report
+            // paradigm-20260820-090736).
+            hasEngageableHostiles: () => Combat.HasEngageableIn(RoomClassifier.Current),
             hasGetEngineArmed: () =>
                 ReadAutoModeFlag(d => d.AutoGetItems) || ReadAutoModeFlag(d => d.AutoGetCash),
+            // Don't `sea` a transit room the player has already queued past — search
+            // only where movement settles (RoomTracker's pending-move queue is empty).
+            hasQueuedMoves: () => RoomTracker.HasQueuedMoves,
             coordinator: MovementCoordinator,
             log: Log);
 
@@ -4238,10 +4266,14 @@ public sealed class AppServices
         // Drop the stale queue / ground snapshot when we actually change rooms.
         RoomTracker.StateChanged += t =>
         {
-            if (t.NewRoom is null) return;
-            if (t.PreviousRoom is not null
+            // Same-room refresh (resync CR re-display) — not a genuine change; skip.
+            if (t.NewRoom is not null && t.PreviousRoom is not null
              && t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
-            AutoSearch.OnRoomChanged();
+            // AutoSearch hears every genuine change INCLUDING a null room (death →
+            // respawn-pending), so it can key its owed search and clear a search
+            // deferred in the room we died in (report paradigm-20260820-090736).
+            AutoSearch.OnRoomChanged(t.NewRoom?.Key);
+            if (t.NewRoom is null) return;   // the other engines have nothing to do on death
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();
             Cash.OnRoomChanged();

@@ -51,6 +51,12 @@ public sealed class RoomTracker
     private readonly RoomGraphManager _graph;
     private readonly LogService? _log;
     private readonly ConcurrentQueue<PendingMove> _pending = new();
+
+    // True while one or more move commands are on the wire awaiting their room
+    // confirm — the player/engine hasn't settled in the current room yet. AutoSearch
+    // reads this so a queued burst (n;e;n) doesn't try to `sea` transit rooms it has
+    // already passed; the search fires only in the room movement actually settles in.
+    public bool HasQueuedMoves => !_pending.IsEmpty;
     private readonly LinkedList<HistoryEntry> _history = new();
     private readonly List<DirectionDto> _recentSteps = new();
     // The room the buffered replay trail is anchored at — where we stood when the FIRST

@@ -121,13 +121,16 @@ public sealed class AilmentSyncEngine : IDisposable
 
         foreach ((MessageFlags flag, string token, WaitReason reason, bool telepathWait) in Ailments)
         {
-            // Held is the lone non-toggle: it announces bare '.@held' (on only)
-            // and its leader-pause release rides @ok. The curable four ride a
-            // paired '.@X on' / '.@X off' toggle so the receiver can clear the
-            // chip on the matching 'off' without witnessing a cure — the case
-            // that broke the reported stuck-blind chip (blindness wore off with
-            // no cure line, and no @ok because its @wait was ignored).
-            bool paired = flag != MessageFlags.MovementPrevented;
+            // Every ailment — held included — rides a paired '.@X on' / '.@X off'
+            // broadcast toggle, so a receiver clears the party-window chip on the
+            // matching 'off' regardless of who observed it and without witnessing a
+            // cure. Held used to announce bare '.@held' (on only) and lean on @ok for
+            // the clear, but @ok is directed to the leader (and never sent when the
+            // held member IS the leader) and never actually cleared the Held chip, so
+            // the badge stuck forever (reports paradigm-20260820-122200 / -153540 /
+            // -130600). A bare '.@held' from an older client still reads as "on" on
+            // the receiver, so this stays backward-compatible.
+            bool paired = true;
             if (added.HasFlag(flag))
             {
                 bool announced = ShouldAnnounce(flag, spells, inParty);
@@ -153,8 +156,9 @@ public sealed class AilmentSyncEngine : IDisposable
             }
             else if (removed.HasFlag(flag))
             {
-                // Paired off-signal — only when we announced the on (so the
-                // room actually set a chip to clear), and never for held.
+                // Paired off-signal — only when we announced the on (so the room
+                // actually set a chip to clear). Now fires for held too, which is
+                // what finally clears the party-window HELD badge on every observer.
                 if (paired && _announcedFlags.HasFlag(flag))
                     Say(token + " off");
                 _announcedFlags &= ~flag;

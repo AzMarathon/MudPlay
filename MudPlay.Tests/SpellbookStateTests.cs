@@ -162,6 +162,47 @@ public sealed class SpellbookStateTests : IDisposable
         Assert.Equal(new[] { "starlight", "high arc" }, book.ObtainedNames);
     }
 
+    // Report paradigm-20260820-055007 (learned spells lost on upgrade): profile load
+    // can run before the game-data set is active, so Available is empty and no
+    // persisted name resolves to a number yet. SetObtainedByNames would drop every
+    // name here — then the immediate post-migration Save writes an empty set and the
+    // learned list is gone. SeedObtainedNames keeps the names as the source of truth;
+    // the numbers re-derive on the next Refresh/Reseed once Available exists.
+    [Fact]
+    public void SeedObtainedNames_BeforeAvailableResolves_RetainsNames_RefreshResolvesNumbers()
+    {
+        SpellbookState book = New().book;
+        Assert.Empty(book.Available);                       // set not active yet
+
+        book.SeedObtainedNames(new[] { "starlight", "high arc" });
+
+        // Names retained even though nothing resolved to a number (Available empty).
+        Assert.Equal(2, book.ObtainedNames.Count);
+        Assert.Contains("starlight", book.ObtainedNames);
+        Assert.Contains("high arc", book.ObtainedNames);
+        Assert.Equal(0, book.ObtainedCount);                // numbers unresolved
+        Assert.False(book.IsObtained(100));
+
+        // Once the set is active, the numbers re-derive from the retained names.
+        book.Refresh(classNumber: 12, level: 5);            // Mage
+        Assert.True(book.IsObtained(100));
+        Assert.True(book.IsObtained(101));
+        Assert.Equal(2, book.ObtainedCount);
+        Assert.Equal(new[] { "starlight", "high arc" }, book.ObtainedNames);
+    }
+
+    [Fact]
+    public void SetObtainedByNames_BeforeAvailableResolves_DropsNames()
+    {
+        // The contrast that pins WHY profile load must Seed, not Set: the
+        // resolve-required setter drops everything while Available is empty.
+        SpellbookState book = New().book;
+        Assert.Empty(book.Available);
+
+        book.SetObtainedByNames(new[] { "starlight", "high arc" });
+        Assert.Empty(book.ObtainedNames);
+    }
+
     private void WriteRenumberSet(string root, string setName, int mageClass, int starNum, int highNum)
     {
         string dir = Path.Combine(root, setName);
