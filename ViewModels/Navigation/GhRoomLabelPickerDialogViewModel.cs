@@ -138,6 +138,9 @@ public sealed partial class GhRoomLabelPickerDialogViewModel : ObservableObject,
 
     public string RoomLabel { get; }
 
+    // Window + header title, e.g. "Set 1/384 Back Room, Gypsy Trainer as Roomba Room".
+    public string DialogTitle { get; }
+
     public ObservableCollection<GhRuleEditRowViewModel> Rules { get; } = new();
 
     [ObservableProperty] private bool _isCatchAll;
@@ -147,6 +150,9 @@ public sealed partial class GhRoomLabelPickerDialogViewModel : ObservableObject,
         RoomLabel = roomLabel;
         _map = map;
         _room = room;
+        DialogTitle = string.IsNullOrWhiteSpace(roomLabel)
+            ? $"Set {map}/{room} as Roomba Room"
+            : $"Set {map}/{room} {roomLabel} as Roomba Room";
         _isCatchAll = existing?.IsCatchAll ?? false;
 
         if (existing is { Rules.Count: > 0 })

@@ -247,8 +247,9 @@ public partial class App : Application
                 MudPlay.ViewModels.Navigation.WaypointActionEditDialogViewModel,
                 MudPlay.Views.Navigation.WaypointActionEditDialog>();
 
-            // Map right-click → "Label as GH room…" → Roomba Mode's rule-list
-            // editor for that room (category/slot rules + catch-all flag).
+            // Map right-click "Toggle: Roomba Room" (or the tab's Add Room box) →
+            // Roomba Mode's rule-list editor for that room (category/slot rules +
+            // catch-all flag).
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.Navigation.GhRoomLabelPickerDialogViewModel,
                 MudPlay.Views.Navigation.GhRoomLabelPickerDialog>();

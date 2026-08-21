@@ -16,12 +16,14 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid Margin="22" RowDefinitions="Auto,Auto,*,Auto">
+    <!-- MaxWidth keeps the tab from forcing the workshop window ultra-wide: without
+         it the wrapping instructions text measures at infinite width. -->
+    <Grid Margin="22" MaxWidth="900" RowDefinitions="Auto,Auto,*,Auto">
 
         <!-- Header: instructions + live phase readout. -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,8">
             <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" TextWrapping="Wrap"
-                       Text="Right-click destination rooms on the map and choose 'Label as GH room…' to assign their sort rules, then Start here (label at least 2 rooms). Roomba walks the circuit once to scan every room, then moves misfiled floor items to their labeled room in the fewest trips. Tick 'Search rooms for hidden items' to also 'sea' each room. Double-click a room below to see its current contents; open 'Roomba Log' for the full move record and summary."/>
+                       Text="Right-click a destination room on the map and choose 'Toggle: Roomba Room' to add it (right-click again to remove it), or type a map/room number below and click Add Room. Assign each room's sort rules, then Start (label at least 2 rooms). Roomba scans the circuit once, moves misfiled floor items to their labeled room in the fewest trips, then scans once more. Tick 'Search rooms for hidden items' to also 'sea' each room. Double-click a room below to see its current contents; open 'Roomba Log' for the full move record and summary."/>
             <TextBlock Text="{Binding PhaseText}"
                        Foreground="{StaticResource ChromeFgBrush}"
                        FontWeight="SemiBold"/>
@@ -35,21 +37,25 @@
                        IsVisible="{Binding CompletionSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
         </StackPanel>
 
-        <!-- Action buttons + hidden-search tuning -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
-            <Button Content="Start Sweep" Command="{Binding StartCommand}" IsEnabled="{Binding !IsRunning}"/>
-            <Button Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}"/>
-            <Button Content="Roomba Log" Command="{Binding OpenRoombaLogCommand}"/>
+        <!-- Action buttons + add-room + hidden-search tuning (WrapPanel so a narrow
+             window wraps the controls instead of forcing the tab wider). -->
+        <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="Start Sweep" Command="{Binding StartCommand}" IsEnabled="{Binding !IsRunning}" Margin="0,0,6,6"/>
+            <Button Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}" Margin="0,0,6,6"/>
+            <Button Content="Roomba Log" Command="{Binding OpenRoombaLogCommand}" Margin="0,0,6,6"/>
+            <TextBox Text="{Binding AddRoomInput}" PlaceholderText="map/room" Width="100"
+                     VerticalAlignment="Center" Margin="12,0,6,6"/>
+            <Button Content="Add Room" Command="{Binding AddRoomCommand}" IsEnabled="{Binding !IsRunning}" Margin="0,0,6,6"/>
             <CheckBox Content="Search rooms for hidden items"
                       IsChecked="{Binding SearchForHidden}"
                       IsEnabled="{Binding !IsRunning}"
-                      VerticalAlignment="Center" Margin="12,0,0,0"
+                      VerticalAlignment="Center" Margin="12,0,6,6"
                       ToolTip.Tip="Off: sort only items visible on the floor. On: send `sea` in each room during recon to reveal and sort hidden items too."/>
-            <TextBlock Classes="FieldLabel" Text="Searches per room" VerticalAlignment="Center" Margin="12,0,0,0"
+            <TextBlock Classes="FieldLabel" Text="Searches per room" VerticalAlignment="Center" Margin="6,0,6,6"
                        IsEnabled="{Binding SearchesEditable}"/>
             <NumericUpDown Value="{Binding SearchesPerRoom}" Minimum="1" Maximum="20" Increment="1"
-                           Width="100" FormatString="0" IsEnabled="{Binding SearchesEditable}"/>
-        </StackPanel>
+                           Width="100" FormatString="0" IsEnabled="{Binding SearchesEditable}" Margin="0,0,0,6"/>
+        </WrapPanel>
 
         <!-- Labeled rooms grid (double-click a row → its current contents below) -->
         <DataGrid Grid.Row="2"

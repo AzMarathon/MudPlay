@@ -95,6 +95,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnStashChanged();
         _services.Bosses.Changed += RefreshBossRooms;
         RefreshBossRooms();
+        _services.GhRoomLabels.Changed += RefreshGhRooms;
+        RefreshGhRooms();
         RefreshTrainerRooms();   // trainers come from game data; refreshed on set swap via OnGraphReloaded
         _services.AutoLair.MarkedChanged += OnAutoLairMarkedChanged;
         _services.AutoLair.ActiveChanged += OnAutoLairActiveChanged;
@@ -170,6 +172,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Movement.AvoidedChanged -= OnAvoidedChanged;
         _services.Movement.StashChanged   -= OnStashChanged;
         _services.Bosses.Changed -= RefreshBossRooms;
+        _services.GhRoomLabels.Changed -= RefreshGhRooms;
         _services.AutoLair.MarkedChanged -= OnAutoLairMarkedChanged;
         _services.AutoLair.ActiveChanged -= OnAutoLairActiveChanged;
         _services.AutoLair.PhaseChanged  -= OnAutoLairPhaseChanged;
@@ -524,6 +527,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         TrainerRooms = rooms;
     }
 
+    // Rebuild the Roomba-room marker set from the label store (map robot glyphs).
+    private void RefreshGhRooms()
+    {
+        HashSet<RoomKey> rooms = new();
+        foreach (Models.Profile.GhRoomLabel label in _services.GhRoomLabels.Labels)
+            rooms.Add(new RoomKey(label.Map, label.Room));
+        GhRooms = rooms;
+    }
+
     // Death does a clean stop of every engine (same as the Stop button), which
     // clears the walker's own destination. Drop the UI's armed walk-to target too
     // so a later Run can't re-send us to a stale destination (the room we just
@@ -863,6 +875,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // StashRooms property — each room renders with a gold outline. Refreshed
     // on OnStashChanged.
     [ObservableProperty] private IReadOnlySet<RoomKey>? _stashRooms;
+
+    // Rooms labeled for Roomba Mode. Bound to MapControl.GhRooms — each renders a
+    // robot-head marker. Refreshed by RefreshGhRooms on GhRoomLabelStore.Changed.
+    [ObservableProperty] private IReadOnlySet<RoomKey>? _ghRooms;
 
     [ObservableProperty] private IReadOnlyDictionary<RoomKey, int>? _loopSequenceNumbers;
     [ObservableProperty] private IReadOnlySet<RoomKey>? _autoLairRooms;
@@ -2044,7 +2060,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ContextIsAvoided));
         OnPropertyChanged(nameof(ContextIsStash));
         OnPropertyChanged(nameof(ContextIsFavorite));
-        OnPropertyChanged(nameof(ContextHasGhLabel));
         RebuildContextTeleports(value);
         RebuildContextFloorMoves(value);
     }
@@ -2053,31 +2068,24 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public bool ContextIsStash   => ContextRoomKey is { } k && _services.Movement.IsStash(k);
     public bool ContextIsFavorite => ContextRoomKey is { } k && _services.Favorites.IsFavorite(k);
 
-    // True when the context room already has a Roomba Mode GH label.
-    public bool ContextHasGhLabel =>
-        ContextRoomKey is { } k && _services.GhRoomLabels.TryGetLabel(k, out _);
-
-    // Right-click → "Label as GH room…". Opens the ItemType (+ optional
-    // subtype) picker and writes the result through GhRoomLabelStore.
+    // Right-click → single "Toggle: Roomba Room". If the room is already a Roomba
+    // room, remove it; otherwise open the rule picker to add it. One menu entry does
+    // both — there's no separate "clear" item. The map robot marker refreshes off
+    // GhRoomLabelStore.Changed (RefreshGhRooms).
     [RelayCommand]
-    private async Task OpenGhRoomLabelPickerAsync()
+    private async Task ToggleContextGhRoomAsync()
     {
         if (ContextRoomKey is not { } k) return;
-        _services.GhRoomLabels.TryGetLabel(k, out Models.Profile.GhRoomLabel existing);
+        if (_services.GhRoomLabels.TryGetLabel(k, out Models.Profile.GhRoomLabel existing))
+        {
+            _services.GhRoomLabels.ClearLabel(k);
+            return;
+        }
         GhRoomLabelPickerDialogViewModel vm = new(ContextRoomName, k.Map, k.Room, existing);
         Models.Profile.GhRoomLabel? result = await _services.Dialogs
             .OpenWindowAsync<GhRoomLabelPickerDialogViewModel, Models.Profile.GhRoomLabel?>(vm);
         if (result is null) return;   // cancelled
         _services.GhRoomLabels.SetLabel(k, result.Rules, result.IsCatchAll);
-        OnPropertyChanged(nameof(ContextHasGhLabel));
-    }
-
-    [RelayCommand]
-    private void ClearContextGhLabel()
-    {
-        if (ContextRoomKey is not { } k) return;
-        _services.GhRoomLabels.ClearLabel(k);
-        OnPropertyChanged(nameof(ContextHasGhLabel));
     }
 
     // ----- "Use Teleport" (right-click a CMD/teleport room) ----------

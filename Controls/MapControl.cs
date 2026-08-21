@@ -117,6 +117,11 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlySet<RoomKey>?> StashRoomsProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(StashRooms));
 
+    // Rooms the user labeled for Roomba Mode (GH sorting). Rendered with a small
+    // robot-head marker so a labeled destination reads at a glance.
+    public static readonly StyledProperty<IReadOnlySet<RoomKey>?> GhRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(GhRooms));
+
     public static readonly StyledProperty<IReadOnlyDictionary<RoomKey, int>?> LoopSequenceNumbersProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyDictionary<RoomKey, int>?>(nameof(LoopSequenceNumbers));
 
@@ -299,6 +304,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(StashRoomsProperty);
         set => SetValue(StashRoomsProperty, value);
+    }
+
+    public IReadOnlySet<RoomKey>? GhRooms
+    {
+        get => GetValue(GhRoomsProperty);
+        set => SetValue(GhRoomsProperty, value);
     }
 
     public IReadOnlyDictionary<RoomKey, int>? LoopSequenceNumbers
@@ -779,7 +790,7 @@ public sealed class MapControl : Control
             HighlightShopsProperty, SpellModeProperty,
             WalkPathProperty, LoopPathProperty, LoopBuilderPathProperty, LoopBuilderWaypointsProperty,
             AutoLairWaypointsProperty, AutoLairApproachPathProperty,
-            LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, LoopSequenceNumbersProperty,
+            LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, GhRoomsProperty, LoopSequenceNumbersProperty,
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
             PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
             BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty,
@@ -1214,6 +1225,9 @@ public sealed class MapControl : Control
             if (StashRooms is not null && StashRooms.Contains(kvp.Value))
                 DrawStashX(context, cell);
 
+            if (GhRooms is not null && GhRooms.Contains(kvp.Value))
+                DrawRobotIcon(context, cell);
+
             if (DeathRooms is not null && DeathRooms.Contains(kvp.Value))
                 DrawSkull(context, cell);
 
@@ -1610,6 +1624,36 @@ public sealed class MapControl : Control
         Point bottomRight = new(cell.Right - inset, cell.Bottom - inset);
         ctx.DrawLine(pen, topLeft, bottomRight);
         ctx.DrawLine(pen, topRight, bottomLeft);
+    }
+
+    // A tiny robot head marking a room the user labeled for Roomba Mode — antenna,
+    // rounded head, two eyes. Cyan so it reads distinctly against the red avoid and
+    // gold stash crosses. Vector primitives (no emoji glyph) so it renders at any
+    // zoom on any font.
+    private static readonly IBrush RobotFillBrush = new SolidColorBrush(Color.Parse("#FF7FE0FF"));
+    private static readonly IPen   RobotRimPen    = new Pen(new SolidColorBrush(Color.Parse("#FF10384A")), 1.0);
+    private static readonly IBrush RobotEyeBrush  = new SolidColorBrush(Color.Parse("#FF10384A"));
+
+    private static void DrawRobotIcon(DrawingContext ctx, Rect cell)
+    {
+        double s = Math.Max(cell.Width * 0.42, 4.0);
+        double cxm = cell.X + cell.Width / 2.0;
+        double cym = cell.Y + cell.Height / 2.0;
+
+        double hw = s * 0.5, hh = s * 0.42;
+        Rect head = new(cxm - hw, cym - hh + s * 0.08, hw * 2, hh * 2);
+        ctx.DrawRectangle(RobotFillBrush, RobotRimPen, new RoundedRect(head, s * 0.14));
+
+        // Antenna: stalk + tip above the head.
+        double ax = cxm, ayBase = head.Y, ayTip = head.Y - s * 0.30;
+        ctx.DrawLine(RobotRimPen, new Point(ax, ayBase), new Point(ax, ayTip));
+        ctx.DrawEllipse(RobotFillBrush, RobotRimPen, new Point(ax, ayTip), s * 0.10, s * 0.10);
+
+        // Two eyes.
+        double eyeR = Math.Max(s * 0.09, 0.8);
+        double eyeY = head.Y + head.Height * 0.45;
+        ctx.DrawEllipse(RobotEyeBrush, null, new Point(head.X + head.Width * 0.32, eyeY), eyeR, eyeR);
+        ctx.DrawEllipse(RobotEyeBrush, null, new Point(head.X + head.Width * 0.68, eyeY), eyeR, eyeR);
     }
 
     // A small bone-white skull marking a room that still holds an un-recovered

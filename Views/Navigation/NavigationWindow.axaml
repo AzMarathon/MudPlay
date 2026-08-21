@@ -640,6 +640,7 @@
                                  LoopApproachPreviewPath="{Binding LoopApproachPreviewPath}"
                                  AvoidedRooms="{Binding AvoidedRooms}"
                                  StashRooms="{Binding StashRooms}"
+                                 GhRooms="{Binding GhRooms}"
                                  LoopSequenceNumbers="{Binding LoopSequenceNumbers}"
                                  AutoLairRooms="{Binding AutoLairRooms}"
                                  AutoLairWaypoints="{Binding AutoLairMarkedKeys}"
@@ -744,11 +745,8 @@
                                   Command="{Binding ToggleContextRoomAvoidedCommand}"/>
                         <MenuItem Header="Toggle: Stash room"
                                   Command="{Binding ToggleContextRoomStashCommand}"/>
-                        <MenuItem Header="Label as GH room…"
-                                  Command="{Binding OpenGhRoomLabelPickerCommand}"/>
-                        <MenuItem Header="Clear GH label"
-                                  Command="{Binding ClearContextGhLabelCommand}"
-                                  IsVisible="{Binding ContextHasGhLabel}"/>
+                        <MenuItem Header="Toggle: Roomba Room"
+                                  Command="{Binding ToggleContextGhRoomCommand}"/>
                         <!-- Auto-lair marking moved into the top-right
                              "Lair mode" toggle: enter the mode, click
                              rooms on the map to add / remove markers,

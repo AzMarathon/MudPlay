@@ -1,21 +1,24 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.ViewModels.Navigation;
 using MudPlay.Views;
 using MudPlay.Views.CharacterWorkshop;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// GH MANAGEMENT section — Roomba Mode's control surface. Lists the character's
-// labeled gang-house rooms (right-click "Label as GH room…" on the map is the
-// editor; this tab reviews + removes and starts/stops the sweep) with a live
-// per-room Status, a phase readout, and a double-click room-inventory view. The
-// per-move record + end-of-run summary live in the separate Roomba Log window.
+// ROOMBA section — Roomba Mode's control surface. Lists the character's labeled
+// gang-house rooms (add via the map's "Toggle: Roomba Room" right-click or this
+// tab's Add Room box; this tab reviews + removes and starts/stops the sweep) with
+// a live per-room Status, a phase readout, and a double-click room-inventory view.
+// The per-move record + end-of-run summary live in the separate Roomba Log window.
 public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewModel
 {
     private readonly GhRoomLabelStore _labels;
@@ -25,7 +28,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private RoombaLogWindow? _logWindow;
 
     public override string Id => "ghmanagement";
-    public override string Title => "GH Management";
+    public override string Title => "Roomba";
     public override Control View => _view ??= new GhManagementSectionView { DataContext = this };
 
     public ObservableCollection<GhRoomLabelRowViewModel> Rooms { get; } = new();
@@ -45,6 +48,10 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     // final recon pass). Null title keeps the detail panel hidden.
     [ObservableProperty] private string? _roomContentsTitle;
     [ObservableProperty] private string _roomContentsText = string.Empty;
+
+    // "Add room" input — a map/room number the user types to label a room without
+    // going to the map (e.g. "1/384").
+    [ObservableProperty] private string _addRoomInput = string.Empty;
 
     // The per-room hidden-search count, editable here. _suppressSettingsWrite guards
     // the constructor's initial seed from the change hook that persists user edits.
@@ -152,7 +159,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     }
 
     [RelayCommand]
-    private void Stop() => _sweep.Stop("user stop from GH Management tab");
+    private void Stop() => _sweep.Stop("user stop from Roomba tab");
 
     // Invoked from the view's double-tap handler: show the room's current floor
     // inventory (from the final recon pass) in the detail panel.
@@ -172,6 +179,40 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         _logWindow = new RoombaLogWindow { DataContext = new RoombaLogViewModel(_sweep) };
         _logWindow.Closed += (_, _) => _logWindow = null;
         _logWindow.Show();
+    }
+
+    // Add a room to the Roomba list by typed map/room number — opens the same rule
+    // picker the map right-click uses, so the user still sets the room's sort rules.
+    [RelayCommand]
+    private async Task AddRoomAsync()
+    {
+        if (!TryParseRoomKey(AddRoomInput, out RoomKey key))
+        {
+            StartHint = "Enter a room as map/number, e.g. 1/384.";
+            return;
+        }
+        string? name = _roomGraph.GetRoom(key)?.Name;
+        _labels.TryGetLabel(key, out GhRoomLabel existing);
+        GhRoomLabelPickerDialogViewModel picker = new(name ?? string.Empty, key.Map, key.Room, existing);
+        GhRoomLabel? result = await AppServices.Current.Dialogs
+            .OpenWindowAsync<GhRoomLabelPickerDialogViewModel, GhRoomLabel?>(picker);
+        if (result is null) return;   // cancelled
+        _labels.SetLabel(key, result.Rules, result.IsCatchAll);
+        AddRoomInput = string.Empty;
+        StartHint = null;
+    }
+
+    // Parse "map/room" (also accepting space, comma, dash, or colon separators).
+    private static bool TryParseRoomKey(string input, out RoomKey key)
+    {
+        key = default;
+        if (string.IsNullOrWhiteSpace(input)) return false;
+        string[] parts = input.Split(new[] { '/', ' ', ',', '-', ':' },
+            System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries);
+        if (parts.Length != 2) return false;
+        if (!int.TryParse(parts[0], out int map) || !int.TryParse(parts[1], out int room)) return false;
+        key = new RoomKey(map, room);
+        return true;
     }
 
     public override void Dispose()
