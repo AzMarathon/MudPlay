@@ -29,14 +29,47 @@ internal static class GhSurveyMerger
 
         void Add(string entry)
         {
-            (int count, string parsedName) = CountedCommand.SplitLeadingCount(entry);
-            string canonical = itemNames.FindByName(entry) is int number
-                ? itemNames.GetName(number) ?? parsedName
-                : parsedName;
+            (int count, string _) = CountedCommand.SplitLeadingCount(entry);
+            string canonical = Canonical(entry, itemNames);
             if (merged.TryGetValue(canonical, out var prior))
                 merged[canonical] = (Math.Max(prior.Count, count), prior.Name);
             else
                 merged[canonical] = (count, canonical);
         }
+    }
+
+    // Merge only the items in `incoming` that AREN'T already on the room's
+    // pre-search visible floor — the true hidden delta a `sea` revealed. A `sea`
+    // re-lists the whole floor (visible + hidden), so merging the raw post-search
+    // snapshot would tag plainly-visible items as hidden and make Sorting waste a
+    // needless search before grabbing them. `visibleByRoom` holds what was on the
+    // floor before any search; anything on it is excluded here.
+    public static void MergeHiddenDelta(
+        Dictionary<RoomKey, List<string>> hiddenByRoom,
+        RoomKey room,
+        IReadOnlyList<string> incoming,
+        Dictionary<RoomKey, List<string>> visibleByRoom,
+        ItemNameStore itemNames)
+    {
+        HashSet<string> visibleNames = new(StringComparer.OrdinalIgnoreCase);
+        if (visibleByRoom.TryGetValue(room, out List<string>? visible))
+            foreach (string entry in visible) visibleNames.Add(Canonical(entry, itemNames));
+
+        List<string> delta = new();
+        foreach (string entry in incoming)
+            if (!visibleNames.Contains(Canonical(entry, itemNames)))
+                delta.Add(entry);
+
+        if (delta.Count > 0) Merge(hiddenByRoom, room, delta, itemNames);
+    }
+
+    // The canonical (game-data) name an observed floor entry resolves to, falling
+    // back to the count-stripped raw text when the name isn't in the item table.
+    private static string Canonical(string entry, ItemNameStore itemNames)
+    {
+        (int _, string parsedName) = CountedCommand.SplitLeadingCount(entry);
+        return itemNames.FindByName(entry) is int number
+            ? itemNames.GetName(number) ?? parsedName
+            : parsedName;
     }
 }

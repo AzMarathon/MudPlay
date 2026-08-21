@@ -61,7 +61,7 @@ public sealed class GhSweepManager : IDisposable
 
     public enum SweepPhase { Idle, Reconning, Sorting }
 
-    private sealed class PendingMove
+    private sealed class PendingSortMove
     {
         public required RoomKey From { get; init; }
         public required RoomKey To { get; init; }
@@ -72,7 +72,7 @@ public sealed class GhSweepManager : IDisposable
         public bool Delivered { get; set; }
     }
 
-    private sealed record InventoryExpectation(PendingMove Move, bool WasDrop, int BeforeCount);
+    private sealed record InventoryExpectation(PendingSortMove Move, bool WasDrop, int BeforeCount);
 
     private readonly GhRoomLabelStore _labels;
     private readonly LoopRunner _loopRunner;
@@ -99,10 +99,10 @@ public sealed class GhSweepManager : IDisposable
     private bool _reroutingSortLoop;
 
     // The room a Sorting-phase dispatch is currently outstanding for, and
-    // exactly which PendingMoves it dispatched there — DispatchSettleTimeout
+    // exactly which PendingSortMoves it dispatched there — DispatchSettleTimeout
     // releases the hold while leaving unconfirmed work queued for the next lap.
     private RoomKey? _dispatchRoom;
-    private readonly List<PendingMove> _outstandingDispatch = new();
+    private readonly List<PendingSortMove> _outstandingDispatch = new();
     private readonly List<InventoryExpectation> _inventoryExpectations = new();
     private bool _awaitingInventoryVerification;
 
@@ -131,14 +131,14 @@ public sealed class GhSweepManager : IDisposable
     private readonly Dictionary<RoomKey, List<string>> _observedByRoom = new();
     private readonly Dictionary<RoomKey, List<string>> _visibleByRoom = new();
     private readonly Dictionary<RoomKey, List<string>> _hiddenByRoom = new();
-    private readonly List<PendingMove> _pending = new();
+    private readonly List<PendingSortMove> _pending = new();
     private readonly List<GhSweepItemFound> _leftInPlace = new();
     private readonly List<GhSweepMove> _movedSoFar = new();
     private readonly List<GhSweepStranded> _stranded = new();
 
     // Sorting-phase lap-progress tracking is diagnostic only. Queued work is
     // never discarded because a lap made no progress or because an arbitrary
-    // lap count was reached: a normal sweep ends only after every PendingMove
+    // lap count was reached: a normal sweep ends only after every PendingSortMove
     // has a verified delivery. The user can still stop it manually, and a
     // genuine LoopRunner failure remains an abnormal terminal condition.
     private int _sortLapCount;
@@ -404,15 +404,15 @@ public sealed class GhSweepManager : IDisposable
         SweepCompleted?.Invoke(report);
     }
 
-    // Moves any still-carried, undelivered PendingMove into _stranded (a
+    // Moves any still-carried, undelivered PendingSortMove into _stranded (a
     // manual drop is needed for these — the sweep is ending with them in the
     // player's pack) and builds the outgoing report. Shared by every sweep
     // exit path (Stop, an external LoopRunner ending, FinishSweep's normal
     // completion) so none of them can silently drop what's currently carried.
     private GhSweepReport BuildFinalReport()
     {
-        List<PendingMove> stillCarried = _pending.Where(p => p.IsCarried && !p.Delivered).ToList();
-        foreach (PendingMove move in stillCarried)
+        List<PendingSortMove> stillCarried = _pending.Where(p => p.IsCarried && !p.Delivered).ToList();
+        foreach (PendingSortMove move in stillCarried)
             _stranded.Add(new GhSweepStranded(move.From, move.To, move.ItemName));
 
         if (stillCarried.Count > 0)
@@ -442,7 +442,7 @@ public sealed class GhSweepManager : IDisposable
     // machine stay separately verifiable. Only ever reads _observedByRoom
     // (GroundItemTracker-sourced) — never InventoryManager's carried
     // snapshot, so a pre-existing carried item can never become a
-    // PendingMove.
+    // PendingSortMove.
     private void BuildSortQueue()
     {
         _pending.Clear();
@@ -457,7 +457,7 @@ public sealed class GhSweepManager : IDisposable
         foreach (GhPendingMove move in moves)
         {
             bool requiresSearch = WasObservedHidden(move.From, move.ItemName);
-            _pending.Add(new PendingMove
+            _pending.Add(new PendingSortMove
             {
                 From = move.From,
                 To = move.To,
@@ -495,9 +495,13 @@ public sealed class GhSweepManager : IDisposable
         if (_reconSearchRoom is { } searchRoom && searchRoom.Equals(current.Key)
             && _reconSearchesSent > 0)
         {
-            GhSurveyMerger.Merge(_hiddenByRoom, current.Key, snapshot, _itemNames);
-            foreach (string item in snapshot)
-                _log?.Info(LogCategory, $"recon observed at {current.Key}: {item} (hidden)");
+            // A `sea` re-lists the WHOLE floor (visible + hidden), so only tag the
+            // items that weren't already on the pre-search visible floor as hidden —
+            // otherwise a plainly-visible item gets flagged RequiresSearch and Sorting
+            // wastes a needless `sea` before grabbing it.
+            GhSurveyMerger.MergeHiddenDelta(_hiddenByRoom, current.Key, snapshot, _visibleByRoom, _itemNames);
+            if (_hiddenByRoom.TryGetValue(current.Key, out List<string>? hiddenHere) && hiddenHere.Count > 0)
+                _log?.Info(LogCategory, $"recon revealed hidden at {current.Key}: {string.Join(", ", hiddenHere)}");
         }
         else
         {
@@ -686,9 +690,9 @@ public sealed class GhSweepManager : IDisposable
             return;
         }
 
-        List<PendingMove> drops = _pending
+        List<PendingSortMove> drops = _pending
             .Where(m => !m.Delivered && m.IsCarried && m.To.Equals(room)).ToList();
-        List<PendingMove> gets = _pending
+        List<PendingSortMove> gets = _pending
             .Where(m => !m.Delivered && !m.IsCarried && m.From.Equals(room)).ToList();
 
         // Roomba deliberately does not pre-emptively skip pickups based on the
@@ -709,18 +713,18 @@ public sealed class GhSweepManager : IDisposable
         _outstandingDispatch.AddRange(drops);
         _outstandingDispatch.AddRange(gets);
         _inventoryExpectations.Clear();
-        foreach (PendingMove move in drops)
+        foreach (PendingSortMove move in drops)
             _inventoryExpectations.Add(new InventoryExpectation(
                 move, WasDrop: true, CountInventoryItem(move.ItemName)));
-        foreach (PendingMove move in gets)
+        foreach (PendingSortMove move in gets)
             _inventoryExpectations.Add(new InventoryExpectation(
                 move, WasDrop: false, CountInventoryItem(move.ItemName)));
         _dispatchSettle.Stop();
         _dispatchSettle.Start();
 
-        foreach (PendingMove move in drops)
+        foreach (PendingSortMove move in drops)
             CountedCommand.Emit(Send, "drop", move.Count, move.ItemName, _isParadigm());
-        foreach (PendingMove move in gets)
+        foreach (PendingSortMove move in gets)
             CountedCommand.Emit(Send, "get", move.Count, move.ItemName, _isParadigm());
     }
 
@@ -770,7 +774,7 @@ public sealed class GhSweepManager : IDisposable
         if (_tracker.State.CurrentRoom is not { } current) return;
         if (_dispatchRoom is not { } dispatchRoom || !dispatchRoom.Equals(current.Key)) return;
 
-        PendingMove? match = isDrop
+        PendingSortMove? match = isDrop
             ? _outstandingDispatch.FirstOrDefault(p => !p.Delivered && p.IsCarried
                                          && SameItem(p.ItemName, name))
             : _outstandingDispatch.FirstOrDefault(p => !p.Delivered && !p.IsCarried
@@ -835,7 +839,7 @@ public sealed class GhSweepManager : IDisposable
         _awaitingInventoryVerification = false;
         foreach (InventoryExpectation expectation in _inventoryExpectations)
         {
-            PendingMove move = expectation.Move;
+            PendingSortMove move = expectation.Move;
             int after = CountInventoryItem(move.ItemName);
             if (!expectation.WasDrop && move.IsCarried)
             {
@@ -998,7 +1002,7 @@ public sealed class GhSweepManager : IDisposable
 
     private void FinishSweep()
     {
-        // Normal completion reaches this only after every PendingMove is
+        // Normal completion reaches this only after every PendingSortMove is
         // Delivered. Stop() and an external LoopRunner failure build their own
         // abnormal report, including anything still carried as Stranded.
         GhSweepReport report = BuildFinalReport();
