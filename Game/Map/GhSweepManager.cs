@@ -483,6 +483,7 @@ public sealed class GhSweepManager : IDisposable
         Phase = SweepPhase.Sorting;
         CaptureCarryBaseline();
         BuildSortQueue();
+        SplitOversizedMoves();
         StrandUnmovableItems();
         _log?.Info(LogCategory,
             $"recon complete; sort queue: {_pending.Count} move(s), {_leftInPlace.Count} left in place");
@@ -546,24 +547,64 @@ public sealed class GhSweepManager : IDisposable
             ? int.MaxValue
             : Math.Max(0, WorkingBudget() - LedgerCarriedWeight());
 
-    // Strand any not-yet-carried queued item too heavy to EVER carry — its own
-    // weight exceeds the whole working budget, so no delivery could free enough
-    // room. Without this the planner would never route to it (no headroom is ever
-    // enough) and the sweep could never finish. Surfaced under LeftInPlace so the
-    // user sees what was skipped. No-op when there's no weight data to judge by.
-    // Runs at sort start and after each resync (a resync can shrink the budget).
+    // Split a queued stack heavier than the whole working budget into budget-sized
+    // sub-moves, so a big pile (e.g. 140 torches) is carried across several trips
+    // instead of stranded wholesale. Splits only when a SINGLE unit still fits the
+    // budget — a unit too heavy to carry at all is left to StrandUnmovableItems.
+    // No-op without weight data. Runs at sort start and after each resync (a shrunk
+    // budget can require finer splitting; already-carried moves are left alone).
+    private void SplitOversizedMoves()
+    {
+        int workingBudget = WorkingBudget();
+        if (workingBudget == int.MaxValue) return;
+
+        foreach (PendingSortMove move in _pending.ToList())
+        {
+            if (move.IsCarried || move.Delivered) continue;
+            int unitWeight = _itemNames.WeightOf(move.ItemName) ?? 0;
+            if (unitWeight <= 0 || unitWeight > workingBudget) continue; // no data, or a single unit can't be carried
+            int perTrip = workingBudget / unitWeight;                    // >= 1 units that fit an empty pack
+            if (move.Count <= perTrip) continue;                         // already a single trip
+
+            IReadOnlyList<int> loads = GhSortPlanner.SplitIntoTrips(move.Count, perTrip);
+            int index = _pending.IndexOf(move);
+            _pending.RemoveAt(index);                                    // replace the stack with its trip-sized chunks
+            for (int i = 0; i < loads.Count; i++)
+            {
+                _pending.Insert(index + i, new PendingSortMove
+                {
+                    From = move.From,
+                    To = move.To,
+                    ItemName = move.ItemName,
+                    Count = loads[i],
+                    RequiresSearch = move.RequiresSearch,
+                });
+            }
+            _log?.Info(LogCategory,
+                $"split {move.Count}x {move.ItemName} ({move.Count * unitWeight} > budget {workingBudget}) "
+                + $"into {loads.Count} trips of up to {perTrip}: {move.From} -> {move.To}");
+        }
+    }
+
+    // Strand any not-yet-carried queued item whose SINGLE unit is too heavy to ever
+    // carry — its own weight exceeds the whole working budget, so no delivery could
+    // free enough room and no split could help. (Oversized stacks of a movable unit
+    // are handled by SplitOversizedMoves, which runs first.) Without this the planner
+    // would never route to it and the sweep could never finish. Surfaced under
+    // LeftInPlace so the user sees what was skipped. No-op without weight data.
     private void StrandUnmovableItems()
     {
         int workingBudget = WorkingBudget();
         if (workingBudget == int.MaxValue) return;
         foreach (PendingSortMove move in _pending
-            .Where(m => !m.Delivered && !m.IsCarried && MoveWeight(m) > workingBudget).ToList())
+            .Where(m => !m.Delivered && !m.IsCarried
+                        && (_itemNames.WeightOf(m.ItemName) ?? 0) > workingBudget).ToList())
         {
             _pending.Remove(move);
             _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.TooHeavy));
             _log?.Info(LogCategory,
-                $"too heavy to carry ({MoveWeight(move)} > working budget {workingBudget}): "
-                + $"leaving {move.Count}x {move.ItemName} at {move.From}");
+                $"too heavy to carry (unit weight {_itemNames.WeightOf(move.ItemName)} > working budget "
+                + $"{workingBudget}): leaving {move.Count}x {move.ItemName} at {move.From}");
         }
     }
 
@@ -1085,7 +1126,9 @@ public sealed class GhSweepManager : IDisposable
         _inventorySettle.Stop();
         _awaitingInventoryResync = false;
         ResyncCarryBaseline();
-        // A corrected (smaller) working budget can reveal an item is now unmovable.
+        // A corrected (smaller) budget can require finer stack splitting and can
+        // reveal a single unit is now unmovable.
+        SplitOversizedMoves();
         StrandUnmovableItems();
         PhaseChanged?.Invoke();
         ContinueAfterTransaction("inventory resync complete");
@@ -1139,10 +1182,14 @@ public sealed class GhSweepManager : IDisposable
             .Select(p => p.To)
             .Distinct()
             .ToList();
+        // A room is a candidate source as long as its LIGHTEST pending move fits the
+        // headroom (not its whole sum) — so a room holding a big split stack, or a
+        // mix of heavy and light items, is still visited to grab what does fit.
+        // FittingGetsAt then picks up every move at the room that fits on arrival.
         List<GhSortPlanner.PickupRoom> pickups = _pending
             .Where(p => !p.IsCarried && !p.Delivered)
             .GroupBy(p => p.From)
-            .Select(g => new GhSortPlanner.PickupRoom(g.Key, g.Sum(MoveWeight)))
+            .Select(g => new GhSortPlanner.PickupRoom(g.Key, g.Min(MoveWeight)))
             .ToList();
 
         RoomKey? target = GhSortPlanner.NextTarget(

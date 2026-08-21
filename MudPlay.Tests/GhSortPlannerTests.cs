@@ -98,4 +98,30 @@ public sealed class GhSortPlannerTests
             distancesFromHere: Dist((5, 3), (2, 3)));   // equal distance
         Assert.Equal(R(2), next);            // lower room number wins
     }
+
+    [Fact]
+    public void SplitIntoTrips_ChunksWithRemainderLast()
+    {
+        // 140 torches, 77 fit per trip → 77 + 63 across two trips (not stranded).
+        Assert.Equal(new[] { 77, 63 }, GhSortPlanner.SplitIntoTrips(140, 77));
+    }
+
+    [Fact]
+    public void SplitIntoTrips_ExactMultiple_HasNoRemainder()
+    {
+        Assert.Equal(new[] { 3, 3, 3 }, GhSortPlanner.SplitIntoTrips(9, 3));
+    }
+
+    [Fact]
+    public void SplitIntoTrips_FitsOneTrip_IsSingleLoad()
+    {
+        Assert.Equal(new[] { 5 }, GhSortPlanner.SplitIntoTrips(5, 10));
+    }
+
+    [Fact]
+    public void SplitIntoTrips_NonPositive_IsEmpty()
+    {
+        Assert.Empty(GhSortPlanner.SplitIntoTrips(0, 10));
+        Assert.Empty(GhSortPlanner.SplitIntoTrips(10, 0));
+    }
 }

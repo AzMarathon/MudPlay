@@ -16,9 +16,9 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Roomba sorting tags items found only by recon search as `(hidden)` and re-searches only those sources before pickup; visible items are grabbed immediately with no post-recon search delay
 - Roomba sorts in the fewest trips between rooms: it fills the pack toward your carry limit (batching several items bound for the same or nearby rooms) before delivering, picking the nearest source that still fits, then the nearest carried destination
 - Roomba tracks every pickup and drop against each item's weight and plans on that ledger without re-reading inventory after each move — it trusts the game's `You took` / `You dropped` lines, only re-checking (`i`) on a `You cannot carry that much!` refusal and then re-planning
-- Roomba leaves an item too heavy to ever carry within your working capacity in place (surfaced as *too heavy to carry*) instead of looping on it forever; Left-in-place entries now say why — no matching room, gone by sort time, or too heavy
+- Roomba splits an oversized item stack (a pile heavier than your whole working carry budget, e.g. 140 torches) across multiple trips instead of abandoning it — only a single item too heavy to carry at all is left in place (surfaced as *too heavy to carry*); Left-in-place entries now say why — no matching room, gone by sort time, or too heavy
 - Roomba no longer stops after a no-progress lap or a fixed number of sorting laps; queued work stays live until every movable item is delivered (or the user stops the run)
-- bug reports addressed: paradigm-20260816-172828, paradigm-20260816-175656, paradigm-20260816-191039, paradigm-20260816-193418
+- bug reports addressed: paradigm-20260816-172828, paradigm-20260816-175656, paradigm-20260816-191039, paradigm-20260816-193418, paradigm-20260821-135158
 
 ## 3.23.0
 
