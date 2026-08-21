@@ -700,6 +700,25 @@ categorically excluded from being picked up/moved, and should never disturb item
 already carrying before automation started (a stronger, simpler guarantee that also protects a worn
 emblem without needing to specifically recognize it).
 
+### `get` failure responses *([CONFIRMED] 2026-08-21, user — screenshots)*
+
+A `get <item>` that can't succeed replies with one of two shapes:
+
+- **`You don't see <echo> here.`** — the item isn't on the floor (gone: decayed, or another
+  player took it). `<echo>` is whatever text followed `get`, echoed back verbatim (`get rod` →
+  `You don't see rod here.`; `get warhorn` → `You don't see warhorn here.`), so it can be a bare
+  word rather than the item's full name.
+- **`Syntax: GET [Amount] [Currency]`** — the game misparsed the item name as a **currency** get
+  (observed for some multi-word names, e.g. `get silk cape`). No item name is echoed. Retrying the
+  same name can't help.
+
+**Client implication (Roomba Mode):** a `get` failure means retrying that pickup is futile — the
+item is gone or un-gettable by that name. Correlate the failure to the outstanding get by the
+echoed word (falling back to the sole pending get when the echo doesn't cleanly match, or for the
+name-less currency error), then drop the item from the sort queue instead of retrying it every lap.
+Do **not** name-match the failure line's word to decide the item is gone — match by "we just sent a
+`get` and got a failure back," since the echo can be truncated or absent.
+
 ## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
 
 Two distinct spawn mechanisms, and they respawn on completely different rules. This matters

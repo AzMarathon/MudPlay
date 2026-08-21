@@ -27,6 +27,12 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     public ObservableCollection<GhRoomLabelRowViewModel> Rooms { get; } = new();
 
     [ObservableProperty] private string _phaseText = "Idle";
+    // A refused Start's reason (null = none), shown as a warning line on the tab so
+    // clicking Start with too few labeled rooms (etc.) isn't a silent no-op.
+    [ObservableProperty] private string? _startHint;
+    // One-line "sweep finished" banner set from the SweepCompleted report; cleared
+    // when the next sweep starts.
+    [ObservableProperty] private string? _completionSummary;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchesEditable))]
     private bool _isRunning;
@@ -71,6 +77,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
 
         _labels.Changed += RebuildRooms;
         _sweep.PhaseChanged += RefreshStatus;
+        _sweep.SweepCompleted += OnSweepCompleted;
         RebuildRooms();
         RefreshStatus();
     }
@@ -128,7 +135,18 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     }
 
     [RelayCommand]
-    private void Start() => _sweep.Start();
+    private void Start()
+    {
+        if (_sweep.Start()) { StartHint = null; CompletionSummary = null; }
+        else StartHint = _sweep.LastStartError;
+    }
+
+    // SweepCompleted fires on the UI thread (GhSweepManager is UI-thread-confined),
+    // so setting the observable directly is safe.
+    private void OnSweepCompleted(GhSweepReport report)
+        => CompletionSummary =
+            $"Sweep complete — {report.Moved.Count} moved, {report.LeftInPlace.Count} left in place, "
+            + $"{report.Stranded.Count} still carried.";
 
     [RelayCommand]
     private void Stop() => _sweep.Stop("user stop from GH Management tab");
@@ -137,5 +155,6 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     {
         _labels.Changed -= RebuildRooms;
         _sweep.PhaseChanged -= RefreshStatus;
+        _sweep.SweepCompleted -= OnSweepCompleted;
     }
 }

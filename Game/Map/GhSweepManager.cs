@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Avalonia.Threading;
 using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 
 namespace MudPlay.Game.Map;
 
@@ -56,6 +58,19 @@ public sealed class GhSweepManager : IDisposable
     // isn't cut short — only fires once confirmations stop arriving entirely.
     private static readonly TimeSpan DispatchSettleTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan InventoryVerificationTimeout = TimeSpan.FromSeconds(3);
+
+    // A dispatched `get` can come back as a failure this manager must act on
+    // rather than retry forever. Two shapes, both confirmed live (GAME_MECHANICS.md):
+    //   "You don't see <echo> here."  — the item is genuinely gone (recon's snapshot
+    //       went stale, or another player took it); <echo> is whatever followed `get`.
+    //   "Syntax: GET [Amount] [Currency]" — the game misparsed the item name as a
+    //       currency get; retrying the same name can't help.
+    private static readonly Regex GetNotHereRegex = new(
+        @"^\s*You don't see (?<echo>.+?) here\.\s*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex GetCurrencySyntaxRegex = new(
+        @"^\s*Syntax:\s*GET\s*\[Amount\]\s*\[Currency\]",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private const string SweepLoopName = "Roomba sweep";
 
@@ -148,6 +163,11 @@ public sealed class GhSweepManager : IDisposable
     public SweepPhase Phase { get; private set; } = SweepPhase.Idle;
     public int CompletedReconLaps { get; private set; }
 
+    // Why the last Start() attempt refused (null when the last Start succeeded or
+    // none has run). The GH Management tab shows this so a refused Start isn't a
+    // silent no-op — the common one being fewer than 2 labeled rooms on first run.
+    public string? LastStartError { get; private set; }
+
     public IReadOnlyList<GhSweepMove> MovedSoFar => _movedSoFar;
     public IReadOnlyList<GhSweepItemFound> LeftInPlace => _leftInPlace;
     public IReadOnlyList<GhSweepStranded> Stranded => _stranded;
@@ -210,6 +230,9 @@ public sealed class GhSweepManager : IDisposable
 
         _getSub = _router.Subscribe(KnownPatterns.PlayerGets, OnGetLine);
         _dropSub = _router.Subscribe(KnownPatterns.PlayerDrops, OnDropLine);
+        // Raw-line hook for the get-FAILURE shapes (no KnownPattern for them);
+        // gated hard on an outstanding get so a manual `get` failure isn't ours.
+        _router.LineDispatched += OnLineForGetFailure;
         _loopRunner.Event += OnLoopEvent;
         if (_inventory is not null)
             _inventory.FullInventoryParsed += OnFullInventoryParsed;
@@ -241,19 +264,23 @@ public sealed class GhSweepManager : IDisposable
     // loop / auto-lair) is active.
     public bool Start()
     {
+        LastStartError = null;
         if (Phase != SweepPhase.Idle)
         {
+            LastStartError = "A sweep is already running.";
             _log?.Warn(LogCategory, "start refused: a sweep is already running");
             return false;
         }
         if (_labels.Labels.Count < 2)
         {
+            LastStartError = "Label at least 2 gang-house rooms on the map to start a sweep.";
             _log?.Warn(LogCategory,
                 $"start refused: {_labels.Labels.Count} labeled room(s); need at least 2");
             return false;
         }
         if (_isOtherEngineBusy())
         {
+            LastStartError = "Another movement engine (a walk, loop, or auto-lair) is running — stop it first.";
             _log?.Warn(LogCategory, "start refused: another movement engine is active");
             return false;
         }
@@ -299,6 +326,7 @@ public sealed class GhSweepManager : IDisposable
         Loop loop = new(SweepLoopName, orderedRooms);
         if (!_loopRunner.Start(loop))
         {
+            LastStartError = "Couldn't plot a walkable route through the labeled rooms.";
             _log?.Warn(LogCategory, "start refused: LoopRunner declined the sweep circuit");
             return false;
         }
@@ -728,13 +756,14 @@ public sealed class GhSweepManager : IDisposable
             CountedCommand.Emit(Send, "get", move.Count, move.ItemName, _isParadigm());
     }
 
-    // A dispatched get/drop can fail without any confirmation line this
-    // manager parses ("You don't see X here." for a get that's genuinely no
-    // longer there — recon's own snapshot can be stale by the time Sorting
-    // gets around to it, or the item was picked up by someone else). Without
-    // this, _outstandingDispatch never reaches zero and GhSortGate holds
-    // forever. Resets on every real confirmation (ResolveConfirm), so it only
-    // fires once confirmations genuinely stop arriving.
+    // Backstop for a dispatched get/drop that fails without a confirmation line
+    // this manager recognizes — a DROP that doesn't land, or a get-failure shape
+    // other than the "You don't see X here." / currency-syntax ones
+    // OnLineForGetFailure strands explicitly. Without this, _outstandingDispatch
+    // never reaches zero and GhSortGate holds forever. Resets on every real
+    // confirmation (ResolveConfirm), so it only fires once confirmations genuinely
+    // stop arriving. Note: unlike a parsed get-failure, this LEAVES the moves
+    // queued for a later-lap retry (a transient block, not a proven-gone item).
     private void OnDispatchSettleElapsed()
     {
         _dispatchSettle.Stop();
@@ -807,6 +836,60 @@ public sealed class GhSweepManager : IDisposable
             // A real confirmation landed — a genuine failure (no confirmation
             // line at all) is what OnDispatchSettleElapsed exists to catch, so
             // keep pushing the deadline out while commands are still resolving.
+            _dispatchSettle.Stop();
+            _dispatchSettle.Start();
+        }
+    }
+
+    // Detect a get FAILURE for one of our outstanding pickups and drop that item
+    // from the queue instead of retrying it forever — the "a vanished item pins an
+    // otherwise-finished sweep in an endless get loop" case. Gated on an
+    // outstanding get so a manual/other `get` failure is never misattributed.
+    private void OnLineForGetFailure(LineExtractor.EmittedLine line)
+    {
+        if (Phase != SweepPhase.Sorting) return;
+        List<PendingSortMove> gets = _outstandingDispatch
+            .Where(m => !m.IsCarried && !m.Delivered).ToList();
+        if (gets.Count == 0) return;
+
+        Match notHere = GetNotHereRegex.Match(line.Text);
+        if (notHere.Success)
+        {
+            // Match the echoed word to an outstanding get; fall back to the sole
+            // outstanding get when the game reshaped or truncated the echo.
+            string echo = notHere.Groups["echo"].Value;
+            PendingSortMove? move = gets.FirstOrDefault(m => SameItem(m.ItemName, echo))
+                                    ?? (gets.Count == 1 ? gets[0] : null);
+            if (move is not null)
+                StrandFailedGet(move, $"game reports it isn't there (\"{line.Text.Trim()}\")");
+            return;
+        }
+        // The currency-syntax misparse names no item, so only attribute it when a
+        // single get is outstanding; retrying the same name can't help either way.
+        if (GetCurrencySyntaxRegex.IsMatch(line.Text) && gets.Count == 1)
+            StrandFailedGet(gets[0], "game misparsed the get as a currency command");
+    }
+
+    // Remove a failed get from the queue (so it stops being retried and no longer
+    // blocks completion), record it under LeftInPlace, and advance the dispatch
+    // exactly as a real confirmation would.
+    private void StrandFailedGet(PendingSortMove move, string reason)
+    {
+        _pending.Remove(move);
+        _outstandingDispatch.Remove(move);
+        _inventoryExpectations.RemoveAll(e => ReferenceEquals(e.Move, move));
+        _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName));
+        _log?.Info(LogCategory,
+            $"get failed for {move.ItemName} at {move.From} — {reason}; not retrying");
+        PhaseChanged?.Invoke();
+        if (_outstandingDispatch.Count == 0)
+        {
+            _dispatchSettle.Stop();
+            _dispatchRoom = null;
+            BeginInventoryVerification("get failure resolved dispatch");
+        }
+        else
+        {
             _dispatchSettle.Stop();
             _dispatchSettle.Start();
         }
@@ -1066,6 +1149,7 @@ public sealed class GhSweepManager : IDisposable
         _inventorySettle.Stop();
         _getSub.Dispose();
         _dropSub.Dispose();
+        _router.LineDispatched -= OnLineForGetFailure;
         _loopRunner.Event -= OnLoopEvent;
         _groundItems.SurveyUpdated -= OnSurveyUpdated;
         if (_inventory is not null)

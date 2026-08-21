@@ -21,10 +21,18 @@
         <!-- Header: instructions + live phase readout. -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,8">
             <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" TextWrapping="Wrap"
-                       Text="Right-click destination rooms on the map and choose 'Label as GH room…' to assign their sort rules, then Start here. Recon walks the circuit and sorts the floor items it sees; tick 'Search rooms for hidden items' to also 'sea' each room and sort what's hidden. It verifies inventory after each pickup/drop, then takes the shortest route to the next drop or pickup."/>
+                       Text="Right-click destination rooms on the map and choose 'Label as GH room…' to assign their sort rules, then Start here (label at least 2 rooms). Recon walks the circuit and sorts the floor items it sees; tick 'Search rooms for hidden items' to also 'sea' each room and sort what's hidden. It verifies inventory after each pickup/drop, then takes the shortest route to the next drop or pickup."/>
             <TextBlock Text="{Binding PhaseText}"
                        Foreground="{StaticResource ChromeFgBrush}"
                        FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding StartHint}"
+                       Foreground="{StaticResource SeverityWarnBrush}"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding StartHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            <TextBlock Text="{Binding CompletionSummary}"
+                       Foreground="{StaticResource SeverityInfoBrush}"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding CompletionSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
         </StackPanel>
 
         <!-- Action buttons + recon tuning -->
