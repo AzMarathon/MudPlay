@@ -141,6 +141,14 @@ public sealed class ItemNameStore
     public int? ItemTypeOf(int number)
         => _itemTypeByNumber.TryGetValue(number, out int t) ? t : null;
 
+    // Subtype accessors (WeaponType / ArmourType / Worn). The int? here means "id
+    // known?" — NOT "is this the right category?": the population loop writes an
+    // entry for every parsed item and a missing MDB column reads as 0, so a KNOWN
+    // id always returns a non-null code (0 = the first enum value), and only an
+    // unknown id returns null. So a caller must gate on ItemType before reading a
+    // subtype — GhItemClassifier.Matches does, comparing WeaponType only for a
+    // Weapon and ArmourType only for Armour — or it would compare 0 cross-category.
+
     // WeaponType (MDB subtype code, meaningful only when ItemType is Weapon)
     // of the item id, or null when the id isn't in the active set. Used by
     // Roomba Mode's room-label matching.

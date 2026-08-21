@@ -4,6 +4,7 @@
 > **Version 3.24.0**
 > - New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: configurable recon laps (default 2) walk the circuit, then misfiled items are carried to their labeled destination. Built on the same loop engine every saved Loop runs on
 > - Roomba: a per-character **Search rooms for hidden items** toggle (off by default) — normally it sorts only the visible floor; tick it to also `sea` each room and sort what's hidden
+> - Roomba: an item that's **gone by sort time** is dropped from the queue instead of retried forever; a refused **Start** now says why on the tab; a finished sweep prints `[Ganghouse roomba complete]`
 > - GH room labels support multiple rules per room (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail), including equip-slot rules (Neck / Wrist / Off-Hand / etc.) for jewelry-style rooms that aren't classified by material or weapon type, and an optional catch-all room for anything matching no explicit rule
 > - Item name resolution now also exposes WeaponType / ArmourType / Worn subtype, letting a GH room label narrow past the top-level category (e.g. "Weapons > 1H Blunt") or match by equip slot alone
 > - Roomba Mode never sweeps up a gang-house guard emblem as clutter, and only ever acts on items found on a GH room floor during its own recon — never anything already in your pack

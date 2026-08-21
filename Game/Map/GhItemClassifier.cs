@@ -11,9 +11,8 @@ namespace MudPlay.Game.Map;
 // reverse index (FindByName, already used by AppServices.IsKnownGroundItem
 // to resolve the same "You notice" wording) rather than a new item model —
 // the MDB import already carries ItemType / WeaponType / ArmourType / Worn
-// as real, populated columns.
-public readonly record struct GhItemClass(int ItemType, int? WeaponType, int? ArmourType, int? Worn);
-
+// as real, populated columns. (The GhItemClass facet struct it returns lives in
+// GhItemClass.cs.)
 public static class GhItemClassifier
 {
     // Classify a floor entry (e.g. "a long sword", "5 gold ring"), or null
