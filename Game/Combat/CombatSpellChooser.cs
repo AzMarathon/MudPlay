@@ -470,8 +470,16 @@ public sealed class CombatSpellChooser
     private static bool CastsOk(int? cap, int castsSoFar) =>
         cap is not { } c || castsSoFar < c;
 
-    private static bool ManaOk(CombatSpellSlot slot, in CombatSpellContext ctx, ThresholdMode mode) =>
-        ManaMeetsReserve(slot.MinManaPerCast, ctx.Mana, ctx.MaxMana, mode);
+    private static bool ManaOk(CombatSpellSlot slot, in CombatSpellContext ctx, ThresholdMode mode)
+    {
+        if (!ManaMeetsReserve(slot.MinManaPerCast, ctx.Mana, ctx.MaxMana, mode)) return false;
+        // Hard affordability floor: never pick a spell we can't actually pay for (the
+        // server silently no-ops a below-cost cast). Unknown cost never blocks — same
+        // convention as CastingDirector.IsAffordable.
+        if (slot.SpellName is { } code && ctx.ManaCostOf?.Invoke(code) is { } cost && ctx.Mana < cost)
+            return false;
+        return true;
+    }
 
     // Whether live MA meets a slot's per-cast mana reserve. In Percentage mode the
     // reserve is compared against the ROUNDED absolute equivalent — the exact value
@@ -591,4 +599,11 @@ public readonly record struct CombatSpellContext(
     // debuff tags on cast and checks for new (untagged) arrivals to decide a re-fire.
     // null when unwired (weapon-only context, tests), where the AoE degrades to
     // once-per-room.
-    IReadOnlyList<string>? RoomMobKeys = null);
+    IReadOnlyList<string>? RoomMobKeys = null,
+    // Resolves a spell's actual mana cost by cast-code (Spellbook.ManaCostOf). ManaOk
+    // uses it as a hard affordability floor beneath the slot's MinManaPerCast reserve:
+    // a MinManaPerCast of 0 means "no reserve", NOT "cast even when you can't afford
+    // it" — a below-cost cast is a silent no-op (report paradigm-20260820-082741, DTCH
+    // spammed at 5/13/20 mana vs its 25 cost). null (unwired / tests) → no cost floor,
+    // old behavior.
+    System.Func<string, int?>? ManaCostOf = null);

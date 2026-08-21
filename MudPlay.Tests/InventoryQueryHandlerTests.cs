@@ -275,23 +275,30 @@ public sealed class InventoryQueryHandlerTests
     }
 
     [Fact]
-    public void Inv_LongPack_CapsWithOverflowSummary()
+    public void Inv_LongPack_SplitsAcrossReplies_ReportsEveryItem_NoTruncation()
     {
         var (engine, _, lines, players, _, _) = Setup();
         SeedPlayer(players, "Bob", PlayerRemoteControls.QueryInventory);
-        // 40 padded item names blow past the pack budget; the reply must cap
-        // and summarise the remainder rather than emit a giant wire line.
-        string many = string.Join(", ", Enumerable.Range(1, 40).Select(i => $"a padded widget number {i}"));
-        Feed(lines, $"You are carrying {many}.");
+        // 40 padded item names blow past a single say's budget; the WHOLE pack must
+        // go out across multiple chunked replies rather than a "+N more" summary.
+        var items = Enumerable.Range(1, 40).Select(i => $"a padded widget number {i}").ToList();
+        Feed(lines, $"You are carrying {string.Join(", ", items)}.");
         Feed(lines, "Encumbrance:    36/2880  -  Light  [1%]");
 
         engine.DispatchForTests(Telepath("Bob", "@inv"));
 
-        string reply = Assert.Single(Replies(engine));
-        Assert.Contains("more, type i)", reply);
-        // Budget is 170 chars of item list; the whole reply stays well under a
-        // MajorMUD input line even after the "carrying: " label.
-        Assert.True(reply.Length < 200, $"reply too long ({reply.Length}): {reply}");
+        List<string> replies = Replies(engine);
+        Assert.True(replies.Count > 1, "a long pack should split across multiple replies");
+        // No truncation summary anywhere.
+        Assert.DoesNotContain(replies, r => r.Contains("more, type i)"));
+        // Every item appears across the replies, and each reply fits a say line.
+        string all = string.Join(" ", replies);
+        foreach (string item in items)
+            Assert.Contains(item, all);
+        foreach (string r in replies)
+            Assert.True(r.Length < 200, $"reply too long ({r.Length}): {r}");
+        // Split parts are labelled "carrying (i/N): …".
+        Assert.All(replies, r => Assert.StartsWith("carrying (", r));
     }
 
     // ----- @what -------------------------------------------------------

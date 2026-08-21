@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using MudPlay.Game.Health;
 using MudPlay.Models.GameData;
@@ -203,6 +204,18 @@ public sealed class CastingDirector : IDisposable
         _log = log;
 
         _state.PropertyChanged += OnStateChanged;
+        // React to a PARTY MEMBER's HP dropping, not just our own state / the combat
+        // tick. The party-heal picker reads each member's HpPercent, but that value
+        // is refreshed by the `par` poll on its own cadence — without watching it, a
+        // member falling below the heal threshold wasn't acted on until the next
+        // self-state change or round tick (report paradigm-20260820-122341: heal fired
+        // a full round late). Read-only on party state — no single-writer concern,
+        // same watch PartyVitalsWatcher already does.
+        if (_party is not null)
+        {
+            _party.Members.CollectionChanged += OnPartyMembersChanged;
+            foreach (PartyMember m in _party.Members) WatchMember(m);
+        }
         _cast.CastFailed += OnCastFailed;
         if (_conditions is not null)
         {
@@ -1448,11 +1461,51 @@ public sealed class CastingDirector : IDisposable
         return new CastCandidate(debuff.Spell, debuff.Target);
     }
 
+    // ----- Party-member HP watch (re-evaluate on a member's HpPercent change) ----
+
+    private readonly HashSet<PartyMember> _watchedMembers = new();
+
+    private void OnPartyMembersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems is not null) foreach (PartyMember m in e.OldItems) UnwatchMember(m);
+        if (e.NewItems is not null) foreach (PartyMember m in e.NewItems) WatchMember(m);
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (PartyMember m in _watchedMembers) m.PropertyChanged -= OnMemberPropertyChanged;
+            _watchedMembers.Clear();
+            if (_party is not null) foreach (PartyMember m in _party.Members) WatchMember(m);
+        }
+    }
+
+    private void WatchMember(PartyMember m)
+    {
+        if (_watchedMembers.Add(m)) m.PropertyChanged += OnMemberPropertyChanged;
+    }
+
+    private void UnwatchMember(PartyMember m)
+    {
+        if (_watchedMembers.Remove(m)) m.PropertyChanged -= OnMemberPropertyChanged;
+    }
+
+    private void OnMemberPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // A member's HP moved — re-run the cast pipeline so a party heal fires this
+        // round, not next. Evaluate() still honours the one-cast-per-round limit, so
+        // an already-spent between-round slot correctly defers to the next round.
+        if (e.PropertyName == nameof(PartyMember.HpPercent)) Evaluate();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         _state.PropertyChanged -= OnStateChanged;
+        if (_party is not null)
+        {
+            _party.Members.CollectionChanged -= OnPartyMembersChanged;
+            foreach (PartyMember m in _watchedMembers) m.PropertyChanged -= OnMemberPropertyChanged;
+            _watchedMembers.Clear();
+        }
         _cast.CastFailed -= OnCastFailed;
         if (_conditions is not null)
         {

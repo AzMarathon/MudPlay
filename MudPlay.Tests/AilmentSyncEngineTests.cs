@@ -209,14 +209,15 @@ public sealed class AilmentSyncEngineTests
 
         h.Feed("You cannot move!");
 
-        // .@held doubles as the "cure my hold" identifier; the leader-pause
-        // is driven by that say on the receiving side, so NO @wait telepath.
-        Assert.Equal(".@held\r", Assert.Single(h.Say));
+        // Held now rides the paired broadcast toggle like the curable four: '.@held on'
+        // on set (no @wait telepath — the leader-pause is driven by that say on the
+        // receiving side).
+        Assert.Equal(".@held on\r", Assert.Single(h.Say));
         Assert.Empty(h.Telepath);
     }
 
     [Fact]
-    public void Held_Cleared_SendsOk()
+    public void Held_Cleared_SaysOff_AndSendsOk()
     {
         using Harness h = new();
         SeedAll(h);
@@ -224,8 +225,11 @@ public sealed class AilmentSyncEngineTests
         h.Feed("You cannot move!");
         h.Feed("You can move again.");
 
-        // The silent Held reason still balances: @ok releases the say-driven
-        // pause on clear, even though no @wait was ever telepathed.
+        // The paired '.@held off' now broadcasts on clear — this is what finally
+        // clears the party-window HELD badge on every observer (reports
+        // paradigm-20260820-122200 / -153540). The @ok still balances the say-driven
+        // leader pause.
+        Assert.Equal(new[] { ".@held on\r", ".@held off\r" }, h.Say);
         Assert.Equal("/Leader @ok\r", Assert.Single(h.Telepath));
     }
 
