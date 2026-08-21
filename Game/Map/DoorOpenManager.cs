@@ -18,9 +18,11 @@ namespace MudPlay.Game.Map;
 //      meets the threshold).
 //   3) If only one verb is viable, use it. If neither is, fail
 //      immediately with DoorOpenResult.Failed("no viable verb").
-//   4) On verb failure (server "fails" line), retry up to the configured
-//      cap; if exhausted AND the other verb is viable, fall back to it;
-//      otherwise fail.
+//   4) On BASH failure ("fails" line): no cap — DoorPolicy only chose bash for a
+//      door this character can break, so keep swinging until it opens, pausing to
+//      rest to rest-max whenever HP falls to the rest trigger (bashing drains HP —
+//      see GAME_MECHANICS). On PICK failure: retry up to OtherSettings.MaxPickAttempts,
+//      then fall back to the other verb if viable, else fail.
 //   5) Bash success → Opened directly (bash both unlocks AND swings the
 //      door). Pick success → open <dir> → on "is now open" → Opened.
 //
@@ -33,12 +35,19 @@ public sealed class DoorOpenManager : IDisposable
 {
     private readonly MessageRouter _router;
     private readonly PlayerStats _stats;
-    private readonly Func<int> _maxBashProvider;
     private readonly Func<int> _maxPickProvider;
     private readonly Func<int> _maxBashStrengthProvider;
     private readonly Func<bool> _picklocksOverBashProvider;
     private readonly Func<int, string?> _itemNameLookup;
     private readonly Func<int, bool> _holdsKeyItem;
+    // Rest-interleave for bashing. Bashing a door drains HP (CONFIRMED mechanic,
+    // see GAME_MECHANICS), so a bashable door is bashed with rest breaks rather
+    // than a fixed attempt cap: _bashRestNeeded is true once HP has fallen to the
+    // rest-if-below trigger (pause bashing, let HealthManager rest), _bashRestRecovered
+    // true once it climbs back to rest-max (resume). Both null → no rest gating
+    // (tests / no wiring): bash proceeds uncapped without pausing.
+    private readonly Func<bool>? _bashRestNeeded;
+    private readonly Func<bool>? _bashRestRecovered;
     private readonly LogService? _log;
     private readonly IDisposable _bashOkSub;
     private readonly IDisposable _bashFailSub;
@@ -85,25 +94,26 @@ public sealed class DoorOpenManager : IDisposable
     public DoorOpenManager(
         MessageRouter router,
         PlayerStats stats,
-        Func<int> maxBashAttemptsProvider,
         Func<int> maxPickAttemptsProvider,
         Func<bool> picklocksOverBashProvider,
         Func<int, string?>? itemNameLookup = null,
         Func<int>? maxBashableStrengthProvider = null,
         Func<int, bool>? holdsKeyItem = null,
+        Func<bool>? bashRestNeeded = null,
+        Func<bool>? bashRestRecovered = null,
         LogService? log = null,
         Func<TimeSpan, Action, IDisposable>? scheduleDelay = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(stats);
-        ArgumentNullException.ThrowIfNull(maxBashAttemptsProvider);
         ArgumentNullException.ThrowIfNull(maxPickAttemptsProvider);
         ArgumentNullException.ThrowIfNull(picklocksOverBashProvider);
         _router = router;
         _stats = stats;
-        _maxBashProvider = maxBashAttemptsProvider;
         _maxPickProvider = maxPickAttemptsProvider;
         _picklocksOverBashProvider = picklocksOverBashProvider;
+        _bashRestNeeded = bashRestNeeded;
+        _bashRestRecovered = bashRestRecovered;
         // The per-set bash ceiling (MaxStrengthIndex). Absent it, fall back to the
         // conservative constant so plain-door tests can construct without game data.
         _maxBashStrengthProvider = maxBashableStrengthProvider
@@ -316,12 +326,49 @@ public sealed class DoorOpenManager : IDisposable
     private void SendVerb()
     {
         if (_current is not { } cur || _verb is null) return;
+
+        // Bashing drains HP — pause before a swing once HP has fallen to the rest
+        // trigger and let HealthManager rest to rest-max. NotifyHealthChanged (or the
+        // watchdog re-check) resumes once recovered. No attempt cap: DoorPolicy only
+        // chose bash for a door this character can break, so we keep swinging (with
+        // rest breaks) until it opens.
+        if (_verb == "bash" && _bashRestNeeded?.Invoke() == true)
+        {
+            _state = DoorState.WaitingBashRest;
+            _log?.Info("Door",
+                $"bash {cur.DirectionShort} paused for rest — HP at/below rest trigger.");
+            ArmWatchdog();   // periodic re-check in case a HP-change notification is missed
+            return;
+        }
+
         _verbAttempts++;
         _wire.Send($"{_verb} {cur.DirectionShort}");
-        int cap = _verb == "bash" ? _maxBashProvider() : _maxPickProvider();
-        _log?.Info("Door",
-            $"{_verb} {cur.DirectionShort} (attempt {_verbAttempts}/{cap}).");
+        if (_verb == "bash")
+            _log?.Info("Door", $"bash {cur.DirectionShort} (uncapped, attempt {_verbAttempts}).");
+        else
+            _log?.Info("Door",
+                $"pick {cur.DirectionShort} (attempt {_verbAttempts}/{_maxPickProvider()}).");
         ArmWatchdog();
+    }
+
+    // Recovery topped off during a bash rest-pause — resume swinging. Re-enters
+    // WaitingBash and sends the next bash (SendVerb re-checks the rest gate, now
+    // satisfied).
+    private void ResumeBashAfterRest()
+    {
+        if (_current is not { } cur || _state != DoorState.WaitingBashRest) return;
+        _log?.Info("Door", $"rest complete — resuming bash {cur.DirectionShort}.");
+        _state = DoorState.WaitingBash;
+        SendVerb();
+    }
+
+    // Live-HP change hook — AppServices subscribes PlayerState.Hp and calls this.
+    // While a bash is paused for rest, resume the moment HP climbs back to rest-max
+    // instead of waiting on the watchdog's periodic re-check. No-op otherwise.
+    public void NotifyHealthChanged()
+    {
+        if (_disposed || _state != DoorState.WaitingBashRest) return;
+        if (_bashRestRecovered?.Invoke() == true) ResumeBashAfterRest();
     }
 
     private void SendOpen()
@@ -359,13 +406,26 @@ public sealed class DoorOpenManager : IDisposable
         switch (_state)
         {
             case DoorState.WaitingBash:
-            case DoorState.WaitingPick:
-                int cap = _verb == "pick" ? _maxPickProvider() : _maxBashProvider();
+                // Uncapped — a lost bash response is just re-sent (SendVerb pauses
+                // for rest first when HP is low). No fall-back to pick.
                 _log?.Info("Door",
-                    $"{_verb} {cur.DirectionShort}: no response in {VerbResponseTimeout.TotalSeconds:0}s " +
+                    $"bash {cur.DirectionShort}: no response in {VerbResponseTimeout.TotalSeconds:0}s " +
+                    $"(attempt {_verbAttempts}) — treating as a miss, re-bashing.");
+                SendVerb();   // re-arms
+                return;
+            case DoorState.WaitingBashRest:
+                // Periodic recovery re-check while resting — resume the bash once HP
+                // has climbed back to rest-max, otherwise keep waiting.
+                if (_bashRestRecovered?.Invoke() == true) ResumeBashAfterRest();
+                else ArmWatchdog();
+                return;
+            case DoorState.WaitingPick:
+                int cap = _maxPickProvider();
+                _log?.Info("Door",
+                    $"pick {cur.DirectionShort}: no response in {VerbResponseTimeout.TotalSeconds:0}s " +
                     $"(attempt {_verbAttempts}/{cap}) — treating as a miss.");
                 if (_verbAttempts < cap) { SendVerb(); return; }   // re-arms
-                TryFallbackOrFail($"{_verb} timed out with no response");
+                TryFallbackOrFail("pick timed out with no response");
                 return;
             case DoorState.WaitingOpen:
             case DoorState.WaitingUseKey:
@@ -388,13 +448,10 @@ public sealed class DoorOpenManager : IDisposable
     {
         if (_state != DoorState.WaitingBash) return;
         if (_current is null) return;
-        int cap = _maxBashProvider();
-        if (_verbAttempts < cap)
-        {
-            SendVerb();
-            return;
-        }
-        TryFallbackOrFail("bash exhausted");
+        // A bashable door is bashed until it opens — no cap, no fall-back to pick.
+        // SendVerb pauses for rest first when HP is low, so the retries pace
+        // themselves around the rest cycle rather than a fixed attempt count.
+        SendVerb();
     }
 
     private void OnPickSuccess(MatchResult _)
@@ -449,6 +506,7 @@ public sealed class DoorOpenManager : IDisposable
         // Without this, the walker stalls indefinitely on the very
         // next door after a successful bash on the previous one.
         if (_state is DoorState.WaitingBash
+                   or DoorState.WaitingBashRest
                    or DoorState.WaitingPick
                    or DoorState.WaitingOpen
                    or DoorState.WaitingUseKey)
@@ -591,6 +649,9 @@ public sealed class DoorOpenManager : IDisposable
         SelectingVerb,
         // Sent bash <dir>; awaiting success/failure line.
         WaitingBash,
+        // Bashing paused mid-sequence: HP fell to the rest trigger, resting to
+        // rest-max before the next swing (NotifyHealthChanged / watchdog resumes).
+        WaitingBashRest,
         // Sent pick <dir>; awaiting success/failure line.
         WaitingPick,
         // Pick succeeded (or door was unlocked); sent open <dir>; awaiting opened line.

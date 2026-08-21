@@ -274,6 +274,32 @@ public partial class MainWindowViewModel : ObservableObject
     // disconnects, not auto-engines.
     [ObservableProperty] private bool _isDisableHangupsActive;
 
+    // Sprint Mode. A transient "just get me there" movement mode. While on:
+    // HealthManager never pauses movement to rest/heal-wait (still casts
+    // configured heal spells), and Auto-Combat / Get-Items / Search / Get-Cash
+    // are forced off (nothing to fight / loot / search for). It auto-turns-off
+    // — restoring exactly the engines it silenced — the instant a go-to walk
+    // arrives, a loop starts its next lap, or an auto-lair is about to enter the
+    // next lair; and manually turning any of those four engines back on ends it
+    // too. See OnIsSprintModeActiveChanged + the nav-event handlers. Persisted
+    // in Models.Profile.GeneralSettings.SprintMode, reseeded on profile load.
+    // Not part of IsAllAutoOff — it's a movement mode, not an auto-engine.
+    [ObservableProperty] private bool _isSprintModeActive;
+
+    // The auto-engines Sprint Mode forced off when it turned on — remembered so
+    // ending Sprint restores exactly those (and only those). Sprint forces off
+    // only engines that were ON, so one the user later re-enables by hand is
+    // never in this set and its state is preserved. Session-only, not persisted.
+    private bool _sprintTurnedOffCombat;
+    private bool _sprintTurnedOffGetItems;
+    private bool _sprintTurnedOffSearch;
+    private bool _sprintTurnedOffGetCash;
+
+    // True while Sprint is programmatically flipping those engines (force-off on
+    // start, restore on end), so their change handlers don't misread Sprint's
+    // own writes as a manual re-enable and recurse.
+    private bool _sprintDrivingEngines;
+
     // True when every wired auto-engine is off — drives the "Auto-All" master
     // toggle's depressed/checked state. Mirrors
     // Game.AutoModeController.AllWiredOff but computed from the live
@@ -350,11 +376,21 @@ public partial class MainWindowViewModel : ObservableObject
     public bool EngineActionIsLooping => !_autoLairOn &&  _loopRunning;
     public bool EngineActionIsLair    =>  _autoLairOn;
 
-    private void OnWalkerEngineEvent(Game.Map.WalkEvent _)
+    private void OnWalkerEngineEvent(Game.Map.WalkEvent e)
         => Dispatcher.UIThread.Post(() =>
         {
             _walkerState = AppServices.Current.Walker.State;
             RefreshEngineActionChip();
+            // A go-to walk arriving ends Sprint Mode (restoring the engines it
+            // silenced). Only a STANDALONE walk-to counts — during a loop or
+            // auto-lair the walker also fires Finished on each sub-path, and those
+            // are ended by the lap-boundary / pre-lair hooks instead. Guard on the
+            // live engine state, not cached flags, to avoid a stale-field race.
+            if (e.Kind == Game.Map.WalkEventKind.Finished
+                && IsSprintModeActive
+                && AppServices.Current.LoopRunner.State == Game.Map.LoopState.Idle
+                && !AppServices.Current.AutoLair.IsActive)
+                IsSprintModeActive = false;
         });
 
     private void OnLoopRunnerEngineEvent(Game.Map.LoopEvent e)
@@ -366,6 +402,15 @@ public partial class MainWindowViewModel : ObservableObject
             // event so the lap counter ticks over on RepeatStarted and the slot
             // clears on Stopped.
             RefreshLocationSlot();
+            // A loop moving from its walk-to-start INTO looping (ReachedFirstWaypoint)
+            // or wrapping into its next lap (RepeatStarted) ends Sprint Mode — you
+            // sprinted the leg that got you here; looping runs normally with the
+            // engines restored. Done BEFORE the base-modes reconcile below so base
+            // modes get the final word over Sprint's restore at a loop start.
+            if ((e.Kind == Game.Map.LoopEventKind.ReachedFirstWaypoint
+                 || e.Kind == Game.Map.LoopEventKind.RepeatStarted)
+                && IsSprintModeActive)
+                IsSprintModeActive = false;
             // Circuit reached its first waypoint (walk-to done, looping begins) —
             // settle the live auto-engines into the character's base modes. Fires
             // once per run (the event itself is one-shot), never on lap wraps.
@@ -390,6 +435,12 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnAutoLairPhaseChangedForBase(Game.Map.AutoLairPhase phase)
         => Dispatcher.UIThread.Post(() =>
         {
+            // About to step into the next lair — end Sprint so we cross the
+            // threshold with the engines (combat especially) restored and fight it
+            // normally. Sprint got us here fast; it doesn't enter the lair.
+            if (phase == Game.Map.AutoLairPhase.Entering && IsSprintModeActive)
+                IsSprintModeActive = false;
+
             if (phase != Game.Map.AutoLairPhase.Engaging) return;
             if (_autoLairBaseReconciled) return;
             _autoLairBaseReconciled = true;
@@ -1288,6 +1339,7 @@ public partial class MainWindowViewModel : ObservableObject
          && e.PropertyName != nameof(IsAutoHideActive)
          && e.PropertyName != nameof(IsAutoSearchActive)
          && e.PropertyName != nameof(IsDisableHangupsActive)
+         && e.PropertyName != nameof(IsSprintModeActive)
          && e.PropertyName != nameof(IsAllAutoOff)) return;
 
         foreach (ToolbarButtonItem row in ToolbarItems)
@@ -1310,6 +1362,9 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             case "ToggleDisableHangups":
                 row.IsActive = IsDisableHangupsActive;
+                break;
+            case "ToggleSprintMode":
+                row.IsActive = IsSprintModeActive;
                 break;
             case "ToggleAutoCombat":
                 row.IsActive = IsAutoCombatActive;
@@ -4558,6 +4613,13 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ToggleDisableHangups() => IsDisableHangupsActive = !IsDisableHangupsActive;
 
+    // Flip the live IsSprintModeActive bit (the partial OnXxxChanged hook
+    // persists it to GeneralSettings.SprintMode, forces/restores Auto Combat,
+    // and the toolbar IsActive badge follows). Bound from the toolbar /
+    // Action-menu / hotkey.
+    [RelayCommand]
+    private void ToggleSprintMode() => IsSprintModeActive = !IsSprintModeActive;
+
     // File-menu toggle for the app-level "reopen last profile on startup" setting.
     // Reads / writes GlobalSettings directly (it's global, not per-profile) so the
     // check state always reflects what startup will do; the getter needs no reseed.
@@ -4586,7 +4648,8 @@ public partial class MainWindowViewModel : ObservableObject
     // owner's ActiveFlags edge: the Confused / Held self-chips clear, their
     // ConfusionGate / HeldGate release, and the ailment @wait balances to @ok.
     // Then it sweeps the remaining self-row ailment chips so the party window
-    // shows a clean self row. Self-only — other members' state is untouched.
+    // shows a clean self row, and sweeps the ailment chips of EVERY party member
+    // (a stuck badge on another member, e.g. the leader, is the reported case).
     // Finally it force-clears combat state so a stuck Combat gate (stale roster
     // parking the walker "fighting" an empty room) releases and the Fighting chip
     // goes away — the conditions sweep alone never touched it.
@@ -4601,14 +4664,21 @@ public partial class MainWindowViewModel : ObservableObject
     {
         AppServices.Current.Conditions.ClearAll("reset");
 
+        // Clear the ailment chips for EVERY party member, not just self. A stuck
+        // HELD / ailment badge on another member (e.g. the leader) can't self-clear
+        // when that client never sent the matching off-signal, and Reset States is
+        // the manual escape hatch for it (report paradigm-20260820-122200). Reading
+        // the roster names and clearing by name is safe (SetMemberAilment normalises
+        // to given name); a member with no name is skipped.
         Game.PartyManager party = AppServices.Current.Party;
-        if (party.LocalCharacterName is { Length: > 0 } me)
+        foreach (Game.PartyMember m in party.State.Members)
         {
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Confused, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.MovementPrevented, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Poisoned, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Blinded, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Diseased, false);
+            if (string.IsNullOrWhiteSpace(m.Name)) continue;
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Confused, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.MovementPrevented, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Poisoned, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Blinded, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Diseased, false);
         }
 
         AppServices.Current.CombatTracker.ResetCombatState("Reset States (manual)");
@@ -4763,6 +4833,7 @@ public partial class MainWindowViewModel : ObservableObject
         // manual room re-display. Re-emit the current observation once the fight is
         // disengaged so every gate-holder re-evaluates together.
         if (!value) AppServices.Current.RoomClassifier?.ReemitCurrent();
+        MaybeEndSprintOnManualEngineEnable(value);
     }
 
     partial void OnIsAutoNukeActiveChanged(bool value)
@@ -4788,10 +4859,16 @@ public partial class MainWindowViewModel : ObservableObject
         => PersistAutoModeFlag("AutoLight", value, d => d.AutoLight = value);
 
     partial void OnIsAutoGetItemsActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
+    {
+        PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
+        MaybeEndSprintOnManualEngineEnable(value);
+    }
 
     partial void OnIsAutoGetCashActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoGetCash", value, d => d.AutoGetCash = value);
+    {
+        PersistAutoModeFlag("AutoGetCash", value, d => d.AutoGetCash = value);
+        MaybeEndSprintOnManualEngineEnable(value);
+    }
 
     partial void OnIsAutoSneakActiveChanged(bool value)
         => PersistAutoModeFlag("AutoSneak", value, d => d.AutoSneak = value);
@@ -4800,10 +4877,76 @@ public partial class MainWindowViewModel : ObservableObject
         => PersistAutoModeFlag("AutoHide", value, d => d.AutoHide = value);
 
     partial void OnIsAutoSearchActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoSearch", value, d => d.AutoSearch = value);
+    {
+        PersistAutoModeFlag("AutoSearch", value, d => d.AutoSearch = value);
+        MaybeEndSprintOnManualEngineEnable(value);
+    }
 
     partial void OnIsDisableHangupsActiveChanged(bool value)
         => PersistGeneralFlag("DisableHangups", value, g => g.DisableHangups = value);
+
+    partial void OnIsSprintModeActiveChanged(bool value)
+    {
+        PersistGeneralFlag("SprintMode", value, g => g.SprintMode = value);
+        // A profile reseed sets this without a real user toggle — skip the engine
+        // coupling so loading a Sprint-on character doesn't stomp the engines'
+        // own independently-reseeded values.
+        if (_suppressAutoEngineWriteback > 0) return;
+        if (value) ForceEnginesOffForSprint();
+        else RestoreEnginesAfterSprint();
+    }
+
+    // Sprint forces Auto-Combat / Get-Items / Search / Get-Cash off for the
+    // duration (a "just keep moving" mode has nothing to fight / loot / search
+    // for) and remembers which it actually turned off so it can restore exactly
+    // those. Guarded so the engines' own change handlers don't read these writes
+    // as a manual re-enable.
+    private void ForceEnginesOffForSprint()
+    {
+        _sprintDrivingEngines = true;
+        try
+        {
+            _sprintTurnedOffCombat   = IsAutoCombatActive;
+            _sprintTurnedOffGetItems = IsAutoGetItemsActive;
+            _sprintTurnedOffSearch   = IsAutoSearchActive;
+            _sprintTurnedOffGetCash  = IsAutoGetCashActive;
+            if (IsAutoCombatActive)   IsAutoCombatActive   = false;
+            if (IsAutoGetItemsActive) IsAutoGetItemsActive = false;
+            if (IsAutoSearchActive)   IsAutoSearchActive   = false;
+            if (IsAutoGetCashActive)  IsAutoGetCashActive  = false;
+        }
+        finally { _sprintDrivingEngines = false; }
+    }
+
+    // Turn back on exactly the engines Sprint forced off. One the user re-enabled
+    // by hand was never in the turned-off set, so it's left as the user set it.
+    private void RestoreEnginesAfterSprint()
+    {
+        _sprintDrivingEngines = true;
+        try
+        {
+            if (_sprintTurnedOffCombat)   IsAutoCombatActive   = true;
+            if (_sprintTurnedOffGetItems) IsAutoGetItemsActive = true;
+            if (_sprintTurnedOffSearch)   IsAutoSearchActive   = true;
+            if (_sprintTurnedOffGetCash)  IsAutoGetCashActive  = true;
+        }
+        finally
+        {
+            _sprintTurnedOffCombat = _sprintTurnedOffGetItems =
+                _sprintTurnedOffSearch = _sprintTurnedOffGetCash = false;
+            _sprintDrivingEngines = false;
+        }
+    }
+
+    // Sprint Mode and its four suppressed engines are mutually exclusive: turning
+    // any of them back on by hand ends Sprint. Ending Sprint restores the others
+    // it silenced; the one just re-enabled is already on, so restore leaves it on.
+    // Ignored while Sprint itself is driving the engine and during a profile reseed.
+    private void MaybeEndSprintOnManualEngineEnable(bool value)
+    {
+        if (!value || _sprintDrivingEngines || _suppressAutoEngineWriteback > 0) return;
+        if (IsSprintModeActive) IsSprintModeActive = false;
+    }
 
     // Reset the LIVE auto-engine state (AutoMode) to the character's BASE modes —
     // the Settings → General base-modes checkboxes (GeneralSettings.AutoModeBase).
@@ -4895,6 +5038,7 @@ public partial class MainWindowViewModel : ObservableObject
                 : ReadGeneralFromProfile(profile);
             Models.Profile.AutoActionDefaults am = general.AutoMode;
             IsDisableHangupsActive = general.DisableHangups;
+            IsSprintModeActive   = general.SprintMode;
             IsAutoCombatActive   = am.AutoCombat;
             IsAutoNukeActive     = am.AutoNuke;
             IsAutoHealRestActive = am.AutoHealRest;

@@ -282,10 +282,23 @@ public sealed partial class CombatManager : IDisposable
     private static readonly TimeSpan AlternationAdvanceMinGap = TimeSpan.FromSeconds(4);
 
     // Real-time stamp of the last attack-spell MaxCasts tally in the spell heartbeat,
-    // gated by AttackTallyMinGap. Reset to MinValue wherever the per-target cascade
-    // resets (alongside _lastAlternationAdvanceAt) so a fresh fight's first cast round
-    // always tallies rather than being blocked by a stale stamp.
+    // gated by AttackTallyMinGap. LEGACY FALLBACK — only used when ReadRoundCount is
+    // unwired (tests that don't opt in). Reset to MinValue wherever the per-target
+    // cascade resets (alongside _lastAlternationAdvanceAt).
     private DateTimeOffset _lastAttackTallyAt = DateTimeOffset.MinValue;
+
+    // Robust round-count tally. When wired, MaxCasts counts one cast per REAL combat
+    // round (RoundDamageTracker's timer-driven RoundCount, one per 5s round) instead
+    // of the fragile AttackTallyMinGap wall-clock on the damage-line heartbeat — the
+    // heartbeat trips several times a round (our multi-hit + the mob's swing + a
+    // stale interval), and no single wall-clock threshold separates a genuine round
+    // tick (~3.3-5s) from a premature one (~0.5-2s): reports paradigm-20260819-120938
+    // (premature tally → capped before lbol fired) vs -055820 (genuine fast tick
+    // rejected → tallied a round late) are that exact tension. One round = one tally.
+    // Set to the current round on engage so the first tally waits for the next round
+    // CLOSE; unwired leaves it -1 and the legacy wall-clock path runs.
+    internal Func<int>? ReadRoundCount { get; set; }
+    private int _lastTalliedRound = -1;
 
     // Minimum real time between two MaxCasts tallies — the SAME round-spacing guard
     // AlternationAdvanceMinGap applies to the phase advance, for the same reason: the
@@ -992,27 +1005,21 @@ public sealed partial class CombatManager : IDisposable
             _guardBlockedTarget = null;
         }
 
-        // Combat-off override for stealth runners. Normally combat-off
-        // means we don't engage at all. But a stealth character sprinting
-        // a walk-to route (AutoSneak on, combat off) that hits a room with
-        // a SeeHidden monster can't re-sneak there — and running onward
-        // would drag/stack monsters across rooms, lethal when solo.
-        // CombatStateTracker owns the decision + latch (and holds the
-        // walker gate so we actually stop); when it has force-clear
-        // latched, we engage anyway and bypass the Min/Max gate to clear
-        // EVERYTHING so the route can resume sneaking.
-        bool seeHiddenOverride = false;
-        if (!_isEnabled())
+        // See-hidden force-clear override for stealth runners — honoured with
+        // auto-attack ON or OFF. A stealth character sprinting a walk-to route
+        // (AutoSneak on) that hits a room with a SeeHidden monster can't re-sneak
+        // there, and running onward would drag/stack monsters across rooms (lethal
+        // solo). CombatStateTracker owns the decision + latch (and holds the walker
+        // gate so we actually stop); when it's force-clear latched we bypass the
+        // Min/Max gate below to clear EVERYTHING so the route can resume sneaking.
+        // With combat OFF the latch additionally makes us engage despite being
+        // disabled; with combat ON we'd engage anyway, and the latch's job is only
+        // the Min/Max bypass.
+        bool seeHiddenOverride = _seeHiddenClearActive?.Invoke() == true;
+        if (!_isEnabled() && !seeHiddenOverride)
         {
-            if (_seeHiddenClearActive?.Invoke() == true)
-            {
-                seeHiddenOverride = true;
-            }
-            else
-            {
-                _currentTarget = null;
-                return;
-            }
+            _currentTarget = null;
+            return;
         }
 
         // Score every Monster entity once. We need BOTH names:
@@ -2753,6 +2760,26 @@ public sealed partial class CombatManager : IDisposable
                 // set here, a single lost race parks the engine in spell mode with no path back
                 // to a retry: the reported "won't re-engage after buffing/healing, sits there
                 // until manual input" stall.
+                // The interrupted attack spell held the round the between-round cast
+                // just closed. RoundDamageTracker tie-breaks ahead of us on CombatStatus,
+                // so it has already CloseCurrent'd that round (RoundCount++) — tally it
+                // toward MaxCasts NOW, before the re-decide inside DispatchRoundAction.
+                // The heartbeat can't (it bails while _combatOff), so without this the
+                // resume re-announces the just-capped spell uncapped (LBOL 2x, report
+                // paradigm-20260820-063541). Round-delta gated so a heal that interrupted
+                // BEFORE the spell's first fire (no round opened) doesn't over-count;
+                // death-window gated so the kill-left-a-survivor path (a legitimately
+                // fresh cast on the survivor) is untouched.
+                if (_announcedSpellCode is { } interruptedSpell
+                    && _lastCastAction is { } interruptedAction
+                    && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
+                    && ReadRoundCount?.Invoke() is { } interruptedRound
+                    && interruptedRound != _lastTalliedRound)
+                {
+                    _spellChooser.MarkCast(
+                        new CombatSpellDecision(interruptedAction, interruptedSpell), spellTarget);
+                    _lastTalliedRound = interruptedRound;
+                }
                 _combatOff = false;
                 _announcedSpellCode = null;
                 // Mark this specific interrupt as resumed BEFORE dispatching — the
@@ -2847,6 +2874,13 @@ public sealed partial class CombatManager : IDisposable
         SendAttack(_readSettings().NormalAttackCommand, priority, refire: true,
                    refireReason: "guard retry");
     }
+
+    // Public current-room engageability probe for consumers (AutoSearch) that must
+    // gate on THIS room's live roster, not the sticky cross-room combat gate
+    // (HasEngageableHostiles), which stays asserted while combat winds down on a
+    // left-behind target and made AutoSearch skip genuinely-empty rooms (report
+    // paradigm-20260820-090736). Null (no observation yet) reads as "no hostile".
+    public bool HasEngageableIn(RoomEntitiesObservation? obs) => obs is { } o && HasEngageable(o);
 
     private bool HasEngageable(RoomEntitiesObservation obs)
     {

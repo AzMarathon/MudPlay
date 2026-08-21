@@ -760,10 +760,12 @@ public sealed class CombatStateTrackerTests
     }
 
     [Fact]
-    public void SeeHiddenOverride_DropsLatch_WhenAutoAttackTurnedOn()
+    public void SeeHiddenOverride_StaysLatched_WhenAutoAttackOn()
     {
-        // Latched in combat-off, then user flips master auto-attack on:
-        // normal gate logic owns pausing, the override latch drops.
+        // The override now force-clears with auto-attack ON or OFF: flipping master
+        // auto-attack on mid-clear keeps the latch (and gate) so the room is still
+        // fully cleared (bypassing Min/Max via CombatManager's latch read) rather
+        // than being dropped to the normal count-gated behaviour.
         using Harness h = new() { AutoAttackEnabled = false };
         h.WireSeeHiddenGate();
         h.ClearWhenSeenHidden = true;
@@ -776,8 +778,27 @@ public sealed class CombatStateTrackerTests
 
         h.AutoAttackEnabled = true;
         h.Feed("Also here: crystal golem.");
-        Assert.False(h.Tracker.SeeHiddenClearActive);
-        Assert.True(h.CombatGateHeld);        // normal gate now holds it
+        Assert.True(h.Tracker.SeeHiddenClearActive);   // latch persists with combat on
+        Assert.True(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void SeeHiddenOverride_ArmsFresh_WithAutoAttackOn()
+    {
+        // Armed directly with auto-attack ON — a stealth runner whose sneak is
+        // broken by a see-hidden monster force-clears the room even when combat is
+        // enabled, so the room can't be skipped by the Min/Max gate.
+        using Harness h = new() { AutoAttackEnabled = true };
+        h.WireSeeHiddenGate();
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "crystal golem", killable: true);
+
+        h.Feed("Also here: crystal golem.");
+
+        Assert.True(h.Tracker.SeeHiddenClearActive);
+        Assert.True(h.CombatGateHeld);
     }
 
     [Fact]

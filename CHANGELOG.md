@@ -2,7 +2,7 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.23.0
+## 3.24.0
 
 - New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: configurable silent recon laps (default 2) search every room traversed by the circuit, then misfiled items are carried to their labeled destination. Built on the same loop engine every saved Loop runs on
 - GH room labels support multiple rules per room (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail), including equip-slot rules (Neck / Wrist / Off-Hand / etc.) for jewelry-style rooms that aren't classified by material or weapon type, and an optional catch-all room for anything matching no explicit rule
@@ -13,6 +13,90 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - After inventory verifies a pickup or drop, Roomba routes directly to the nearest carried destination (then the nearest remaining source) instead of blindly completing the original one-way circuit; failed pickups stay queued without double-moving delivered items
 - Roomba no longer stops after a no-progress lap or a fixed number of sorting laps, and no longer defers pickups to avoid the Heavy bracket; queued work stays live until every item has a verified delivery (or the user stops the run)
 - bug reports addressed: paradigm-20260816-172828, paradigm-20260816-175656, paradigm-20260816-191039, paradigm-20260816-193418
+
+## 3.23.0
+
+- New **Sprint Mode** toolbar toggle (running-figure icon) — a transient "just get me there" movement mode: while on, movement never pauses to rest/heal-wait (configured heal spells still cast), and **Auto-Combat / Get-Items / Search / Get-Cash are forced off** and restored when it ends. It **turns itself off** (restoring those engines) when a go-to walk arrives, a loop begins looping (arriving at the loop start after a walk-to, or wrapping into the next lap), or an auto-lair is about to enter the next lair; manually re-enabling any of those four engines ends it too
+- The **EXP** button is no longer on the default toolbar (still available to add via the toolbar editor)
+- Combat settings: fixed the **Debuff (single target)**, **Normal attack spell**, and **Alternate attack spell** cast-cap tooltips claiming "casts per room" when the engine has always enforced them per-target (a fresh mob gets its own allowance) — misled players into thinking the cap wasn't being honored when many mobs died in quick succession
+- bug reports addressed: paradigm-20260820-164102
+
+## 3.22.35
+
+- Auto-deposit no longer strands the walker at a bank: a bank lobby prints its currency-conversion table behind a blank line in the room display, which room-name recovery read as the end of the block — so the client saw the room as "The currency conversion rates are:", the map stayed on the street outside, and neither the `dep` nor the loop resume fired
+- Room-name recovery now reaches back across an in-display blank line for the bright-cyan name, and the line buffer it scans is deeper — it was exactly the length of a bank arrival, so one floor item or a second occupant evicted the name outright
+
+## 3.22.34
+
+- `@inv` now reports the **entire carried pack** — no more `(and N more items)` truncation; a long inventory splits across numbered replies (`carrying (1/2): …`)
+- Party **HELD** status now clears everywhere: a member's `.@held on`/`.@held off` broadcast toggles the chip on every client like the other ailments (previously held announced once and never cleared party-wide)
+- **Reset States** now clears every party member's ailment chips, not just your own
+- **Auto-search** now searches each room you enter **exactly once** — no redundant re-searches, no rooms skipped; it clears cleanly on death and holds for a room you're transiting with queued moves, so the engine feels responsive again instead of "slow"
+- Combat: a capped attack spell (e.g. **LBOL** at `MaxCasts 1`) no longer fires a **second time** when a between-round heal/buff interrupts its round — the interrupted round is tallied before the resume re-decides, so the cascade advances to the alternate
+- Combat: spell choice now checks a spell's **real mana cost**, not just the reserve floor — an attack/drain spell you can't actually afford is skipped instead of chosen
+- Party heal now fires the **instant** a member's HP drops below the threshold, not a full round late
+- Coin auto-collect is suppressed in your **stash room** while looping, so a stash run doesn't re-grab what it just deposited
+- **Learned spells** no longer lost on upgrade when the profile loads before the game-data set is active — the obtained set is seeded by name and re-resolves once the set loads
+- bug reports addressed: paradigm-20260820-153957, paradigm-20260820-122200, paradigm-20260820-153540, paradigm-20260820-130600, paradigm-20260820-090736, paradigm-20260820-090254, paradigm-20260820-080408, paradigm-20260820-063541, paradigm-20260820-082741, paradigm-20260820-122341, paradigm-20260820-055720, paradigm-20260820-055007
+
+## 3.22.22
+
+- Fixed meditate never re-engaging after something (a self-bless, etc.) interrupted it in place — the auto-rest engine's confirm/interrupt tracking only recognized the "resting" position, never "meditating", so the latch got stuck and blocked every further re-send until the next room move
+
+## 3.22.21
+
+- Fixed max HP/mana drifting stale when equipping/removing gear that grants a flat pool bonus (e.g. severed head of Goru-Nezar's +50 mana) — the health engine's rest and "pool is full" checks now track the change immediately instead of waiting on a manual stat-screen check
+
+## 3.22.20
+
+- Item-cast buffs (e.g. `#emerald-tipped crozier`) now free a `Worn`-bucketed off-hand blocker (a charm/skull the game's `i` text doesn't label `Off-Hand`) before wielding a two-handed cast item, and re-equip it after — previously the whole equip/use/restore sequence silently failed every recast
+- bug reports addressed: paradigm-20260819-234712
+
+## 3.22.19
+
+- Navigation: the search-box dropdown now **groups results by source** — saved GOTO locations first, then boss-table targets, then rooms — instead of interleaving them by relevance
+- Navigation: **door bashing is now rest-aware and uncapped** — a bashable door is bashed until it opens (no fixed attempt cap), pausing to rest to your rest-max whenever HP dips to the rest trigger; the old "Max bash attempts" setting is removed (picking keeps its cap)
+- Combat: the **"clear hostiles when sneak broken by see-hidden monster"** toggle now force-clears the room with **Auto-Combat on or off** (previously combat-off only)
+
+## 3.22.16
+
+- Remote: `@exp` now reads `4,500,000 EXP to level, making 1.1m/hr ~4h 10m to level.` — it leads with the **exp still needed to level**, abbreviates the rate (exact under 100k, `853k` in the hundred-thousands, `1.1m`/`30m` in the millions), and keeps the time-to-level
+- Time-to-level formatting (the `@exp` reply and the status-bar TNL) now shows **plain minutes under 90m** (`89m`, not `1h 29m`) and **rolls up to days past 25h** (`1d 1h 0m`)
+
+## 3.22.15
+
+- Bug report: new **Room combat assessment** section — the engine's live engageability verdict for every monster in the current room (Magical level, spell-immunity, each weapon's hit-magic, and the **CanAct / StuckOnMana / Unkillable** call with its reason), so a "won't attack this monster" report is self-diagnosing without combat logging being on
+- Bug report: new **Spell resolution** section — every configured combat/heal/cure/bless slot resolved to its **Spell number, name, learned flag, ReqLevel, EnergyCost, and mana cost**, so a mis-cast or "spell looks blocked" report shows the bad value at a glance
+- Bug report: new **Monster overrides** section — per-monster attack command / attack spell / pre-attack spell (with counts), relationship, priority, and flags you've customized, tagged with the tier each comes from
+- Bug report: new **Item overrides** section — per-item loot-automation flags (collect / discard / buy / sell / stash / keep-minimum, etc.) you've customized, tagged with the owning tier
+
+## 3.22.11
+
+- Remote: `@have <item>` now reports the **true carried quantity** — a stack of 25 counts as 25, not 1 (it was counting inventory *entries*, and a stack is one entry) — and the reply reads `yes - Nx 'item'` instead of `yes - Nx matching 'item'`
+
+## 3.22.10
+
+- Combat: fixed the **attack-spell level lookup clobbered by duplicate short cast-codes** — a monster/item-triggered spell sharing a player spell's short command (e.g. `disr`) could silently overwrite its ReqLevel with an unrelated one, making the real spell look blocked by a monster's spell immunity when it would actually land; the player's own learnable spell now wins the lookup over any same-code duplicate
+- bug reports addressed: paradigm-20260819-195419
+
+## 3.22.9
+
+- Combat: attack-spell **MaxCasts are now counted once per real combat round** (off the round timer) instead of per damage-line tick — so a spell no longer switches to its alternate before it fires, or blows past its cast cap (the recurring miscount reports)
+- Combat: the cap-switch to the alternate attack now fires **exactly once** — the deferred switch is idempotent, so an alternate like magic-missile can't double-fire after the primary caps or after a between-round buff
+- Healing: the **major heal now takes precedence over the minor heal below its threshold** (self and party) — minor no longer keeps firing while you fall through the major band; if the major heal is unaffordable it falls back to the configured minor, and both respect the HP triggers + the "heal if above" mana floors
+- Navigation: the **pass-through stash now hides your coins in the actual stash room**, not the next one — the stash fires before the loop steps out
+- Navigation: **auto-collect is suppressed in a stash room while looping** — a search there no longer re-exposes and re-grabs the pile you just stashed
+- bug reports addressed: paradigm-20260819-120938, paradigm-20260819-121003, paradigm-20260819-121247, paradigm-20260819-121516, paradigm-20260819-142147, paradigm-20260819-054200
+
+## 3.22.3
+
+- Navigation: the **Room Info** panel now mirrors the map tooltip — monsters are shown in three labelled groups, **Placed** / **Assigned** / **Lair**, instead of one flat tagged list, with the lair's **Max Regen** line beneath the Lair group
+
+## 3.22.2
+
+- Game Data: an item that sits on a room's floor now shows a **"Placed in"** section on its record — a clickable link to each room that holds it, with **Queue Walking here →**; room-only items (like the bogwood box) previously showed no source at all
+- Navigation: the Room Info panel **and the map hover tooltip** now list a room's statically-**placed** floor items, not just ones its `roomitem` command scatters — so an item sitting in a room (like the bogwood box at 14/10415) shows up when you hover / go there
+- Navigation: the room tooltip / Room Info panel now split monsters into **Placed** (a boss / NPC fixture), **Assigned** (roams / rarely spawns there), and **Lair** (a consistent lair spawner) instead of one lumped "Also Here" line — a monster can appear under more than one, showing the distinction at a glance; the lair's **Max Regen** now sits directly beneath the Lair line
 
 ## 3.22.0
 

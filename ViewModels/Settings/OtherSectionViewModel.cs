@@ -98,9 +98,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // AppServices — no push needed, the manager reads through the resolver
     // on every request.
 
-    // Walker max bash <dir> retries before falling back to pick / failing.
-    [ObservableProperty] private int _maxBashAttempts = 10;
-
     // Walker max pick <dir> retries before falling back to bash / failing.
     [ObservableProperty] private int _maxPickAttempts = 10;
 
@@ -249,7 +246,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             UtilizeDisarmTrapsIfAble = UtilizeDisarmTrapsIfAble,
             MaxTrapSearchAttempts = Math.Clamp(MaxTrapSearchAttempts, 1, 100),
             MaxTrapDisarmAttempts = Math.Clamp(MaxTrapDisarmAttempts, 1, 50),
-            MaxBashAttempts       = Math.Clamp(MaxBashAttempts,       1, 100),
             MaxPickAttempts       = Math.Clamp(MaxPickAttempts,       1, 100),
             PicklocksOverBash     = PicklocksOverBash,
             SearchRoomsIfItemNeeded = SearchRoomsIfItemNeeded,
@@ -309,7 +305,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         UtilizeDisarmTrapsIfAble = dto.UtilizeDisarmTrapsIfAble;
         MaxTrapSearchAttempts = dto.MaxTrapSearchAttempts;
         MaxTrapDisarmAttempts = dto.MaxTrapDisarmAttempts;
-        MaxBashAttempts       = dto.MaxBashAttempts;
         MaxPickAttempts       = dto.MaxPickAttempts;
         PicklocksOverBash     = dto.PicklocksOverBash;
         SearchRoomsIfItemNeeded = dto.SearchRoomsIfItemNeeded;
@@ -372,7 +367,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnUtilizeDisarmTrapsIfAbleChanged(bool value) => MarkDirty();
     partial void OnMaxTrapSearchAttemptsChanged(int value) => MarkDirty();
     partial void OnMaxTrapDisarmAttemptsChanged(int value) => MarkDirty();
-    partial void OnMaxBashAttemptsChanged(int value)       => MarkDirty();
     partial void OnMaxPickAttemptsChanged(int value)       => MarkDirty();
     partial void OnPicklocksOverBashChanged(bool value)    => MarkDirty();
     partial void OnSearchRoomsIfItemNeededChanged(bool value) => MarkDirty();

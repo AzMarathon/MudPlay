@@ -2077,7 +2077,15 @@ public sealed class AppServices
         {
             if (Spellbook.ClassNumber < 1) return;
             IReadOnlyList<string> learned = Spellbook.ObtainedNames;
-            p.LearnedSpells = learned.Count > 0 ? new List<string>(learned) : null;
+            // Only persist when we actually have names. Never overwrite a populated
+            // saved set with null just because the live obtained set is transiently
+            // empty — the immediate save that runs right after a profile-schema
+            // migration fires before the game-data set is active and the first
+            // `spells` poll, so ObtainedNames is momentarily empty; the old code
+            // wrote null there and wiped the learned set on upgrade (report
+            // paradigm-20260820-055007). A genuine reroll-to-zero clears via its own
+            // explicit path, not this passive save.
+            if (learned.Count > 0) p.LearnedSpells = new List<string>(learned);
         };
 
         Stats.ScreenParsed += snapshot =>
@@ -2120,10 +2128,13 @@ public sealed class AppServices
             // which ApplyStatScreenMax ignores.
             Player.ApplyStatScreenMax(p.LastKnownStats?.MaxHits ?? 0, p.LastKnownStats?.MaxMana ?? 0);
             SeedSpellbook(p.LastKnownStats);
-            // Restore the learned checkmarks now the class's available list is
-            // built. Resolves by name against Available, so entries the current
-            // class can't learn (a cross-set carryover) are harmlessly dropped.
-            if (learned is not null) Spellbook.SetObtainedByNames(learned);
+            // Restore the learned checkmarks. Seed the names AUTHORITATIVELY (not
+            // resolve-and-drop): profile load can run before the game-data set is
+            // active (Available still empty), where SetObtainedByNames would drop
+            // everything and the ensuing migration save would persist the wipe
+            // (report paradigm-20260820-055007). The numbers re-derive on the
+            // ActiveSetChanged reseed once Available is built.
+            if (learned is not null) Spellbook.SeedObtainedNames(learned);
         };
         // Persist + restore the last-known carry weight across sessions.
         // Encumbrance only changes in the realm, so the value the client last saw
@@ -2219,13 +2230,19 @@ public sealed class AppServices
         // restarting an engine. Wire-sender is bound by MainWindowVM
         // alongside the trap one (gate-wrapped SendUserInput).
         Door = new Game.Map.DoorOpenManager(Router, PlayerStats,
-            maxBashAttemptsProvider:       () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").MaxBashAttempts,
             maxPickAttemptsProvider:       () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").MaxPickAttempts,
             picklocksOverBashProvider:     () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").PicklocksOverBash,
             itemNameLookup:                id => ItemNames.GetName(id),
             maxBashableStrengthProvider:   () => MaxStrength.MaxAchievableStrength,
             // Read lazily at door-open time — Inventory is constructed after Door.
             holdsKeyItem:                  HoldsKeyItem,
+            // Rest-interleave for bashing (bashing drains HP): pause a bash once HP
+            // falls to the Health-tab rest-if-below trigger, resume once it climbs
+            // back to rest-max. HealthManager owns the actual rest/stand cycle — the
+            // door FSM only gates its swings on these. Reuses PoolThreshold so the
+            // percentage/absolute mode matches the rest engine exactly.
+            bashRestNeeded:                () => BashRestGate(recovered: false),
+            bashRestRecovered:             () => BashRestGate(recovered: true),
             log: Log,
             // UI-thread one-shot so the door FSM's response watchdog fires on the
             // same thread its router-driven handlers run on; keeps Game/Map UI-free
@@ -2237,6 +2254,12 @@ public sealed class AppServices
                 timer.Start();
                 return new DispatcherTimerHandle(timer);
             });
+        // Resume a bash rest-pause the moment live HP climbs back to rest-max,
+        // rather than waiting on the door FSM's periodic watchdog re-check.
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PlayerState.Hp)) Door.NotifyHealthChanged();
+        };
         // LeaderDoorAssistManager — observes the leader failing to bash a
         // door and pitches in. Reads the Party-tab toggle + the Other-tab
         // pick/bash preference live. Wire-sender bound by MainWindowVM
@@ -3150,16 +3173,18 @@ public sealed class AppServices
             isLeaderWaited: () => PartyState.SelfIsLeader && PartyEssentials.IsPaused,
             isSelfPoisoned: () => Conditions.IsPoisoned);
 
-        // Per-waypoint "do not rest in this room": true while a loop is running
-        // and the room we're standing in is one of its waypoints flagged
-        // DoNotRest — HealthManager then suppresses the rest hold so the loop
-        // advances out. Matched by room key (per-room), so it clears the instant
-        // the loop steps into any other room. Loops only.
+        // Rest-skip has two independent sources, either one suppresses both rest
+        // gates: (1) Sprint Mode — a global "never pause to rest" toggle (see
+        // ReadSprintMode); (2) the per-waypoint "do not rest in this room" flag —
+        // true while a loop is running and the room we're standing in is one of
+        // its waypoints flagged DoNotRest. Matched by room key (per-room), so it
+        // clears the instant the loop steps into any other room. Loops only.
         Health.SetDoNotRestSelector(() =>
-            LoopRunner.State != Game.Map.LoopState.Idle
-            && RoomTracker.State.CurrentRoom is { } here
-            && LoopRunner.CurrentLoop?.Waypoints is { } wps
-            && wps.Any(w => w.DoNotRest && w.Key.Equals(here.Key)));
+            ReadSprintMode()
+            || (LoopRunner.State != Game.Map.LoopState.Idle
+                && RoomTracker.State.CurrentRoom is { } here
+                && LoopRunner.CurrentLoop?.Waypoints is { } wps
+                && wps.Any(w => w.DoNotRest && w.Key.Equals(here.Key))));
 
         // Server-side resting state clears on move; drop our latch
         // too so the next threshold breach actually fires `rest`
@@ -3259,6 +3284,10 @@ public sealed class AppServices
         // via the live spellbook. Combat-tab spells keep their own
         // MinManaPerCast threshold and aren't gated here.
         CastDirector.SetManaCostLookup(Spellbook.ManaCostOf);
+        // Combat chooser affordability floor — same cost source, so an attack/drain
+        // spell whose slot has MinManaPerCast=0 still won't be cast below its real
+        // mana cost (report paradigm-20260820-082741).
+        Combat.SetSpellManaCost(Spellbook.ManaCostOf);
         // Auto-Bless auto-engine gate — when off, the Buffing category is
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));
@@ -3394,6 +3423,12 @@ public sealed class AppServices
         OutboundAttack = new Game.Combat.OutboundAttackObserver(
             (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
         Tick.CombatTickElapsed += Combat.OnCombatTick;
+        // Count attack-spell MaxCasts off RoundDamageTracker's timer-driven round
+        // count (one per real 5s round) instead of the damage-line heartbeat + a
+        // wall-clock gate — the robust round counter the recurring miscount /
+        // double-fire reports need (RoundDamage's tick is wired above, so its count
+        // is fresh when the combat heartbeat reads it).
+        Combat.ReadRoundCount = () => RoundDamage.RoundCount;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a
         // second of its threshold — a final kill that never triggered a resync
@@ -3601,6 +3636,33 @@ public sealed class AppServices
                 ? Game.Inventory.EquipmentSlotMap.InventorySlotForWornCode(worn)
                 : null);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
+
+        // Equipment-driven max HP/mana pool sync. A worn item can carry a flat
+        // pool bonus (Items.Abil 88 = +Max HP, Abil 69 = +Max Mana — e.g. the
+        // severed head of Goru-Nezar's +50 mana); PromptParser's high-water
+        // ratchet and periodic stat-screen resync don't react to that changing
+        // mid-session, so equip/remove could leave the health engine's rest and
+        // "pool is full" checks reading a stale ceiling. Reused
+        // CharacterCalculator.AggregateEquipmentStats (already the Character
+        // Info tab's live worn-set bonus reader) resolves the current total;
+        // reseeded (no delta applied) on profile load / active game-data set
+        // change so a character or realm swap doesn't diff against a
+        // now-meaningless prior total.
+        var equipmentMaxSync = new Game.Health.EquipmentMaxPoolSync(
+            equipped =>
+            {
+                Game.Calculators.EquipmentStatSummary totals =
+                    Game.Calculators.CharacterCalculator.AggregateEquipmentStats(equipped, GameData).Totals;
+                return (totals.PlusMaxHp, totals.PlusMaxMana);
+            },
+            Player.ApplyEquipmentMaxDelta);
+        Inventory.Changed += () =>
+        {
+            if (Inventory.IsLoaded) equipmentMaxSync.OnEquippedItemsChanged(Inventory.Snapshot.EquippedItems);
+        };
+        Profile.ProfileLoaded += _ => equipmentMaxSync.Reset();
+        GameData.ActiveSetChanged += _ => equipmentMaxSync.Reset();
+
         // Death-recovery deathpile capture. RoomTracker.NoteDeath
         // records the worn + carried items from the last-known `i` snapshot
         // onto the death record; DeathRecoveryManager.SimulateDeath captures
@@ -3788,7 +3850,12 @@ public sealed class AppServices
             // Stand auto-equip off the slot the item-cast borrows so its own restore
             // isn't doubled by the rest-break the swap triggers (AutoEquip is built
             // just below; this lambda reads it at fire time). See NoteItemCastSwap.
-            onSwap: () => AutoEquip?.NoteItemCastSwap());
+            onSwap: () => AutoEquip?.NoteItemCastSwap(),
+            // A "(Worn)"-bucketed item can still occupy the off-hand mechanically
+            // (Items.Worn == Off-Hand); OffHandNames is built straight from every
+            // Items.json row (not the collision-prone by-name index), so it answers
+            // correctly even for a display name shared with a non-wearable item.
+            isOffHandItem: name => ItemNames.OffHandNames.Contains(name, StringComparer.OrdinalIgnoreCase));
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
 
@@ -3985,6 +4052,12 @@ public sealed class AppServices
         {
             Cash.OnRoomObserved();
             AutoGetItems.OnRoomObserved();
+            // AutoSearch defers its per-room search "until combat clears" the same way;
+            // without this it never fires the deferred `sea` and the Search gate sticks
+            // held, wedging the walker on "waiting — searching the room" when combat
+            // ended via the idle-stall watchdog rather than a clean room re-display
+            // (report paradigm-20260820-090254).
+            AutoSearch.OnRoomObserved();
         };
 
         // The force-clear is optimistic (a resync CR re-display re-confirms a beat
@@ -4186,9 +4259,16 @@ public sealed class AppServices
             isEnabled: () => ReadAutoModeFlag(d => d.AutoSearch),
             isDemandActive: () =>
                 PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
-            hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
+            // Probe THIS room's live roster (not CombatTracker.HasEngageableHostiles —
+            // the sticky cross-room gate, which stays asserted while combat winds down
+            // on a left-behind target and made AutoSearch skip empty rooms; report
+            // paradigm-20260820-090736).
+            hasEngageableHostiles: () => Combat.HasEngageableIn(RoomClassifier.Current),
             hasGetEngineArmed: () =>
                 ReadAutoModeFlag(d => d.AutoGetItems) || ReadAutoModeFlag(d => d.AutoGetCash),
+            // Don't `sea` a transit room the player has already queued past — search
+            // only where movement settles (RoomTracker's pending-move queue is empty).
+            hasQueuedMoves: () => RoomTracker.HasQueuedMoves,
             coordinator: MovementCoordinator,
             log: Log);
 
@@ -4217,14 +4297,22 @@ public sealed class AppServices
         // AutoGetItems / GroundItems / Cash above already rely on.
         RoomTracker.StateChanged += t =>
         {
-            if (t.NewRoom is null) return;
-            if (t.PreviousRoom is not null
+            // Same-room refresh (resync CR re-display) — not a genuine change; skip.
+            if (t.NewRoom is not null && t.PreviousRoom is not null
              && t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
-            AutoSearch.OnRoomChanged();
+            // AutoSearch hears every genuine change INCLUDING a null room (death →
+            // respawn-pending), so it can key its owed search and clear a search
+            // deferred in the room we died in (report paradigm-20260820-090736).
+            AutoSearch.OnRoomChanged(t.NewRoom?.Key);
+            if (t.NewRoom is null) return;   // the other engines have nothing to do on death
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();
             Cash.OnRoomChanged();
             GhSweep.OnRoomChanged(t);
+            // Pass-through stash runs here — ahead of LoopRunner's StateChanged
+            // handler — so its `hide` reaches the wire before the loop's next move
+            // (else the coins hide in the NEXT room; report paradigm-20260819-054200).
+            AutoDeposit?.OnRoomEntered(t);
         };
 
         Walker = new Game.Map.AutoWalkManager(RoomGraph, Bfs, RoomTracker,
@@ -4885,6 +4973,12 @@ public sealed class AppServices
         // its own bank -> shop -> origin light detour and needs the `i` dump to
         // notice the bought copy land.
         Inventory.Changed += AutoDeposit.OnInventoryChanged;
+        // In a stash room mid-loop, suppress cash + item auto-collect so a search
+        // there can't re-expose and re-grab the pile the pass-through stash just
+        // hid (report paradigm-20260819-121516). AutoDeposit owns the room/stash/
+        // running-engine state; the lambda reads it live per survey line.
+        Cash.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
+        AutoGetItems.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
         // Bank deposits (already a copper value) join stash hides in the Session
         // Stats stashed/deposited figure. The transaction-history ledger is fed
         // separately from the `You deposit …` echo (InventoryManager.BankDeposited,
@@ -5282,6 +5376,13 @@ public sealed class AppServices
     // without restarting an engine.
     private bool ReadDisableHangups() =>
         ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups;
+
+    // Live read of Sprint Mode from the char-tier General section — the same
+    // store the toolbar toggle writes. Wired into HealthManager's rest-skip
+    // selector (see the SetDoNotRestSelector call above) so flipping the
+    // toggle takes effect without restarting an engine.
+    private bool ReadSprintMode() =>
+        ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").SprintMode;
 
     // Buff-duration source: map a 4-letter cast code to the
     // buff's Models.GameData.MessageRecord.CasterMessage
@@ -5981,6 +6082,22 @@ public sealed class AppServices
             return (long)Math.Ceiling(copper);
         }
         return null;
+    }
+
+    // HP rest gate for DoorOpenManager's bash-interleave. recovered=false → "HP has
+    // fallen to the Health-tab rest-if-below trigger, pause bashing"; recovered=true
+    // → "HP has climbed back to rest-max, resume". Reuses PoolThreshold so the
+    // percentage/absolute mode matches HealthManager's own rest cycle exactly. No
+    // vitals yet (MaxHp<=0) reads as not-needed / already-recovered so a fresh login
+    // never stalls a bash.
+    private bool BashRestGate(bool recovered)
+    {
+        int max = PlayerState.MaxHp;
+        if (max <= 0) return recovered;
+        Models.Profile.HealthSettings hs = Resolver.Resolve<Models.Profile.HealthSettings>("Health");
+        return recovered
+            ? PlayerState.Hp >= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestMaxHp, max)
+            : PlayerState.Hp <= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestIfBelowHp, max);
     }
 
     // Live key-possession check for DoorOpenManager's opportunistic floor grab:

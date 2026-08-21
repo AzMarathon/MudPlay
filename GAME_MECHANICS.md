@@ -107,6 +107,14 @@ it isn't here and you're unsure, ask.
 - **[OBSERVED]** A two-handed weapon needs both hands free; the game rejects the wield while an
   off-hand is occupied (it isn't "usable" until the off-hand is gone), so the off-hand must be
   `rem`'d first.
+- **[CONFIRMED 2026-08-19, user report paradigm-20260819-234712]** The off-hand-occupied block
+  above isn't limited to items the `i` listing prints as `(Off-Hand)` — an item whose MDB `Worn`
+  code is Off-Hand (12) can still print under the generic `(Worn)` bucket in the game's own `i`
+  text (e.g. a *red skull*, a worn charm/skull item), yet it mechanically fills the off-hand and
+  blocks a 2H wield exactly the same: `You may not ready a 2-handed weapon with your <item>
+  worn!`, naming the blocking item. The client's own `EquippedItems.Slot` label (taken verbatim
+  from the game's `i` text) can therefore disagree with what actually blocks a 2H equip — the
+  item's declared MDB `Worn` code is the authoritative signal, not its display bucket.
 - **[OBSERVED]** Re-equipping an item that's already worn draws
   `You do not have <X> left unequipped.`
 - **[CONFIRMED]** Worn gear **persists across logins** — you log back in wearing whatever you
@@ -723,6 +731,12 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
 - For a **loop**, an instant mob still yields only once per lap (bounded by lap time); only a
   stay-in-room **rooming** setup kills it every round.
 
+**`Summoned By` field — three room-reference token kinds *([CONFIRMED] 2026-08-19, data cross-ref)*.** A monster's `Summoned By` lists the rooms it appears in, each token tagged by *how* it spawns there. Verified by the room side: a `Group(lair)` token always points at a room **with** a `Lair` tag, a `Group:` token at one **without**.
+- **`Room m/r`** — the room's `NPC` fixture: a **placed** boss / unique (the NPC-placed mechanic above). Nav tooltip labels these **`Placed:`**.
+- **`Group: m/r`** (no `(lair)`) — an **assigned** roam / rare-random spawn; the room carries no `Lair` tag for it. Tooltip label **`Assigned:`**.
+- **`Group(lair): m/r`** — a **lair** spawn; the room's `Lair` tag lists the same monster. Tooltip label **`Lair:`** (sourced from the room's own `Lair` tag, which also carries the `(Max N)` simultaneous cap).
+- A monster can carry more than one kind for the *same* room (a placed boss that also has a `Group:` roam token — e.g. Aiken `1/398` has both `Room 1/398` and `Group: 1/398`), so the three tooltip lines may legitimately repeat a name. The nav tooltip / Room Info panel split these into Placed / Assigned / Lair; `MonsterSpawnIndex` parses the token kinds, while the combat resolver keeps a permissive union of all of them.
+
 **Boss monsters — a game-limited / long-regen singleton.** *([CONFIRMED] 2026-08-03, user + reports `paradigm-20260803-035136`, `-094657`)*
 - A monster is a **boss** if its **`GameLimit` is 1** (only one exists in the game at a time) OR its
   **`RegenTime` is ≥ 1 hour** — and this holds whether it's a **lair** member OR a **placed** monster
@@ -1118,6 +1132,14 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   door.`** (not "The door is now open."). `DoorOpenManager` keys on all three; matching only
   present-tense "unlock(s)" or "is now open" stranded the walker at a picked door
   (report stock-20260730-182812).
+- **[CONFIRMED]** **Bashing a door drains the basher's HP.** Each `bash <dir>` swing at a door
+  costs HP (a bashable door opens after some number of swings, gated by RNG, not a single hit),
+  so sustained bashing whittles the character down. `DoorOpenManager` therefore bashes a
+  *bashable* door (per `DoorPolicy`) **uncapped** — no fixed attempt limit — but interleaves
+  rest: once HP falls to the Health-tab **rest-if-below** trigger it pauses bashing so
+  `HealthManager` can rest to **rest-max**, then resumes. (Confirmed by user direction; replaced
+  the old fixed `MaxBashAttempts` cap.) Picking, by contrast, does **not** drain HP and keeps its
+  `MaxPickAttempts` retry cap.
 - **Corollary the tracker relies on:** *a room redisplay that still matches the room you moved
   from is never the result of a refused move.* While a move is pending, seeing the source room
   again can only be a **passive re-look** — a combat-clear, a monster/player arrival or
@@ -2651,6 +2673,20 @@ glass jug               5               2 gold crowns
   can't clear it (it needs a confirmed Resting first). So the client must **re-attempt the
   rest once poison clears** (the poison falling edge drops the stale latch) — otherwise it
   sits standing below the rest floor forever, which is what report 092945 hit.
+
+## Casting a spell interrupts resting/meditating *([CONFIRMED] 2026-08-20, user)*
+
+- **Casting a spell on yourself (a self-bless, etc.) while resting or meditating breaks the
+  rest/meditate state** — position drops back to Standing, same as taking a hit or moving.
+  Reported as "meditate not re-engaging automatically after blessing while resting."
+- **Consequence for the auto-rest engine:** `HealthManager`'s confirm/interrupt latch
+  (`_restInFlight` / `_restConfirmedByPrompt`) only recognized `PlayerPosition.Resting`, never
+  `PlayerPosition.Meditating` — so a `meditate` send's confirmation step never fired, the
+  interruption step's guard never tripped either, and the latch stuck `true` forever after a
+  meditate got interrupted in place (no room move to fall back on and clear it via
+  `NoteRoomChanged`). Fixed by treating Resting and Meditating as the same "in a resting-family
+  position" state for the confirm/interrupt check — `rest` was never affected, since its
+  position always matched.
 
 ## Confusion fumbles — actions fail and must be re-sent *([CONFIRMED] 2026-07-14, user)*
 

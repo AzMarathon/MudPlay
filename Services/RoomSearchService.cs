@@ -197,7 +197,8 @@ public sealed class RoomSearchService
                         Name:              string.Empty,
                         StepsFromCurrent:  null,
                         MonsterTag:        monsterTag,
-                        MatchRank:         rank));
+                        MatchRank:         rank,
+                        Kind:              SearchResultKind.Monster));
                     continue;
                 }
 
@@ -207,7 +208,8 @@ public sealed class RoomSearchService
                     if (_blacklist.IsBlacklisted(lk)) continue;
                     if (_graph.GetRoom(lk) is not { } lroom) continue;
                     int? steps = source is { } src ? DistanceFrom(src, lroom.Key) : null;
-                    matches.Add(new RoomSearchResult(lroom.Key, lroom.DisplayName, steps, monsterTag, rank));
+                    matches.Add(new RoomSearchResult(
+                        lroom.Key, lroom.DisplayName, steps, monsterTag, rank, SearchResultKind.Monster));
                 }
             }
         }
@@ -230,7 +232,8 @@ public sealed class RoomSearchService
                 if (_graph.GetRoom(key) is not { } froom) continue;
                 if (matches.Any(x => x.MonsterTag is null && x.Key.Equals(key))) continue;
                 matches.Add(BuildRoomMatch(froom, source)
-                    with { MonsterTag = $"{fav.Label} · goto", MatchRank = MatchRank(fav.Label!, tokens) });
+                    with { MonsterTag = $"{fav.Label} · goto", MatchRank = MatchRank(fav.Label!, tokens),
+                           Kind = SearchResultKind.Favorite });
             }
         }
 
@@ -255,13 +258,19 @@ public sealed class RoomSearchService
                     if (_graph.GetRoom(bk) is not { } broom) continue;
                     if (matches.Any(x => x.MonsterTag == bossTag && x.Key.Equals(bk))) continue;
                     int? steps = source is { } src ? DistanceFrom(src, broom.Key) : null;
-                    matches.Add(new RoomSearchResult(broom.Key, broom.DisplayName, steps, bossTag, rank));
+                    matches.Add(new RoomSearchResult(
+                        broom.Key, broom.DisplayName, steps, bossTag, rank, SearchResultKind.Boss));
                 }
             }
         }
 
+        // Group by source first — favourites, then bosses, then rooms, then bare
+        // monster labels — so the dropdown reads by kind instead of interleaving
+        // them by relevance. Within each group the original relevance / distance /
+        // name order is preserved.
         return matches
-            .OrderBy(mm => mm.MatchRank)
+            .OrderBy(mm => (int)mm.Kind)
+            .ThenBy(mm => mm.MatchRank)
             .ThenBy(mm => mm.StepsFromCurrent ?? int.MaxValue)
             .ThenBy(mm => mm.PrimaryLine, StringComparer.OrdinalIgnoreCase)
             .ToList();

@@ -308,6 +308,34 @@
                                 </ItemsControl>
                             </StackPanel>
 
+                            <!-- Placed in — rooms whose static Placed list drops this
+                                 item on the floor. Each links to the room's Rooms-tab
+                                 record, with a Queue-Walk action. Hidden when the item is
+                                 never floor-placed. -->
+                            <StackPanel IsVisible="{Binding HasPlacedIn}" Margin="0,10,0,0">
+                                <TextBlock Classes="SectionHeader" Text="Placed in"/>
+                                <ItemsControl ItemsSource="{Binding PlacedIn}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vm:PlacedInRow">
+                                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,1,0,4">
+                                                <Button Classes="MdbLink"
+                                                        Content="{Binding Location}"
+                                                        Command="{Binding Open}"
+                                                        IsEnabled="{Binding CanOpen}"
+                                                        HorizontalAlignment="Left"
+                                                        ToolTip.Tip="Open this room in the Game Data browser"/>
+                                                <Button Classes="MdbLink"
+                                                        Content="Queue Walking here →"
+                                                        Command="{Binding QueueWalk}"
+                                                        IsEnabled="{Binding CanOpen}"
+                                                        HorizontalAlignment="Left"
+                                                        ToolTip.Tip="Arm a walk to this room (opens the map; then click Run)"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
                             <!-- Chest Contents — containers only. Decoded loot table:
                                  item · at-least-once drop chance for one `open`, plus a
                                  yield summary. Read-only; hidden for non-containers. -->

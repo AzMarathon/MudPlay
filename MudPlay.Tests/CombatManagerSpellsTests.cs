@@ -56,6 +56,11 @@ public sealed class CombatManagerSpellsTests
         // instead of the zero real elapsed time a synchronous test call has.
         private DateTimeOffset _clock = DateTimeOffset.UtcNow;
 
+        // Models RoundDamageTracker's timer-driven RoundCount: a genuine round
+        // boundary (Tick / TickFast) advances it; a premature same-round tick
+        // (TickSameRound) does not. Drives the attack-spell MaxCasts tally.
+        private int _roundCount;
+
         // When deferPost is set, the cascade switch-dispatch scheduler queues actions
         // into Posted instead of running them inline, so a test can interleave server
         // lines between a deferred switch-dispatch being scheduled and it actually
@@ -89,6 +94,8 @@ public sealed class CombatManagerSpellsTests
                 log: Log);
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.SetClock(() => _clock);
+            // Production counts MaxCasts off RoundDamageTracker.RoundCount; mirror it.
+            Combat.ReadRoundCount = () => _roundCount;
             Combat.SetBackstabHooks(() => Sneaking, n => SeeHidden.Contains(n));
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
             Combat.SetSpellShortResolver(
@@ -158,6 +165,18 @@ public sealed class CombatManagerSpellsTests
             Router.Dispatch(emitted);
         }
 
+        // A between-round cast's *Combat Off* that closes the open attack-spell
+        // round. In production RoundDamageTracker (CombatStatus tieBreak 100)
+        // CloseCurrent's that round — RoundCount++ — BEFORE CombatManager's resume
+        // reads the count. RoundDamageTracker isn't wired here (the int _roundCount
+        // is its stand-in), so bump first, then dispatch the Off — mirroring that
+        // ordering so the resume tallies the interrupted spell toward MaxCasts.
+        public void FeedOffClosingRound()
+        {
+            _roundCount++;
+            Feed("*Combat Off*");
+        }
+
         /// <summary>One combat round. Mirrors the AppServices tick-subscription
         /// order: the coordinator clears its cooldown first, then the combat
         /// heartbeat re-decides. (CastingDirector sits between them in production but
@@ -166,6 +185,7 @@ public sealed class CombatManagerSpellsTests
         public void Tick()
         {
             _clock += TimeSpan.FromSeconds(5);
+            _roundCount++;   // a genuine round boundary closed (mirrors RoundDamage)
             Cast.OnCombatTick();
             Combat.OnCombatTick();
         }
@@ -187,6 +207,7 @@ public sealed class CombatManagerSpellsTests
         public void TickFast()
         {
             _clock += TimeSpan.FromSeconds(3);
+            _roundCount++;   // a genuine (fast) round boundary — must tally, not reject
             Cast.OnCombatTick();
             Combat.OnCombatTick();
         }
@@ -417,6 +438,56 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("mmis giant rat", h.LastSent);
     }
 
+    // Reports paradigm-20260819-121003 / -142147: after lbol caps and the switch to
+    // mmis is DEFERRED, a second tick during the delay window recomputed the switch
+    // (the announce is still the stale lbol, so sameSpell=false takes the ungated
+    // decision-changed branch) and scheduled it AGAIN — the alternate fired twice.
+    // The pending-switch latch must collapse the re-arm so it dispatches exactly once.
+    [Fact]
+    public void CapSwitch_RetickDuringDeferWindow_DispatchesAlternateOnce()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);
+
+        h.Tick();                       // cap-switch to mmis, deferred (queued)
+        Assert.Single(h.Posted);        // one dispatch armed
+        h.TickSameRound();              // re-tick while the switch is still pending
+        Assert.Single(h.Posted);        // still ONE — the latch blocked the double-schedule
+
+        h.DrainPosted();
+        Assert.Equal("mmis giant rat", h.LastSent);
+        Assert.Equal(1, h.AllSent.Count(s => s == "mmis giant rat"));   // exactly one mmis
+    }
+
+    // Report paradigm-20260819-120938: a solo mob's counter-swing tripped a combat
+    // tick WITHIN the engage round (before lbol's round resolved); the MinValue solo
+    // anchor let that premature tick tally lbol and — MaxCasts=1 — cap it, so mmis
+    // went out before lbol ever fired. The tally now keys off the real round count,
+    // so a same-round tick counts nothing and the cap waits for a genuine boundary.
+    [Fact]
+    public void SoloEngage_PrematureSameRoundTick_DoesNotCapBeforeARoundCloses()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);
+
+        h.TickSameRound();                                   // premature — no round closed yet
+        Assert.Equal("lbol giant rat", h.LastSent);          // still lbol; not capped
+        Assert.DoesNotContain("mmis giant rat", h.AllSent);  // mmis did NOT fire early
+
+        h.Tick();                                            // real round boundary → tally → cap → mmis
+        Assert.Equal("mmis giant rat", h.LastSent);
+    }
+
     // Report paradigm-20260815-202319 ("not re-engaging combat after buffing mid-combat"):
     // a between-round self-buff (armr) fires, then the round's nuke (lbol, MaxCasts=1)
     // KILLS one mob in a multi-mob room. The death→re-observe re-picks the live survivor
@@ -459,6 +530,36 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal(sentBeforeOff + 1, h.Sent.Count);
         Assert.Equal("lbol thin leprous outcast", h.LastSent);
+    }
+
+    // Report paradigm-20260820-063541 ("LBOL cast twice"): a between-round survival
+    // cast interrupts an attack spell (lbol, MaxCasts=1) mid-round and drops *Combat
+    // Off*. The heartbeat can't tally the interrupted round (OnCombatTick bails while
+    // _combatOff), so the spell-resume used to re-announce the STILL-current lbol
+    // uncapped — a second lbol before the cascade advanced. RoundDamageTracker now
+    // tie-breaks ahead of CombatManager on that Off and closes the round first; the
+    // resume tallies lbol's cast toward its cap before re-deciding, so it cascades to
+    // the alternate (mmis) instead of firing lbol a second time.
+    [Fact]
+    public void BetweenRoundInterrupt_TalliesAttackSpellRound_ResumeRespectsMaxCasts()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);          // engage → lbol (spell mode)
+
+        // A between-round survival cast interrupts lbol's round and drops *Combat Off*.
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteBetweenRoundCast();
+        h.FeedOffClosingRound();                             // round closes (tieBreak) → resume tallies lbol
+
+        // lbol hit MaxCasts=1 on the interrupted round → the resume cascades to the
+        // alternate, NOT a second lbol.
+        Assert.Equal("mmis giant rat", h.LastSent);
+        Assert.Equal(1, h.AllSent.Count(s => s == "lbol giant rat"));   // exactly one lbol
     }
 
     // MaxCasts must count real rounds, not damage-line ticks. A multi-hit attack spell

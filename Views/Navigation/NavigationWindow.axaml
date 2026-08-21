@@ -999,23 +999,46 @@
                                                    FontSize="11"
                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
-                                        <!-- Monsters -->
-                                        <StackPanel IsVisible="{Binding RoomInfo.HasMonsters}" Spacing="1">
-                                            <TextBlock Classes="RoomInfoGroup" Text="Monsters"/>
-                                            <ItemsControl ItemsSource="{Binding RoomInfo.Monsters}">
+                                        <!-- Monsters — Placed / Assigned / Lair, mirroring the map tooltip -->
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasPlaced}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Placed"/>
+                                            <ItemsControl ItemsSource="{Binding RoomInfo.PlacedMonsters}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="gd:RoomDetailLink">
-                                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                                            <Button Classes="RecordLink"
-                                                                    Content="{Binding Text}" Command="{Binding Open}"/>
-                                                            <TextBlock Text="{Binding Detail}"
-                                                                       IsVisible="{Binding HasDetail}"
-                                                                       FontSize="11" VerticalAlignment="Center"
-                                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                                        </StackPanel>
+                                                        <Button Classes="RecordLink"
+                                                                Content="{Binding Text}" Command="{Binding Open}"/>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
+                                        </StackPanel>
+
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasAssigned}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Assigned"/>
+                                            <ItemsControl ItemsSource="{Binding RoomInfo.AssignedMonsters}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="gd:RoomDetailLink">
+                                                        <Button Classes="RecordLink"
+                                                                Content="{Binding Text}" Command="{Binding Open}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasLair}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Lair"/>
+                                            <ItemsControl ItemsSource="{Binding RoomInfo.LairMonsters}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="gd:RoomDetailLink">
+                                                        <Button Classes="RecordLink"
+                                                                Content="{Binding Text}" Command="{Binding Open}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <!-- Lair regen sits directly beneath the Lair group, like the tooltip. -->
+                                            <TextBlock Text="{Binding RoomInfo.LairRegen}"
+                                                       IsVisible="{Binding RoomInfo.HasLairRegen}"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
                                         </StackPanel>
 
                                         <!-- Floor items -->

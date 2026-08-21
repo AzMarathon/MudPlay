@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.23.0**
+> **Version 3.24.0**
 > - New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: configurable silent recon laps (default 2) search every room traversed by the circuit, then misfiled items are carried to their labeled destination. Built on the same loop engine every saved Loop runs on
 > - GH room labels support multiple rules per room (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail), including equip-slot rules (Neck / Wrist / Off-Hand / etc.) for jewelry-style rooms that aren't classified by material or weapon type, and an optional catch-all room for anything matching no explicit rule
 > - Item name resolution now also exposes WeaponType / ArmourType / Worn subtype, letting a GH room label narrow past the top-level category (e.g. "Weapons > 1H Blunt") or match by equip slot alone

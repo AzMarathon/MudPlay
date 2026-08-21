@@ -25,6 +25,14 @@ namespace MudPlay.Game.Spells;
 // the off-hand slot), and finally eq the off-hand again. (Confirmed MajorMUD equip
 // order; see GAME_MECHANICS.md.) eq is the universal equip verb (matches CombatManager).
 //
+// Some off-hand-occupying items (e.g. a worn charm/skull) don't print under the literal
+// "Off-Hand" slot in the client's snapshot — the game's own 'i' listing buckets them
+// under the generic "Worn" label, but they still functionally block a two-handed wield
+// exactly like a shield does ("You may not ready a 2-handed weapon with your <item>
+// worn!"). isOffHandItem lets the two-handed branch recognize one of these among the
+// Worn-slot entries by its game-data Worn code (report paradigm-20260819-234712: a red
+// skull, Worn=Off-Hand but displayed as "Worn", silently blocked every crozier recast).
+//
 // The commands are sent back-to-back — MajorMUD queues typed input, and an item use
 // resolves the cast immediately so the restore can follow without waiting. The buff
 // timer (recast scheduling) is owned by CastingDirector, not this sequencer; this
@@ -41,12 +49,21 @@ public sealed class ItemCastSequencer
     // Inventory slot label a shield / off-hand item occupies.
     private const string OffHandSlot = "Off-Hand";
 
+    // Inventory slot label the client files a game-displayed "(Worn)" item under —
+    // the generic bucket some off-hand-blocking charms land in (see isOffHandItem).
+    private const string WornSlot = "Worn";
+
     private readonly Func<IReadOnlyList<ClassCastItem>> _castItems;
     private readonly Func<InventorySnapshot> _inventory;
     // Given an inventory slot label, the item the equipment manager wants worn there
     // (its Default set), or null. Used as the restore fallback when the live slot
     // can't say what belongs there — see RestoreTarget. Null when unwired (tests).
     private readonly Func<string, string?>? _desiredSlotItem;
+    // True when a display-name's game data marks it an off-hand item (Items.Worn ==
+    // Off-Hand), regardless of which slot label the live snapshot filed it under.
+    // Lets the two-handed branch recognize a Worn-bucketed off-hand blocker. Null
+    // when unwired (tests) — the Worn slot is then never scanned.
+    private readonly Func<string, bool>? _isOffHandItem;
     // Invoked when a swap is about to hit the wire, so auto-equip can stand off the
     // borrowed slot while this sequence's own restore handles it (see
     // AutoEquipCoordinator.NoteItemCastSwap). Null when unwired (tests).
@@ -59,7 +76,8 @@ public sealed class ItemCastSequencer
         Func<InventorySnapshot> inventory,
         LogService? log = null,
         Func<string, string?>? desiredSlotItem = null,
-        Action? onSwap = null)
+        Action? onSwap = null,
+        Func<string, bool>? isOffHandItem = null)
     {
         ArgumentNullException.ThrowIfNull(castItems);
         ArgumentNullException.ThrowIfNull(inventory);
@@ -68,6 +86,7 @@ public sealed class ItemCastSequencer
         _log = log;
         _desiredSlotItem = desiredSlotItem;
         _onSwap = onSwap;
+        _isOffHandItem = isOffHandItem;
     }
 
     // Bind the wire sink (the wrapped engine sender).
@@ -111,7 +130,11 @@ public sealed class ItemCastSequencer
         if (item.IsTwoHanded)
         {
             string? restoreWeapon = SlotItem(inv, WeaponHandSlot);
-            string? restoreOffHand = SlotItem(inv, OffHandSlot);
+            // The blocker is whatever's literally in "Off-Hand", or — failing that —
+            // a Worn-bucketed item whose game data says it occupies the off-hand
+            // anyway (see class remarks: a worn charm/skull can block a 2H wield
+            // without the snapshot ever labeling it "Off-Hand").
+            string? restoreOffHand = SlotItem(inv, OffHandSlot) ?? OffHandBlockingWornItem(inv);
             bool restoreWeaponDiffers = Differs(restoreWeapon, name);
             bool juggleOffHand = Differs(restoreOffHand, name);
 
@@ -168,6 +191,21 @@ public sealed class ItemCastSequencer
     private static bool Differs(string? worn, string castName) =>
         !string.IsNullOrWhiteSpace(worn)
         && !string.Equals(worn, castName, StringComparison.OrdinalIgnoreCase);
+
+    // The Worn-slot item, if any, whose game data marks it an off-hand occupant —
+    // the two-handed branch's fallback for a blocker the snapshot didn't label
+    // "Off-Hand". Null when unwired or no Worn item resolves as off-hand.
+    private string? OffHandBlockingWornItem(InventorySnapshot inv)
+    {
+        if (_isOffHandItem is null) return null;
+        foreach (EquippedItem e in inv.EquippedItems)
+        {
+            if (!string.Equals(e.Slot.Trim(), WornSlot, StringComparison.OrdinalIgnoreCase)) continue;
+            string n = e.Name.Trim();
+            if (n.Length > 0 && _isOffHandItem(n)) return n;
+        }
+        return null;
+    }
 
     // The item name occupying the given slot in the last inventory dump, or null
     // when that slot is empty.

@@ -1,18 +1,21 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.Json;
 using MudPlay.Game.Map;
 
 namespace MudPlay.Services;
 
-// Lazy per-set reverse index of floor items — the items a room's CMD chain
-// scatter-places on the ground via the TBInfo `roomitem` directive (e.g. a
-// "make emblem" command that drops the dragon emblem in the room). This is the
-// one room→item mapping the shop/drop/giver indexes don't cover: ItemSourceIndex
-// deliberately skips `roomitem` because it isn't a gated hand-over to the player,
-// and the Rooms table itself carries no item column. Backs the Navigation Room
-// Info panel's floor-item links. Builds on first query and self-invalidates by
-// comparing the cache's ActiveSet to the set it last built from — same lifetime
-// contract as ItemSourceIndex.
+// Lazy per-set reverse index of floor items — the items a room drops on the
+// ground. Two sources, both of which the shop/drop/giver indexes skip (a floor
+// item isn't a gated hand-over to the player):
+//   1. The room's static `Placed` column — a comma-separated list of item ids the
+//      room spawns with (dupes = multiple copies, e.g. "73,73,623"). This is the
+//      common case and mirrors the item's own "Obtained From: Room {map}/{room}".
+//   2. The TBInfo `roomitem` directive fired by a room's CMD chain (e.g. a "make
+//      emblem" command that scatter-drops the dragon emblem).
+// Backs the Navigation Room Info panel's floor-item links. Builds on first query
+// and self-invalidates by comparing the cache's ActiveSet to the set it last
+// built from — same lifetime contract as ItemSourceIndex.
 public sealed class RoomFloorItemIndex
 {
     private readonly GameDataCache _cache;
@@ -65,6 +68,10 @@ public sealed class RoomFloorItemIndex
             return;
         }
 
+        // Source 1: the static `Placed` column on each room record.
+        IndexPlacedColumn();
+
+        // Source 2: TBInfo `roomitem` directives fired by room CMD chains.
         var itemIds = new List<int>();
         var rooms = new HashSet<(int Map, int Room)>();
 
@@ -108,6 +115,52 @@ public sealed class RoomFloorItemIndex
         _log?.Info("RoomFloorItemIndex",
             $"Indexed floor items for {_itemsByRoom.Count} room(s) from '{active}'.");
     }
+
+    // Index every room's static `Placed` column: a comma-separated list of item
+    // ids the room drops on its floor (dupes = extra copies, collapsed here to the
+    // distinct set). Reads the raw Rooms table off the cache — the same JSON the
+    // item view reads for its "Obtained From: Room" cross-reference — so the two
+    // directions stay in sync. A malformed / empty column is skipped silently.
+    private void IndexPlacedColumn()
+    {
+        JsonDocument? rooms = _cache.GetRawTable("Rooms");
+        if (rooms is null) return;
+
+        foreach (JsonElement el in rooms.RootElement.EnumerateArray())
+        {
+            if (!TryInt(el, "Map Number", out int map) || !TryInt(el, "Room Number", out int room))
+                continue;
+            string placed = ReadString(el, "Placed");
+            if (placed.Length == 0) continue;
+
+            RoomKey key = new(map, room);
+            foreach (string tok in placed.Split(','))
+            {
+                int id = LeadingInt(tok.Trim());   // tolerates the trailing NUL the MDB pads with
+                if (id > 0) AddFloorItem(key, id);
+            }
+        }
+    }
+
+    private void AddFloorItem(RoomKey key, int itemId)
+    {
+        if (!_itemsByRoom.TryGetValue(key, out List<int>? list))
+            _itemsByRoom[key] = list = new List<int>();
+        if (!list.Contains(itemId)) list.Add(itemId);
+    }
+
+    private static bool TryInt(JsonElement el, string field, out int value)
+    {
+        value = 0;
+        return el.TryGetProperty(field, out JsonElement v)
+            && v.ValueKind == JsonValueKind.Number
+            && v.TryGetInt32(out value);
+    }
+
+    private static string ReadString(JsonElement el, string field) =>
+        el.TryGetProperty(field, out JsonElement v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString() ?? string.Empty
+            : string.Empty;
 
     // Walk the entry's Called-From graph upward, collecting the distinct room roots.
     // Textblock refs recurse (a block called by another block); monster / spell refs

@@ -192,7 +192,11 @@ public sealed class AutoDepositManager : IDisposable
 
         _cash.AutoDepositRequested += OnAutoDepositRequested;
         _walker.Event += OnWalkEvent;
-        _tracker.StateChanged += OnRoomEntered;
+        // The pass-through stash is NOT subscribed to RoomTracker.StateChanged
+        // here: it must run BEFORE the loop's next-move step so the `hide` reaches
+        // the wire ahead of the move (otherwise the coins get hidden in the next
+        // room — report paradigm-20260819-054200). AppServices drives OnRoomEntered
+        // from its early StateChanged handler, registered ahead of LoopRunner's.
     }
 
     // True while a reroute owns the walker (bank/stash detour and the walk back).
@@ -332,7 +336,9 @@ public sealed class AutoDepositManager : IDisposable
     // Suppressed while a reroute is in flight (_busy, where the arrival handler
     // owns the stash) and when no resumable engine is active (a purely manual walk
     // never stashes).
-    private void OnRoomEntered(RoomTransition t)
+    // Driven by AppServices' early RoomTracker.StateChanged handler (registered
+    // ahead of LoopRunner) so the stash's `hide` precedes the loop's next move.
+    internal void OnRoomEntered(RoomTransition t)
     {
         if (_busy) return;
         if (t.NewRoom is not { } room) return;
@@ -586,6 +592,15 @@ public sealed class AutoDepositManager : IDisposable
         return false;
     }
 
+    // True when the character is standing in a marked stash room with a loop /
+    // lair running — the pass-through-stash context. AppServices wires this into
+    // the cash + item auto-collect engines so a search here can't re-expose and
+    // re-grab the pile the stash just hid (report paradigm-20260819-121516).
+    public bool IsPassingThroughStashRoom()
+        => _tracker.State.CurrentRoom is { } room
+           && IsStashRoom(room.Key)
+           && SnapshotRunningEngine().Kind != ResumeKind.None;
+
     // Whether room is one the running engine will reach on its own — a resolved
     // loop-circuit room, or a marked Auto-Lair room. Such a room needs no detour:
     // the pass-through handler stashes it when the engine walks through.
@@ -682,7 +697,7 @@ public sealed class AutoDepositManager : IDisposable
         _disposed = true;
         _cash.AutoDepositRequested -= OnAutoDepositRequested;
         _walker.Event -= OnWalkEvent;
-        _tracker.StateChanged -= OnRoomEntered;
+        // OnRoomEntered is driven by AppServices (not a direct subscription).
         _buyTimer.Dispose();
         _depositSyncTimer.Dispose();
     }

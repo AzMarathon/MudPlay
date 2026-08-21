@@ -164,11 +164,11 @@ The **EXP/HR ESTIMATOR** panel in the right rail projects how much experience a 
 
 **Shift+right-click** skips the menu when a room's only jump is unambiguous — a room with just an up exit, just a down exit, or a single teleport destination immediately follows it (recentres the map there) instead of opening the menu.
 
-**Left-click any room** to load it into the **ROOM INFO** rail panel. Clicking never forces the panel open — it just refreshes the panel's contents to the room you clicked, so expand ROOM INFO whenever you like and it shows the last room you clicked. It lists clickable links to everything attached to that room — the **room name** itself (click it to open the room's record), each **monster** that lairs, is summoned, or is placed there, each **floor item** the room scatter-places (via its `roomitem` command), the **shop** as a whole when the room hosts one, and the room's cast-on-enter **room spell**. Clicking a **monster** or the **room spell** opens its full record in a dialog (the same record you get from the Monsters / Spells browser tabs); the **shop** opens the room-detail popup — its stock table with buy/sell prices and the live Charm picker (the same popup the Shops browser tab opens); and the room / item links open that record in the **Game Data Browser**. Either way it's a quick jump from "what's in this room" to the full record without hunting through the browser's tables.
+**Left-click any room** to load it into the **ROOM INFO** rail panel. Clicking never forces the panel open — it just refreshes the panel's contents to the room you clicked, so expand ROOM INFO whenever you like and it shows the last room you clicked. It lists clickable links to everything attached to that room — the **room name** itself (click it to open the room's record), the monsters grouped (like the map tooltip) into **Placed** (a boss / NPC fixture), **Assigned** (roams there / rarely spawns), and **Lair** (consistent lair spawners, with the lair's **Max Regen** beneath) — a monster can appear in more than one group — each **floor item** the room drops on the ground (its static placements plus anything its `roomitem` command scatters), the **shop** as a whole when the room hosts one, and the room's cast-on-enter **room spell**. Clicking a **monster** or the **room spell** opens its full record in a dialog (the same record you get from the Monsters / Spells browser tabs); the **shop** opens the room-detail popup — its stock table with buy/sell prices and the live Charm picker (the same popup the Shops browser tab opens); and the room / item links open that record in the **Game Data Browser**. Either way it's a quick jump from "what's in this room" to the full record without hunting through the browser's tables.
 
 The **Overlays ▾** button layers lairs, shops, and spell rooms onto the map and toggles the **Legend** — which you can **drag anywhere on the map** (it remembers where you put it; toggle it off and back on and it snaps back into view if the window has since shrunk). Route lines are colour-coded — walk-to **blue**, a running loop **green**, a loop you're previewing **red**, an Auto-Lair approach **orange**. Exit stubs carry their own colours (shown in the Legend): **red** for a trapped exit, **magenta** "Action required" for an exit you can't just walk — one that needs a command or in-room action to cross (a `go path`-style named exit, a lever, or an ask-a-guard door), and **cyan** for a hidden exit revealed with `sea`.
 
-Hovering a room shows its details, including the monsters that spawn there with their game-data record numbers (e.g. `Dark Goblin Archer(#48)`).
+Hovering a room shows its details in a tooltip — the monsters that spawn there, split into **Placed** (a boss / NPC fixture), **Assigned** (roams / rarely spawns there), and **Lair** (a consistent lair spawner), each with its game-data record number (e.g. `Dark Goblin Archer(#48)`); the lair's **Max Regen** sits directly beneath the Lair line; then any **floor items** the room holds, its shop / room spell, exits, and lighting.
 
 **Getting past obstacles.** En route, MudPlay handles closed and locked doors (key, pick, or bash), traps (search and disarm, or delegate to a capable party member), and hidden exits. It also routes through **NPC ask-transport** exits — a sealed room whose only way out is asking a resident NPC to port you elsewhere (the Floating Citadel's Grey Lord ports you to Town Square when asked) — sending the `ask <npc> <keyword>` for you, so those pockets are no longer dead-ends to the router. For an **action-gated** exit whose opener is a lever or switch in *another* room (the magenta "Action required" stubs), it drives a go-pull-return detour automatically — visiting each lever room on the way past, then crossing the primed exit. This works even when a lever alcove is itself behind **another** action-gated door: the walker opens each inner door first (walk in, pull, return) before crossing, so a multi-level lever vault is solved end-to-end. Only a very deep (4+ levels) or self-referential (levers that gate each other) puzzle is left unsolved — those fail cleanly at plan time (*"route needs an action-gated exit the walker can't auto-solve"*) and log the exit that stopped it, so you can drive that stretch by hand. It also crosses two further special exits: a **room-command reveal** — a hidden passage opened by typing a command *in the room itself* (e.g. `clear rubble` at a rubble-blocked entrance), which it sends before stepping through — and an **item-use teleport**, where *using* an item transports you across (e.g. `use potion of levitation` to reach an otherwise-unreachable area); it uses the item for you when your route crosses one. When a route is blocked *only* because you lack a required item for one of these gates — often a quest item that can't be auto-fetched — the walk fails with a message that **names the item to go obtain**, rather than a bare "no path".
 
@@ -225,7 +225,7 @@ Active party members get a few things for free regardless of the grid: the party
 | `@health` | — | HP / MA / Kai and resting-or-meditating state |
 | `@status` | — | what you're doing (walking / looping / fighting / resting), your room, and any ailments |
 | `@lives` | — | lives remaining |
-| `@exp` | — | session exp earned, exp/hour, and time-to-level |
+| `@exp` | — | exp remaining to level, the compact exp/hour rate, and time-to-level (e.g. `4,500,000 EXP to level, making 1.1m/hr ~4h 10m to level`) |
 | `@level` | — | level, current exp, and exp to next |
 | `@where` | — | room name, map/room, and exits |
 | `@path` | — | the movement engine's activity and step progress; when stopped/idle, names the last loop or auto-lair that was run (so you can help a dead player resume their circuit) |
@@ -401,7 +401,7 @@ Each engine — Auto-Combat, Auto-Nuke, Auto-Heal/Rest, Auto-Bless, Auto-Light, 
 The **Action menu** also carries commands you fire once, on demand, rather than leaving running:
 
 - **Get All / Drop All / Equip All / Deposit All** — pick up everything on the floor, drop everything unworn, wear your Default gear set, or bank your wealth down to the keep-on-hand floor, right now. (These are the local twins of the `@get-all` / `@drop-all` / `@deposit-all` remote commands, and the toolbar Get / Drop / Equip / Deposit buttons drive the same actions.)
-- **Reset States** — the recovery escape hatch. Clears *your own* stuck ailments, waits, and movement holds and returns you to an idle state — reach for it when an engine looks wedged (e.g. the walker parked "held" or "waiting" with nothing actually happening). It's also on the terminal's right-click menu.
+- **Reset States** — the recovery escape hatch. Clears your own stuck ailments, waits, and movement holds **and every party member's ailment chips** (blind / poison / disease / confuse / held), returning you to an idle state — reach for it when an engine looks wedged (e.g. the walker parked "held" or "waiting" with nothing actually happening) or a party row is stuck showing a condition that's already gone. It's also on the terminal's right-click menu.
 
 ## Base modes
 
@@ -466,9 +466,9 @@ Values group with thousands separators. Unlike the live **Filter…** text box, 
 **Double-click a row to open it** — what happens depends on the table:
 
 - **Items** and **Monsters** open a real **override editor**: an editable pane on the left, the read-only **Other Info (from MDB)** on the right. For an item you can flip its automation flags (**Auto-collect, Auto-discard, Auto-buy, Auto-sell, Auto-stash**, and more), set **Min. to keep / Max to get**, and toggle **Auto-obtain for path**. For a monster you can set its **Relationship** and **Priority** and its pre-attack and override-attack spells; the read-only pane's **Spawns In** list shows each room's lair size (e.g. `1/2122 (lair: 2)`). (Combat message wording and per-monster flavor prefixes are no longer edited here — hits, misses, dodges, blocks, and deaths are recognized generically from line colour and the experience line, and flavor adjectives come from one shared vocabulary you edit under **Flavor Prefixes** (below), so you never hand-enter a monster's messages or prefixes.) When you set the Relationship to **Neutral**, a **Kill on sight** checkbox appears — a neutral is normally left alone (it never attacks first), but checking this makes auto-combat engage it while leaving other passive neutrals safe to rest among, so the engine can rest/meditate between kills instead of being forced to clear the whole room. Even *without* Kill on sight, if you hand-attack a passive neutral yourself (a manual swing or combat cast), the engine takes over and finishes it — hitting a neutral turns it hostile, so it's treated like an enemy until it dies and the walker holds in the room — so you don't have to keep swinging manually; the other un-engaged neutrals stay passive and rest-safe. The **Use** dropdown chooses where the override saves — **Character** (this character only), **BBS** (everyone on this BBS), or **Global** (the whole install) — then **OK** writes it and the row's Use column updates to match.
-- On an item, the right-hand info pane is also interactive: a **Charm** picker (default 50) re-prices the **Bought / sold** buy/sell figures live so you can compare, say, a higher-charm party member selling; each shop links to its room record and offers **Queue Walking here →** (arms a walk to that shop, like typing it in the nav search box); and **Dropped by** lists the monsters that drop it as links to their records.
+- On an item, the right-hand info pane is also interactive: a **Charm** picker (default 50) re-prices the **Bought / sold** buy/sell figures live so you can compare, say, a higher-charm party member selling; each shop links to its room record and offers **Queue Walking here →** (arms a walk to that shop, like typing it in the nav search box); **Dropped by** lists the monsters that drop it as links to their records; and **Placed in** lists the rooms whose floor holds it, each a link to the room record with its own **Queue Walking here →** (so a room-only item like a quest box shows exactly where to find it).
 - **Spells** — double-click edits the spell's player-cast **message** wording (its success and wear-off lines); the spell's own stats are read-only. The read-only record also lists **Negated by** — any items that cancel the spell while carried (the inverse of the Item Finder's *Negates* column). Record references on that tab — Summons, Casts, Casted By, Negated by, Learned From — are clickable links that open the monster / spell / item record. A spell's message is stored in the Messages table, but because you edit it here, a message **claimed by a spell in this set is hidden from the Messages tab** — it would just be the same record listed twice. (A message whose spell link is orphaned — the spell isn't in this set — stays on the Messages tab, since the Spells section can't reach it.)
-- **Rooms** — double-click opens a read-only detail popup (exits, lighting, shop, placed monsters, room commands); its "Also here" monsters show their record number and link to their records. For a shop room, a **Charm** picker re-prices the stock table live.
+- **Rooms** — double-click opens a read-only detail popup (exits, lighting, shop, monsters, room commands); its monsters are tagged **placed** / **assigned** / **lair**, show their record number, and link to their records. For a shop room, a **Charm** picker re-prices the stock table live.
 - **Shops** — double-click opens the room-detail popup for the shop's room directly (the same popup the Rooms tab opens, showing the stock table with its live Charm picker). A shop that spans several rooms opens on the first and lists the others as clickable links in brackets next to the popup's title — click one to hop the popup to that room.
 - The rest (Lairs, Races, Classes, and so on) are read-only reference.
 
@@ -733,6 +733,18 @@ See the [Keybindings](#keybindings) section below — the rebind dialog is launc
 **Default:** Off
 **What it does:** This is a toolbar button, not a checkbox on a settings tab — but it's documented here because that's where you'll actually find it (look for the "no hangup" icon). When on, **no** automatic mechanism can drop your connection — not a remote `@hangup`, not the emergency low-HP hangup, nothing — only you disconnecting manually will end the session.
 **Important notes:** This is a hard override — it wins over the General tab's "Allow hangup in all-off mode" carve-out. One narrow exception still fires even with this on: a graceful log-off ahead of the BBS's nightly server cleanup, if you've opted into "reconnect after cleanup" on the BBS tab.
+
+### Sprint Mode (toolbar toggle)
+
+**Default:** Off
+**What it does:** A transient "just get me there" movement toggle (running-figure icon, next to the movement Start/Pause/Stop buttons) — not a settings-tab checkbox. When on, movement **never pauses to rest or wait for HP/MA to recover**, no matter how low they get; your configured heal spells still fire normally on their usual thresholds while you keep moving. Turning it on also **forces off Auto-Combat, Auto-Get Items, Auto-Search, and Auto-Get Cash** for the duration — a "never stop" run has nothing to fight, loot, or search for — and remembers exactly which of those were on so it can put them **back** when Sprint ends. Every other safety pause (avoid rooms, hazard/trap detours, teleport-maze solving, party sync, mortally-wounded) is untouched. The only thing that force-stops a sprinting character is death.
+**It turns itself off** — restoring the engines it silenced — the moment it has done its job:
+- a **go-to walk** reaches its destination;
+- a **loop** begins looping — whether that's arriving at the loop's start after a walk-to, or wrapping into the next lap;
+- an **auto-lair** circuit is about to enter the next lair (you sprint the travel there, then cross the threshold with combat back on to fight it).
+
+Manually turning **any of those four engines back on** while Sprint is running also ends it (the two are mutually exclusive) — the engine you clicked stays on and the others it had silenced come back too.
+**Important notes:** While active it's an "arrive or die" mode — use it for a route you're confident the character survives taking hits the whole way, since a hostile room is walked straight through rather than fought. It's designed to be flipped on for a single leg (a go-to, one loop lap, one hop between lairs) and clean up after itself.
 
 ---
 
@@ -1069,7 +1081,7 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 ### Clear hostiles when sneak broken by see-hidden monster
 
 **Default:** Off
-**What it does:** A safety valve for stealth routes: if Auto-Combat is off and Auto-Sneak is on (you're trying to sneak through a route untouched) and you stumble into a room with a see-hidden monster, your stealth breaks. With this on, MudPlay fights and clears that one room instead of continuing to walk while exposed and dragging monsters behind you — bypassing the Min/Max room-skip gate for just that room.
+**What it does:** A safety valve for stealth routes: while Auto-Sneak is on (you're trying to sneak through a route untouched) and you stumble into a room with a see-hidden monster, your stealth breaks. With this on, MudPlay fights and clears that one room instead of continuing to walk while exposed and dragging monsters behind you — bypassing the Min/Max room-skip gate for just that room, then re-sneaks and carries on. This works whether **Auto-Combat is on or off**: the whole point is to clear the room and get moving again, so it force-clears regardless of your combat toggle (with Auto-Combat off it engages just for that room; with it on, it overrides the Min/Max gate so the room can't be skipped and left to drag).
 
 ### Run distance
 
@@ -1143,7 +1155,7 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 ### Minor heal / Major heal
 
 **Default:** unset
-**What it does:** Your primary self-heal spell (Minor) and your emergency self-heal spell (Major). Minor fires at the Health tab's Minor thresholds; Major fires at the (lower) Major/life-threat threshold. If you haven't set a Major heal, MudPlay uses Minor heal at the Major threshold instead of doing nothing.
+**What it does:** Your primary self-heal spell (Minor) and your emergency self-heal spell (Major). Minor fires in the band between its own threshold and the Major threshold; once your HP drops into the (lower) Major/life-threat band the Major heal **takes over** — Minor yields to it there by severity, so you don't have to re-order priorities to get the big heal at low HP. If you can't afford the Major heal, it falls back to Minor rather than skipping the heal. If you haven't set a Major heal at all, MudPlay uses Minor heal at the Major threshold. The same severity rule applies to the party Minor/Major heal slots.
 
 ### HP Regen
 
@@ -1656,10 +1668,10 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **Default:** 20 / 5
 **What it does:** Caps how many times MudPlay retries searching for a trap (in response to a remote `@trap` command), and separately how many times it retries actually disarming one, before giving up.
 
-### Door max bash / Door max pick
+### Door max pick
 
-**Default:** 10 / 10
-**What it does:** Caps how many times the walker retries bashing or picking a locked door before giving up on it.
+**Default:** 10
+**What it does:** Caps how many times the walker retries **picking** a locked door before giving up (picking is probabilistic — it can fail even when your skill meets the requirement). **Bashing has no cap**: bashing a door drains HP, so instead of a fixed retry count the walker bashes a genuinely bashable door until it opens, pausing to **rest to your rest-max** whenever HP dips to your Health-tab rest trigger, then resuming. A door that isn't actually bashable (strength/requirement too high) still falls through to picking or a key rather than bashing forever.
 
 ### Pick locks instead of bashing
 
@@ -1843,6 +1855,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Allow hangup in all-off mode | `false` | bool | `AllowHangupInAllOffMode` | Models/Profile/GeneralSettings.cs |
 | Re-enable on reconnect (11 flags) | `false` (all) | bool | `ReEnableAutoCombatOnReconnect` etc. | Models/Profile/GeneralSettings.cs |
 | Disable hangups (toolbar toggle) | `false` | bool | `DisableHangups` | Models/Profile/GeneralSettings.cs |
+| Sprint Mode (toolbar toggle) | `false` | bool | `SprintMode` | Models/Profile/GeneralSettings.cs |
 | Auto-load last profile (edited on MainWindow, not Settings) | `false` | bool | `GlobalSettings.AutoLoadLastProfile` | Models/Settings/GlobalSettings.cs |
 | Player cleanup days (edited on Other tab) | `90` | int, 0–3650 | `GlobalSettings.PlayerCleanupDays` | Models/Settings/GlobalSettings.cs |
 | Show toolbar | `true` | bool | `ToolbarSettings.Visible` | Models/Profile/ToolbarSettings.cs |

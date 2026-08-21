@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using MudPlay.Game.Health;
 using MudPlay.Models.GameData;
@@ -203,6 +204,18 @@ public sealed class CastingDirector : IDisposable
         _log = log;
 
         _state.PropertyChanged += OnStateChanged;
+        // React to a PARTY MEMBER's HP dropping, not just our own state / the combat
+        // tick. The party-heal picker reads each member's HpPercent, but that value
+        // is refreshed by the `par` poll on its own cadence — without watching it, a
+        // member falling below the heal threshold wasn't acted on until the next
+        // self-state change or round tick (report paradigm-20260820-122341: heal fired
+        // a full round late). Read-only on party state — no single-writer concern,
+        // same watch PartyVitalsWatcher already does.
+        if (_party is not null)
+        {
+            _party.Members.CollectionChanged += OnPartyMembersChanged;
+            foreach (PartyMember m in _party.Members) WatchMember(m);
+        }
         _cast.CastFailed += OnCastFailed;
         if (_conditions is not null)
         {
@@ -979,6 +992,22 @@ public sealed class CastingDirector : IDisposable
         //    single-target heal for the immediate top-up while it ticks.
         int majorTrigger = PoolThreshold.Resolve(
             health.HpThresholdMode, health.MajorHealCombatTrigger, _state.MaxHp);
+
+        // Two exclusive bands. Once HP falls into the major-heal band, yield to
+        // MajorSelfHeal instead of firing minor again. Minor is walked BEFORE major
+        // (lower priority int by default), and without this lower bound minor
+        // matched the whole Hp<=minorTrigger range and fired even at single-digit
+        // HP — major was dead code in combat and the player died (report
+        // paradigm-20260819-121247: minor cast at 13/142 HP with mana to spare).
+        // Yield only when a major spell is configured AND affordable, so a
+        // mana-starved caster still falls back to the cheaper minor heal rather
+        // than healing nothing (the decision pass would skip an unaffordable major
+        // and, with minor yielded, leave no heal at all).
+        if (_state.Hp <= majorTrigger
+            && !string.IsNullOrWhiteSpace(spells.MajorHealSpell)
+            && SpellAffordable(spells.MajorHealSpell))
+            return null;
+
         if (_state.Hp > majorTrigger
             && !string.IsNullOrWhiteSpace(spells.HpRegenSpell)
             && IsRecastDue("", spells.HpRegenSpell))
@@ -986,6 +1015,12 @@ public sealed class CastingDirector : IDisposable
 
         return string.IsNullOrWhiteSpace(spells.MinorHealSpell) ? null : spells.MinorHealSpell;
     }
+
+    // Mirrors the decision-pass affordability skip (an unknown cost never blocks):
+    // a spell is castable when we don't know its cost or the pool covers it. Used
+    // so a minor heal only yields to major when major could actually fire.
+    private bool SpellAffordable(string spell)
+        => _manaCostLookup?.Invoke(spell) is not { } cost || _state.Ma >= cost;
 
     // Mana-floor gate for self heals: only cast a heal when the caster pool sits at
     // or above HealIfAboveMaCombat (in combat) or HealIfAboveMaResting (resting /
@@ -1120,11 +1155,23 @@ public sealed class CastingDirector : IDisposable
     // MinorHealMemberThresholdPercent. When AoeMinMembers or more members are below
     // the threshold AND a group spell is configured, fire the AOE variant instead
     // (no target).
-    private CastCandidate? PickMinorPartyHeal(PartySettings? settings) =>
-        PickPartyHeal(settings,
+    private CastCandidate? PickMinorPartyHeal(PartySettings? settings)
+    {
+        // Severity precedence (same two-band rule as the self heal): if a member
+        // has dropped into the major-party band, yield to MajorPartyHeal instead
+        // of firing the minor party heal — otherwise minor, walked first, would
+        // keep a critically-low member on minor heals while major stayed dead
+        // code (report paradigm-20260819-121247, party-side). Yield only when the
+        // major party heal can actually fire (configured + affordable), so a
+        // mana-starved healer still falls back to the cheaper minor party heal.
+        if (PickMajorPartyHeal(settings) is { } major && SpellAffordable(major.Spell))
+            return null;
+
+        return PickPartyHeal(settings,
             threshold: settings?.MinorHealMemberThresholdPercent ?? 70,
             singleSpell: settings?.MinorPartyHealSpell,
             aoeSpell:    settings?.MinorPartyHealAoeSpell);
+    }
 
     // Symmetric to PickMinorPartyHeal at the major / critical threshold.
     private CastCandidate? PickMajorPartyHeal(PartySettings? settings) =>
@@ -1247,9 +1294,10 @@ public sealed class CastingDirector : IDisposable
     // MaRegen + WhenHpFull + WhenMaFull) and return the first configured slot due to
     // recast on us. Timing is gated by the Spells-tab self-bless toggles, mirroring
     // the party-bless gates: blocked during combat unless SelfBlessDuringCombat,
-    // blocked while resting unless SelfBlessWhileResting (default on). Both default
-    // to the prior hard-coded behaviour — self buffs out of combat only — so a
-    // profile that never touches the toggles behaves exactly as before.
+    // blocked during a triggered recovery rest unless SelfBlessWhileResting (both
+    // default OFF). Both default to the prior hard-coded behaviour — self buffs out
+    // of combat and outside an active recovery only — so a profile that never
+    // touches the toggles behaves exactly as before.
     //
     // HpRegenSpell deliberately does NOT live here: an HP-regen HoT is treated as
     // assisted healing, cast reactively by the minor-self-heal path
@@ -1413,11 +1461,51 @@ public sealed class CastingDirector : IDisposable
         return new CastCandidate(debuff.Spell, debuff.Target);
     }
 
+    // ----- Party-member HP watch (re-evaluate on a member's HpPercent change) ----
+
+    private readonly HashSet<PartyMember> _watchedMembers = new();
+
+    private void OnPartyMembersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems is not null) foreach (PartyMember m in e.OldItems) UnwatchMember(m);
+        if (e.NewItems is not null) foreach (PartyMember m in e.NewItems) WatchMember(m);
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (PartyMember m in _watchedMembers) m.PropertyChanged -= OnMemberPropertyChanged;
+            _watchedMembers.Clear();
+            if (_party is not null) foreach (PartyMember m in _party.Members) WatchMember(m);
+        }
+    }
+
+    private void WatchMember(PartyMember m)
+    {
+        if (_watchedMembers.Add(m)) m.PropertyChanged += OnMemberPropertyChanged;
+    }
+
+    private void UnwatchMember(PartyMember m)
+    {
+        if (_watchedMembers.Remove(m)) m.PropertyChanged -= OnMemberPropertyChanged;
+    }
+
+    private void OnMemberPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // A member's HP moved — re-run the cast pipeline so a party heal fires this
+        // round, not next. Evaluate() still honours the one-cast-per-round limit, so
+        // an already-spent between-round slot correctly defers to the next round.
+        if (e.PropertyName == nameof(PartyMember.HpPercent)) Evaluate();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         _state.PropertyChanged -= OnStateChanged;
+        if (_party is not null)
+        {
+            _party.Members.CollectionChanged -= OnPartyMembersChanged;
+            foreach (PartyMember m in _watchedMembers) m.PropertyChanged -= OnMemberPropertyChanged;
+            _watchedMembers.Clear();
+        }
         _cast.CastFailed -= OnCastFailed;
         if (_conditions is not null)
         {

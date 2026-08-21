@@ -88,6 +88,17 @@ public sealed partial class CombatManager
     private SpellReqLevelIndex? _spellReqLevel;
     private MonsterResistIndex? _monsterResist;
     private SpellAttackTypeIndex? _spellAttackType;
+    // Resolves an attack spell's actual mana cost by cast-code (Spellbook.ManaCostOf),
+    // threaded into the chooser context as an affordability floor. Until wired, the
+    // chooser gates on the slot's MinManaPerCast reserve alone (old behavior).
+    private Func<string, int?>? _spellManaCost;
+
+    // Wire the spell mana-cost lookup used to gate the combat chooser on real
+    // affordability (a MinManaPerCast=0 slot must still not cast a spell we can't
+    // pay for — a below-cost cast silently no-ops). Same source the CastingDirector
+    // uses (Spellbook.ManaCostOf).
+    public void SetSpellManaCost(Func<string, int?> manaCostOf)
+        => _spellManaCost = manaCostOf ?? throw new ArgumentNullException(nameof(manaCostOf));
 
     // Opt into deterministic magic-eligibility gating. monsterMagic supplies each
     // monster's Magical / SpellImmu levels, itemMagic supplies each weapon's
@@ -264,6 +275,13 @@ public sealed partial class CombatManager
             // anchor when there's another mob to guard against; leave solo fights at
             // MinValue so the first genuine tick always tallies.
             _lastAttackTallyAt = enemyCount > 1 ? _now() : DateTimeOffset.MinValue;
+            // Round-count anchor: the first MaxCasts tally waits for the NEXT round to
+            // CLOSE, so a premature tick — a solo mob's counter-swing or a stale
+            // interval projection right after the engage — can't cap the spell before
+            // it fires (report paradigm-20260819-120938). This makes the solo/multi
+            // distinction above moot when a round-count source is wired. Unwired leaves
+            // it -1 and the legacy wall-clock gate runs.
+            _lastTalliedRound = ReadRoundCount?.Invoke() ?? -1;
         }
 
         // A per-monster forced attack COMMAND wins over the entire normal flow
@@ -622,8 +640,24 @@ public sealed partial class CombatManager
             // paradigm-20260815-130957: "hamm set to 2, swapped after the first cast").
             // Gate the tally to once per real round so MaxCasts counts rounds cast, not
             // tick fires — the cap-preempt still fires on the genuine capping-round tick.
-            if (_now() - _lastAttackTallyAt < AttackTallyMinGap) return;
-            _lastAttackTallyAt = _now();
+            // Robust count: tally at most ONCE per real combat round. The round
+            // boundary is RoundDamageTracker's timer-driven RoundCount (one per 5s
+            // round), so multiple damage-line ticks inside one round — our multi-hit,
+            // the mob's counter-swing, a stale interval — collapse to a single tally,
+            // and a genuine round that lands fast still counts (fixes the -055820 vs
+            // -120938 wall-clock tension). Falls back to the wall-clock gate only when
+            // no round-count source is wired (legacy tests).
+            if (ReadRoundCount is { } readRound)
+            {
+                int round = readRound();
+                if (round == _lastTalliedRound) return;
+                _lastTalliedRound = round;
+            }
+            else
+            {
+                if (_now() - _lastAttackTallyAt < AttackTallyMinGap) return;
+                _lastAttackTallyAt = _now();
+            }
 
             _spellChooser.MarkCast(decision, target);   // tally this round's fired cast
 
@@ -680,12 +714,36 @@ public sealed partial class CombatManager
     // switch during the delay window is itself gated by AttackTallyMinGap (one tally per
     // round), so no double-schedule. Falls back to a bare _post when no scheduler is
     // wired (tests that don't opt in).
+    // Pending deferred switch (target→spell). While one is armed, a re-tick during
+    // the dispatch delay can't schedule the same switch again — the double-cast in
+    // reports paradigm-20260819-121003 / -142147 (mmis fired twice after lbol
+    // capped). Cleared when the dispatch runs, so the next round may re-arm.
+    private (string Target, string Spell)? _pendingSwitch;
+
     private void DeferSwitchDispatch(
         CombatSettings settings, string target, string reason, string? from, string? to)
     {
+        // Idempotency guard: while a switch to the SAME target→spell is already
+        // scheduled, don't arm a second. During SwitchDispatchDelay the announce is
+        // still the pre-switch spell, so a re-tick recomputes sameSpell=false and
+        // would re-arm the identical switch — the double-cast this fixes.
+        string toKey = to ?? string.Empty;
+        if (_pendingSwitch is { } pend
+            && string.Equals(pend.Target, target, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(pend.Spell, toKey, StringComparison.OrdinalIgnoreCase))
+            return;
+        _pendingSwitch = (target, toKey);
+
         void Dispatch()
         {
+            _pendingSwitch = null;   // consumed — the next round may re-arm if needed
             if (_disposed || !_isEnabled() || _combatOff) return;
+            // The announce already IS the switch target — e.g. a between-round-cast
+            // resume re-announced it while this deferral sat pending. Firing again
+            // double-casts the alternate (report paradigm-20260819-121003). No-op.
+            if (to is { } toSpell
+                && string.Equals(_announcedSpellCode, toSpell, StringComparison.OrdinalIgnoreCase))
+                return;
             // A same-burst / adjacent-packet kill / departure nulls both target latches;
             // either mismatch means the switch would land on a corpse (or a re-picked mob).
             if (!string.Equals(_castingSpellTarget, target, StringComparison.OrdinalIgnoreCase)
@@ -1018,7 +1076,8 @@ public sealed partial class CombatManager
             HpBelowDrainTrigger: hpBelowDrain,
             DrainTargetEligible: drainEligible,
             HpBelowDrainRelease: hpBelowDrainRelease,
-            RoomMobKeys:         CollectEngageableMobKeys(obs));
+            RoomMobKeys:         CollectEngageableMobKeys(obs),
+            ManaCostOf:          _spellManaCost);
     }
 
     // Resolve the drain spell's two live gates for a target: whether HP has fallen
@@ -1295,6 +1354,47 @@ public sealed partial class CombatManager
     // injects, by CombatStateTracker (walker-gate release).
     public bool CanEngageMonster(int monsterNumber) =>
         AssessEngage(_readSettings(), monsterNumber, species: null) == EngageAssessment.CanAct;
+
+    // One monster the engine has seen in the current room, with the exact
+    // engageability verdict + weapon/spell magic data behind it. Frozen for the
+    // bug report so a "skip un-actionable … Unkillable" decision is diagnosable
+    // from the capture without combat logging being on or the scrollback still
+    // holding the line.
+    internal readonly record struct RoomEngageSnapshot(
+        int MonsterNumber,
+        string Species,
+        int Magical,
+        int SpellImmu,
+        int NormalWeaponHit,
+        int AltWeaponHit,
+        EngageAssessment Assessment,
+        string? UnengageableReason);
+
+    // Snapshot every monster known in the current room (the room-scoped
+    // _speciesByNumber map, cleared on room change) with its live EngageAssessment
+    // and the raw magic numbers the gate weighs. Reuses the same _readSettings() /
+    // magic indexes the live path uses, so the report shows precisely what the
+    // engine decided.
+    internal IReadOnlyList<RoomEngageSnapshot> SnapshotRoomEngage()
+    {
+        List<RoomEngageSnapshot> list = new(_speciesByNumber.Count);
+        if (_speciesByNumber.Count == 0) return list;
+
+        CombatSettings settings = _readSettings();
+        int normalHit = _itemMagic?.HitMagic(settings.NormalWeapon) ?? -1;
+        int altHit = _itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1;
+        foreach ((int number, string species) in _speciesByNumber)
+        {
+            int magical = _monsterMagic?.MagicalLevel(number) ?? -1;
+            int immu = _monsterMagic?.SpellImmunity(number) ?? -1;
+            list.Add(new RoomEngageSnapshot(
+                number, species, magical, immu, normalHit, altHit,
+                AssessEngage(settings, number, species),
+                UnengageableReason(settings, number)));
+        }
+        list.Sort((a, b) => a.MonsterNumber.CompareTo(b.MonsterNumber));
+        return list;
+    }
 
     // How the engine can act against a monster THIS round.
     internal enum EngageAssessment

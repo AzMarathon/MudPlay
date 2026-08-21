@@ -47,8 +47,23 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     private RoomDetailLink? _roomSpellLink;
     public bool HasRoomSpell => RoomSpellLink is not null;
 
-    public ObservableCollection<RoomDetailLink> Monsters { get; } = new();
-    public bool HasMonsters => Monsters.Count > 0;
+    // Monsters split by how the room hosts them — mirrors the map tooltip's
+    // Placed / Assigned / Lair lines. Each renders under its own labelled group.
+    public ObservableCollection<RoomDetailLink> PlacedMonsters { get; } = new();
+    public bool HasPlaced => PlacedMonsters.Count > 0;
+
+    public ObservableCollection<RoomDetailLink> AssignedMonsters { get; } = new();
+    public bool HasAssigned => AssignedMonsters.Count > 0;
+
+    public ObservableCollection<RoomDetailLink> LairMonsters { get; } = new();
+    public bool HasLair => LairMonsters.Count > 0;
+
+    // "Max Regen: N @ time" for the room's lair, shown beneath the Lair group
+    // (mirrors the tooltip). Empty when the room has no lair.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLairRegen))]
+    private string _lairRegen = string.Empty;
+    public bool HasLairRegen => LairRegen.Length > 0;
 
     public ObservableCollection<RoomDetailLink> FloorItems { get; } = new();
     public bool HasFloorItems => FloorItems.Count > 0;
@@ -58,7 +73,10 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     public void Show(RoomKey key)
     {
         _key = key;
-        Monsters.Clear();
+        PlacedMonsters.Clear();
+        AssignedMonsters.Clear();
+        LairMonsters.Clear();
+        LairRegen = string.Empty;
         FloorItems.Clear();
         ShopLink = null;
         RoomSpellLink = null;
@@ -78,21 +96,21 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         RoomName = room.DisplayName;
         RoomKeyLabel = $"Map {key.Map} · Room {key.Room}";
 
-        // Monsters — lair + summoned (shared resolver), then the placed NPC the
-        // resolver omits (a boss / shopkeeper lives on the room's Npc field).
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (RoomTooltipBuilder.RoomMonsterRef mref in
-                 RoomTooltipBuilder.ResolveAlsoHere(room, _services.GameData, _services.MonsterSpawns, out _))
-        {
-            seen.Add(mref.Name);
-            Monsters.Add(MakeMonsterLink(mref.Id, mref.Name, note: null));
-        }
-        if (room.Npc > 0)
-        {
-            string placed = _services.GameData.FindNameByNumber("Monsters", room.Npc) ?? $"#{room.Npc}";
-            if (seen.Add(placed))
-                Monsters.Add(MakeMonsterLink(room.Npc, placed, note: "placed"));
-        }
+        // Monsters — split into Placed (the room's NPC fixture / a boss),
+        // Assigned (roam / rare-random spawns), and Lair (consistent lair
+        // spawners), each under its own labelled group so the panel mirrors the
+        // map tooltip. A monster may appear in more than one group (a placed boss
+        // that also roams) — the distinction is intentional, not a duplicate. The
+        // group header carries the category, so the per-link note is dropped.
+        RoomTooltipBuilder.RoomMonsters rm =
+            RoomTooltipBuilder.ResolveRoomMonsters(room, _services.GameData, _services.MonsterSpawns);
+        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Placed)
+            PlacedMonsters.Add(MakeMonsterLink(m.Id, m.Name, note: null));
+        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Assigned)
+            AssignedMonsters.Add(MakeMonsterLink(m.Id, m.Name, note: null));
+        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Lair)
+            LairMonsters.Add(MakeMonsterLink(m.Id, m.Name, note: null));
+        LairRegen = RoomTooltipBuilder.FormatLairRegen(rm.LairMax, room.Delay);
 
         // Floor items — TBInfo `roomitem` placements.
         foreach (int itemId in _services.RoomFloorItems.FloorItemsOf(key))
@@ -138,11 +156,14 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     private RoomDetailLink MakeMonsterLink(int id, string name, string? note)
         => new($"{name}(#{id})", note, new AsyncRelayCommand(() => _services.OpenMonsterRecordAsync(id)));
 
-    // HasMonsters / HasFloorItems track collection counts, not observable fields, so
-    // a re-populate has to poke their bindings by hand.
+    // Has* flags track collection counts, not observable fields, so a re-populate
+    // has to poke their bindings by hand. (HasLairRegen is auto-notified via the
+    // LairRegen [ObservableProperty].)
     private void RaiseSectionVisibility()
     {
-        OnPropertyChanged(nameof(HasMonsters));
+        OnPropertyChanged(nameof(HasPlaced));
+        OnPropertyChanged(nameof(HasAssigned));
+        OnPropertyChanged(nameof(HasLair));
         OnPropertyChanged(nameof(HasFloorItems));
     }
 }

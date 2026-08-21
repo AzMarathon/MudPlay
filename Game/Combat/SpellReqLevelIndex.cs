@@ -44,6 +44,7 @@ public sealed class SpellReqLevelIndex
         if (_byShort is { } cached) return cached;
 
         Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> learnedKeys = new(StringComparer.OrdinalIgnoreCase);
         JsonDocument? doc = _cache.GetRawTable("Spells");
         if (doc is not null)
         {
@@ -60,8 +61,27 @@ public sealed class SpellReqLevelIndex
                     && lvlEl.TryGetInt32(out int parsed))
                     reqLevel = parsed;
 
-                // Last writer wins on duplicate cast-codes (rare in game data).
-                map[code.Trim()] = reqLevel;
+                // A cast-code often maps to SEVERAL rows — the player-learnable spell
+                // plus monster/item/textblock-triggered variants of the same short
+                // command (a `Casted By: Item #…` / `Monster #…` row, Learnable=0).
+                // Those variants carry an unrelated ReqLevel (frequently 0), so a
+                // blind last-writer-wins overwrite can clobber the real spell's level
+                // with one that means nothing to the player's own cast — e.g. "disr"
+                // is Disrupt Undead at ReqLevel 16, but an item-cast "disr" duplicate
+                // at ReqLevel 0 landing later in the table made every SpellImmu ≥ 1
+                // monster look immune to it, so the engine gave up on undead it could
+                // actually have hit (report paradigm-20260819-195419). Mirrors
+                // CombatSpellIndex's fix for the same duplicate-Short disease (report
+                // paradigm-20260814-210613): once a Learnable row has set a code's
+                // level, later non-learnable duplicates for that code are ignored.
+                string key = code.Trim();
+                bool learnable = row.TryGetProperty("Learnable", out JsonElement learnEl)
+                    && learnEl.ValueKind == JsonValueKind.Number
+                    && learnEl.TryGetInt32(out int learnVal) && learnVal != 0;
+
+                if (learnedKeys.Contains(key) && !learnable) continue;
+                map[key] = reqLevel;
+                if (learnable) learnedKeys.Add(key);
             }
         }
 
