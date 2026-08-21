@@ -1636,21 +1636,24 @@ public sealed class MapControl : Control
 
     private static void DrawRobotIcon(DrawingContext ctx, Rect cell)
     {
-        double s = Math.Max(cell.Width * 0.42, 4.0);
+        double s = Math.Max(cell.Width * 0.34, 3.5);
         double cxm = cell.X + cell.Width / 2.0;
         double cym = cell.Y + cell.Height / 2.0;
 
-        double hw = s * 0.5, hh = s * 0.42;
-        Rect head = new(cxm - hw, cym - hh + s * 0.08, hw * 2, hh * 2);
+        // Head placed so the antenna above balances the head below — the whole glyph
+        // (tip to head-bottom) stays centred on the cell, ~0.4 cell tall, so it sits
+        // fully inside the room square rather than poking out the top.
+        double hw = s * 0.5, hh = s * 0.40;
+        Rect head = new(cxm - hw, cym - hh + s * 0.14, hw * 2, hh * 2);
         ctx.DrawRectangle(RobotFillBrush, RobotRimPen, new RoundedRect(head, s * 0.14));
 
         // Antenna: stalk + tip above the head.
-        double ax = cxm, ayBase = head.Y, ayTip = head.Y - s * 0.30;
+        double ax = cxm, ayBase = head.Y, ayTip = head.Y - s * 0.20;
         ctx.DrawLine(RobotRimPen, new Point(ax, ayBase), new Point(ax, ayTip));
-        ctx.DrawEllipse(RobotFillBrush, RobotRimPen, new Point(ax, ayTip), s * 0.10, s * 0.10);
+        ctx.DrawEllipse(RobotFillBrush, RobotRimPen, new Point(ax, ayTip), s * 0.08, s * 0.08);
 
         // Two eyes.
-        double eyeR = Math.Max(s * 0.09, 0.8);
+        double eyeR = Math.Max(s * 0.08, 0.7);
         double eyeY = head.Y + head.Height * 0.45;
         ctx.DrawEllipse(RobotEyeBrush, null, new Point(head.X + head.Width * 0.32, eyeY), eyeR, eyeR);
         ctx.DrawEllipse(RobotEyeBrush, null, new Point(head.X + head.Width * 0.68, eyeY), eyeR, eyeR);
