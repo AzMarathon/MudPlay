@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Inventory;
+using MudPlay.Game.Map;
 using MudPlay.Terminal;
 
 namespace MudPlay.Services;
@@ -736,6 +737,16 @@ public static class BugReportBuilder
             $"{svc.GhSweep.MovedSoFar.Count} / {svc.GhSweep.LeftInPlace.Count} / "
             + $"{svc.GhSweep.PendingMoveCount} / {svc.GhSweep.CarriedPendingCount} / "
             + $"{svc.GhSweep.HiddenPendingCount}");
+        // Full-ledger carry state — a "sweep stranded everything" or "won't pick up"
+        // report needs the tracked working budget, what the ledger thinks is carried,
+        // the live headroom, and how many items were left as too-heavy.
+        Kv(sb, "Roomba working budget / carried / headroom",
+            svc.GhSweep.WorkingWeightBudget == int.MaxValue
+                ? "(no weight data)"
+                : $"{svc.GhSweep.WorkingWeightBudget} / {svc.GhSweep.LedgerCarriedWeightNow} / "
+                    + $"{svc.GhSweep.CarryHeadroomNow}");
+        Kv(sb, "Roomba left too-heavy",
+            svc.GhSweep.LeftInPlace.Count(f => f.Reason == GhLeftReason.TooHeavy).ToString());
 
         // Default-task startup state — a "my loop / Auto-Lair didn't start on
         // login" report needs to know whether the runner deferred the start

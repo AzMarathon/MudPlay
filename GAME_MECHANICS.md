@@ -711,13 +711,20 @@ A `get <item>` that can't succeed replies with one of two shapes:
 - **`Syntax: GET [Amount] [Currency]`** — the game misparsed the item name as a **currency** get
   (observed for some multi-word names, e.g. `get silk cape`). No item name is echoed. Retrying the
   same name can't help.
+- **`You cannot carry that much!`** — a **capacity refusal**: the item is on the floor and gettable,
+  but taking it would exceed the carry limit. The item is NOT gone (unlike the two above) — it's a
+  transient block that clears once weight is shed. No item name is echoed. (Confirmed by screenshot:
+  `get 20 torch` succeeds twice, then a third `get 20 tor` while overloaded → `You cannot carry that
+  much!`.)
 
-**Client implication (Roomba Mode):** a `get` failure means retrying that pickup is futile — the
-item is gone or un-gettable by that name. Correlate the failure to the outstanding get by the
-echoed word (falling back to the sole pending get when the echo doesn't cleanly match, or for the
-name-less currency error), then drop the item from the sort queue instead of retrying it every lap.
-Do **not** name-match the failure line's word to decide the item is gone — match by "we just sent a
-`get` and got a failure back," since the echo can be truncated or absent.
+**Client implication (Roomba Mode):** the first two shapes mean retrying is futile — the item is
+gone or un-gettable by that name, so drop it from the sort queue (correlate to the outstanding get by
+the echoed word, falling back to the sole pending get for a truncated/absent echo). The capacity
+refusal is different: the item stays queued, but our tracked working-weight has drifted low (we
+thought it fit and it didn't), so re-verify inventory once (`i`) to resync the baseline, then re-plan
+— deliver to free room and retry, or strand the item if it's too heavy for the whole working budget.
+Do **not** name-match a failure line's word to decide anything — match by "we just sent a `get` and
+got a failure back," since the echo can be truncated or absent.
 
 ## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
 

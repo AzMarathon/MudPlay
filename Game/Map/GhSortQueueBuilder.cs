@@ -37,7 +37,7 @@ public static class GhSortQueueBuilder
 
                 if (GhItemClassifier.IsGuardEmblem(entry))
                 {
-                    leftInPlace.Add(new GhSweepItemFound(room, entry));
+                    leftInPlace.Add(new GhSweepItemFound(room, entry, GhLeftReason.NoMatchingRoom));
                     continue;
                 }
 
@@ -65,7 +65,7 @@ public static class GhSortQueueBuilder
                     }
                     else
                     {
-                        leftInPlace.Add(new GhSweepItemFound(room, entry));
+                        leftInPlace.Add(new GhSweepItemFound(room, entry, GhLeftReason.NoMatchingRoom));
                         continue;
                     }
                 }

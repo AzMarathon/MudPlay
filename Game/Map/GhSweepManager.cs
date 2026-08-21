@@ -60,16 +60,21 @@ public sealed class GhSweepManager : IDisposable
     private static readonly TimeSpan InventoryVerificationTimeout = TimeSpan.FromSeconds(3);
 
     // A dispatched `get` can come back as a failure this manager must act on
-    // rather than retry forever. Two shapes, both confirmed live (GAME_MECHANICS.md):
+    // rather than retry forever. Three shapes, all confirmed live (GAME_MECHANICS.md):
     //   "You don't see <echo> here."  — the item is genuinely gone (recon's snapshot
     //       went stale, or another player took it); <echo> is whatever followed `get`.
     //   "Syntax: GET [Amount] [Currency]" — the game misparsed the item name as a
     //       currency get; retrying the same name can't help.
+    //   "You cannot carry that much!" — a capacity refusal; the item is still there,
+    //       our tracked working-weight drifted low, so resync (not strand).
     private static readonly Regex GetNotHereRegex = new(
         @"^\s*You don't see (?<echo>.+?) here\.\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex GetCurrencySyntaxRegex = new(
         @"^\s*Syntax:\s*GET\s*\[Amount\]\s*\[Currency\]",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex GetCannotCarryRegex = new(
+        @"^\s*You cannot carry that much!\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private const string SweepLoopName = "Roomba sweep";
@@ -86,8 +91,6 @@ public sealed class GhSweepManager : IDisposable
         public bool IsCarried { get; set; }
         public bool Delivered { get; set; }
     }
-
-    private sealed record InventoryExpectation(PendingSortMove Move, bool WasDrop, int BeforeCount);
 
     private readonly GhRoomLabelStore _labels;
     private readonly LoopRunner _loopRunner;
@@ -118,8 +121,21 @@ public sealed class GhSweepManager : IDisposable
     // releases the hold while leaving unconfirmed work queued for the next lap.
     private RoomKey? _dispatchRoom;
     private readonly List<PendingSortMove> _outstandingDispatch = new();
-    private readonly List<InventoryExpectation> _inventoryExpectations = new();
-    private bool _awaitingInventoryVerification;
+
+    // Full-ledger verification: we trust "You took X" / "You dropped X" as ground
+    // truth and track the working carry weight ourselves (each confirmed get adds
+    // its weight, each drop subtracts), so the happy path never sends a
+    // per-transaction `i`. A fresh `i` is requested ONLY to resync the baseline
+    // after a capacity refusal ("You cannot carry that much!") — the one case where
+    // the ledger has provably drifted (we thought an item fit and it didn't).
+    private bool _awaitingInventoryResync;
+    private bool _resyncPending;
+
+    // Baseline captured at sort start (and corrected on a resync): base = the
+    // player's gear+pack weight carrying zero Roomba pickups; max = MaxWeight.
+    // int.MaxValue max means "no weight data" → fill everything, strand nothing.
+    private int _baseCarryWeight;
+    private int _maxCarryWeight = int.MaxValue;
 
     // Recon's own direct-search dispatch (mirrors _outstandingDispatch's role
     // for Sorting's get/drop dispatch): which circuit room we're currently
@@ -176,6 +192,13 @@ public sealed class GhSweepManager : IDisposable
     public int CarriedPendingCount => _pending.Count(p => p.IsCarried && !p.Delivered);
     public int HiddenPendingCount => _pending.Count(p => p.RequiresSearch && !p.Delivered);
     public int CompletedSortLaps => _sortLapCount;
+
+    // Read-only weight-ledger snapshot for the bug report: the working budget
+    // (max - base), what the tracked ledger says is carried right now, and the
+    // resulting live headroom. int.MaxValue budget means "no weight data".
+    public int WorkingWeightBudget => WorkingBudget();
+    public int LedgerCarriedWeightNow => LedgerCarriedWeight();
+    public int CarryHeadroomNow => CurrentHeadroom();
 
     // Fires once, when a sweep finishes (queue exhausted or stopped early).
     public event Action<GhSweepReport>? SweepCompleted;
@@ -307,8 +330,10 @@ public sealed class GhSweepManager : IDisposable
         _dispatchRoom = null;
         _outstandingDispatch.Clear();
         _inventorySettle.Stop();
-        _inventoryExpectations.Clear();
-        _awaitingInventoryVerification = false;
+        _awaitingInventoryResync = false;
+        _resyncPending = false;
+        _baseCarryWeight = 0;
+        _maxCarryWeight = int.MaxValue;
 
         // Order the labeled rooms into a sane walking route rather than handing
         // LoopRunner raw label-insertion order (whatever order the user
@@ -456,11 +481,90 @@ public sealed class GhSweepManager : IDisposable
     private void BeginSortPhase()
     {
         Phase = SweepPhase.Sorting;
+        CaptureCarryBaseline();
         BuildSortQueue();
+        StrandUnmovableItems();
         _log?.Info(LogCategory,
             $"recon complete; sort queue: {_pending.Count} move(s), {_leftInPlace.Count} left in place");
         PhaseChanged?.Invoke();
         if (_pending.Count == 0) FinishSweep();
+    }
+
+    // The carry weight one queued move adds to the pack (whole stack). 0 when the
+    // item's weight isn't in game data — never block a pickup on missing data.
+    private int MoveWeight(PendingSortMove move)
+        => (_itemNames.WeightOf(move.ItemName) ?? 0) * Math.Max(1, move.Count);
+
+    // Capture the working-weight baseline as the sort phase opens: recon picks
+    // nothing up, so the live CurrentWeight is exactly the gear+pack weight we carry
+    // with zero sort-items (our base), and MaxWeight is the ceiling. No encumbrance
+    // reading yet → no cap (fill everything, strand nothing), as the pre-planner
+    // engine did.
+    private void CaptureCarryBaseline()
+    {
+        if (_inventory?.Snapshot.Encumbrance is { MaxWeight: > 0 } enc)
+        {
+            _maxCarryWeight = enc.MaxWeight;
+            _baseCarryWeight = enc.CurrentWeight;
+        }
+        else
+        {
+            _maxCarryWeight = int.MaxValue;
+            _baseCarryWeight = 0;
+        }
+    }
+
+    // Correct the baseline from a fresh `i` after a capacity refusal proved the
+    // ledger drifted. Fold the discrepancy into base so that base + ledger-carried
+    // equals the real current weight and future headroom matches reality.
+    private void ResyncCarryBaseline()
+    {
+        if (_inventory?.Snapshot.Encumbrance is not { MaxWeight: > 0 } enc) return;
+        _maxCarryWeight = enc.MaxWeight;
+        _baseCarryWeight = Math.Max(0, enc.CurrentWeight - LedgerCarriedWeight());
+        _log?.Info(LogCategory,
+            $"resynced carry weight: max={_maxCarryWeight} current={enc.CurrentWeight} "
+            + $"base={_baseCarryWeight} ledgerCarried={LedgerCarriedWeight()}");
+    }
+
+    // Total weight of everything Roomba is currently carrying (picked up, not yet
+    // delivered) — the ledger we track in lieu of a per-transaction `i`.
+    private int LedgerCarriedWeight()
+        => _pending.Where(m => m.IsCarried && !m.Delivered).Sum(MoveWeight);
+
+    // The most sort-item weight we could ever hold at once: MaxWeight minus the
+    // base gear/pack weight. int.MaxValue when there's no weight data to judge by.
+    private int WorkingBudget()
+        => _maxCarryWeight == int.MaxValue
+            ? int.MaxValue
+            : Math.Max(0, _maxCarryWeight - _baseCarryWeight);
+
+    // How much more can be carried right now, from the tracked ledger (no `i`):
+    // working budget minus what's already in the pack. No cap without weight data.
+    private int CurrentHeadroom()
+        => _maxCarryWeight == int.MaxValue
+            ? int.MaxValue
+            : Math.Max(0, WorkingBudget() - LedgerCarriedWeight());
+
+    // Strand any not-yet-carried queued item too heavy to EVER carry — its own
+    // weight exceeds the whole working budget, so no delivery could free enough
+    // room. Without this the planner would never route to it (no headroom is ever
+    // enough) and the sweep could never finish. Surfaced under LeftInPlace so the
+    // user sees what was skipped. No-op when there's no weight data to judge by.
+    // Runs at sort start and after each resync (a resync can shrink the budget).
+    private void StrandUnmovableItems()
+    {
+        int workingBudget = WorkingBudget();
+        if (workingBudget == int.MaxValue) return;
+        foreach (PendingSortMove move in _pending
+            .Where(m => !m.Delivered && !m.IsCarried && MoveWeight(m) > workingBudget).ToList())
+        {
+            _pending.Remove(move);
+            _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.TooHeavy));
+            _log?.Info(LogCategory,
+                $"too heavy to carry ({MoveWeight(move)} > working budget {workingBudget}): "
+                + $"leaving {move.Count}x {move.ItemName} at {move.From}");
+        }
     }
 
     // Build the sort queue from what recon observed. Delegates the actual
@@ -654,27 +758,30 @@ public sealed class GhSweepManager : IDisposable
 
     private void DispatchAtRoom(RoomKey room)
     {
-        // A shortest-work delivery route is sacred: do not interrupt it with a
-        // new pickup (and especially not a hidden-item search delay) merely
-        // because its BFS path crosses another source room. Finish a carried
-        // drop first; once the pack has no Roomba-carried item, the scheduler
-        // will target the nearest remaining source deliberately.
-        bool carryingAnything = _pending.Any(m => m.IsCarried && !m.Delivered);
-        bool isCurrentDropDestination = _pending.Any(m =>
-            m.IsCarried && !m.Delivered && m.To.Equals(room));
-        if (carryingAnything && !isCurrentDropDestination)
+        // Do whatever this room holds: drop carried items destined here, and pick
+        // up pending sources here that still fit the live carry headroom. The trip
+        // planner (GhSortPlanner) chooses WHICH room to walk to next — fill the
+        // pack at the nearest fitting source before delivering — so on arrival we
+        // don't second-guess the route, we just act on what's here.
+        //
+        // A pure transit room (nothing to drop, no pending pickup that fits the
+        // current load) falls through untouched, so the old "don't interrupt a
+        // delivery route with a mid-route hidden-item search" guarantee still
+        // holds: in deliver mode nothing fits headroom anywhere, so no transit
+        // room ever has a fitting get to search for.
+        bool hasDrop = _pending.Any(m => m.IsCarried && !m.Delivered && m.To.Equals(room));
+        List<PendingSortMove> fittingGets = FittingGetsAt(room);
+        if (!hasDrop && fittingGets.Count == 0)
         {
             _log?.Debug(LogCategory,
-                $"passing through {room} without pickup/search; prioritizing carried delivery");
+                $"passing through {room}: nothing to drop and no pending pickup fits the current load");
             return;
         }
 
         // Visible items remain directly gettable after recon and must not pay
         // another SearchesPerRoom delay. Only a queue entry explicitly learned
         // from a recon search needs to be revealed again before its pickup.
-        bool hasHiddenPickup = _pending.Any(m =>
-            !m.Delivered && !m.IsCarried && m.RequiresSearch && m.From.Equals(room));
-        if (!hasHiddenPickup)
+        if (!fittingGets.Any(m => m.RequiresSearch))
         {
             DispatchAtRoomAfterSearch(room);
             return;
@@ -684,6 +791,28 @@ public sealed class GhSweepManager : IDisposable
         _sortSearchesSent = 0;
         AssertGate($"searching before pickup at {room}");
         DispatchNextSortSearch();
+    }
+
+    // The pending pickups at `room` that still fit the live carry headroom, in
+    // discovery order (greedy per item — a heavy one that overflows is skipped
+    // while a lighter later one may still fit). The planner only routes to a
+    // source whose whole batch fits, so at a deliberate pickup target this keeps
+    // everything; at a room we're only passing through (or dropping in with a full
+    // pack) it correctly leaves the too-heavy pickups queued for a later pass.
+    private List<PendingSortMove> FittingGetsAt(RoomKey room)
+    {
+        int headroom = CurrentHeadroom();
+        List<PendingSortMove> fitting = new();
+        int used = 0;
+        foreach (PendingSortMove move in _pending.Where(
+            m => !m.Delivered && !m.IsCarried && m.From.Equals(room)))
+        {
+            int weight = MoveWeight(move);
+            if (used + weight > headroom) continue;
+            used += weight;
+            fitting.Add(move);
+        }
+        return fitting;
     }
 
     private void DispatchNextSortSearch()
@@ -720,14 +849,12 @@ public sealed class GhSweepManager : IDisposable
 
         List<PendingSortMove> drops = _pending
             .Where(m => !m.Delivered && m.IsCarried && m.To.Equals(room)).ToList();
-        List<PendingSortMove> gets = _pending
-            .Where(m => !m.Delivered && !m.IsCarried && m.From.Equals(room)).ToList();
+        // Only pick up what still fits the live carry headroom (same filter the
+        // arrival dispatch and the trip planner use). Items too heavy to add right
+        // now stay queued and are retried on a later pass once a delivery frees
+        // space — the fill-to-capacity, trip-minimizing contract.
+        List<PendingSortMove> gets = FittingGetsAt(room);
 
-        // Roomba deliberately does not pre-emptively skip pickups based on the
-        // Heavy bracket or an estimated capacity. Item weights and live pack
-        // state are not reliable enough to decide that queued work is impossible.
-        // Attempt every pickup; if the game refuses one, the unconfirmed move
-        // remains queued and is retried after carried items have been dropped.
         if (drops.Count == 0 && gets.Count == 0)
         {
             ReleaseGate("nothing dispatchable after room search");
@@ -740,13 +867,6 @@ public sealed class GhSweepManager : IDisposable
         _outstandingDispatch.Clear();
         _outstandingDispatch.AddRange(drops);
         _outstandingDispatch.AddRange(gets);
-        _inventoryExpectations.Clear();
-        foreach (PendingSortMove move in drops)
-            _inventoryExpectations.Add(new InventoryExpectation(
-                move, WasDrop: true, CountInventoryItem(move.ItemName)));
-        foreach (PendingSortMove move in gets)
-            _inventoryExpectations.Add(new InventoryExpectation(
-                move, WasDrop: false, CountInventoryItem(move.ItemName)));
         _dispatchSettle.Stop();
         _dispatchSettle.Start();
 
@@ -776,7 +896,9 @@ public sealed class GhSweepManager : IDisposable
 
         _outstandingDispatch.Clear();
         _dispatchRoom = null;
-        BeginInventoryVerification("dispatch settle timeout");
+        // Trust the ledger — a lost command just means that move stays queued; no
+        // `i` needed. (A real capacity refusal arrives as its own line and resyncs.)
+        ContinueAfterTransaction("dispatch settle timeout");
     }
 
     // Self-drop confirmation ("You dropped X." / Paradigm's counted form) —
@@ -829,7 +951,7 @@ public sealed class GhSweepManager : IDisposable
         {
             _dispatchSettle.Stop();
             _dispatchRoom = null;
-            BeginInventoryVerification("room dispatch confirmed");
+            AdvanceAfterDispatch("room dispatch confirmed");
         }
         else
         {
@@ -839,6 +961,20 @@ public sealed class GhSweepManager : IDisposable
             _dispatchSettle.Stop();
             _dispatchSettle.Start();
         }
+    }
+
+    // A dispatch just fully resolved. Normally re-plan straight off the ledger; but
+    // if a capacity refusal flagged the ledger as drifted, resync from a fresh `i`
+    // first (which then re-plans). The one place `i` re-enters the happy path.
+    private void AdvanceAfterDispatch(string reason)
+    {
+        if (_resyncPending)
+        {
+            _resyncPending = false;
+            BeginInventoryResync(reason);
+            return;
+        }
+        ContinueAfterTransaction(reason);
     }
 
     // Detect a get FAILURE for one of our outstanding pickups and drop that item
@@ -851,6 +987,16 @@ public sealed class GhSweepManager : IDisposable
         List<PendingSortMove> gets = _outstandingDispatch
             .Where(m => !m.IsCarried && !m.Delivered).ToList();
         if (gets.Count == 0) return;
+
+        // A capacity refusal is NOT a gone item — the pickup is gettable, our
+        // tracked working-weight just drifted low. Leave the refused gets queued and
+        // resync the baseline from a fresh `i`, then re-plan (deliver to free room,
+        // or strand what the corrected budget can't ever hold).
+        if (GetCannotCarryRegex.IsMatch(line.Text))
+        {
+            HandleCapacityRefusal(gets);
+            return;
+        }
 
         Match notHere = GetNotHereRegex.Match(line.Text);
         if (notHere.Success)
@@ -870,23 +1016,23 @@ public sealed class GhSweepManager : IDisposable
             StrandFailedGet(gets[0], "game misparsed the get as a currency command");
     }
 
-    // Remove a failed get from the queue (so it stops being retried and no longer
-    // blocks completion), record it under LeftInPlace, and advance the dispatch
-    // exactly as a real confirmation would.
-    private void StrandFailedGet(PendingSortMove move, string reason)
+    // "You cannot carry that much!" — abort the outstanding pickups (they stay
+    // queued, they're not gone) and mark the ledger for a resync. The resync + the
+    // re-plan run once the dispatch fully unwinds (any drops in the same batch
+    // resolve first), routing AdvanceAfterDispatch through BeginInventoryResync.
+    private void HandleCapacityRefusal(List<PendingSortMove> outstandingGets)
     {
-        _pending.Remove(move);
-        _outstandingDispatch.Remove(move);
-        _inventoryExpectations.RemoveAll(e => ReferenceEquals(e.Move, move));
-        _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName));
+        foreach (PendingSortMove get in outstandingGets) _outstandingDispatch.Remove(get);
+        _resyncPending = true;
         _log?.Info(LogCategory,
-            $"get failed for {move.ItemName} at {move.From} — {reason}; not retrying");
+            $"capacity refused {outstandingGets.Count} pending pickup(s) at {_dispatchRoom}; "
+            + "will resync carry weight and re-plan");
         PhaseChanged?.Invoke();
         if (_outstandingDispatch.Count == 0)
         {
             _dispatchSettle.Stop();
             _dispatchRoom = null;
-            BeginInventoryVerification("get failure resolved dispatch");
+            AdvanceAfterDispatch("capacity refusal");
         }
         else
         {
@@ -895,86 +1041,71 @@ public sealed class GhSweepManager : IDisposable
         }
     }
 
-    private void BeginInventoryVerification(string dispatchResult)
+    // Remove a failed get from the queue (so it stops being retried and no longer
+    // blocks completion), record it under LeftInPlace, and advance the dispatch
+    // exactly as a real confirmation would.
+    private void StrandFailedGet(PendingSortMove move, string reason)
     {
-        bool hasConfirmedTransaction = _inventoryExpectations.Any(e =>
-            e.WasDrop ? e.Move.Delivered : e.Move.IsCarried);
-        if (_inventory is null || !hasConfirmedTransaction)
+        _pending.Remove(move);
+        _outstandingDispatch.Remove(move);
+        _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.GoneBySortTime));
+        _log?.Info(LogCategory,
+            $"get failed for {move.ItemName} at {move.From} — {reason}; not retrying");
+        PhaseChanged?.Invoke();
+        if (_outstandingDispatch.Count == 0)
         {
-            _inventoryExpectations.Clear();
-            ContinueAfterTransaction(dispatchResult);
+            _dispatchSettle.Stop();
+            _dispatchRoom = null;
+            ContinueAfterTransaction("get failure resolved dispatch");
+        }
+        else
+        {
+            _dispatchSettle.Stop();
+            _dispatchSettle.Start();
+        }
+    }
+
+    private void BeginInventoryResync(string reason)
+    {
+        if (_inventory is null)
+        {
+            ContinueAfterTransaction(reason);
             return;
         }
-
-        _awaitingInventoryVerification = true;
+        _awaitingInventoryResync = true;
         _inventorySettle.Stop();
         _inventorySettle.Start();
         Send("i");
-        _log?.Info(LogCategory,
-            $"requested full inventory verification after {dispatchResult}");
+        _log?.Info(LogCategory, $"requesting inventory resync after {reason}");
     }
 
     private void OnFullInventoryParsed()
     {
-        if (!_awaitingInventoryVerification || Phase != SweepPhase.Sorting) return;
-
+        if (!_awaitingInventoryResync || Phase != SweepPhase.Sorting) return;
         _inventorySettle.Stop();
-        _awaitingInventoryVerification = false;
-        foreach (InventoryExpectation expectation in _inventoryExpectations)
-        {
-            PendingSortMove move = expectation.Move;
-            int after = CountInventoryItem(move.ItemName);
-            if (!expectation.WasDrop && move.IsCarried)
-            {
-                int expected = expectation.BeforeCount + move.Count;
-                if (after < expected)
-                {
-                    move.IsCarried = false;
-                    _log?.Warn(LogCategory,
-                        $"inventory did not verify pickup of {move.Count}x {move.ItemName}: "
-                        + $"before={expectation.BeforeCount}, after={after}; queued for retry");
-                }
-            }
-            else if (expectation.WasDrop && move.Delivered)
-            {
-                int expectedMaximum = Math.Max(0, expectation.BeforeCount - move.Count);
-                if (after > expectedMaximum)
-                {
-                    move.Delivered = false;
-                    move.IsCarried = true;
-                    int movedIndex = _movedSoFar.FindLastIndex(m =>
-                        m.From.Equals(move.From) && m.To.Equals(move.To)
-                        && string.Equals(m.ItemName, move.ItemName, StringComparison.OrdinalIgnoreCase));
-                    if (movedIndex >= 0) _movedSoFar.RemoveAt(movedIndex);
-                    _log?.Warn(LogCategory,
-                        $"inventory did not verify drop of {move.Count}x {move.ItemName}: "
-                        + $"before={expectation.BeforeCount}, after={after}; queued for retry");
-                }
-            }
-        }
-
-        _inventoryExpectations.Clear();
+        _awaitingInventoryResync = false;
+        ResyncCarryBaseline();
+        // A corrected (smaller) working budget can reveal an item is now unmovable.
+        StrandUnmovableItems();
         PhaseChanged?.Invoke();
-        ContinueAfterTransaction("inventory verification complete");
+        ContinueAfterTransaction("inventory resync complete");
     }
 
     private void OnInventoryVerificationTimeout()
     {
         _inventorySettle.Stop();
-        if (!_awaitingInventoryVerification) return;
-        _awaitingInventoryVerification = false;
-        _inventoryExpectations.Clear();
+        if (!_awaitingInventoryResync) return;
+        _awaitingInventoryResync = false;
         _log?.Warn(LogCategory,
-            "full inventory verification timed out; retaining server-confirmed transaction state");
-        ContinueAfterTransaction("inventory verification timeout");
+            "inventory resync timed out; continuing on the tracked ledger");
+        ContinueAfterTransaction("inventory resync timeout");
     }
 
-    // Once the server and full inventory agree on a room transaction, do not
-    // blindly release the original one-way circuit. Carried destinations are
-    // urgent: rebuild the active loop as a two-room shuttle from here directly
-    // to the nearest drop. With nothing carried, target the nearest remaining
-    // pickup source. LoopRunner still owns every movement command and all its
-    // normal gating/recovery behavior; GhSweep only chooses the next waypoint.
+    // A room transaction just resolved off the tracked ledger (or a resync). Do not
+    // blindly release the original one-way circuit — let the trip planner choose the
+    // next waypoint: fill the pack at the nearest fitting source, then deliver to the
+    // nearest carried destination. LoopRunner still owns every movement command and
+    // all its normal gating/recovery behavior; GhSweep only chooses the next room.
     private void ContinueAfterTransaction(string reason)
     {
         if (_pending.All(p => p.Delivered))
@@ -998,27 +1129,24 @@ public sealed class GhSweepManager : IDisposable
         if (Phase != SweepPhase.Sorting || _tracker.State.CurrentRoom is not { } current)
             return false;
 
-        List<RoomKey> carriedDestinations = _pending
+        RoomKey here = current.Key;
+
+        // Weight-aware, trip-minimizing pick: keep filling the pack (nearest source
+        // whose batch fits the live headroom) before delivering (nearest carried
+        // destination). See GhSortPlanner.
+        List<RoomKey> carried = _pending
             .Where(p => p.IsCarried && !p.Delivered)
             .Select(p => p.To)
             .Distinct()
             .ToList();
-        IEnumerable<RoomKey> candidates = carriedDestinations.Count > 0
-            ? carriedDestinations
-            : _pending.Where(p => !p.IsCarried && !p.Delivered)
-                .Select(p => p.From)
-                .Distinct();
+        List<GhSortPlanner.PickupRoom> pickups = _pending
+            .Where(p => !p.IsCarried && !p.Delivered)
+            .GroupBy(p => p.From)
+            .Select(g => new GhSortPlanner.PickupRoom(g.Key, g.Sum(MoveWeight)))
+            .ToList();
 
-        RoomKey here = current.Key;
-        RoomKey? target = candidates
-            .Where(key => !key.Equals(here))
-            .Select(key => (Key: key, Distance: _bfs.DistanceBetween(here, key)))
-            .Where(x => x.Distance is > 0)
-            .OrderBy(x => x.Distance)
-            .ThenBy(x => x.Key.Map)
-            .ThenBy(x => x.Key.Room)
-            .Select(x => (RoomKey?)x.Key)
-            .FirstOrDefault();
+        RoomKey? target = GhSortPlanner.NextTarget(
+            carried, pickups, CurrentHeadroom(), _bfs.ComputeDistancesFrom(here));
         if (target is not { } destination) return false;
 
         var shuttle = new Loop(SweepLoopName, new[] { here, destination });
@@ -1040,29 +1168,11 @@ public sealed class GhSweepManager : IDisposable
             return Phase != SweepPhase.Sorting; // a synchronous Failed event already ended the sweep
         }
 
-        string targetKind = carriedDestinations.Count > 0 ? "drop" : "pickup";
+        string targetKind = carried.Contains(destination) ? "drop" : "pickup";
         _log?.Info(LogCategory,
             $"shortest-work reroute: {here} -> {destination} ({targetKind}, "
             + $"{_bfs.DistanceBetween(here, destination)} hop(s))");
         return true;
-    }
-
-    private int CountInventoryItem(string target)
-    {
-        if (_inventory is null) return 0;
-        InventorySnapshot snapshot = _inventory.Snapshot;
-        int total = 0;
-        foreach (string entry in snapshot.CarriedItems)
-        {
-            (int count, string name) = CountedCommand.SplitLeadingCount(entry);
-            if (SameItem(name, target)) total += count;
-        }
-        foreach (string entry in snapshot.Keys ?? Array.Empty<string>())
-        {
-            (int count, string name) = InventorySnapshot.ParseKeyEntry(entry);
-            if (SameItem(name, target)) total += count;
-        }
-        return total;
     }
 
     private bool SameItem(string left, string right)
@@ -1105,8 +1215,8 @@ public sealed class GhSweepManager : IDisposable
         _dispatchRoom = null;
         _outstandingDispatch.Clear();
         _inventorySettle.Stop();
-        _awaitingInventoryVerification = false;
-        _inventoryExpectations.Clear();
+        _awaitingInventoryResync = false;
+        _resyncPending = false;
         _pendingArrivalSurvey = null;
         // Mark idle before stopping our loop so its synchronous Stopped event
         // cannot be mistaken for an external failure. Stop while GhSortGate is

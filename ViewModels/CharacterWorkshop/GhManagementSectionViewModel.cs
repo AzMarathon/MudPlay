@@ -127,12 +127,19 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
             : string.Join("\n", _sweep.MovedSoFar.Select(m => $"{m.ItemName}: {m.From} -> {m.To}"));
         LeftInPlaceText = _sweep.LeftInPlace.Count == 0
             ? "(none)"
-            : string.Join("\n", _sweep.LeftInPlace.Select(f => $"{f.ItemName} at {f.Room}"));
+            : string.Join("\n", _sweep.LeftInPlace.Select(f => $"{f.ItemName} at {f.Room} ({DescribeReason(f.Reason)})"));
         HasStranded = _sweep.Stranded.Count > 0;
         StrandedText = _sweep.Stranded.Count == 0
             ? "(none)"
             : string.Join("\n", _sweep.Stranded.Select(s => $"{s.ItemName}: carrying from {s.CarriedFrom}, meant for {s.IntendedDestination}"));
     }
+
+    private static string DescribeReason(GhLeftReason reason) => reason switch
+    {
+        GhLeftReason.TooHeavy => "too heavy to carry",
+        GhLeftReason.GoneBySortTime => "gone by sort time",
+        _ => "no matching room",
+    };
 
     [RelayCommand]
     private void Start()

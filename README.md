@@ -10,8 +10,10 @@
 > - Roomba Mode never sweeps up a gang-house guard emblem as clutter, and only ever acts on items found on a GH room floor during its own recon — never anything already in your pack
 > - Fixed Roomba losing the room title in very large wrapped floor lists, repeatedly falling into `rm` recovery, and attributing a newly-entered room's visible items to the room just left
 > - Roomba sorting tags items found only by recon search as `(hidden)` and re-searches only those sources before pickup; visible items are grabbed immediately with no post-recon search delay
-> - After inventory verifies a pickup or drop, Roomba routes directly to the nearest carried destination (then the nearest remaining source) instead of blindly completing the original one-way circuit; failed pickups stay queued without double-moving delivered items
-> - Roomba no longer stops after a no-progress lap or a fixed number of sorting laps, and no longer defers pickups to avoid the Heavy bracket; queued work stays live until every item has a verified delivery (or the user stops the run)
+> - Roomba sorts in the fewest trips between rooms: it fills the pack toward your carry limit (batching several items bound for the same or nearby rooms) before delivering, picking the nearest source that still fits, then the nearest carried destination
+> - Roomba tracks every pickup and drop against each item's weight and plans on that ledger without re-reading inventory after each move — it trusts the game's `You took` / `You dropped` lines, only re-checking (`i`) on a `You cannot carry that much!` refusal and then re-planning
+> - Roomba leaves an item too heavy to ever carry within your working capacity in place (surfaced as *too heavy to carry*) instead of looping on it forever; Left-in-place entries now say why — no matching room, gone by sort time, or too heavy
+> - Roomba no longer stops after a no-progress lap or a fixed number of sorting laps; queued work stays live until every movable item is delivered (or the user stops the run)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

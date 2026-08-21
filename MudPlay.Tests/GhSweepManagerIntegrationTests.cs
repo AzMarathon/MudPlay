@@ -25,7 +25,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void Sorting_SkipsSearchForVisibleItem_RoutesBackwardToDrop_AndResearchesHiddenItem()
+    public void Sorting_SkipsSearchForVisibleItem_BatchesHiddenPickup_ThenDeliversBothInOneTrip()
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), """
@@ -40,9 +40,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             """);
         File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), """
             [
-              { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 100 },
+              { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 10 },
               { "Number": 2, "Name": "chain shirt", "ItemType": 0, "Encum": 1 },
-              { "Number": 3, "Name": "mace", "ItemType": 1, "Encum": 100 }
+              { "Number": 3, "Name": "mace", "ItemType": 1, "Encum": 10 }
             ]
             """);
 
@@ -145,52 +145,42 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.Equal("get war hammer", sent[^1]);
         Assert.Equal(reconSearchCount, sent.Count(command => command == "sea"));
 
+        // Full-ledger verification: "You took X" is trusted as ground truth and the
+        // carry weight is tracked from the ledger, so NO per-transaction `i` goes out.
+        // The reroute happens straight off the confirm — and it FILLS the pack before
+        // delivering: the hidden mace at B is also a weapon (bound for A), so rather
+        // than deliver the war hammer immediately, the planner routes NORTH to batch
+        // the mace first, cutting two delivery trips down to one.
         FeedRouter(router, "You took war hammer.");
-        Assert.Equal("i", sent[^1]);
-        int sentBeforeInventory = sent.Count;
-
-        FeedInventory(inventoryLines, "war hammer");
-
-        Assert.True(sent.Count > sentBeforeInventory);
-        Assert.Equal("s", sent[^1]); // destination A is one room behind C
-
-        tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
-            DateTimeOffset.UtcNow.AddSeconds(6));
-        Assert.Equal("drop war hammer", sent[^1]);
-        FeedRouter(router, "You dropped war hammer.");
-        Assert.Equal("i", sent[^1]);
-        FeedInventory(inventoryLines, "nothing");
-        Assert.Equal("n", sent[^1]); // nearest remaining source is hidden mace at B
-
-        tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
-            DateTimeOffset.UtcNow.AddSeconds(7));
         Assert.Equal("n", sent[^1]);
+
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
-            DateTimeOffset.UtcNow.AddSeconds(8));
+            DateTimeOffset.UtcNow.AddSeconds(6));
         Assert.Equal("sea", sent[^1]); // mace was tagged hidden during recon
         Assert.Equal(reconSearchCount + 1, sent.Count(command => command == "sea"));
         FireSearchSettle(sweep);
-        Assert.Equal("get mace", sent[^1]);
+        Assert.Equal("get mace", sent[^1]); // picked up while still carrying the war hammer
 
+        // Pack now holds everything bound for A and no source remains — deliver:
+        // route from B toward A (two hops south through transit room C).
         FeedRouter(router, "You took mace.");
-        Assert.Equal("i", sent[^1]);
-        FeedInventory(inventoryLines, "mace");
         Assert.Equal("s", sent[^1]);
-
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
-            DateTimeOffset.UtcNow.AddSeconds(9));
-        Assert.Equal("s", sent[^1]);
+            DateTimeOffset.UtcNow.AddSeconds(7));
+        Assert.Equal("s", sent[^1]); // C is pure transit on the delivery route
+
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
-            DateTimeOffset.UtcNow.AddSeconds(10));
+            DateTimeOffset.UtcNow.AddSeconds(8));
+        // Both carried weapons are dropped in the single visit to A.
+        Assert.Equal("drop war hammer", sent[^2]);
         Assert.Equal("drop mace", sent[^1]);
 
+        FeedRouter(router, "You dropped war hammer.");
         FeedRouter(router, "You dropped mace.");
-        Assert.Equal("i", sent[^1]);
-        int sentBeforeFinalInventory = sent.Count;
-        FeedInventory(inventoryLines, "nothing");
-
         Assert.Equal(GhSweepManager.SweepPhase.Idle, sweep.Phase);
-        Assert.Equal(sentBeforeFinalInventory, sent.Count); // no extra loop step on final gate clear
+
+        // The whole sweep completed on the tracked ledger — never a single `i`.
+        Assert.DoesNotContain("i", sent);
 
         sweep.Dispose();
         ground.Dispose();
@@ -217,8 +207,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             """);
         File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), """
             [
-              { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 100 },
-              { "Number": 3, "Name": "mace", "ItemType": 1, "Encum": 100 }
+              { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 10 },
+              { "Number": 3, "Name": "mace", "ItemType": 1, "Encum": 10 }
             ]
             """);
 
@@ -314,7 +304,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             ]
             """);
         File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), """
-            [ { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 100 } ]
+            [ { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 10 } ]
             """);
 
         GameDataCache cache = new(_root);
@@ -403,11 +393,13 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         inventory.Dispose();
     }
 
-    // A `get` the game CONFIRMS ("You took X.") but that the fresh inventory dump
-    // doesn't actually show (the item never reached the pack) must be re-queued,
-    // not treated as delivered — the delivery-reliability path the reports are about.
+    // A `get` refused with "You cannot carry that much!" is NOT a gone item. The
+    // engine normally trusts its tracked ledger (no per-transaction `i`), but this
+    // one signal proves the ledger drifted, so it requests a single resync `i`. When
+    // the fresh dump shows the working budget is now smaller than the item's weight,
+    // the item is stranded (too heavy) instead of being retried forever.
     [Fact]
-    public void UnverifiedPickup_InventoryDoesNotShowIt_RequeuesTheMove()
+    public void CapacityRefusal_ResyncsFromInventory_StrandsWhatNoLongerFits()
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), """
@@ -421,7 +413,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             ]
             """);
         File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), """
-            [ { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 100 } ]
+            [ { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 60 } ]
             """);
 
         GameDataCache cache = new(_root);
@@ -447,6 +439,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
         LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
         inventory.AttachLineExtractor(inventoryLines);
+        // Recon baseline: nearly empty (1/100), so a 60-weight hammer looks movable.
         FeedInventory(inventoryLines, "nothing");
 
         RoomTracker tracker = new(graph);
@@ -490,21 +483,24 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         FireSearchSettle(sweep);
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
 
+        // Sorting reaches C and dispatches the pickup — the ledger thinks it fits.
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(5));
         Assert.Equal("get war hammer", sent[^1]);
+        int getsSent = sent.Count(c => c == "get war hammer");
 
-        // The game confirms the pickup, so the engine requests a fresh `i`...
-        FeedRouter(router, "You took war hammer.");
+        // Capacity refusal — the ONE signal that triggers a single resync `i`.
+        FeedRouter(router, "You cannot carry that much!");
         Assert.Equal("i", sent[^1]);
-        Assert.Equal(1, sweep.CarriedPendingCount);   // provisionally carried
 
-        // ...but the dump shows an empty pack — the pickup didn't really land.
-        FeedInventory(inventoryLines, "nothing");
+        // The fresh dump shows only 40 of 100 free (base weight is really 60), which
+        // is less than the 60-weight hammer, so it can never be carried → stranded.
+        FeedInventory(inventoryLines, "nothing", currentWeight: 60);
 
-        Assert.Equal(0, sweep.CarriedPendingCount);    // un-carried again
-        Assert.Equal(1, sweep.PendingMoveCount);       // still queued for a retry
-        Assert.DoesNotContain(sweep.MovedSoFar, m => m.ItemName == "war hammer");
+        Assert.Contains(sweep.LeftInPlace,
+            f => f.ItemName == "war hammer" && f.Reason == GhLeftReason.TooHeavy);
+        Assert.Equal(0, sweep.PendingMoveCount);
+        Assert.Equal(getsSent, sent.Count(c => c == "get war hammer")); // never re-sent
 
         sweep.Dispose();
         ground.Dispose();
@@ -523,12 +519,12 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         router.Dispatch(new LineExtractor.EmittedLine(text, Array.Empty<CellAttributes>(),
             DateTimeOffset.UtcNow, IsPromptLine: false));
 
-    private static void FeedInventory(LineExtractor lines, string carried)
+    private static void FeedInventory(LineExtractor lines, string carried, int currentWeight = 1)
     {
         FeedLine(lines, $"You are carrying {carried}.");
         FeedLine(lines, "You have no keys.");
         FeedLine(lines, "Wealth:    0 copper farthings");
-        FeedLine(lines, "Encumbrance:    1/100  -  None  [1%]");
+        FeedLine(lines, $"Encumbrance:    {currentWeight}/100  -  None  [{currentWeight}%]");
     }
 
     private static void FeedLine(LineExtractor lines, string text)
