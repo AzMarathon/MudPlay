@@ -23,7 +23,7 @@
         <!-- Header: instructions + live phase readout. -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,8">
             <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" TextWrapping="Wrap"
-                       Text="Right-click a destination room on the map and choose 'Toggle: Roomba Room' to add it (right-click again to remove it), or type a map/room number below and click Add Room. Assign each room's sort rules, then Start (label at least 2 rooms). Roomba scans the circuit once, moves misfiled floor items to their labeled room in the fewest trips, then scans once more. Tick 'Search rooms for hidden items' to also 'sea' each room. Double-click a room below to see its current contents; open 'Roomba Log' for the full move record and summary."/>
+                       Text="Right-click a map room → 'Toggle: Roomba Room' (or add one by number below) and set its sort rules, then Start (needs 2+ rooms). Double-click a room for its contents; 'Roomba Log' has the full run."/>
             <TextBlock Text="{Binding PhaseText}"
                        Foreground="{StaticResource ChromeFgBrush}"
                        FontWeight="SemiBold"/>
