@@ -46,6 +46,10 @@ public sealed class GhRoomLabelStore
     public int ReconLaps => Math.Max(1, _profile.Current?.GhReconLaps ?? DefaultReconLaps);
     public int SearchesPerRoom => Math.Max(1, _profile.Current?.GhSearchesPerRoom ?? DefaultSearchesPerRoom);
 
+    // Whether recon searches (`sea`) each room for hidden items. Off by default:
+    // Roomba sorts only the visible floor unless the user opts in.
+    public bool SearchForHidden => _profile.Current?.GhSearchForHidden ?? false;
+
     public void SetReconLaps(int laps)
     {
         if (_profile.Current is not { } current) return;
@@ -61,6 +65,15 @@ public sealed class GhRoomLabelStore
         current.GhSearchesPerRoom = Math.Max(1, count);
         _profile.Save();
         _log?.Info("GhSweep", $"searches per room set to {current.GhSearchesPerRoom}");
+        Changed?.Invoke();
+    }
+
+    public void SetSearchForHidden(bool on)
+    {
+        if (_profile.Current is not { } current) return;
+        current.GhSearchForHidden = on;
+        _profile.Save();
+        _log?.Info("GhSweep", $"search for hidden items {(on ? "enabled" : "disabled")}");
         Changed?.Invoke();
     }
 

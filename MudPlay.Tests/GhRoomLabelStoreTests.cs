@@ -68,6 +68,19 @@ public sealed class GhRoomLabelStoreTests
     }
 
     [Fact]
+    public void SearchForHidden_DefaultsOff_AndPersistsWhenSet()
+    {
+        GhRoomLabelStore store = NewStore();
+        Assert.False(store.SearchForHidden);   // hidden-item search is opt-in
+
+        store.SetSearchForHidden(true);
+        Assert.True(store.SearchForHidden);
+
+        store.SetSearchForHidden(false);
+        Assert.False(store.SearchForHidden);
+    }
+
+    [Fact]
     public void SetReconLaps_FiresChanged()
     {
         GhRoomLabelStore store = NewStore();

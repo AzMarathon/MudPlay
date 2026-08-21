@@ -182,6 +182,11 @@ public sealed class CharacterProfile
     public int? GhReconLaps { get; set; }
     public int? GhSearchesPerRoom { get; set; }
 
+    // Whether Roomba searches (`sea`) each room for hidden items during recon.
+    // null/false = sort visible floor items only (never search); true = also
+    // reveal + sort items hidden in the rooms. Off by default. Per-character.
+    public bool? GhSearchForHidden { get; set; }
+
     // Recent walk-to destinations, newest first, capped at 10. Each entry is a
     // "map/room" coordinate string. Maintained by GotoHistoryStore; drives the
     // Navigation goto-button dropdown. null or empty = no history yet.

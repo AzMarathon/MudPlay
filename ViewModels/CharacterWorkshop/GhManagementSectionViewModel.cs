@@ -27,7 +27,9 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     public ObservableCollection<GhRoomLabelRowViewModel> Rooms { get; } = new();
 
     [ObservableProperty] private string _phaseText = "Idle";
-    [ObservableProperty] private bool _isRunning;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SearchesEditable))]
+    private bool _isRunning;
     [ObservableProperty] private string _movedText = string.Empty;
     [ObservableProperty] private string _leftInPlaceText = string.Empty;
     [ObservableProperty] private string _strandedText = string.Empty;
@@ -42,6 +44,17 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     [ObservableProperty] private int _reconLaps;
     [ObservableProperty] private int _searchesPerRoom;
 
+    // Whether recon searches (`sea`) each room for hidden items. Off by default —
+    // Roomba sorts the visible floor only unless the user opts in. Persisted
+    // per-character via the store.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SearchesEditable))]
+    private bool _searchForHidden;
+
+    // The searches-per-room count only matters while hidden-item search is on and
+    // the sweep isn't running — grey the ticker out otherwise.
+    public bool SearchesEditable => !IsRunning && SearchForHidden;
+
     public GhManagementSectionViewModel(GhRoomLabelStore labels, GhSweepManager sweep, RoomGraphManager roomGraph)
     {
         ArgumentNullException.ThrowIfNull(labels);
@@ -53,6 +66,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
 
         ReconLaps = _labels.ReconLaps;
         SearchesPerRoom = _labels.SearchesPerRoom;
+        SearchForHidden = _labels.SearchForHidden;
         _suppressSettingsWrite = false;
 
         _labels.Changed += RebuildRooms;
@@ -71,6 +85,12 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     {
         if (_suppressSettingsWrite) return;
         _labels.SetSearchesPerRoom(value);
+    }
+
+    partial void OnSearchForHiddenChanged(bool value)
+    {
+        if (_suppressSettingsWrite) return;
+        _labels.SetSearchForHidden(value);
     }
 
     private void RebuildRooms()

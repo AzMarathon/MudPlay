@@ -554,7 +554,15 @@ public sealed class GhSweepManager : IDisposable
             return;
         }
 
-        if (Phase == SweepPhase.Reconning) { BeginRoomSearches(here); return; }
+        if (Phase == SweepPhase.Reconning)
+        {
+            // Only hold the room to send `sea` when the user opted into hidden-item
+            // search. With it off (the default), recon just observes the room's
+            // visible floor — the room display already surfaced it via the survey —
+            // and lets the loop walk on, so nothing hidden is ever tagged or sorted.
+            if (_labels.SearchForHidden) BeginRoomSearches(here);
+            return;
+        }
         DispatchAtRoom(here);
     }
 

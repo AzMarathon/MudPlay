@@ -21,7 +21,7 @@
         <!-- Header: instructions + live phase readout. -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,8">
             <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" TextWrapping="Wrap"
-                       Text="Right-click destination rooms on the map and choose 'Label as GH room…' to assign their sort rules, then Start here. Recon searches every circuit room; sorting re-searches only items logged as hidden, verifies inventory, then takes the shortest route to the next drop or pickup."/>
+                       Text="Right-click destination rooms on the map and choose 'Label as GH room…' to assign their sort rules, then Start here. Recon walks the circuit and sorts the floor items it sees; tick 'Search rooms for hidden items' to also 'sea' each room and sort what's hidden. It verifies inventory after each pickup/drop, then takes the shortest route to the next drop or pickup."/>
             <TextBlock Text="{Binding PhaseText}"
                        Foreground="{StaticResource ChromeFgBrush}"
                        FontWeight="SemiBold"/>
@@ -34,9 +34,15 @@
             <TextBlock Classes="FieldLabel" Text="Recon laps" VerticalAlignment="Center" Margin="12,0,0,0"/>
             <NumericUpDown Value="{Binding ReconLaps}" Minimum="1" Maximum="20" Increment="1"
                            Width="100" FormatString="0" IsEnabled="{Binding !IsRunning}"/>
-            <TextBlock Classes="FieldLabel" Text="Searches per room" VerticalAlignment="Center" Margin="12,0,0,0"/>
+            <CheckBox Content="Search rooms for hidden items"
+                      IsChecked="{Binding SearchForHidden}"
+                      IsEnabled="{Binding !IsRunning}"
+                      VerticalAlignment="Center" Margin="12,0,0,0"
+                      ToolTip.Tip="Off: sort only items visible on the floor. On: send `sea` in each room during recon to reveal and sort hidden items too."/>
+            <TextBlock Classes="FieldLabel" Text="Searches per room" VerticalAlignment="Center" Margin="12,0,0,0"
+                       IsEnabled="{Binding SearchesEditable}"/>
             <NumericUpDown Value="{Binding SearchesPerRoom}" Minimum="1" Maximum="20" Increment="1"
-                           Width="100" FormatString="0" IsEnabled="{Binding !IsRunning}"/>
+                           Width="100" FormatString="0" IsEnabled="{Binding SearchesEditable}"/>
         </StackPanel>
 
         <!-- Labeled rooms grid -->
