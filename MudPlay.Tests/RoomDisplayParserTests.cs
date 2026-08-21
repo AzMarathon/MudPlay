@@ -36,6 +36,10 @@ public sealed class RoomDisplayParserTests : IDisposable
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
             "N": "0", "S": "1/1", "E": "0", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 297, "Name": "Bank of Godfrey",
+            "Light": 0, "Shop": 8, "Lair": "", "Delay": 5,
+            "N": "1/2", "S": "0", "E": "1/1", "W": "1/41 (Door [1000 picklocks/strength])",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 2, "Room Number": 5, "Name": "Cellar",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
             "N": "0", "S": "0", "E": "0", "W": "0",
@@ -55,6 +59,24 @@ public sealed class RoomDisplayParserTests : IDisposable
         LineExtractor lines = new(new TerminalEmulator(80, 25));
         RoomDisplayParser parser = new(lines, tracker);
         return (tracker, parser);
+    }
+
+    // Same wiring, but hands back the emulator so a test can replay raw wire
+    // bytes through the whole terminal -> line -> parser path.
+    private (RoomTracker Tracker, RoomDisplayParser Parser, TerminalEmulator Terminal) NewParserWithTerminal(
+        string json = GraphJson)
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        RoomTracker tracker = new(graph);
+        TerminalEmulator term = new(80, 25);
+        LineExtractor lines = new(term);
+        RoomDisplayParser parser = new(lines, tracker);
+        return (tracker, parser, term);
     }
 
     // ----- happy paths ----------------------------------------------
@@ -398,6 +420,118 @@ public sealed class RoomDisplayParserTests : IDisposable
 
     // ----- colour-anchored detection --------------------------------
 
+    // ----- bank lobby: a blank line INSIDE the room display ----------
+
+    // Captured off a live 1.11p board (Bank of Godfrey, 1/297, 2026-08-20):
+    // the bank lobby prints its currency-conversion table as part of the room
+    // display, separated from the description by a BLANK line, and the table
+    // is dim cyan (SGR 0;36) rather than the bright cyan of a room name. The
+    // blank line is a block boundary for name recovery, so scanning forward
+    // from it finds no bright-cyan line and the text fallback returns "The
+    // currency conversion rates are:" — a name no room has. The tracker can't
+    // match it, keeps its previous room (map goes stale), and a walker mid-step
+    // never sees the arrival: no auto-deposit, no resumed loop.
+    [Fact]
+    public void BankLobby_TableAfterBlankLineInDisplay_StillRecoversRoomName()
+    {
+        (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
+
+        parser.FeedTestEmittedLines(new[]
+        {
+            ColoredLine("Bank of Godfrey", BrightCyanSgr1Then36),
+            ColoredLine("    This is the town bank. It is lightly crowded with customers come to", DefaultAttr),
+            ColoredLine("withdraw or deposit their hard-earned cash. There is a row of bank tellers", DefaultAttr),
+            ColoredLine("along the western wall, and you can see a large iron gate with triple locks", DefaultAttr),
+            ColoredLine("leading into the vault. ", DefaultAttr),
+            ColoredLine("", DimCyan),
+            ColoredLine("The currency conversion rates are:", DimCyan),
+            ColoredLine("100 platinum pieces == 1 runic coins", DimCyan),
+            ColoredLine("100 gold crowns == 1 platinum piece", DimCyan),
+            ColoredLine("10 silver nobles == 1 gold crown", DimCyan),
+            ColoredLine("10 copper farthings == 1 silver noble", DimCyan),
+            ColoredLine("Also here: nasty elite guardsman.", DefaultAttr),
+            ColoredLine("Obvious exits: north, east, closed gate west", DefaultAttr),
+        });
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 297), tracker.State.CurrentRoom!.Key);
+    }
+
+    // The same lobby with one more line in the display — a second occupant, an
+    // item on the floor, or an "Also here:" list long enough to wrap. The
+    // capture above already fills the rolling line buffer exactly, so ONE extra
+    // line evicts the room-name line before "Obvious exits:" arrives and no
+    // colour pass can find what is no longer buffered. The buffer has to be
+    // deep enough to hold the longest real room display, not just this one.
+    [Fact]
+    public void BankLobby_ExtraOccupantLine_StillRecoversRoomName()
+    {
+        (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
+
+        parser.FeedTestEmittedLines(new[]
+        {
+            ColoredLine("Bank of Godfrey", BrightCyanSgr1Then36),
+            ColoredLine("    This is the town bank. It is lightly crowded with customers come to", DefaultAttr),
+            ColoredLine("withdraw or deposit their hard-earned cash. There is a row of bank tellers", DefaultAttr),
+            ColoredLine("along the western wall, and you can see a large iron gate with triple locks", DefaultAttr),
+            ColoredLine("leading into the vault. ", DefaultAttr),
+            ColoredLine("", DimCyan),
+            ColoredLine("The currency conversion rates are:", DimCyan),
+            ColoredLine("100 platinum pieces == 1 runic coins", DimCyan),
+            ColoredLine("100 gold crowns == 1 platinum piece", DimCyan),
+            ColoredLine("10 silver nobles == 1 gold crown", DimCyan),
+            ColoredLine("10 copper farthings == 1 silver noble", DimCyan),
+            ColoredLine("You notice a torch here.", DefaultAttr),
+            ColoredLine("Also here: nasty elite guardsman, Salad.", DefaultAttr),
+            ColoredLine("Obvious exits: north, east, closed gate west", DefaultAttr),
+        });
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 297), tracker.State.CurrentRoom!.Key);
+    }
+
+    // End-to-end replay of the real thing: the byte-for-byte wire capture of a
+    // `w` into the Bank of Godfrey (1/297) taken off a live MajorMUD v1.11p-WG
+    // board on 2026-08-20, fed through the actual TerminalEmulator and
+    // LineExtractor rather than hand-built lines. This is what proves the fix on
+    // the path the client really runs: the SGR parsing that marks the name
+    // bright cyan (ESC[1;36m) and the table dim cyan (ESC[0;36m), the blank line
+    // the lobby emits before its currency table, the backspace-overstruck exit
+    // hotkeys ("nL\borth"), and the "closed gate west" barrier phrasing.
+    [Fact]
+    public void BankLobby_RawWireCapture_LandsInTheBank()
+    {
+        (RoomTracker tracker, RoomDisplayParser parser, TerminalEmulator term) = NewParserWithTerminal();
+        RoomObservation? observed = null;
+        parser.RoomParsed += o => observed = o;
+
+        term.Feed(Convert.FromHexString(BankArrivalCaptureHex));
+
+        Assert.NotNull(observed);
+        Assert.Equal("Bank of Godfrey", observed!.Value.Name);
+        Assert.Equal(
+            new[] { Direction.N, Direction.E, Direction.W }.OrderBy(d => d),
+            observed.Value.Exits.OrderBy(d => d));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 297), tracker.State.CurrentRoom!.Key);
+    }
+
+    private const string BankArrivalCaptureHex =
+        "770d0a1b5b303b33373b34306d1b5b3739441b5b4b1b5b313b33366d42616e6b206f6620476f64667265790d0a1b5b37"
+        + "39441b5b4b1b5b303b33373b34306d20202020546869732069732074686520746f776e2062616e6b2e20497420697320"
+        + "6c696768746c792063726f77646564207769746820637573746f6d65727320636f6d6520746f0d0a7769746864726177"
+        + "206f72206465706f73697420746865697220686172642d6561726e656420636173682e20546865726520697320612072"
+        + "6f77206f662062616e6b2074656c6c6572730d0a616c6f6e6720746865207765737465726e2077616c6c2c20616e6420"
+        + "796f752063616e207365652061206c617267652069726f6e2067617465207769746820747269706c65206c6f636b730d"
+        + "0a6c656164696e6720696e746f20746865207661756c742e200d0a1b5b3739441b5b4b1b5b303b33366d0d0a54686520"
+        + "63757272656e637920636f6e76657273696f6e207261746573206172653a0d0a31303020706c6174696e756d20706965"
+        + "636573203d3d20312072756e696320636f696e730d0a31303020676f6c642063726f776e73203d3d203120706c617469"
+        + "6e756d2070696563650d0a31302073696c766572206e6f626c6573203d3d203120676f6c642063726f776e0d0a313020"
+        + "636f70706572206661727468696e6773203d3d20312073696c766572206e6f626c650d0a1b5b303b33356d416c736f20"
+        + "686572653a201b5b303b33376d6e6173747920656c697465206775617264736d616e1b5b306d1b5b303b33356d2e0d0a"
+        + "1b5b306d1b5b303b33326d4f6276696f75732065786974733a206e4c086f7274682c206552086173742c20636c6f7365"
+        + "64206761746520776573740d0a1b5b3739441b5b4b1b5b303b33376d5b48503d33331b5b303b33376d5d3a01";
+
     private static LineExtractor.EmittedLine ColoredLine(string text, CellAttributes attr)
     {
         CellAttributes[] attrs = new CellAttributes[text.Length];
@@ -410,6 +544,11 @@ public sealed class RoomDisplayParserTests : IDisposable
 
     private static readonly CellAttributes BrightCyanSgr1Then36 = new(
         TerminalColor.Indexed(6), TerminalColor.Default, CellFlags.Bold);
+
+    // SGR 0;36 — the bank's currency table. Index 6 WITHOUT bold, so it is
+    // deliberately NOT bright cyan and must not be mistaken for a room name.
+    private static readonly CellAttributes DimCyan = new(
+        TerminalColor.Indexed(6), TerminalColor.Default, CellFlags.None);
 
     private static readonly CellAttributes DefaultAttr = CellAttributes.Default;
 

@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.22.23
+
+- Auto-deposit no longer strands the walker at a bank: a bank lobby prints its currency-conversion table behind a blank line in the room display, which room-name recovery read as the end of the block — so the client saw the room as "The currency conversion rates are:", the map stayed on the street outside, and neither the `dep` nor the loop resume fired
+- Room-name recovery now reaches back across an in-display blank line for the bright-cyan name, and the line buffer it scans is deeper — it was exactly the length of a bank arrival, so one floor item or a second occupant evicted the name outright
+
 ## 3.22.22
 
 - Fixed meditate never re-engaging after something (a self-bless, etc.) interrupted it in place — the auto-rest engine's confirm/interrupt tracking only recognized the "resting" position, never "meditating", so the latch got stuck and blocked every further re-send until the next room move
