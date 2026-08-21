@@ -2,6 +2,19 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.22.34
+
+- `@inv` now reports the **entire carried pack** — no more `(and N more items)` truncation; a long inventory splits across numbered replies (`carrying (1/2): …`)
+- Party **HELD** status now clears everywhere: a member's `.@held on`/`.@held off` broadcast toggles the chip on every client like the other ailments (previously held announced once and never cleared party-wide)
+- **Reset States** now clears every party member's ailment chips, not just your own
+- **Auto-search** now searches each room you enter **exactly once** — no redundant re-searches, no rooms skipped; it clears cleanly on death and holds for a room you're transiting with queued moves, so the engine feels responsive again instead of "slow"
+- Combat: a capped attack spell (e.g. **LBOL** at `MaxCasts 1`) no longer fires a **second time** when a between-round heal/buff interrupts its round — the interrupted round is tallied before the resume re-decides, so the cascade advances to the alternate
+- Combat: spell choice now checks a spell's **real mana cost**, not just the reserve floor — an attack/drain spell you can't actually afford is skipped instead of chosen
+- Party heal now fires the **instant** a member's HP drops below the threshold, not a full round late
+- Coin auto-collect is suppressed in your **stash room** while looping, so a stash run doesn't re-grab what it just deposited
+- **Learned spells** no longer lost on upgrade when the profile loads before the game-data set is active — the obtained set is seeded by name and re-resolves once the set loads
+- bug reports addressed: paradigm-20260820-153957, paradigm-20260820-122200, paradigm-20260820-153540, paradigm-20260820-130600, paradigm-20260820-090736, paradigm-20260820-090254, paradigm-20260820-080408, paradigm-20260820-063541, paradigm-20260820-082741, paradigm-20260820-122341, paradigm-20260820-055720, paradigm-20260820-055007
+
 ## 3.22.22
 
 - Fixed meditate never re-engaging after something (a self-bless, etc.) interrupted it in place — the auto-rest engine's confirm/interrupt tracking only recognized the "resting" position, never "meditating", so the latch got stuck and blocked every further re-send until the next room move

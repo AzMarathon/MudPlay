@@ -16,7 +16,13 @@ namespace MudPlay.Services;
 // to long-lived services).
 public sealed class MessageRouter
 {
-    private sealed record Subscription(IMessagePattern Pattern, Action<MatchResult> Handler);
+    // TieBreak orders subscribers of the SAME pattern (same Pattern.Priority) —
+    // higher runs first. Default 0. Almost every subscriber leaves it 0 (order
+    // among same-pattern peers doesn't matter); it exists for the rare case where
+    // one same-pattern handler must observe a line before another (e.g.
+    // RoundDamageTracker must close the round on *Combat Off* before CombatManager
+    // reads the round count to tally MaxCasts — report paradigm-20260820-063541).
+    private sealed record Subscription(IMessagePattern Pattern, Action<MatchResult> Handler, int TieBreak = 0);
 
     private readonly List<Subscription> _subs = new();
 
@@ -58,12 +64,12 @@ public sealed class MessageRouter
 
     // Register handler to be invoked whenever pattern matches a dispatched
     // line. Disposing the returned token un-subscribes.
-    public IDisposable Register(IMessagePattern pattern, Action<MatchResult> handler)
+    public IDisposable Register(IMessagePattern pattern, Action<MatchResult> handler, int tieBreak = 0)
     {
         ArgumentNullException.ThrowIfNull(pattern);
         ArgumentNullException.ThrowIfNull(handler);
 
-        Subscription sub = new(pattern, handler);
+        Subscription sub = new(pattern, handler, tieBreak);
         _subs.Add(sub);
         return new SubscriptionToken(this, sub);
     }
@@ -72,12 +78,12 @@ public sealed class MessageRouter
     // RegisterPattern). Equivalent to Register with the looked-up pattern.
     // Throws InvalidOperationException when no pattern with the given id is in
     // the catalog.
-    public IDisposable Subscribe(string id, Action<MatchResult> handler)
+    public IDisposable Subscribe(string id, Action<MatchResult> handler, int tieBreak = 0)
     {
         if (!TryGetPattern(id, out IMessagePattern pattern))
             throw new InvalidOperationException(
                 $"No catalog pattern with id '{id}' — has DefaultPatterns.Seed run?");
-        return Register(pattern, handler);
+        return Register(pattern, handler, tieBreak);
     }
 
     // Evaluate every registered pattern against line and invoke matching
@@ -104,7 +110,15 @@ public sealed class MessageRouter
 
         if (hits is null) return;
 
-        hits.Sort(static (a, b) => b.Sub.Pattern.Priority.CompareTo(a.Sub.Pattern.Priority));
+        // Descending pattern priority, then descending per-subscription TieBreak so a
+        // handler that must observe a line before another same-pattern peer (higher
+        // TieBreak) runs first — deterministic where the default equal-priority order
+        // is not.
+        hits.Sort(static (a, b) =>
+        {
+            int byPattern = b.Sub.Pattern.Priority.CompareTo(a.Sub.Pattern.Priority);
+            return byPattern != 0 ? byPattern : b.Sub.TieBreak.CompareTo(a.Sub.TieBreak);
+        });
         foreach ((Subscription sub, MatchResult result) in hits)
         {
             sub.Handler(result);

@@ -240,6 +240,25 @@ public sealed class SpellbookState
         Changed?.Invoke();
     }
 
+    // Seed the authoritative obtained-name set directly from a persisted snapshot,
+    // WITHOUT requiring the names to resolve against the current Available list.
+    // Profile load can run before the game-data set is active (Available empty), so
+    // SetObtainedByNames would resolve nothing and drop every persisted name — then
+    // the immediate post-migration Save writes null and the learned set is lost on
+    // upgrade (report paradigm-20260820-055007). This keeps the names as the source
+    // of truth; the numbers re-derive on the next Reseed once Available exists.
+    public void SeedObtainedNames(IEnumerable<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        HashSet<string> nextNames = new(names, StringComparer.OrdinalIgnoreCase);
+        if (nextNames.SetEquals(_obtainedNames)) return;
+        _obtainedNames.Clear();
+        _obtainedNames.UnionWith(nextNames);
+        ResolveObtainedFromNames();
+        RebuildAvailablePicks();
+        Changed?.Invoke();
+    }
+
     // Mark a single spell obtained by its full Name — the learn-scroll signal
     // ("…learn the spell harm."). Returns the resolved spell (so a caller can
     // surface it), or null when the name doesn't match an available spell. Fires

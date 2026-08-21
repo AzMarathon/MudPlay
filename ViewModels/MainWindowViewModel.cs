@@ -4583,7 +4583,8 @@ public partial class MainWindowViewModel : ObservableObject
     // owner's ActiveFlags edge: the Confused / Held self-chips clear, their
     // ConfusionGate / HeldGate release, and the ailment @wait balances to @ok.
     // Then it sweeps the remaining self-row ailment chips so the party window
-    // shows a clean self row. Self-only — other members' state is untouched.
+    // shows a clean self row, and sweeps the ailment chips of EVERY party member
+    // (a stuck badge on another member, e.g. the leader, is the reported case).
     // Finally it force-clears combat state so a stuck Combat gate (stale roster
     // parking the walker "fighting" an empty room) releases and the Fighting chip
     // goes away — the conditions sweep alone never touched it.
@@ -4598,14 +4599,21 @@ public partial class MainWindowViewModel : ObservableObject
     {
         AppServices.Current.Conditions.ClearAll("reset");
 
+        // Clear the ailment chips for EVERY party member, not just self. A stuck
+        // HELD / ailment badge on another member (e.g. the leader) can't self-clear
+        // when that client never sent the matching off-signal, and Reset States is
+        // the manual escape hatch for it (report paradigm-20260820-122200). Reading
+        // the roster names and clearing by name is safe (SetMemberAilment normalises
+        // to given name); a member with no name is skipped.
         Game.PartyManager party = AppServices.Current.Party;
-        if (party.LocalCharacterName is { Length: > 0 } me)
+        foreach (Game.PartyMember m in party.State.Members)
         {
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Confused, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.MovementPrevented, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Poisoned, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Blinded, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Diseased, false);
+            if (string.IsNullOrWhiteSpace(m.Name)) continue;
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Confused, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.MovementPrevented, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Poisoned, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Blinded, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Diseased, false);
         }
 
         AppServices.Current.CombatTracker.ResetCombatState("Reset States (manual)");

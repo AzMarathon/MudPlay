@@ -88,6 +88,17 @@ public sealed partial class CombatManager
     private SpellReqLevelIndex? _spellReqLevel;
     private MonsterResistIndex? _monsterResist;
     private SpellAttackTypeIndex? _spellAttackType;
+    // Resolves an attack spell's actual mana cost by cast-code (Spellbook.ManaCostOf),
+    // threaded into the chooser context as an affordability floor. Until wired, the
+    // chooser gates on the slot's MinManaPerCast reserve alone (old behavior).
+    private Func<string, int?>? _spellManaCost;
+
+    // Wire the spell mana-cost lookup used to gate the combat chooser on real
+    // affordability (a MinManaPerCast=0 slot must still not cast a spell we can't
+    // pay for — a below-cost cast silently no-ops). Same source the CastingDirector
+    // uses (Spellbook.ManaCostOf).
+    public void SetSpellManaCost(Func<string, int?> manaCostOf)
+        => _spellManaCost = manaCostOf ?? throw new ArgumentNullException(nameof(manaCostOf));
 
     // Opt into deterministic magic-eligibility gating. monsterMagic supplies each
     // monster's Magical / SpellImmu levels, itemMagic supplies each weapon's
@@ -1065,7 +1076,8 @@ public sealed partial class CombatManager
             HpBelowDrainTrigger: hpBelowDrain,
             DrainTargetEligible: drainEligible,
             HpBelowDrainRelease: hpBelowDrainRelease,
-            RoomMobKeys:         CollectEngageableMobKeys(obs));
+            RoomMobKeys:         CollectEngageableMobKeys(obs),
+            ManaCostOf:          _spellManaCost);
     }
 
     // Resolve the drain spell's two live gates for a target: whether HP has fallen

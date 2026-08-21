@@ -1,8 +1,16 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.22**
-> - Fixed meditate never re-engaging after something (a self-bless, etc.) interrupted it in place — the auto-rest engine's confirm/interrupt tracking only recognized the "resting" position, never "meditating", so the latch got stuck and blocked every further re-send until the next room move
+> **Version 3.22.34**
+> - `@inv` now reports the **entire carried pack** — no more `(and N more items)` truncation; a long inventory splits across numbered replies (`carrying (1/2): …`)
+> - Party **HELD** status now clears everywhere: a member's `.@held on`/`.@held off` broadcast toggles the chip on every client like the other ailments
+> - **Reset States** now clears every party member's ailment chips, not just your own
+> - **Auto-search** now searches each room you enter **exactly once** — no redundant re-searches, no rooms skipped; it clears cleanly on death and holds for a room you're transiting with queued moves
+> - Combat: a capped attack spell (e.g. **LBOL** at `MaxCasts 1`) no longer fires a **second time** when a between-round heal/buff interrupts its round
+> - Combat: spell choice now checks a spell's **real mana cost**, not just the reserve floor — an unaffordable attack/drain spell is skipped
+> - Party heal now fires the **instant** a member's HP drops below the threshold, not a round late
+> - Coin auto-collect is suppressed in your **stash room** while looping
+> - **Learned spells** no longer lost on upgrade when the profile loads before the game-data set is active
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

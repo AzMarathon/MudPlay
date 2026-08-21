@@ -2760,6 +2760,26 @@ public sealed partial class CombatManager : IDisposable
                 // set here, a single lost race parks the engine in spell mode with no path back
                 // to a retry: the reported "won't re-engage after buffing/healing, sits there
                 // until manual input" stall.
+                // The interrupted attack spell held the round the between-round cast
+                // just closed. RoundDamageTracker tie-breaks ahead of us on CombatStatus,
+                // so it has already CloseCurrent'd that round (RoundCount++) — tally it
+                // toward MaxCasts NOW, before the re-decide inside DispatchRoundAction.
+                // The heartbeat can't (it bails while _combatOff), so without this the
+                // resume re-announces the just-capped spell uncapped (LBOL 2x, report
+                // paradigm-20260820-063541). Round-delta gated so a heal that interrupted
+                // BEFORE the spell's first fire (no round opened) doesn't over-count;
+                // death-window gated so the kill-left-a-survivor path (a legitimately
+                // fresh cast on the survivor) is untouched.
+                if (_announcedSpellCode is { } interruptedSpell
+                    && _lastCastAction is { } interruptedAction
+                    && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
+                    && ReadRoundCount?.Invoke() is { } interruptedRound
+                    && interruptedRound != _lastTalliedRound)
+                {
+                    _spellChooser.MarkCast(
+                        new CombatSpellDecision(interruptedAction, interruptedSpell), spellTarget);
+                    _lastTalliedRound = interruptedRound;
+                }
                 _combatOff = false;
                 _announcedSpellCode = null;
                 // Mark this specific interrupt as resumed BEFORE dispatching — the
@@ -2854,6 +2874,13 @@ public sealed partial class CombatManager : IDisposable
         SendAttack(_readSettings().NormalAttackCommand, priority, refire: true,
                    refireReason: "guard retry");
     }
+
+    // Public current-room engageability probe for consumers (AutoSearch) that must
+    // gate on THIS room's live roster, not the sticky cross-room combat gate
+    // (HasEngageableHostiles), which stays asserted while combat winds down on a
+    // left-behind target and made AutoSearch skip genuinely-empty rooms (report
+    // paradigm-20260820-090736). Null (no observation yet) reads as "no hostile".
+    public bool HasEngageableIn(RoomEntitiesObservation? obs) => obs is { } o && HasEngageable(o);
 
     private bool HasEngageable(RoomEntitiesObservation obs)
     {
