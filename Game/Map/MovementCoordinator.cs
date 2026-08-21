@@ -103,6 +103,12 @@ public sealed class MovementCoordinator
     // never flips the toolbar Start/Pause/Stop; self-clears on the settle timer.
     public const string SearchGate = "Search";
 
+    // Asserted by GhSweepManager (Roomba Mode) while a get/drop dispatched at
+    // a gang-house circuit room is being searched or a transaction is outstanding, so the sweep's own loop
+    // doesn't step out mid-dispatch. Engine-wait tier — never flips the
+    // toolbar Start/Pause/Stop.
+    public const string GhSortGate = "GhSort";
+
     // Asserted by DeathRecoveryManager while the corpse-recovery loop is
     // running. Clears when recovery finishes.
     public const string CorpseRecoveryGate = "CorpseRecovery";

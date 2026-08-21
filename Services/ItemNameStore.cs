@@ -53,6 +53,12 @@ public sealed class ItemNameStore
     // sending open (see ItemTypeOf).
     private readonly Dictionary<int, int> _itemTypeByNumber = new();
 
+    // Item Number → WeaponType / ArmourType (MDB subtype codes, meaningful only
+    // when ItemType is Weapon / Armour respectively). Lets Roomba Mode's room
+    // labels narrow past the top-level category (see WeaponTypeOf / ArmourTypeOf).
+    private readonly Dictionary<int, int> _weaponTypeByNumber = new();
+    private readonly Dictionary<int, int> _armourTypeByNumber = new();
+
     public string? ActiveSet { get; private set; }
 
     // Alphabetically-sorted, distinct names of every weapon (ItemType == 1)
@@ -135,6 +141,33 @@ public sealed class ItemNameStore
     public int? ItemTypeOf(int number)
         => _itemTypeByNumber.TryGetValue(number, out int t) ? t : null;
 
+    // Subtype accessors (WeaponType / ArmourType / Worn). The int? here means "id
+    // known?" — NOT "is this the right category?": the population loop writes an
+    // entry for every parsed item and a missing MDB column reads as 0, so a KNOWN
+    // id always returns a non-null code (0 = the first enum value), and only an
+    // unknown id returns null. So a caller must gate on ItemType before reading a
+    // subtype — GhItemClassifier.Matches does, comparing WeaponType only for a
+    // Weapon and ArmourType only for Armour — or it would compare 0 cross-category.
+
+    // WeaponType (MDB subtype code, meaningful only when ItemType is Weapon)
+    // of the item id, or null when the id isn't in the active set. Used by
+    // Roomba Mode's room-label matching.
+    public int? WeaponTypeOf(int number)
+        => _weaponTypeByNumber.TryGetValue(number, out int t) ? t : null;
+
+    // ArmourType (MDB subtype code, meaningful only when ItemType is Armour)
+    // of the item id, or null when the id isn't in the active set. Used by
+    // Roomba Mode's room-label matching.
+    public int? ArmourTypeOf(int number)
+        => _armourTypeByNumber.TryGetValue(number, out int t) ? t : null;
+
+    // Worn (MDB equip-slot code) of the item id, or null when the id isn't in
+    // the active set. Backed by the same _wornByNumber index WornCodeOf uses.
+    // Used by Roomba Mode's slot-based room-label rules (Neck / Wrist /
+    // Off-Hand rooms, which aren't classified by ItemType or ArmourType).
+    public int? WornOf(int number)
+        => _wornByNumber.TryGetValue(number, out int w) ? w : null;
+
     // Lower-case, trim, and strip a leading article / count token so a loose
     // room phrasing collapses to the canonical item name shape. Shared by the
     // reverse-index build and the FindByName lookup so both sides agree on
@@ -200,6 +233,8 @@ public sealed class ItemNameStore
         _encumByNumber.Clear();
         _wornByNumber.Clear();
         _itemTypeByNumber.Clear();
+        _weaponTypeByNumber.Clear();
+        _armourTypeByNumber.Clear();
         _weaponNames = Array.Empty<string>();
         _offHandNames = Array.Empty<string>();
         ActiveSet = setName;
@@ -245,6 +280,8 @@ public sealed class ItemNameStore
             _wornByNumber[number] = worn;
             int itemType = ReadInt(row, "ItemType");
             _itemTypeByNumber[number] = itemType;
+            _weaponTypeByNumber[number] = ReadInt(row, "WeaponType");
+            _armourTypeByNumber[number] = ReadInt(row, "ArmourType");
 
             if (itemType == 1) weapons.Add(name);
             if (worn == 12) offHands.Add(name);

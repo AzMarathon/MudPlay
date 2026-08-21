@@ -664,6 +664,208 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    [Fact]
+    public void ResumeAfterRecovery_CoordinatorStillPaused_DefersInsteadOfDoubleSending()
+    {
+        // Regression (Roomba Mode field report: a sweep crashed mid-run, stranding
+        // ~15 picked-up items with no drop). Root cause is in shared LoopRunner /
+        // MovementCoordinator plumbing, not Roomba-specific: an authoritative rm
+        // resync (EngineRecoveryGate.NoteAuthoritativePosition) can resolve while an
+        // UNRELATED MovementCoordinator gate is still asserted (e.g. GhSweepManager's
+        // GhSort gate holding a room for a get/drop dispatch, or AutoSearchManager's
+        // Search gate holding for a room-entry search). The old ResumeAfterRecovery
+        // only checked its OWN State==Paused before resuming + sending the next
+        // step's move — State==Paused is ambiguous between "my own recovery pause"
+        // and "some other gate paused me", so it sent the next move while the OTHER
+        // gate was still up, desyncing the loop's step counter one step early. On
+        // this line graph (B has no south exit) the step AFTER that premature send
+        // then fires "s" from the wrong room and fails "no exit S from B" — the exact
+        // crash from the field report.
+        Harness h = NewHarness(LineGraphJson, deferResume: true, wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("line",
+            new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) }));
+        Assert.Single(h.Sent);                        // step 0: "e" -> 1/2
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        // An unrelated gate (standing in for GhSort / Search) asserts on arrival at
+        // 1/2, the way GhSweepManager / AutoSearchManager do.
+        h.Coordinator.AssertGate("TestOtherEngine");
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.W, Direction.N }));
+
+        // A resync that was already in flight (started before the gate asserted)
+        // resolves now, to the room we're already standing in — the step's expected
+        // target, which is the "recovered at expected target" fast path.
+        h.Gate!.NoteSuspectedMismatch("test mismatch");
+        Assert.Single(h.ResyncReasons);
+        h.Gate.NoteAuthoritativePosition(new RoomKey(1, 2));
+
+        // Must NOT have sent a second move — TestOtherEngine is still asserted, so
+        // the resync resolving must defer to it instead of resuming right away.
+        Assert.Single(h.Sent);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+
+        // The other gate clears (its real dispatch finishes) — exactly one deferred
+        // advance fires, sending the CORRECT next step ("n" -> 1/3), never "s" (which
+        // would fail — B has no south exit).
+        h.Coordinator.ClearGate("TestOtherEngine");
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        h.Drain();
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void RoomChangedSubscriber_RegisteredBeforeLoopRunner_HoldsTheLoopBeforeItAdvances()
+    {
+        // Regression (Roomba Mode field report: "its not stopping in the room,
+        // its trying to run in grab stuff and the engine has it leaving the room
+        // before they pick anything up"). Root cause: GhSweepManager originally
+        // subscribed to RoomTracker.StateChanged in its OWN constructor, which
+        // runs AFTER LoopRunner's constructor (GhSweepManager needs the LoopRunner
+        // instance to exist first) — multicast delegates fire in registration
+        // order, so GhSweepManager's handler always ran SECOND on every arrival,
+        // after LoopRunner's own confirm-and-advance had already sent the next
+        // move. The fix moved the subscription to an external wrapper lambda in
+        // AppServices, registered BEFORE LoopRunner is constructed — the same
+        // early-registration pattern AutoSearchManager's own working Search-gate
+        // hold already relied on. This test proves the underlying mechanism
+        // that fix depends on, independent of GhSweepManager's own wiring: a
+        // reactor subscribed to RoomTracker.StateChanged BEFORE LoopRunner's own
+        // subscription can hold the loop (via a MovementCoordinator gate) before
+        // LoopRunner ships the next move; constructing LoopRunner first (as
+        // GhSweepManager used to, indirectly) would let the next move ship first.
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        RoomTracker tracker = new(graph);
+        MovementCoordinator coord = new();
+        BfsMapper bfs = new(graph);
+
+        // The "reactor" — asserts a gate the instant it sees arrival at B (1/2),
+        // exactly what GhSweepManager.OnRoomChanged does on arrival at a labeled
+        // room. Registered BEFORE the LoopRunner below is even constructed.
+        bool reactorFired = false;
+        tracker.StateChanged += t =>
+        {
+            if (t.NewRoom is not { } room || !room.Key.Equals(new RoomKey(1, 2))) return;
+            reactorFired = true;
+            coord.AssertGate("TestReactorGate");
+        };
+
+        TestAvoidFilter filter = new();
+        // Deferred resume-dispatch mode (captured in `posted`, drained manually) —
+        // the same mode every other same-burst-pause test in this file uses;
+        // resume dispatches are deliberately posted past the burst rather than run
+        // inline, so the test drives that explicitly via Drain() below.
+        List<Action> posted = new();
+        LoopRunner runner = new(tracker, coord, graph: graph, bfs: bfs, filter: filter,
+            postToUi: posted.Add);
+        List<byte[]> sent = new();
+        runner.SetWireSender(sent.Add);
+        List<LoopEvent> events = new();
+        runner.Event += e => events.Add(e);
+
+        tracker.SetLocated(new RoomKey(1, 1));
+        runner.Start(AbCycle());
+        Assert.Single(sent);   // step 0: "n" -> 1/2
+
+        // Arrival at 1/2 — the reactor's handler (registered first) runs before
+        // LoopRunner's own OnTrackerStateChanged (registered second via the
+        // constructor above), asserting TestReactorGate before LoopRunner gets a
+        // chance to decide whether to advance.
+        tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.True(reactorFired);
+        Assert.True(coord.IsGateAsserted("TestReactorGate"));
+        // The loop must NOT have shipped the next move ("s") while the reactor's
+        // gate is still up — held, not raced past.
+        Assert.Single(sent);
+        Assert.Equal(LoopState.Paused, runner.State);
+
+        // The reactor's own dispatch finishes and clears its gate — the resume
+        // dispatch is queued (posted), not yet sent.
+        coord.ClearGate("TestReactorGate");
+        Assert.Equal(LoopState.Running, runner.State);
+        Assert.Single(sent);
+        Assert.Single(posted);
+
+        // Burst ends; the deferred resume dispatch runs — exactly one new move.
+        Action[] batch = posted.ToArray();
+        posted.Clear();
+        foreach (Action a in batch) a();
+
+        Assert.Equal(2, sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(sent[1]));
+        Assert.DoesNotContain(events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void RepeatStarted_SubscriberAssertsGateSynchronously_HoldsBeforeWrapAroundMoveShips()
+    {
+        // Regression (Roomba Mode field report: an entire room's worth of `get`
+        // commands dispatched while already standing in a DIFFERENT room —
+        // more severe than the earlier one-step-late desync). Root cause:
+        // SendNextStep checks State/_stepInFlight ONCE at entry, then — on a
+        // lap wrap — calls Raise(RepeatStarted) and unconditionally falls
+        // through to send the new lap's first move, without re-checking
+        // whether the Raise() call itself changed State. A RepeatStarted
+        // subscriber that synchronously asserts a MovementCoordinator gate
+        // (e.g. a room-arrival dispatcher holding the room the loop just
+        // wrapped back into) gets silently overridden: the loop ships the
+        // wrap-around move anyway, physically leaving that room while the
+        // subscriber's own commands are still queued/outstanding against it.
+        // The fix re-checks State/_stepInFlight immediately after Raise()
+        // returns and aborts the fall-through if either changed.
+        Harness h = NewHarness(deferResume: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);   // step 0: "n" -> 1/2
+
+        // Complete step 0 normally (no gate involved yet).
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Equal(2, h.Sent.Count);   // step 1: "s" -> 1/1
+
+        // A RepeatStarted subscriber that asserts a gate the instant the lap
+        // wraps — the same thing a room-arrival dispatcher does on arrival.
+        h.Runner.Event += e =>
+        {
+            if (e.Kind == LoopEventKind.RepeatStarted) h.Coordinator.AssertGate("TestDispatchGate");
+        };
+
+        // Completing step 1 lands back at 1/1 — the lap wraps, RepeatStarted
+        // fires, the subscriber above asserts the gate mid-event, and
+        // SendNextStep (still executing, several frames up) must NOT ship
+        // the new lap's first move ("n" again) while that gate is up.
+        h.Tracker.NoteRoomObserved(new RoomObservation("A",
+            new HashSet<Direction> { Direction.N }));
+
+        Assert.True(h.Coordinator.IsGateAsserted("TestDispatchGate"));
+        Assert.Equal(2, h.Sent.Count);   // NOT 3 — the wrap-around move must be held
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.Equal(1, h.Runner.CompletedLaps);
+
+        // The dispatcher's own work finishes and clears the gate — the held
+        // move ships, exactly once, once the burst ends and the deferred
+        // resume dispatch runs.
+        h.Coordinator.ClearGate("TestDispatchGate");
+        h.Drain();
+
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
     // ----- PR C: lap timing + ReachedFirstWaypoint ---------------------
 
     [Fact]

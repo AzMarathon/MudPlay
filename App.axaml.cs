@@ -247,6 +247,13 @@ public partial class App : Application
                 MudPlay.ViewModels.Navigation.WaypointActionEditDialogViewModel,
                 MudPlay.Views.Navigation.WaypointActionEditDialog>();
 
+            // Map right-click "Toggle: Roomba Room" (or the tab's Add Room box) →
+            // Roomba Mode's rule-list editor for that room (category/slot rules +
+            // catch-all flag).
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.Navigation.GhRoomLabelPickerDialogViewModel,
+                MudPlay.Views.Navigation.GhRoomLabelPickerDialog>();
+
             // Navigation → "Manage" chip → loops + auto-lair markers
             // CRUD surface. Modeless; replaces the bottom-strip
             // save/discard/name textbox UX with a dedicated window.

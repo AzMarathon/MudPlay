@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Inventory;
+using MudPlay.Game.Map;
 using MudPlay.Terminal;
 
 namespace MudPlay.Services;
@@ -722,6 +723,29 @@ public static class BugReportBuilder
         Kv(sb, "Travel per-hop estimate",
             $"{svc.AutoLair.TravelCostModel.EstimateTravel(1).TotalSeconds:0.00} s");
         Kv(sb, "Auto-deposit reroute", svc.AutoDeposit.RerouteStatus);
+        // Roomba Mode (GhSweepManager) — a "sweep won't start / got stuck"
+        // report needs the phase, lap count, and how much of the sort queue
+        // is still outstanding.
+        Kv(sb, "Roomba sweep phase", svc.GhSweep.Phase.ToString());
+        Kv(sb, "Roomba recon laps done", svc.GhSweep.CompletedReconLaps.ToString());
+        Kv(sb, "Roomba completed sort laps", svc.GhSweep.CompletedSortLaps.ToString());
+        Kv(sb, "Roomba searches per room", svc.GhRoomLabels.SearchesPerRoom.ToString());
+        Kv(sb, "Roomba labeled destinations / circuit rooms",
+            $"{svc.GhRoomLabels.Labels.Count} / {svc.GhSweep.CircuitRoomCount}");
+        Kv(sb, "Roomba moved / left / pending / carried / hidden",
+            $"{svc.GhSweep.MovedSoFar.Count} / {svc.GhSweep.LeftInPlace.Count} / "
+            + $"{svc.GhSweep.PendingMoveCount} / {svc.GhSweep.CarriedPendingCount} / "
+            + $"{svc.GhSweep.HiddenPendingCount}");
+        // Full-ledger carry state — a "sweep stranded everything" or "won't pick up"
+        // report needs the tracked working budget, what the ledger thinks is carried,
+        // the live headroom, and how many items were left as too-heavy.
+        Kv(sb, "Roomba working budget / carried / headroom",
+            svc.GhSweep.WorkingWeightBudget == int.MaxValue
+                ? "(no weight data)"
+                : $"{svc.GhSweep.WorkingWeightBudget} / {svc.GhSweep.LedgerCarriedWeightNow} / "
+                    + $"{svc.GhSweep.CarryHeadroomNow}");
+        Kv(sb, "Roomba left too-heavy",
+            svc.GhSweep.LeftInPlace.Count(f => f.Reason == GhLeftReason.TooHeavy).ToString());
 
         // Default-task startup state — a "my loop / Auto-Lair didn't start on
         // login" report needs to know whether the runner deferred the start

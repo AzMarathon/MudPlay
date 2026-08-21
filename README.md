@@ -1,10 +1,21 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.23.0**
-> - New **Sprint Mode** toolbar toggle (running-figure icon) — a transient "just get me there" movement mode: while on, movement never pauses to rest/heal-wait (configured heal spells still cast), and **Auto-Combat / Get-Items / Search / Get-Cash are forced off** and restored when it ends. It **turns itself off** (restoring those engines) when a go-to walk arrives, a loop begins looping, or an auto-lair is about to enter the next lair; manually re-enabling any of those four engines ends it too
-> - The **EXP** button is no longer on the default toolbar (still available to add via the toolbar editor)
-> - Combat settings: fixed the per-target cast-cap tooltips (Debuff / Normal attack / Alternate attack) that mislabeled the cap as "casts per room"
+> **Version 3.24.0**
+> - New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: it scans the circuit once, carries misfiled items to their labeled destination in the fewest trips, then scans once more to refresh each room. Built on the same loop engine every saved Loop runs on
+> - Roomba: one scan lap (the recon-laps picker is gone), a live per-room **Status** column (Scanning / Cleaning / Complete), double-click a room to see its current floor contents, and a **Roomba Log** window with the full move record + an end-of-run summary (rooms sorted, items sorted, and the explicit unmovable list)
+> - Roomba: the map right-click is now a single **Toggle: Roomba Room** (adds it, or removes it if already marked), labeled rooms show a **robot marker** on the map, the rule picker is titled "Set <map/room> <name> as Roomba Room", and the tab (renamed **Roomba**) gains an **Add Room** box to label a room by map/room number
+> - Roomba: a per-character **Search rooms for hidden items** toggle (off by default) — normally it sorts only the visible floor; tick it to also `sea` each room and sort what's hidden
+> - Roomba: an item that's **gone by sort time** is dropped from the queue instead of retried forever; a refused **Start** now says why on the tab; a finished sweep prints `[Ganghouse roomba complete]`
+> - GH room labels support multiple rules per room (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail), including equip-slot rules (Neck / Wrist / Off-Hand / etc.) for jewelry-style rooms that aren't classified by material or weapon type, and an optional catch-all room for anything matching no explicit rule
+> - Item name resolution now also exposes WeaponType / ArmourType / Worn subtype, letting a GH room label narrow past the top-level category (e.g. "Weapons > 1H Blunt") or match by equip slot alone
+> - Roomba Mode never sweeps up a gang-house guard emblem as clutter, and only ever acts on items found on a GH room floor during its own recon — never anything already in your pack
+> - Fixed Roomba losing the room title in very large wrapped floor lists, repeatedly falling into `rm` recovery, and attributing a newly-entered room's visible items to the room just left
+> - Roomba sorting tags items found only by recon search as `(hidden)` and re-searches only those sources before pickup; visible items are grabbed immediately with no post-recon search delay
+> - Roomba sorts in the fewest trips between rooms: it fills the pack toward your carry limit (batching several items bound for the same or nearby rooms) before delivering, picking the nearest source that still fits, then the nearest carried destination
+> - Roomba tracks every pickup and drop against each item's weight and plans on that ledger without re-reading inventory after each move — it trusts the game's `You took` / `You dropped` lines, only re-checking (`i`) on a `You cannot carry that much!` refusal and then re-planning
+> - Roomba splits an oversized item stack (a pile heavier than your whole working carry budget, e.g. 140 torches) across multiple trips instead of abandoning it — only a single item too heavy to carry at all is left in place (surfaced as *too heavy to carry*); Left-in-place entries now say why — no matching room, gone by sort time, or too heavy
+> - Roomba no longer stops after a no-progress lap or a fixed number of sorting laps; queued work stays live until every movable item is delivered (or the user stops the run)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

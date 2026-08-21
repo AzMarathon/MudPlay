@@ -804,6 +804,9 @@ public partial class MainWindowViewModel : ObservableObject
         // yellow terminal notice.
         AppServices.Current.QuestAvailability.QuestBecameAvailable += OnQuestAvailable;
 
+        // Roomba sweep finished → a terminal notice, same style as the quest one.
+        AppServices.Current.GhSweep.SweepCompleted += OnGhSweepCompleted;
+
         // Room-display + movement-refusal parsers feeding RoomTracker.
         // Same per-session LineExtractor binding shape as the who/look
         // parsers above.
@@ -1098,6 +1101,9 @@ public partial class MainWindowViewModel : ObservableObject
         // StashRoomManager's `hide N <coin>` commands ride the same
         // gate-wrapped pipeline.
         AppServices.Current.Stash.SetWireSender(engineSend);
+        // Roomba Mode's `get`/`drop` sort-phase commands ride the same
+        // gate-wrapped pipeline.
+        AppServices.Current.GhSweep.SetWireSender(engineSend);
         // Auto-deposit reroute's bank `dep` command rides the same
         // gate-wrapped pipeline.
         AppServices.Current.AutoDeposit.SetWireSender(engineSend);
@@ -1519,6 +1525,10 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnQuestAvailable(string questName)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             WriteTerminalStatus($"[{questName} Quest is Now Available]", TerminalStatusKind.Notice));
+
+    private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
+        => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            WriteTerminalStatus("[Ganghouse roomba complete]", TerminalStatusKind.Notice));
 
     // The login sequence sends stat / exp / inventory (and the user's who, etc.) right
     // after entering the realm. Wait for that to finish rendering, then dump the quests

@@ -1,0 +1,55 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="560"
+        x:Class="MudPlay.Views.RoombaLogWindow"
+        x:DataType="vm:RoombaLogViewModel"
+        Title="Roomba Log"
+        Width="560" Height="560"
+        MinWidth="380" MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.SectionHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,12,0,4"/>
+        </Style>
+        <Style Selector="Border.Panel">
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Background" Value="{StaticResource ChromeBgElevBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+    </Window.Styles>
+
+    <ScrollViewer Padding="16" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="2">
+
+            <TextBlock Classes="SectionHeader" Text="Summary" Margin="0,0,0,4"/>
+            <Border Classes="Panel" BorderBrush="{StaticResource SeverityInfoBrush}">
+                <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"
+                           FontFamily="{StaticResource FontMono}"
+                           Foreground="{StaticResource ChromeFgBrush}"/>
+            </Border>
+
+            <TextBlock Classes="SectionHeader" Text="Moved"/>
+            <Border Classes="Panel">
+                <TextBlock Text="{Binding MovementLog}" TextWrapping="Wrap"
+                           Foreground="{StaticResource ChromeFgBrush}"/>
+            </Border>
+
+            <TextBlock Classes="SectionHeader" Text="Left in place"/>
+            <Border Classes="Panel">
+                <TextBlock Text="{Binding LeftBehind}" TextWrapping="Wrap"
+                           Foreground="{StaticResource ChromeFgBrush}"/>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Window>

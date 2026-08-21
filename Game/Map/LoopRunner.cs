@@ -329,6 +329,30 @@ public sealed class LoopRunner : IRecoverableEngine
         // desynced — fail rather than blindly continuing.
         if (_expectedMoveTarget is { } expected && recoveredAnchor.Equals(expected))
         {
+            // State==Paused here is ambiguous: EngineRecoveryGate's own
+            // PauseForRecovery set it, OR an unrelated MovementCoordinator gate
+            // (Search, GhSort, ...) asserted while recovery was already paused
+            // and OnPauseChanged(true) found State==Running-turned-Paused too.
+            // Resolving THIS recovery doesn't mean the coordinator agrees we
+            // should move — if some other gate is still up, sending the next
+            // step here races that gate's eventual clear and can double-send
+            // (OnPauseChanged's own "coordinator resumed" path would ALSO
+            // advance once the other gate clears, since _stepInFlight /
+            // _expectedMoveTarget are unchanged and still describe a completed
+            // step). Defer entirely to that already re-pause-safe, deferred
+            // path instead of advancing here: leave State Paused and just
+            // record that the move landed. This is the fix for the "loop
+            // double-sends a move and desyncs its step counter" bug (a GhSort
+            // gate clearing in the same burst as an authoritative rm resync
+            // sent the SAME cardinal twice, one lap re-entering a room from a
+            // step that no longer matched its real exits — "no exit S" crash).
+            if (_coordinator.IsPaused)
+            {
+                _log?.Info("LoopRunner",
+                    $"ResumeAfterRecovery: recovered at expected target {recoveredAnchor}, but coordinator still paused (gates={string.Join(",", _coordinator.AssertedGates)}); deferring advance to gate clear");
+                return;
+            }
+
             _log?.Info("LoopRunner",
                 $"ResumeAfterRecovery: recovered at expected target {recoveredAnchor}; resuming step {_index + 1}");
             State = LoopState.Running;
@@ -893,6 +917,20 @@ public sealed class LoopRunner : IRecoverableEngine
             _lapStartedAt = now;
             _index = 0;
             Raise(new LoopEvent(LoopEventKind.RepeatStarted, _loop.Name));
+
+            // A RepeatStarted subscriber can react synchronously — e.g. a
+            // room-arrival dispatcher asserting a MovementCoordinator gate to
+            // hold the room the loop just wrapped back into. That reaction
+            // can change State (via OnPauseChanged) or stop the loop
+            // entirely, several frames up the stack from here, but this
+            // method already passed its own State/_stepInFlight guard at
+            // entry and doesn't know to look again. Re-check before falling
+            // through to send the next step: without this, a gate asserted
+            // during the Raise() above is silently ignored for THIS send —
+            // the loop ships the next move anyway, physically leaving the
+            // room a reactor just started dispatching commands for, so
+            // those commands resolve against the wrong room entirely.
+            if (_loop is null || State != LoopState.Running || _stepInFlight) return;
         }
 
         LoopStep step = _expandedSteps[_index];

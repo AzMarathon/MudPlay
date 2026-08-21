@@ -680,6 +680,52 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   we were fighting, so the engaged name attributes it. Never key kill-attribution on a monster
   number the player can't have seen. (This is what boss-timer kill detection uses.)
 
+## Gang houses & guard emblems *([CONFIRMED] 2026-08-16, user)*
+
+Gang house (GH) guards are conditionally hostile, gated on an item, not on the alignment/title
+system above. A gang house's guards **do not attack** a character who is carrying that house's
+matching emblem item (e.g. a gold house's guards stand down for a **Gold Emblem**, a silver
+house's for a **Silver Emblem** — the emblem's name matches the house's color/name). **Losing or
+dropping the required emblem while inside makes the guards attack.** This is a separate mechanism
+from the `jail`-casting guard/title system in *Monster aggression* above — it is not tied to the
+player's alignment title at all, only to possession of the correct emblem for the specific house.
+
+**Client implication (Roomba Mode / any GH automation):** an emblem item must never be treated as
+disposable clutter by automation that picks up and relocates items inside a gang house — moving it
+away from the player (even temporarily, mid-sweep) risks the guards turning hostile. No item-level
+flag or `ItemType` value in the imported MDB data currently distinguishes an emblem from any other
+item; the only known signal is the item name pattern (`"<Color> Emblem"`). Until a more precise
+data field is identified, automation should treat any item name matching that pattern as
+categorically excluded from being picked up/moved, and should never disturb items the player was
+already carrying before automation started (a stronger, simpler guarantee that also protects a worn
+emblem without needing to specifically recognize it).
+
+### `get` failure responses *([CONFIRMED] 2026-08-21, user — screenshots)*
+
+A `get <item>` that can't succeed replies with one of two shapes:
+
+- **`You don't see <echo> here.`** — the item isn't on the floor (gone: decayed, or another
+  player took it). `<echo>` is whatever text followed `get`, echoed back verbatim (`get rod` →
+  `You don't see rod here.`; `get warhorn` → `You don't see warhorn here.`), so it can be a bare
+  word rather than the item's full name.
+- **`Syntax: GET [Amount] [Currency]`** — the game misparsed the item name as a **currency** get
+  (observed for some multi-word names, e.g. `get silk cape`). No item name is echoed. Retrying the
+  same name can't help.
+- **`You cannot carry that much!`** — a **capacity refusal**: the item is on the floor and gettable,
+  but taking it would exceed the carry limit. The item is NOT gone (unlike the two above) — it's a
+  transient block that clears once weight is shed. No item name is echoed. (Confirmed by screenshot:
+  `get 20 torch` succeeds twice, then a third `get 20 tor` while overloaded → `You cannot carry that
+  much!`.)
+
+**Client implication (Roomba Mode):** the first two shapes mean retrying is futile — the item is
+gone or un-gettable by that name, so drop it from the sort queue (correlate to the outstanding get by
+the echoed word, falling back to the sole pending get for a truncated/absent echo). The capacity
+refusal is different: the item stays queued, but our tracked working-weight has drifted low (we
+thought it fit and it didn't), so re-verify inventory once (`i`) to resync the baseline, then re-plan
+— deliver to free room and retry, or strand the item if it's too heavy for the whole working budget.
+Do **not** name-match a failure line's word to decide anything — match by "we just sent a `get` and
+got a failure back," since the echo can be truncated or absent.
+
 ## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
 
 Two distinct spawn mechanisms, and they respawn on completely different rules. This matters
