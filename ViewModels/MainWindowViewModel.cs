@@ -402,15 +402,20 @@ public partial class MainWindowViewModel : ObservableObject
             // event so the lap counter ticks over on RepeatStarted and the slot
             // clears on Stopped.
             RefreshLocationSlot();
+            // A loop moving from its walk-to-start INTO looping (ReachedFirstWaypoint)
+            // or wrapping into its next lap (RepeatStarted) ends Sprint Mode — you
+            // sprinted the leg that got you here; looping runs normally with the
+            // engines restored. Done BEFORE the base-modes reconcile below so base
+            // modes get the final word over Sprint's restore at a loop start.
+            if ((e.Kind == Game.Map.LoopEventKind.ReachedFirstWaypoint
+                 || e.Kind == Game.Map.LoopEventKind.RepeatStarted)
+                && IsSprintModeActive)
+                IsSprintModeActive = false;
             // Circuit reached its first waypoint (walk-to done, looping begins) —
             // settle the live auto-engines into the character's base modes. Fires
             // once per run (the event itself is one-shot), never on lap wraps.
             if (e.Kind == Game.Map.LoopEventKind.ReachedFirstWaypoint)
                 ReconcileAutoModeToBase("loop start");
-            // A new lap starting ends Sprint Mode: you sprinted the rest of this
-            // lap, and the next lap runs normally with the engines restored.
-            if (e.Kind == Game.Map.LoopEventKind.RepeatStarted && IsSprintModeActive)
-                IsSprintModeActive = false;
         });
 
     private void OnAutoLairActiveChanged(bool active)

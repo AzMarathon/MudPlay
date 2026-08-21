@@ -740,7 +740,7 @@ See the [Keybindings](#keybindings) section below — the rebind dialog is launc
 **What it does:** A transient "just get me there" movement toggle (running-figure icon, next to the movement Start/Pause/Stop buttons) — not a settings-tab checkbox. When on, movement **never pauses to rest or wait for HP/MA to recover**, no matter how low they get; your configured heal spells still fire normally on their usual thresholds while you keep moving. Turning it on also **forces off Auto-Combat, Auto-Get Items, Auto-Search, and Auto-Get Cash** for the duration — a "never stop" run has nothing to fight, loot, or search for — and remembers exactly which of those were on so it can put them **back** when Sprint ends. Every other safety pause (avoid rooms, hazard/trap detours, teleport-maze solving, party sync, mortally-wounded) is untouched. The only thing that force-stops a sprinting character is death.
 **It turns itself off** — restoring the engines it silenced — the moment it has done its job:
 - a **go-to walk** reaches its destination;
-- a **loop** starts its next lap (you sprint the rest of the current lap, then it resumes normally);
+- a **loop** begins looping — whether that's arriving at the loop's start after a walk-to, or wrapping into the next lap;
 - an **auto-lair** circuit is about to enter the next lair (you sprint the travel there, then cross the threshold with combat back on to fight it).
 
 Manually turning **any of those four engines back on** while Sprint is running also ends it (the two are mutually exclusive) — the engine you clicked stays on and the others it had silenced come back too.
