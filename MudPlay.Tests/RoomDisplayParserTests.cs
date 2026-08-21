@@ -516,6 +516,36 @@ public sealed class RoomDisplayParserTests : IDisposable
         Assert.Equal(new RoomKey(1, 297), tracker.State.CurrentRoom!.Key);
     }
 
+    // Guard on the across-blank reach-back: it must stop at the nearest HARD
+    // boundary (a movement transition here) and never reach past it for a stale
+    // cyan name from the PRIOR room. Buffer:
+    //   [Cellar cyan] [You walk north.] [Town Gates cyan] [blank] [dim table]
+    // The near block (after the blank) has no bright cyan, so the reach-back
+    // fires — but it may only walk back to just after "You walk north.", landing
+    // on "Town Gates". If it ignored the hard boundary it would grab "Cellar"
+    // (a real room, but the wrong one), whose exits don't match {N} → the tracker
+    // would miss 1/1. So this fails loudly if the reach-back ever becomes
+    // unbounded.
+    [Fact]
+    public void AcrossBlankReachBack_StopsAtHardBoundary_IgnoresStalePriorName()
+    {
+        (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
+
+        parser.FeedTestEmittedLines(new[]
+        {
+            ColoredLine("Cellar", BrightCyanSgr1Then36),          // stale prior room name (before the boundary)
+            ColoredLine("You walk north.", DefaultAttr),          // HARD boundary — the real block start
+            ColoredLine("Town Gates", BrightCyanSgr1Then36),      // current room name, before the in-display blank
+            ColoredLine("", DimCyan),                             // blank inside the display
+            ColoredLine("The currency conversion rates are:", DimCyan),  // near block: no bright cyan
+            ColoredLine("Obvious exits: north.", DefaultAttr),
+        });
+
+        // Recovered "Town Gates" (after the boundary), not "Cellar" (before it).
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
     private const string BankArrivalCaptureHex =
         "770d0a1b5b303b33373b34306d1b5b3739441b5b4b1b5b313b33366d42616e6b206f6620476f64667265790d0a1b5b37"
         + "39441b5b4b1b5b303b33373b34306d20202020546869732069732074686520746f776e2062616e6b2e20497420697320"
