@@ -1,16 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.34**
-> - `@inv` now reports the **entire carried pack** — no more `(and N more items)` truncation; a long inventory splits across numbered replies (`carrying (1/2): …`)
-> - Party **HELD** status now clears everywhere: a member's `.@held on`/`.@held off` broadcast toggles the chip on every client like the other ailments
-> - **Reset States** now clears every party member's ailment chips, not just your own
-> - **Auto-search** now searches each room you enter **exactly once** — no redundant re-searches, no rooms skipped; it clears cleanly on death and holds for a room you're transiting with queued moves
-> - Combat: a capped attack spell (e.g. **LBOL** at `MaxCasts 1`) no longer fires a **second time** when a between-round heal/buff interrupts its round
-> - Combat: spell choice now checks a spell's **real mana cost**, not just the reserve floor — an unaffordable attack/drain spell is skipped
-> - Party heal now fires the **instant** a member's HP drops below the threshold, not a round late
-> - Coin auto-collect is suppressed in your **stash room** while looping
-> - **Learned spells** no longer lost on upgrade when the profile loads before the game-data set is active
+> **Version 3.22.35**
+> - Auto-deposit no longer strands the walker at a bank: a bank lobby prints its currency-conversion table behind a blank line in the room display, which room-name recovery read as the end of the block — so the client saw the room as "The currency conversion rates are:", the map stayed on the street outside, and neither the `dep` nor the loop resume fired
+> - Room-name recovery now reaches back across an in-display blank line for the bright-cyan name, and the line buffer it scans is deeper — it was exactly the length of a bank arrival, so one floor item or a second occupant evicted the name outright
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
