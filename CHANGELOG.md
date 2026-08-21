@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.23.0
+
+- New **Sprint Mode** toolbar toggle (running-figure icon) — a transient "just get me there" movement mode: while on, movement never pauses to rest/heal-wait (configured heal spells still cast), and **Auto-Combat / Get-Items / Search / Get-Cash are forced off** and restored when it ends. It **turns itself off** (restoring those engines) when a go-to walk arrives, a loop begins looping (arriving at the loop start after a walk-to, or wrapping into the next lap), or an auto-lair is about to enter the next lair; manually re-enabling any of those four engines ends it too
+- The **EXP** button is no longer on the default toolbar (still available to add via the toolbar editor)
+- Combat settings: fixed the **Debuff (single target)**, **Normal attack spell**, and **Alternate attack spell** cast-cap tooltips claiming "casts per room" when the engine has always enforced them per-target (a fresh mob gets its own allowance) — misled players into thinking the cap wasn't being honored when many mobs died in quick succession
+- bug reports addressed: paradigm-20260820-164102
+
 ## 3.22.35
 
 - Auto-deposit no longer strands the walker at a bank: a bank lobby prints its currency-conversion table behind a blank line in the room display, which room-name recovery read as the end of the block — so the client saw the room as "The currency conversion rates are:", the map stayed on the street outside, and neither the `dep` nor the loop resume fired

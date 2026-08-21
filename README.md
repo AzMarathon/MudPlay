@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.22.35**
-> - Auto-deposit no longer strands the walker at a bank: a bank lobby prints its currency-conversion table behind a blank line in the room display, which room-name recovery read as the end of the block — so the client saw the room as "The currency conversion rates are:", the map stayed on the street outside, and neither the `dep` nor the loop resume fired
-> - Room-name recovery now reaches back across an in-display blank line for the bright-cyan name, and the line buffer it scans is deeper — it was exactly the length of a bank arrival, so one floor item or a second occupant evicted the name outright
+> **Version 3.23.0**
+> - New **Sprint Mode** toolbar toggle (running-figure icon) — a transient "just get me there" movement mode: while on, movement never pauses to rest/heal-wait (configured heal spells still cast), and **Auto-Combat / Get-Items / Search / Get-Cash are forced off** and restored when it ends. It **turns itself off** (restoring those engines) when a go-to walk arrives, a loop begins looping, or an auto-lair is about to enter the next lair; manually re-enabling any of those four engines ends it too
+> - The **EXP** button is no longer on the default toolbar (still available to add via the toolbar editor)
+> - Combat settings: fixed the per-target cast-cap tooltips (Debuff / Normal attack / Alternate attack) that mislabeled the cap as "casts per room"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
