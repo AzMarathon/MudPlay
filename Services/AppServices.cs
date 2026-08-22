@@ -1897,6 +1897,10 @@ public sealed class AppServices
         // its own ChatRouter subscription.
         foreach (string token in Game.Conditions.PartyAilmentTracker.AnnounceTokens)
             RemoteCommands.RegisterIgnored(token);
+        // Boss-timer sync responses ride the chat as `@timerdata …` lines the requester
+        // scrapes itself (BossTimerSyncCollector); reserve the token so the engine
+        // swallows it instead of bouncing "{command invalid}" at each responder.
+        RemoteCommands.RegisterIgnored(Game.Remote.BossTimerQueryHandler.SyncResponseToken);
         // Stat-screen parser ahead of LivesProvider hookup below so
         // both the engine's @suicide hard-block and the @lives reply
         // path share the same "unknown until first stat poll" source.
