@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.24.1
+
+- Combat: a capped normal-attack spell (e.g. `MaxCasts 1`) no longer fires a second time against a fast multi-projectile caster — the cap-switch's built-in delay (added to avoid a corpse-cast) was itself wide enough to let the server auto-repeat the capped spell one round past its cap; shortened to close that gap while still catching a trailing kill packet
+- bug reports addressed: paradigm-20260822-003106
+
 ## 3.24.0
 
 - New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: it scans the circuit once, carries misfiled items to their labeled destination in the fewest trips, then scans once more to refresh each room. Built on the same loop engine every saved Loop runs on

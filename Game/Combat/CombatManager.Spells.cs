@@ -709,8 +709,10 @@ public sealed partial class CombatManager
     // kill packet land and process first, THEN re-validate against the now-current state
     // and skip a target that's gone (the next observation re-picks the survivor cleanly).
     // A legit mid-fight switch (mob still alive) re-validates fine and dispatches a hair
-    // later, still far inside the ~5 s round, so the cap-preempt (report
-    // paradigm-20260814-061340) is preserved. The re-tick that would otherwise re-arm the
+    // later, so the cap-preempt (report paradigm-20260814-061340) is preserved — the
+    // window is short enough (SwitchDispatchDelay) to still land ahead of the server's
+    // next round even for a fast multi-projectile caster (report paradigm-20260822-003106).
+    // The re-tick that would otherwise re-arm the
     // switch during the delay window is itself gated by AttackTallyMinGap (one tally per
     // round), so no double-schedule. Falls back to a bare _post when no scheduler is
     // wired (tests that don't opt in).

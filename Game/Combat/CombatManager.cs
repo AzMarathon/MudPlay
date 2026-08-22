@@ -221,11 +221,18 @@ public sealed partial class CombatManager : IDisposable
     // paradigm-20260815-201731 / -202241, confirmed high-mana so it's the cap-switch, not
     // the mana fallback). Instead delay the switch dispatch a short REAL-TIME window so
     // the adjacent kill packet lands and the exp-inferred drop nulls the target first;
-    // the delayed dispatch then re-validates and skips a dead target. The window sits far
-    // under a ~5s combat round, so a live-target switch still lands the same round (the
-    // server swaps next round) — the cap-preempt (report 061340) is preserved. Injected
-    // one-shot scheduler; null in tests that don't opt in (falls back to _post).
-    private static readonly TimeSpan SwitchDispatchDelay = TimeSpan.FromMilliseconds(750);
+    // the delayed dispatch then re-validates and skips a dead target. 750ms was the
+    // original window, chosen as "far under" a 5s round — but a capped multi-projectile
+    // attack spell (e.g. a priest's disr) resolves its own cast in under 2s, so the
+    // 750ms wait was itself eating most of the remaining reaction time before the
+    // server locked in one more round of the capped spell (MaxCasts=1 still firing
+    // twice; report paradigm-20260822-003106). Bridging one adjacent network packet
+    // only needs on the order of a round-trip, not half a second, so the window is cut
+    // to 200ms — still enough for the trailing kill packet to land and re-validate away,
+    // while leaving far more of the round for the switch to actually beat the server's
+    // next auto-repeat. Injected one-shot scheduler; null in tests that don't opt in
+    // (falls back to _post).
+    private static readonly TimeSpan SwitchDispatchDelay = TimeSpan.FromMilliseconds(200);
     private Action<TimeSpan, Action>? _scheduleSwitchDispatch;
 
     // Backstab flee-on-failure action, bound in AppServices to
