@@ -2152,9 +2152,30 @@ public sealed partial class CombatManager : IDisposable
             && string.Equals(_lastConfirmedAttackCastTarget, target, StringComparison.OrdinalIgnoreCase);
         _lastConfirmedAttackCastAt = now;
         _lastConfirmedAttackCastTarget = target;
-        if (grouped) return;
+        if (grouped)
+        {
+            _log?.Combat(LogCategory,
+                $"attack-cast projectile grouped spell={_announcedSpellCode ?? "?"} "
+                + $"target='{target}' confirmedCount={ConfirmedAttackCastCount}");
+            return;
+        }
 
         ConfirmedAttackCastCount++;
+        _log?.Combat(LogCategory,
+            $"attack-cast confirmed spell={_announcedSpellCode ?? "?"} target='{target}' "
+            + $"confirmedCount={ConfirmedAttackCastCount}");
+
+        // Do not wait for TickEngine's next CombatTickElapsed to consume this
+        // confirmation. A mob hit/miss commonly opens the server's round burst and
+        // fires that heartbeat BEFORE our spell-result lines arrive; TickEngine then
+        // debounces the immediately-following projectile lines. Waiting for another
+        // heartbeat therefore postpones a MaxCasts=1 switch until the NEXT round,
+        // after the server has already auto-repeated the capped spell. The Spells
+        // partial applies the newly-observed cast directly to the existing chooser
+        // tally and deferred-switch path. Its ReadRoundCount gate makes this active
+        // only when the configured count source actually advanced (production wires
+        // that source to ConfirmedAttackCastCount).
+        ApplyConfirmedAttackCastToCap();
     }
 
     // Backstab surprise-round resolver. The opener swings exactly once; the first
