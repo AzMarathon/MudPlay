@@ -157,6 +157,12 @@ public sealed class CombatManagerSpellsTests
                 Name: name,
                 Links: Array.Empty<GameDataLink>()));
 
+        // Moves the fake clock without the round-boundary side effects Tick()/
+        // TickSameRound()/TickFast() carry (they also bump _roundCount and drive
+        // Cast/Combat's tick) — for tests exercising ConfirmedAttackCastCount's own
+        // real-time grouping window directly.
+        public void AdvanceClock(TimeSpan by) => _clock += by;
+
         public void Feed(string line)
         {
             LineExtractor.EmittedLine emitted = new(
@@ -645,6 +651,132 @@ public sealed class CombatManagerSpellsTests
         // MaxCasts=1, and switch to mmis so lbol doesn't auto-repeat a second round.
         h.TickFast();
         Assert.Equal("mmis small animated tree", h.LastSent);
+    }
+
+    // Report paradigm-20260822-003106 (second instance): a spell that fires more than
+    // one damage line per cast (a "You cast X at Y for N damage!" line per projectile)
+    // must count as ONE cast toward MaxCasts, not one per line — and a genuinely later,
+    // separate cast must still count as a new one, even with zero round-closing ticks
+    // in between (RoundDamageTracker's own round-close can bundle real casts together
+    // for a fast caster before it ever fires — a live fight measured as a single ~10s
+    // "round" contained two full disr casts, silently under-counting MaxCasts). MaxCasts
+    // 2 makes both halves of that guarantee observable: if the two projectile lines were
+    // miscounted as two casts, the cap would exhaust (and switch) after the FIRST real
+    // cast; if a later, separate cast were missed, the cap would never exhaust at all.
+    [Fact]
+    public void MaxCasts2_ConfirmedCastCount_GroupsProjectiles_CountsSeparateCasts_NoRoundCloseNeeded()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "disr", MinEnemies = 0, MaxCastsPerRoom = 2 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "fierce wraith");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;   // production wiring
+
+        h.Feed("Also here: fierce wraith.");
+        Assert.Equal("disr fierce wraith", h.LastSent);
+
+        // The first real cast's own two projectiles, sub-second apart — grouped as ONE.
+        h.Feed("You cast disrupt at fierce wraith for 75 damage!");
+        h.AdvanceClock(TimeSpan.FromMilliseconds(300));
+        h.Feed("You cast disrupt at fierce wraith for 88 damage!");
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("disr fierce wraith", h.LastSent);   // 1 of 2 allowed casts spent — no switch yet
+
+        // A genuinely separate real cast, well past the grouping window — but with no
+        // round-closing Tick() at all in between. Must still count as cast #2 and cap-switch.
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        h.Feed("You cast disrupt at fierce wraith for 77 damage!");
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+        Assert.Equal(2, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("turn fierce wraith", h.LastSent);
+    }
+
+    // Report paradigm-20260822-063043: one disrupt CAST emits exactly TWO
+    // projectile lines. A mob hit/miss can open that round's server burst, causing
+    // TickEngine to fire CombatTickElapsed before either projectile arrives and then
+    // debounce both projectiles. The grouped confirmation must therefore tally the
+    // one cast and arm the disr→turn switch directly, with no post-projectile combat
+    // heartbeat; otherwise the server commits a second disrupt before the next tick.
+    [Fact]
+    public void MaxCasts1_TwoProjectileCast_SwitchesAfterOneCast_WithoutLaterHeartbeat()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.NormalAttackSpell = new CombatSpellSlot
+        {
+            SpellName = "disr",
+            MinEnemies = 0,
+            MaxCastsPerRoom = 1,
+        };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot
+        {
+            SpellName = "turn",
+            MinEnemies = 0,
+        };
+        h.AddMonster(1, "big wraith");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+
+        h.Feed("Also here: big wraith.");
+        Assert.Equal("disr big wraith", h.LastSent);
+
+        // Models the mob's result line firing the damage-driven heartbeat first.
+        // No cast has confirmed yet, so it must not spend disr's cap.
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+        Assert.Equal("disr big wraith", h.LastSent);
+
+        // These are two projectiles from ONE disrupt cast, not two casts.
+        h.Feed("You cast disrupt at big wraith for 61 damage!");
+        h.AdvanceClock(TimeSpan.FromMilliseconds(300));
+        h.Feed("You cast disrupt at big wraith for 77 damage!");
+
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Single(h.Posted);                 // one corpse-safe switch is armed
+        Assert.DoesNotContain("turn big wraith", h.AllSent);
+
+        // No Combat.OnCombatTick call after either projectile. The confirmation
+        // itself owns the cap transition, and its short safety delay now expires.
+        h.DrainPosted();
+
+        Assert.Equal("turn big wraith", h.LastSent);
+        Assert.Equal(1, h.AllSent.Count(s => s == "turn big wraith"));
+    }
+
+    // The confirmation-driven path above must retain the delayed switch's original
+    // purpose: if that one disrupt cast kills, the exp/death packet gets a chance to
+    // clear the target and the queued turn must not be sent at its corpse.
+    [Fact]
+    public void MaxCasts1_TwoProjectileKillingCast_DeferredSwitchStillSkipsCorpse()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.NormalAttackSpell = new CombatSpellSlot
+        {
+            SpellName = "disr",
+            MinEnemies = 0,
+            MaxCastsPerRoom = 1,
+        };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot
+        {
+            SpellName = "turn",
+            MinEnemies = 0,
+        };
+        h.AddMonster(1, "spectre");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+
+        h.Feed("Also here: spectre.");
+        h.Feed("You cast disrupt at spectre for 83 damage!");
+        h.AdvanceClock(TimeSpan.FromMilliseconds(300));
+        h.Feed("You cast disrupt at spectre for 91 damage!");
+
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Single(h.Posted);
+
+        h.Feed("You gain 1500 experience.");
+        h.DrainPosted();
+
+        Assert.DoesNotContain("turn spectre", h.AllSent);
     }
 
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even

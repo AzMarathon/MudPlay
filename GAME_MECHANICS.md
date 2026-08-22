@@ -2958,3 +2958,44 @@ the attack rotation); the **AoE** debuff is gated by **Auto-Nuke**.
     is** (energy 1–1000) — a last-writer-wins lookup that picked a 0-energy monster
     duplicate misfiled a hand-cast `vamp` as in-between and the engine re-announced its
     attack over it. Classify a shared cast-code by "any entry combat", not the last one.
+- **[CONFIRMED]** *(2026-08-22, user)* **A combat spell is engaged ONCE and auto-repeats.**
+  You type `disr zombie` a single time; the engine then re-fires it **every round on its
+  own** — you do NOT re-issue it per round — until the monster dies or an **in-between-round
+  action breaks combat**. Within each round it fires **`floor(1000 / EnergyCost)` times** —
+  the 1000-energy round budget over the spell's cost. So a **500-cost** spell (`disr`,
+  `mmis`, `lbol`) fires **up to twice** a round, **333** → 3×, **250** → 4×. That is the
+  **maximum**; it fires **fewer** when the monster **dies on an earlier shot** or combat
+  order ends the round first. Concretely for `disr` (500): a **30-HP** mob dies on the first
+  shot → **1 fire total**; a **700-HP** mob → ~3–4 rounds showing **2 fires each round**
+  (absent other damage). The client **cannot suppress a mid-round repeat** (server/energy-
+  driven), so the earliest a spell swap (e.g. a `MaxCastsPerRoom` cap) can take effect is the
+  **next round** — the cap-switch is a client override sent after counting. Consequence for
+  cap-counting: **one round** of a 500-cost cap spell is **up to two** `You cast X …` result
+  lines, and a per-encounter cap must treat that round's fires as **ONE unit**, not two
+  casts. (Deriving the expected per-round fire count from `floor(1000/EnergyCost)` is a more
+  robust "same round" signal than a fixed wall-clock grouping window.)
+
+### Combat order, monster targeting, and attack-last *([CONFIRMED] 2026-08-22, user)*
+
+- **Physical swings per round** come from a swing calculation, hard-capped at **5 on Stock,
+  6 on Paradigm**.
+- **Player attack order = announce order, FIFO.** Players deal their damage in the order
+  they engaged/announced their attacks — first to announce fires first. Party rank does NOT
+  change this order.
+- **Backstab is pre-emptive** — a successful backstab always resolves **first**, ahead of the
+  normal order.
+- **Monster targeting is probabilistic, not deterministic.** A hostile NPC picks its target
+  by **chance**; several factors apply hidden **modifiers** that make a party member more or
+  less likely to be chosen — never guaranteed, and the modifier values aren't visible:
+  - **Party rank** — **frontrank** raises the odds of being targeted, **backrank** lowers
+    them (midrank between).
+  - **Attacking last** raises the odds; **attacking first** lowers them.
+  - These stack: a **frontrank member attacking last** is the most likely target; a
+    **backrank member attacking first** the least — but it's still a weighted roll.
+- **"Attack last" (client setting)** therefore does two independent things:
+  - Resolves your action at the **end** of the round's order — the **mana/energy save**: in a
+    party that *usually but not always* one-rounds a mob, a spellcaster set to attack last
+    casts last, so if the mob is already dead its spell has no target and **never fires —
+    energy/mana saved**; it only spends when the mob survives to the caster's slot.
+  - **Raises** your monster-targeting odds (a positive modifier) — useful for a tank drawing
+    aggro, a cost for a squishy caster.

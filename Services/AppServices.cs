@@ -3423,12 +3423,14 @@ public sealed class AppServices
         OutboundAttack = new Game.Combat.OutboundAttackObserver(
             (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
         Tick.CombatTickElapsed += Combat.OnCombatTick;
-        // Count attack-spell MaxCasts off RoundDamageTracker's timer-driven round
-        // count (one per real 5s round) instead of the damage-line heartbeat + a
-        // wall-clock gate — the robust round counter the recurring miscount /
-        // double-fire reports need (RoundDamage's tick is wired above, so its count
-        // is fresh when the combat heartbeat reads it).
-        Combat.ReadRoundCount = () => RoundDamage.RoundCount;
+        // Count attack-spell MaxCasts off Combat's own ConfirmedAttackCastCount —
+        // incremented directly off each observed cast-result line — instead of
+        // RoundDamageTracker's timer-driven RoundCount. That tracker's 5s window is
+        // sized for DPS/session stats, not per-cast precision, and can bundle more
+        // than one real cast into a single round for a fast caster, under-counting
+        // MaxCasts (report paradigm-20260822-003106). See ReadRoundCount's
+        // declaration comment on CombatManager for the full reasoning.
+        Combat.ReadRoundCount = () => Combat.ConfirmedAttackCastCount;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a
         // second of its threshold — a final kill that never triggered a resync

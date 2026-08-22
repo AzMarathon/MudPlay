@@ -691,6 +691,59 @@ public sealed partial class CombatManager
             _castingSpellTarget = null;   // can't rebuild the target — drop; next observe re-picks
     }
 
+    // Consume a newly-observed single-target attack-spell cast immediately, from
+    // OnAttackCastConfirmed, instead of relying on a later CombatTickElapsed. One
+    // cast may emit several projectile result lines (disrupt emits two); the caller
+    // groups those lines and invokes this only for the first line in the cast.
+    //
+    // The ReadRoundCount comparison is intentional. Production wires it to
+    // ConfirmedAttackCastCount, so the just-incremented value differs from the
+    // per-target baseline and is consumed here. Tests/legacy callers that wire a
+    // different round source retain the heartbeat-owned tally path unchanged.
+    private void ApplyConfirmedAttackCastToCap()
+    {
+        if (!CombatSpellsWired || !_isEnabled()) return;
+        if (_castingSpellTarget is not { } target
+            || !string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase))
+            return;
+        if (_announcedSpellCode is not { } announced
+            || _lastCastAction is not (CombatSpellAction.NormalAttackSpell
+                or CombatSpellAction.AlternateAttackSpell
+                or CombatSpellAction.DrainSpell))
+            return;
+        if (ReadRoundCount is not { } readRound) return;
+
+        int confirmedCast = readRound();
+        if (confirmedCast == _lastTalliedRound) return;
+        _lastTalliedRound = confirmedCast;
+
+        // Attribute the observed cast to what the server was actually repeating,
+        // rather than re-choosing first. Mana may already have dropped below the
+        // slot floor by the time its projectile lines arrive, but that does not make
+        // the cast which just consumed mana disappear from MaxCasts bookkeeping.
+        CombatSpellDecision fired = new(_lastCastAction.Value, announced);
+        _spellChooser.MarkCast(fired, target);
+
+        // The cast is tallied even if the room view vanished or a between-round cast
+        // has already interrupted combat. In those cases the established kill/resume
+        // paths own the next dispatch. With a live target, re-decide now and route a
+        // capped/otherwise-changed choice through the same corpse-safe delay as the
+        // heartbeat path.
+        if (_combatOff
+            || _classifier.Current is not { } obs
+            || !TargetPresent(obs, target))
+            return;
+
+        CombatSettings settings = _readSettings();
+        CombatSpellContext ctx = BuildContext(
+            settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
+        CombatSpellDecision afterTally = _spellChooser.Choose(settings, ctx);
+        bool decisionChanged = afterTally.Action != fired.Action
+            || !string.Equals(afterTally.Spell, fired.Spell, StringComparison.OrdinalIgnoreCase);
+        if (decisionChanged && TryBuildCandidate(obs, target) is not null)
+            DeferSwitchDispatch(settings, target, "cap-switch", announced, afterTally.Spell);
+    }
+
     // The combat tick is DAMAGE-LINE driven, so a spell switch decided in the
     // heartbeat above is decided on the round's (possibly killing) damage line —
     // BEFORE the death / exp / *Combat Off* lines that drop the target. When those
@@ -709,8 +762,10 @@ public sealed partial class CombatManager
     // kill packet land and process first, THEN re-validate against the now-current state
     // and skip a target that's gone (the next observation re-picks the survivor cleanly).
     // A legit mid-fight switch (mob still alive) re-validates fine and dispatches a hair
-    // later, still far inside the ~5 s round, so the cap-preempt (report
-    // paradigm-20260814-061340) is preserved. The re-tick that would otherwise re-arm the
+    // later, so the cap-preempt (report paradigm-20260814-061340) is preserved — the
+    // window is short enough (SwitchDispatchDelay) to still land ahead of the server's
+    // next round even for a fast multi-projectile caster (report paradigm-20260822-003106).
+    // The re-tick that would otherwise re-arm the
     // switch during the delay window is itself gated by AttackTallyMinGap (one tally per
     // round), so no double-schedule. Falls back to a bare _post when no scheduler is
     // wired (tests that don't opt in).

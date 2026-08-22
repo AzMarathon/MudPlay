@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.24.1
+
+- Combat: a capped single-target attack spell (e.g. `MaxCasts 1`) no longer fires past its cap against a fast caster — MaxCasts now counts directly off each observed cast-result line (grouping a multi-projectile spell's own damage lines into one cast) instead of RoundDamageTracker's 5s-ish round window, which could bundle more than one real cast into a single tally before it ever closed
+- Combat: a confirmed cast now applies to MaxCasts and arms its cap-switch immediately, instead of waiting for the next combat heartbeat — a mob's own hit/miss line could fire that heartbeat before either of a spell's projectile lines arrived, so the confirmed cast sat un-applied until the round after the server had already auto-repeated the capped spell
+- Combat: the cap-switch's built-in delay (added to avoid a corpse-cast) shortened from 750ms to 200ms — still enough to catch a trailing kill packet, without eating enough of the round for the server to auto-repeat the capped spell first
+- bug reports addressed: paradigm-20260822-003106, paradigm-20260822-063043
+
 ## 3.24.0
 
 - New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: it scans the circuit once, carries misfiled items to their labeled destination in the fewest trips, then scans once more to refresh each room. Built on the same loop engine every saved Loop runs on
