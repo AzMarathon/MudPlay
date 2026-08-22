@@ -2,7 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.24.1**
-> - Combat: a capped normal-attack spell (e.g. `MaxCasts 1`) no longer fires a second time against a fast multi-projectile caster — the cap-switch's built-in delay (added to avoid a corpse-cast) was itself wide enough to let the server auto-repeat the capped spell one round past its cap; shortened to close that gap while still catching a trailing kill packet
+> - Combat: a capped single-target attack spell (e.g. `MaxCasts 1`) no longer fires past its cap against a fast caster — MaxCasts now counts directly off each observed cast-result line (grouping a multi-projectile spell's own damage lines into one cast) instead of RoundDamageTracker's 5s-ish round window, which could bundle more than one real cast into a single tally before it ever closed
+> - Combat: the cap-switch's built-in delay (added to avoid a corpse-cast) shortened from 750ms to 200ms — still enough to catch a trailing kill packet, without eating enough of the round for the server to auto-repeat the capped spell first
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

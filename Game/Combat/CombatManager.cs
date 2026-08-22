@@ -110,6 +110,8 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _monsterProtectSub;
     private readonly IDisposable _bsResolveHitsSub;
     private readonly IDisposable _bsResolveMissesSub;
+    private readonly IDisposable _attackConfirmHitsSub;
+    private readonly IDisposable _attackConfirmMissesSub;
 
     // Minimum gap between safety-net `l` refreshes. Keeps a flurry of miss/hit
     // lines from spamming the server.
@@ -295,17 +297,44 @@ public sealed partial class CombatManager : IDisposable
     private DateTimeOffset _lastAttackTallyAt = DateTimeOffset.MinValue;
 
     // Robust round-count tally. When wired, MaxCasts counts one cast per REAL combat
-    // round (RoundDamageTracker's timer-driven RoundCount, one per 5s round) instead
-    // of the fragile AttackTallyMinGap wall-clock on the damage-line heartbeat — the
-    // heartbeat trips several times a round (our multi-hit + the mob's swing + a
-    // stale interval), and no single wall-clock threshold separates a genuine round
-    // tick (~3.3-5s) from a premature one (~0.5-2s): reports paradigm-20260819-120938
-    // (premature tally → capped before lbol fired) vs -055820 (genuine fast tick
-    // rejected → tallied a round late) are that exact tension. One round = one tally.
+    // round instead of the fragile AttackTallyMinGap wall-clock on the damage-line
+    // heartbeat — the heartbeat trips several times a round (our multi-hit + the mob's
+    // swing + a stale interval), and no single wall-clock threshold separates a genuine
+    // round tick from a premature one: reports paradigm-20260819-120938 (premature
+    // tally → capped before lbol fired) vs -055820 (genuine fast tick rejected →
+    // tallied a round late) are that exact tension. One round = one tally.
     // Set to the current round on engage so the first tally waits for the next round
     // CLOSE; unwired leaves it -1 and the legacy wall-clock path runs.
+    //
+    // Wired (AppServices) to ConfirmedAttackCastCount, NOT RoundDamageTracker's own
+    // RoundCount — that tracker's 5s timer-driven window is sized for DPS/session
+    // stats, not for this. A fast multi-projectile caster can complete more than one
+    // real cast inside a single RoundDamageTracker window (its "first hit" anchor
+    // only starts counting once combat produces a damage line, so a slow-opening
+    // fight's window can span 8-10s+), silently under-counting MaxCasts by exactly
+    // the number of casts that landed inside one window (report paradigm-20260822-003106:
+    // MaxCasts=1 still cast twice, on a fight RoundDamageTracker measured as one
+    // 10s round). ConfirmedAttackCastCount instead increments directly off each
+    // observed cast-confirmation line, so it can't bundle two real casts into one tally.
     internal Func<int>? ReadRoundCount { get; set; }
     private int _lastTalliedRound = -1;
+
+    // How many real single-target attack-spell casts OnAttackCastConfirmed has
+    // observed landing this session — the precise signal ReadRoundCount is wired to
+    // (see its comment). Monotonic, like RoundDamageTracker.RoundCount; callers
+    // baseline against it via _lastTalliedRound, never read it as a target-scoped
+    // count.
+    internal int ConfirmedAttackCastCount { get; private set; }
+
+    // Real-time stamp of the last OnAttackCastConfirmed increment, for the
+    // multi-projectile grouping window (ConfirmedCastGroupWindow) — a spell that
+    // fires more than one damage line per cast (many single-target attack spells do)
+    // must count as ONE cast, not one per line. 1.2s comfortably covers the
+    // sub-second spacing observed between one cast's own projectiles while staying
+    // well under the shortest real round-to-round gap.
+    private DateTimeOffset _lastConfirmedAttackCastAt = DateTimeOffset.MinValue;
+    private string? _lastConfirmedAttackCastTarget;
+    private static readonly TimeSpan ConfirmedCastGroupWindow = TimeSpan.FromMilliseconds(1200);
 
     // Minimum real time between two MaxCasts tallies — the SAME round-spacing guard
     // AlternationAdvanceMinGap applies to the phase advance, for the same reason: the
@@ -634,6 +663,15 @@ public sealed partial class CombatManager : IDisposable
         // so its breadth (it also matches self-emotes) is harmless.
         _bsResolveHitsSub   = router.Subscribe(KnownPatterns.UserHits,   OnBackstabResolutionLine);
         _bsResolveMissesSub = router.Subscribe(KnownPatterns.UserMisses, OnBackstabResolutionLine);
+
+        // High tieBreak so this runs ahead of TickEngine's own UserHits subscription
+        // (default 0) — ConfirmedAttackCastCount must already reflect a landed cast
+        // by the time that same line's cascade reaches OnCombatTick's re-decide. Both
+        // hits AND misses count — MaxCasts caps cast ATTEMPTS (what the server auto-
+        // repeats each round), not just successful hits, so a spell that keeps
+        // whiffing must still hit its cap instead of casting forever unpunished.
+        _attackConfirmHitsSub   = router.Subscribe(KnownPatterns.UserHits,   OnAttackCastConfirmed, tieBreak: 50);
+        _attackConfirmMissesSub = router.Subscribe(KnownPatterns.UserMisses, OnAttackCastConfirmed);
     }
 
     // Bind the wire sender — typically the TelnetClient.SendAsync wrapper that
@@ -2087,6 +2125,38 @@ public sealed partial class CombatManager : IDisposable
         }
     }
 
+    // Increments ConfirmedAttackCastCount once per REAL single-target attack/
+    // alternate/drain-spell cast landing (or missing) against the current target —
+    // the precise signal ReadRoundCount now runs on (see its declaration comment).
+    // Gated on _castingSpellTarget: that field is only set while the round's action
+    // is our announced single-target spell (a weapon swing clears it on send), so any
+    // qualifying combat-result line reaching here while it's set is that spell's own
+    // result, never a swing. The "You " prefix and target-name check mirror
+    // OnBackstabResolutionLine's filtering — both UserHits and UserMisses also fire
+    // for party members' actions and (UserMisses) self-emotes. Consecutive lines
+    // inside ConfirmedCastGroupWindow are one cast's own multi-projectile results,
+    // not a second cast — only the group's first line increments. The grouping also
+    // requires the SAME target: a kill that immediately re-engages a fresh mob within
+    // the window must still count that mob's opening cast, not fold it into the
+    // corpse's tally.
+    private void OnAttackCastConfirmed(MatchResult match)
+    {
+        if (_castingSpellTarget is not { } target) return;
+
+        string text = match.Text;
+        if (!text.StartsWith("You ", StringComparison.Ordinal)) return;
+        if (text.IndexOf(target, StringComparison.OrdinalIgnoreCase) < 0) return;
+
+        DateTimeOffset now = _now();
+        bool grouped = now - _lastConfirmedAttackCastAt < ConfirmedCastGroupWindow
+            && string.Equals(_lastConfirmedAttackCastTarget, target, StringComparison.OrdinalIgnoreCase);
+        _lastConfirmedAttackCastAt = now;
+        _lastConfirmedAttackCastTarget = target;
+        if (grouped) return;
+
+        ConfirmedAttackCastCount++;
+    }
+
     // Backstab surprise-round resolver. The opener swings exactly once; the first
     // of OUR combat-result lines naming the target settles the outcome:
     //   * carries "surprise" (e.g. "You surprise punch orc rogue for 30 damage!")
@@ -3071,6 +3141,8 @@ public sealed partial class CombatManager : IDisposable
         _monsterProtectSub.Dispose();
         _bsResolveHitsSub.Dispose();
         _bsResolveMissesSub.Dispose();
+        _attackConfirmHitsSub.Dispose();
+        _attackConfirmMissesSub.Dispose();
     }
 
     private readonly record struct EngageableCandidate(
