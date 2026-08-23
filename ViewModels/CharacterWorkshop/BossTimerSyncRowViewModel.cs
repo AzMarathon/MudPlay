@@ -14,7 +14,10 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
 {
     public string BossName { get; }
     public int? MonsterNumber { get; }
-    public string? MatchName { get; }        // null = untracked by us
+    public string? MatchName { get; }        // our BossStore name (null = untracked by us)
+    // The name a responder sent (may be null for a number-only record) — the adoption
+    // fallback when the identity isn't in our catalog by number.
+    public string? SentName { get; }
     public bool Tracked => MatchName is not null;
 
     public DateTimeOffset? OursKilledAt { get; }
@@ -29,12 +32,13 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
     public DateTimeOffset? SelectedKilledAt { get; private set; }
 
     public BossTimerSyncRowViewModel(
-        string bossName, int? monsterNumber, string? matchName,
+        string bossName, int? monsterNumber, string? matchName, string? sentName,
         DateTimeOffset? oursKilledAt, string oursText)
     {
         BossName = bossName;
         MonsterNumber = monsterNumber;
         MatchName = matchName;
+        SentName = sentName;
         OursKilledAt = oursKilledAt;
         OursText = oursText;
         SelectedKilledAt = null;   // keep ours

@@ -130,7 +130,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         string oursText = oursKilled is { } k ? FormatKilled(k)
             : ours is not null ? "— no timer —" : "— not in your list —";
 
-        BossTimerSyncRowViewModel row = new(display, number, ours?.Name, oursKilled, oursText);
+        BossTimerSyncRowViewModel row = new(display, number, ours?.Name, name, oursKilled, oursText);
         _rowsByKey[key] = row;
         Rows.Add(row);
         return row;
@@ -161,13 +161,43 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         int applied = 0;
         foreach (BossTimerSyncRowViewModel row in Rows)
         {
-            if (row.SelectedKilledAt is not { } chosen || row.MatchName is not { } target) continue;
-            if (row.OursKilledAt == chosen) continue;   // no-op
-            _timers.MarkKilled(target, chosen);
-            applied++;
+            if (row.SelectedKilledAt is not { } chosen) continue;
+            if (row.MatchName is { } target)
+            {
+                if (row.OursKilledAt == chosen) continue;   // no-op
+                _timers.MarkKilled(target, chosen);
+                applied++;
+            }
+            else if (AdoptUntracked(row, chosen))   // a boss we weren't tracking
+            {
+                applied++;
+            }
         }
         Status = $"Applied {applied} timer update(s).";
         CloseRequested?.Invoke(applied > 0);
+    }
+
+    // Adopt a timer for a boss not currently in our list: recover its real def from the
+    // catalog (a seed boss we'd removed, or an overlay one) — or, failing that, synth a
+    // minimal def from the sent name — un-hide it on the active realm, then stamp the
+    // timer. A number-only identity we can't resolve to any catalog boss is skipped.
+    private bool AdoptUntracked(BossTimerSyncRowViewModel row, DateTimeOffset chosen)
+    {
+        BossDef? def = _bosses.FindInCatalog(row.MonsterNumber, row.SentName);
+        if (def is null)
+        {
+            if (row.SentName is not { Length: > 0 } sent) return false;
+            def = new BossDef { Name = sent, MonsterNumber = row.MonsterNumber };
+        }
+        if (_realm == RealmType.ParaMud) def.InParadigm = true; else def.InStock = true;
+
+        List<BossDef> list = _bosses.Resolve()
+            .Where(b => !string.Equals(b.Name, def.Name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        list.Add(def);
+        _bosses.Save(list);
+        _timers.MarkKilled(def.Name, chosen);
+        return true;
     }
 
     [RelayCommand]
