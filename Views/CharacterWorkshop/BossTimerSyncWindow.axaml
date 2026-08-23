@@ -1,0 +1,101 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="560"
+        x:Class="MudPlay.Views.CharacterWorkshop.BossTimerSyncWindow"
+        x:DataType="vm:BossTimerSyncViewModel"
+        Title="Sync boss timers"
+        Width="660" Height="560"
+        MinWidth="480" MinHeight="360"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <!-- A pick button (keep-ours / a responder's timer); the selected one lights up. -->
+        <Style Selector="Button.pick">
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="0,0,6,4"/>
+            <Setter Property="Background" Value="{StaticResource ChromeBgElevBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="Button.pick.selected">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+    </Window.Styles>
+
+    <DockPanel Margin="14" LastChildFill="True">
+
+        <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource ChromeFgMutedBrush}"
+                       Text="Request boss timers from other clients on a channel, then pick which timer to fold into your table per boss. Only the rows you pick are applied — nothing else overwrites your timers."/>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <ComboBox ItemsSource="{Binding Channels}" SelectedIndex="{Binding ChannelIndex}" Width="150"/>
+                <TextBox Text="{Binding TelepathTarget}" PlaceholderText="player" Width="120"
+                         VerticalAlignment="Center" IsEnabled="{Binding TelepathTargetEnabled}"/>
+                <Button Content="Request Timers" Command="{Binding SendRequestCommand}"/>
+            </StackPanel>
+            <TextBlock Text="{Binding Status}" Foreground="{StaticResource ChromeFgSecBrush}" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Spacing="6" Margin="0,10,0,0">
+            <Button Content="Apply Selected" Command="{Binding ApplyCommand}"/>
+            <Button Content="Close" Command="{Binding CancelCommand}"/>
+        </StackPanel>
+
+        <Border Background="{StaticResource ChromeBgSunkenBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1" CornerRadius="4">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                <ItemsControl ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BossTimerSyncRowViewModel">
+                            <Border Padding="6" Margin="0,0,0,6"
+                                    Background="{StaticResource ChromeBgElevBrush}"
+                                    BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1" CornerRadius="4">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="{Binding BossName}" FontWeight="SemiBold"
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
+                                    <WrapPanel Orientation="Horizontal">
+                                        <Button Classes="pick" Classes.selected="{Binding KeepOursSelected}"
+                                                Command="{Binding KeepOursCommand}">
+                                            <StackPanel>
+                                                <TextBlock Text="Keep ours" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource ChromeFgBrush}"/>
+                                                <TextBlock Text="{Binding OursText}" FontSize="11"
+                                                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <ItemsControl ItemsSource="{Binding Responders}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:BossTimerSyncCellViewModel">
+                                                    <Button Classes="pick" Classes.selected="{Binding IsSelected}"
+                                                            Command="{Binding AdoptCommand}">
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Responder}" FontWeight="SemiBold"
+                                                                       Foreground="{StaticResource ChromeFgBrush}"/>
+                                                            <TextBlock Text="{Binding Text}" FontSize="11"
+                                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+    </DockPanel>
+</Window>

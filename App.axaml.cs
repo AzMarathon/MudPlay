@@ -101,6 +101,10 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.CharacterWorkshop.ManageBossesDialogViewModel,
                 MudPlay.Views.CharacterWorkshop.ManageBossesDialog>();
+            // @timer sync merge window.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.CharacterWorkshop.BossTimerSyncViewModel,
+                MudPlay.Views.CharacterWorkshop.BossTimerSyncWindow>();
 
             // Per-action keybind rebind dialog — opened from any
             // toolbar button or menu item that owns a BuiltInAction.

@@ -43,10 +43,12 @@ public sealed class BossTimerQueryHandler : IDisposable
     private readonly BossStore _bosses;
     private readonly BossTimerStore _timers;
     private readonly GameDataCache _gameData;
+    private readonly LogService? _log;
     private bool _disposed;
 
     public BossTimerQueryHandler(
-        RemoteCommandManager engine, BossStore bosses, BossTimerStore timers, GameDataCache gameData)
+        RemoteCommandManager engine, BossStore bosses, BossTimerStore timers, GameDataCache gameData,
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(bosses);
@@ -56,6 +58,7 @@ public sealed class BossTimerQueryHandler : IDisposable
         _bosses = bosses;
         _timers = timers;
         _gameData = gameData;
+        _log = log;
 
         if (!RemoteCommandCatalog.TryGetCategory("@timer", out PlayerRemoteControls category))
             throw new InvalidOperationException(
@@ -133,6 +136,8 @@ public sealed class BossTimerQueryHandler : IDisposable
         IReadOnlyList<string> chunks = BossTimerSyncCodec.Chunk(payload, MaxBlobCharsPerLine);
         for (int i = 0; i < chunks.Count; i++)
             ctx.Reply($"{SyncResponseToken} {token} {i + 1}/{chunks.Count} {chunks[i]}");
+        _log?.Info("BossTimerSync",
+            $"answered @timer sync from {ctx.Sender} on {ctx.Channel}: {records.Count} timer(s), {chunks.Count} line(s)");
     }
 
     private static string Format((BossDef Def, BossWindowState State) t)

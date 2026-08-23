@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.24.1**
-> - Combat: a capped single-target attack spell (e.g. `MaxCasts 1`) no longer fires past its cap against a fast caster — MaxCasts now counts directly off each observed cast-result line (grouping a multi-projectile spell's own damage lines into one cast) instead of RoundDamageTracker's 5s-ish round window, which could bundle more than one real cast into a single tally before it ever closed
-> - Combat: a confirmed cast now applies to MaxCasts and arms its cap-switch immediately, instead of waiting for the next combat heartbeat — a mob's own hit/miss line could fire that heartbeat before either of a spell's projectile lines arrived, so the confirmed cast sat un-applied until the round after the server had already auto-repeated the capped spell
-> - Combat: the cap-switch's built-in delay (added to avoid a corpse-cast) shortened from 750ms to 200ms — still enough to catch a trailing kill packet, without eating enough of the round for the server to auto-repeat the capped spell first
+> **Version 3.25.0**
+> - New feature: **boss-timer sync** — share respawn timers between clients over chat. On the Player Workshop → Bosses tab, **Sync Timers…** requests timers from other clients (`@timer sync` on gang / telepath / local); each responder answers with its timers compressed onto a couple of chat lines, and a merge table lets you pick, per boss, whether to keep yours or adopt a responder's — folding is always manual, so a stale timer can't silently overwrite yours
+> - Boss-timer sync matches on the boss itself (its monster), never on room pins (which are user-editable), and carries only the identity + raw kill time — everything derived is recomputed locally. Responding reuses the existing `@timer` permission and the standard reply-on-received-channel / channel-ignore rules
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

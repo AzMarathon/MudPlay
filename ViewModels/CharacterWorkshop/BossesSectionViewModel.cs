@@ -175,6 +175,18 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
         if (saved) Rebuild();
     }
 
+    // Open the @timer sync merge window: request timers from other clients over chat
+    // and fold chosen ones into the table. Modeless — responses trickle in live.
+    [RelayCommand]
+    private async Task SyncTimers()
+    {
+        bool applied = await AppServices.Current.Dialogs
+            .OpenWindowAsync<BossTimerSyncViewModel, bool>(
+                new BossTimerSyncViewModel(
+                    _bosses, _timers, _gameData, AppServices.Current.Chat, AppServices.Current.SendTypedInput));
+        if (applied) RefreshStatuses();
+    }
+
     // Open the Chest Offload helper: open the containers a boss dropped, then sell
     // the loot shop-by-shop. Modeless — the terminal stays live so you can walk.
     [RelayCommand]
