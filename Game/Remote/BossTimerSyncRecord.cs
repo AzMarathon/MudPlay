@@ -12,4 +12,13 @@ public readonly record struct BossTimerSyncRecord(int? MonsterNumber, string? Na
 {
     // A record must carry at least one identity handle.
     public bool HasIdentity => MonsterNumber is not null || !string.IsNullOrEmpty(Name);
+
+    // Compact one-timer summary for the program log: "name @ local-time", falling back to
+    // "#number" when only a number was sent.
+    public string Describe()
+    {
+        string who = !string.IsNullOrEmpty(Name) ? Name
+                   : MonsterNumber is { } n ? $"#{n}" : "?";
+        return $"{who} @ {KilledAt.ToLocalTime():MMM d HH:mm}";
+    }
 }

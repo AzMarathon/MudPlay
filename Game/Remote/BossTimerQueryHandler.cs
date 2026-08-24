@@ -134,8 +134,10 @@ public sealed class BossTimerQueryHandler : IDisposable
         IReadOnlyList<string> chunks = BossTimerSyncCodec.Chunk(payload, MaxBlobCharsPerLine);
         for (int i = 0; i < chunks.Count; i++)
             ctx.Reply($"{SyncResponseToken} {i + 1}/{chunks.Count} {chunks[i]}");
+        string sent = records.Count == 0 ? "(no active timers)"
+            : string.Join(", ", records.Select(r => r.Describe()));
         _log?.Info("BossTimerSync",
-            $"answered @timer sync from {ctx.Sender} on {ctx.Channel}: {records.Count} timer(s), {chunks.Count} line(s)");
+            $"answered @timer sync from {ctx.Sender} on {ctx.Channel}: {records.Count} timer(s) in {chunks.Count} line(s): {sent}");
     }
 
     private static string Format((BossDef Def, BossWindowState State) t)

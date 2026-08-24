@@ -68,7 +68,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _send = send;
         _realm = gameData.ActiveRealm;
 
-        _collector = new BossTimerSyncCollector(chat);
+        _collector = new BossTimerSyncCollector(chat, AppServices.Current.Log);
         _collector.ResponseReceived += OnResponse;
         AppServices.Current.TimerSyncWindowActive = true;   // suppress a duplicate auto-open
 
@@ -112,19 +112,29 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         void Handle(BossTimerSyncResponse r)
         {
             _responders.Add(r.Sender);
+            int adopted = 0, inSync = 0, conflict = 0;
             foreach (BossTimerSyncRecord rec in r.Records)
-                IngestOffer(EnsureRow(rec.MonsterNumber, rec.Name), r.Sender, rec.KilledAt);
+                switch (IngestOffer(EnsureRow(rec.MonsterNumber, rec.Name), r.Sender, rec.KilledAt))
+                {
+                    case TimerMergeKind.AutoMerge: adopted++; break;
+                    case TimerMergeKind.InSync:    inSync++;  break;
+                    default:                       conflict++; break;
+                }
+            AppServices.Current.Log.Info("BossTimerSync",
+                $"folded {r.Sender}'s {r.Records.Count} timer(s): {adopted} adopted, {inSync} already in sync, {conflict} to resolve");
             UpdateStatus();
         }
     }
 
-    // Route one responder's timer for a boss row. A timer for a boss we track but hold no
-    // timer for is adopted outright (nothing of ours to overwrite); one that matches what
-    // we hold is a no-op; only a genuine disagreement — or a boss we don't track yet, whose
-    // adoption adds it to our list — becomes a pickable conflict the user resolves manually.
-    private void IngestOffer(BossTimerSyncRowViewModel row, string sender, DateTimeOffset offer)
+    // Route one responder's timer for a boss row, returning what we did with it. A timer
+    // for a boss we track but hold no timer for is adopted outright (nothing of ours to
+    // overwrite); one that matches what we hold is a no-op; only a genuine disagreement —
+    // or a boss we don't track yet, whose adoption adds it to our list — becomes a pickable
+    // conflict the user resolves manually.
+    private TimerMergeKind IngestOffer(BossTimerSyncRowViewModel row, string sender, DateTimeOffset offer)
     {
-        switch (Classify(row.OursKilledAt, row.Tracked, offer))
+        TimerMergeKind kind = Classify(row.OursKilledAt, row.Tracked, offer);
+        switch (kind)
         {
             case TimerMergeKind.AutoMerge:
                 _timers.MarkKilled(row.MatchName!, offer);   // AutoMerge only fires for tracked bosses
@@ -138,6 +148,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
                 row.AddConflict(sender, offer, FormatKilled(offer));
                 break;
         }
+        return kind;
     }
 
     internal enum TimerMergeKind { AutoMerge, InSync, Conflict }

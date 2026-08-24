@@ -77,6 +77,7 @@ public sealed class BossTimerSyncCollector : IDisposable
         }
         if (p.Done) return;                 // already delivered this sender's set
         p.Chunks[index - 1] = blob;
+        _log?.Debug("BossTimerSync", $"received line {index}/{count} from {sender} ({blob.Length} chars)");
         if (p.Chunks.Any(c => c is null)) return;   // still missing pieces
 
         p.Done = true;
@@ -90,7 +91,8 @@ public sealed class BossTimerSyncCollector : IDisposable
             _log?.Warn("BossTimerSync", $"discarding malformed timer-sync payload from {sender}: {ex.Message}");
             return;
         }
-        _log?.Info("BossTimerSync", $"timer-sync response from {sender}: {records.Count} timer(s)");
+        _log?.Info("BossTimerSync",
+            $"received {records.Count} timer(s) from {sender} in {p.N} line(s): {Describe(records)}");
         ResponseReceived?.Invoke(new BossTimerSyncResponse(sender, records));
     }
 
@@ -113,4 +115,8 @@ public sealed class BossTimerSyncCollector : IDisposable
         blob = parts[2];
         return true;
     }
+
+    // Compact one-line summary of a decoded set for the program log.
+    private static string Describe(IReadOnlyList<BossTimerSyncRecord> records)
+        => records.Count == 0 ? "(no active timers)" : string.Join(", ", records.Select(r => r.Describe()));
 }

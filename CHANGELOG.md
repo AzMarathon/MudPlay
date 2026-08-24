@@ -12,6 +12,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Remote commands no longer treat your own public-channel echo as an incoming command: a gangpath'd `@timer sync` (or any `@`-command over gang) used to be read back from your own "You gangpath" echo — which the server tags with your character name, not "You" — and bounce a "command invalid or not allowed" reply at the whole gang; the engine now recognizes its own name and skips it
 - Sending `@timer sync` over gang now auto-opens the merge window (previously only telepath / say did), so a gang broadcast collects its responses
 - The sync merge list keeps a buffer below the last row, so a scrolled list always reveals its final entry instead of clipping it
+- Timer-sync now logs the exchange to the program log: which timers were received from whom and over how many response lines, what was done with each set (adopted / already in sync / left for you to resolve), and — on the answering side — which timers were sent (the requester-side log had been silently disabled)
 - bug reports addressed: stock-20260824-001454, stock-20260824-001714, stock-20260824-092811
 
 ## 3.24.1
