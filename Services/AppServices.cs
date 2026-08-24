@@ -178,6 +178,11 @@ public sealed class AppServices
     // snapshotting back on save.
     public WindowLayoutStore WindowLayouts { get; }
 
+    // Edge-snapping + main-window cluster-move for the panel windows. Reads its
+    // on/off from the Global "Snap windows together" setting; fed each window via
+    // WindowLayoutStore.AttachWindow.
+    public WindowSnapManager WindowSnap { get; }
+
     // Per-character splitter-position memory for two-pane resizable
     // dialogs. Each dialog calls SplitterLayoutStore.AttachGrid
     // once during construction with a stable id + the Grid to manage;
@@ -1817,7 +1822,9 @@ public sealed class AppServices
         // Log already set by ctor parameter — bootstrap log carries the
         // DataMigration entries from before AppServices was constructed.
         Panels = new FloatingPanelHost();
-        WindowLayouts = new WindowLayoutStore(Profile);
+        // Window snapping reads its master on/off live from the Global setting.
+        WindowSnap = new WindowSnapManager(() => Settings.Current.SnapWindows);
+        WindowLayouts = new WindowLayoutStore(Profile, WindowSnap);
         SplitterLayouts = new SplitterLayoutStore(Profile);
         SessionStatsLayout = new SessionStatsLayoutStore(Profile);
         Wire = new WireBuffer();

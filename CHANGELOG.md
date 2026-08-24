@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.26.0
+
+- New feature: **window snapping** — MudPlay's panel windows (Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats) snap flush to each other's edges as you drag them near, on every platform. Dragging the **main** window carries the whole snapped cluster with it; grab any other panel to pull it off freely. Toggle it in **Settings → General → "Snap windows together"** (on by default); child windows opened from within a panel don't snap
+
 ## 3.25.5
 
 - Combat: disabling AutoCombat mid-fight, or dying, no longer strands the attack-spell cascade latched to a target that's no longer being fought — CastingDirector's round-owed gate runs before every category (heal, cure, bless, item-cast, party heal/bless, debuff), so a stale latch was silently blocking all of them until the next profile reload
