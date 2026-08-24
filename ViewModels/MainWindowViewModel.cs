@@ -2960,11 +2960,26 @@ public partial class MainWindowViewModel : ObservableObject
     // uses the button.
     private void OnChatForTimerSync(MudPlay.Game.ChatLogEntry e)
     {
+        // Our own outbound request looks different per channel: a directed telepath is its
+        // own TelepathOutgoing echo, a say echoes as "You say" (null speaker), and a gang
+        // (or say) line on some boards echoes tagged with our character name — so treat a
+        // self-named Gangpath / Local line as outgoing too. An inbound request we'd merely
+        // respond to has someone else's name and is excluded.
+        bool selfSpoke = e.Speaker is null || IsSelfName(e.Speaker);
         bool outgoing = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing
-                     || (e.Channel == MudPlay.Game.ChatChannel.Local && e.Speaker is null);
+                     || ((e.Channel == MudPlay.Game.ChatChannel.Gangpath
+                          || e.Channel == MudPlay.Game.ChatChannel.Local) && selfSpoke);
         if (!outgoing) return;
         if (!e.Message.TrimStart().StartsWith("@timer sync", StringComparison.OrdinalIgnoreCase)) return;
         OpenTimerSyncWindow();
+    }
+
+    private static bool IsSelfName(string speaker)
+    {
+        string? self = AppServices.Current.Party.LocalCharacterName;
+        if (string.IsNullOrEmpty(self)) return false;
+        static string Given(string n) { int s = n.IndexOf(' '); return s >= 0 ? n[..s] : n; }
+        return Given(self).Equals(Given(speaker), StringComparison.OrdinalIgnoreCase);
     }
 
     private async void OpenTimerSyncWindow()

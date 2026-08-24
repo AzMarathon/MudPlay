@@ -9,7 +9,9 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Typing `@timer sync` by hand (a telepath or say request, not just the **Sync Timers…** button) now auto-opens the merge window so the responders' replies are collected and shown, instead of arriving with nothing listening
 - Boss-timer sync now only prompts you on a real conflict: a timer for a boss you track but have no timer for is adopted automatically, one that matches what you hold is left alone, and the pick buttons appear only when someone's timer disagrees with one you already have (an untracked boss still asks, since adopting it adds it to your list)
 - Boss-timer sync no longer tags requests with a random correlation code — `@timer sync` and the `@timerdata` replies are clean, since each reply already carries the responder's name and the merge table shows one column per responder
-- bug reports addressed: stock-20260824-001454, stock-20260824-001714
+- Remote commands no longer treat your own public-channel echo as an incoming command: a gangpath'd `@timer sync` (or any `@`-command over gang) used to be read back from your own "You gangpath" echo — which the server tags with your character name, not "You" — and bounce a "command invalid or not allowed" reply at the whole gang; the engine now recognizes its own name and skips it
+- Sending `@timer sync` over gang now auto-opens the merge window (previously only telepath / say did), so a gang broadcast collects its responses
+- bug reports addressed: stock-20260824-001454, stock-20260824-001714, stock-20260824-092811
 
 ## 3.24.1
 

@@ -2045,6 +2045,11 @@ public sealed class AppServices
         // Stats itself is constructed above where PartyEssentials needs
         // PlayerStats injected.
         RemoteCommands.LivesProvider = () => Stats.HasParsed ? PlayerStats.Lives : (int?)null;
+        // SelfNameProvider — lets the engine recognise its own gangpath echo (public
+        // channels tag the sender's real name, not "You") and skip it instead of bouncing
+        // a denial at the gang. Party.LocalCharacterName tracks PlayerStats.Name, falling
+        // back to the profile name.
+        RemoteCommands.SelfNameProvider = () => Party.LocalCharacterName;
 
         // Persist stat captures onto the loaded profile so the next
         // session starts hydrated with the last-observed values

@@ -7,6 +7,7 @@
 > - Typing `@timer sync` by hand (a telepath or say request, not just the **Sync Timers…** button) auto-opens the merge window so the responders' replies are collected and shown
 > - Boss-timer sync only prompts on a real conflict — a timer for a boss you track but have no timer for is adopted automatically, a matching one is left alone, and the pick buttons appear only when someone's timer disagrees with one you already hold
 > - Boss-timer sync requests are clean — no random correlation code on `@timer sync` or its replies, since each reply already carries the responder's name
+> - Fixed remote commands treating your own public-channel echo as an inbound command: a gangpath'd `@timer sync` no longer bounces "command invalid or not allowed" at the gang, and now auto-opens the merge window like telepath / say already did
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

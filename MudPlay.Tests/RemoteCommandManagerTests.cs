@@ -1237,4 +1237,39 @@ public sealed class RemoteCommandManagerTests
 
         Assert.Empty(engine.LastSentForTests);
     }
+
+    // ===== Public-channel self-echo =====
+
+    [Fact]
+    public void OwnGangpathEcho_IsSkipped_NoDenialBounce()
+    {
+        // A gangpath'd @timer sync echoes back tagged with our character name (public
+        // channels never use "You"). Without the self-name guard the engine would run it,
+        // deny it (no self-grant), and bounce "command invalid" at the whole gang — the
+        // reported bug. The given-name echo must match our "Given Family" self-name.
+        var (engine, _, _) = Setup();
+        bool fired = false;
+        engine.RegisterHandler("@timer", PlayerRemoteControls.QueryBossTimers, _ => fired = true);
+        engine.SelfNameProvider = () => "Raijin WuzHere";
+
+        engine.DispatchForTests(Gangpath("Raijin", "@timer sync"));
+
+        Assert.False(fired);
+        Assert.Empty(engine.LastSentForTests);
+    }
+
+    [Fact]
+    public void AnotherPlayersGangpath_StillProcessed_WhenSelfNameSet()
+    {
+        // The self-name guard must not swallow a real inbound command from someone else.
+        var (engine, _, players) = Setup();
+        bool fired = false;
+        engine.RegisterHandler("@timer", PlayerRemoteControls.QueryBossTimers, _ => fired = true);
+        engine.SelfNameProvider = () => "Raijin";
+        SeedPlayer(players, "Fujin", PlayerRemoteControls.QueryBossTimers);
+
+        engine.DispatchForTests(Gangpath("Fujin", "@timer sync"));
+
+        Assert.True(fired);
+    }
 }
