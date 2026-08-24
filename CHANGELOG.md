@@ -2,6 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.25.5
+
+- Combat: disabling AutoCombat mid-fight, or dying, no longer strands the attack-spell cascade latched to a target that's no longer being fought — CastingDirector's round-owed gate runs before every category (heal, cure, bless, item-cast, party heal/bless, debuff), so a stale latch was silently blocking all of them until the next profile reload
+- CastingDirector's buff-duration timers are now cleared on death — previously only cleared on profile load, so a dead-and-gone buff MudPlay still believed was active could suppress a legitimate recast
+- Auto Bless now re-evaluates immediately when toggled on, matching Auto Heal/Rest — previously it just persisted the flag and could sit doing nothing until an unrelated event happened to trigger a check
+- Bug report: new **Casting spell target** / **Spell attack owed** fields (Combat weapon state) and an **Active buff timers** list (Spell resolution), so a stale-latch recurrence is visible directly in a capture
+- Fixed a prompt-in-chat poisoning bug: another player's own status line quoted inside a chat message (e.g. `Mindcrime gossips: [HP=671/KAI=40]:w`) could be mistaken for the local character's prompt, corrupting MaxHp and triggering a spurious healing/mana-drain spiral — the prompt scanner now only accepts a status line at a real wire boundary or immediately after a chained prompt, rejecting one quoted inside surrounding chat text
+- bug reports addressed: paradigm-20260824-012300, paradigm-20260824-010304
+
 ## 3.25.3
 
 - Conversation window: click a highlighted line again to unselect it (or press Escape to clear the whole selection), so a clicked row no longer stays highlighted until it scrolls off

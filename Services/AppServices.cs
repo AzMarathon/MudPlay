@@ -4895,6 +4895,17 @@ public sealed class AppServices
         // concern is the movement engines) since the reset spans all conditions.
         RoomTracker.PlayerDeathObserved += () => Conditions.ClearAll("death");
 
+        // Same reasoning as the condition reset above, for the attack-spell
+        // cascade and buff-duration tracking: death is a full server-side reset
+        // (every buff drops, whatever spell was mid-flight is moot), but nothing
+        // previously told CombatManager or CastingDirector that. A stale
+        // IsSpellAttackOwed latch or a buff timer for a duration the server
+        // already cleared otherwise survives indefinitely — the former silently
+        // blocks every automatic heal/cure/bless, the latter suppresses a
+        // legitimate recast (report paradigm-20260824-012300).
+        RoomTracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
+        RoomTracker.PlayerDeathObserved += () => CastDirector.ResetBuffTracking();
+
         // Party-death roster-cleanup bridge. Leader-side: when an active party
         // member dies mid-route it lingers as an [Invited] par slot; we uninvite
         // that phantom once combat clears so the loop / walk-to doesn't stall on

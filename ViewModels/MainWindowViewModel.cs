@@ -4910,7 +4910,18 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     partial void OnIsAutoBlessActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoBless", value, d => d.AutoBless = value);
+    {
+        PersistAutoModeFlag("AutoBless", value, d => d.AutoBless = value);
+        // Mirror OnIsAutoHealRestActiveChanged: a genuine flip must re-evaluate
+        // CastingDirector at once rather than waiting for the next unrelated HP/
+        // mana/position/combat event to happen to trigger one — previously
+        // enabling Auto Bless could sit doing nothing for an arbitrary stretch
+        // (report paradigm-20260824-012300). Evaluate() already gates bless on
+        // _autoBlessEnabled internally, so calling it on either transition is
+        // safe — a disable just finds nothing eligible to fire.
+        if (_suppressAutoEngineWriteback > 0) return;
+        AppServices.Current.CastDirector?.Evaluate();
+    }
 
     partial void OnIsAutoLightActiveChanged(bool value)
         => PersistAutoModeFlag("AutoLight", value, d => d.AutoLight = value);

@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.25.3**
-> - Conversation window: click a highlighted line again to unselect it (or press Escape to clear the whole selection), so a clicked row no longer stays highlighted until it scrolls off
-> - Conversation window: click-hold and drag across lines to select (or deselect) a run of them at once
-> - Conversation window: copy now works on the whole line — select a line and press Ctrl+C, or right-click → Copy (multi-select copies every highlighted line in order)
+> **Version 3.25.5**
+> - Combat: disabling AutoCombat mid-fight, or dying, no longer strands the attack-spell cascade latched to a target that's no longer being fought — this was silently blocking all automatic healing, curing, and blessing until the next profile reload
+> - CastingDirector's buff-duration timers are now cleared on death, so a dead-and-gone buff can't suppress a legitimate recast
+> - Auto Bless now re-evaluates immediately when toggled on, matching Auto Heal/Rest
+> - Fixed a prompt-in-chat poisoning bug: another player's own status line quoted inside a chat message could be mistaken for the local character's prompt, corrupting MaxHp and triggering a spurious healing/mana-drain spiral
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -1960,4 +1960,56 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat.");   // full-roster observe — townsperson gone
         Assert.False(h.Combat.IsUserEngagedInstance("townsperson"));
     }
+
+    // Report paradigm-20260824-012300: AutoCombat toggled off mid-fight left
+    // _castingSpellTarget / _spellAttackOwed latched to a target no longer being
+    // fought ("between-round cast noted (manual) — resume armed
+    // (spellTarget=small blue dragon hatchling)" with the dragon long gone).
+    // CastingDirector's IsSpellAttackOwed gate is unconditional and runs before
+    // every category, so the stale latch silently blocked every automatic
+    // heal/cure/bless for the rest of the session. Disabling AutoCombat must
+    // drop the whole cascade, not just CurrentTarget.
+    [Fact]
+    public void AutoCombatDisabled_ClearsStaleAttackSpellCascade()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "agon", MinEnemies = 0 };
+        h.AddMonster(1, "small blue dragon hatchling");
+
+        h.Feed("Also here: small blue dragon hatchling.");
+        Assert.Equal("agon small blue dragon hatchling", h.LastSent);
+        h.Combat.NoteBetweenRoundCast();   // a survival cast armed the round-owed latch
+        Assert.True(h.Combat.IsSpellAttackOwed);
+        Assert.Equal("small blue dragon hatchling", h.Combat.Snapshot().CastingSpellTarget);
+
+        h.AutoCombatEnabled = false;
+        h.Feed("Also here: small blue dragon hatchling.");   // next observation, combat off
+
+        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
+        Assert.Null(h.Combat.Snapshot().CurrentTarget);
+    }
+
+    // Same root cause, the death path: the corpse/respawn room has nothing to do
+    // with whatever spell was mid-flight when the character died, but nothing
+    // previously told CombatManager that (report paradigm-20260824-012300 also
+    // documents CastingDirector buff timers surviving death for the same reason —
+    // a full server-side state reset with no matching client-side reset).
+    [Fact]
+    public void OnPlayerDeath_ClearsStaleAttackSpellCascade()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "agon", MinEnemies = 0 };
+        h.AddMonster(1, "small blue dragon hatchling");
+
+        h.Feed("Also here: small blue dragon hatchling.");
+        h.Combat.NoteBetweenRoundCast();
+        Assert.True(h.Combat.IsSpellAttackOwed);
+
+        h.Combat.OnPlayerDeath();
+
+        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
+        Assert.Null(h.Combat.Snapshot().CurrentTarget);
+    }
 }
