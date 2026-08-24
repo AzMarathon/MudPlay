@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
@@ -20,6 +22,12 @@ public partial class ConversationWindow : Window
     private ListBox? _rowsList;
     private ScrollViewer? _rowsScroll;
 
+    // Click-drag selection paint: on press we pick a direction (select an unselected row,
+    // deselect a selected one) and dragging over further rows applies that same state.
+    private bool _dragging;
+    private bool _dragValue;
+    private int _dragLastIndex = -1;
+
     public ConversationWindow()
     {
         InitializeComponent();
@@ -34,6 +42,18 @@ public partial class ConversationWindow : Window
     private void OnOpened(object? sender, EventArgs e)
     {
         _rowsList = this.FindControl<ListBox>("RowsList");
+        if (_rowsList is not null)
+        {
+            // Tunnel the press so we set the selection ourselves (and suppress the
+            // ListBox's own click-toggle) before it acts; capture drives the move/release
+            // even when the pointer leaves a row's bounds mid-drag.
+            _rowsList.AddHandler(InputElement.PointerPressedEvent, OnRowsPointerPressed,
+                RoutingStrategies.Tunnel);
+            _rowsList.AddHandler(InputElement.PointerMovedEvent, OnRowsPointerMoved,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+            _rowsList.AddHandler(InputElement.PointerReleasedEvent, OnRowsPointerReleased,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        }
         if (DataContext is ConversationViewModel vm)
         {
             vm.ScrollToRowRequested += OnScrollToRow;
@@ -172,6 +192,70 @@ public partial class ConversationWindow : Window
             CopyRows(SelectedRows());
             e.Handled = true;
         }
+    }
+
+    // Press a line to begin a drag-select: pick a direction from the pressed row (select
+    // it if it wasn't, deselect it if it was) and paint that state across every row the
+    // drag passes over. Suppresses the list's own click-toggle so there's no double flip.
+    private void OnRowsPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_rowsList is null) return;
+        if (!e.GetCurrentPoint(_rowsList).Properties.IsLeftButtonPressed) return;   // left only
+        // A press on an inline link (or any button) activates it — don't hijack for a drag.
+        if (e.Source is Visual src && src.FindAncestorOfType<Button>(includeSelf: true) is not null) return;
+
+        ListBoxItem? container = ContainerAt(e.GetPosition(_rowsList));
+        if (container is null) return;   // background press — leave it to the list
+        int index = _rowsList.IndexFromContainer(container);
+        if (index < 0 || index >= _rowsList.Items.Count) return;
+
+        object? row = _rowsList.Items[index];
+        bool selected = row is not null && (_rowsList.SelectedItems?.Contains(row) ?? false);
+        _dragValue = !selected;
+        SetSelected(row, _dragValue);
+        _dragging = true;
+        _dragLastIndex = index;
+        e.Pointer.Capture(_rowsList);
+        _rowsList.Focus();               // so Ctrl+C copies the selection
+        e.Handled = true;                // suppress the list's own click-toggle
+    }
+
+    private void OnRowsPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_dragging || _rowsList is null) return;
+        ListBoxItem? container = ContainerAt(e.GetPosition(_rowsList));
+        if (container is null) return;
+        int index = _rowsList.IndexFromContainer(container);
+        if (index < 0 || index == _dragLastIndex) return;
+        // Fill rows skipped between the last hit and this one so a fast drag leaves no gaps.
+        int lo = Math.Min(index, _dragLastIndex), hi = Math.Max(index, _dragLastIndex);
+        for (int i = lo; i <= hi; i++)
+            if (i >= 0 && i < _rowsList.Items.Count) SetSelected(_rowsList.Items[i], _dragValue);
+        _dragLastIndex = index;
+    }
+
+    private void OnRowsPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_dragging) return;
+        _dragging = false;
+        _dragLastIndex = -1;
+        e.Pointer.Capture(null);
+    }
+
+    private ListBoxItem? ContainerAt(Point p)
+    {
+        if (_rowsList is null) return null;
+        foreach (Visual v in _rowsList.GetVisualsAt(p))
+            if (v.FindAncestorOfType<ListBoxItem>(includeSelf: true) is { } item)
+                return item;
+        return null;
+    }
+
+    private void SetSelected(object? row, bool value)
+    {
+        if (row is null || _rowsList?.SelectedItems is not { } sel) return;
+        if (value) { if (!sel.Contains(row)) sel.Add(row); }
+        else sel.Remove(row);
     }
 
     // Right-click → Copy. Copies the whole selection when the clicked row is part of

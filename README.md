@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.25.2**
+> **Version 3.25.3**
 > - Conversation window: click a highlighted line again to unselect it (or press Escape to clear the whole selection), so a clicked row no longer stays highlighted until it scrolls off
+> - Conversation window: click-hold and drag across lines to select (or deselect) a run of them at once
 > - Conversation window: copy now works on the whole line — select a line and press Ctrl+C, or right-click → Copy (multi-select copies every highlighted line in order)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
