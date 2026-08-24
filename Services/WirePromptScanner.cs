@@ -17,9 +17,13 @@ namespace MudPlay.Services;
 // regex. A small carryover buffer (~1 KB cap) preserves partial matches across
 // chunk boundaries.
 //
-// Unanchored on purpose: the server chains multiple statlines back-to-back on
-// the same row ([HP=27/MA=31]:[HP=28/MA=34]:[HP=29/MA=34]:), so a ^-anchored
-// line regex would only catch the first.
+// The regex remains unanchored because the server chains multiple statlines
+// back-to-back on the same row
+// ([HP=27/MA=31]:[HP=28/MA=34]:[HP=29/MA=34]:). Each candidate is nevertheless
+// boundary-validated: it must start at a real wire row/control boundary or
+// directly after a previously accepted statline. This rejects another player's
+// prompt quoted inside chat ("Bob gossips: [HP=671/KAI=40]:w") without losing
+// the chained rewrites this scanner exists to preserve.
 public sealed class WirePromptScanner
 {
     private const int BufferCap = 1024;
@@ -27,6 +31,13 @@ public sealed class WirePromptScanner
     // Stripped-text carryover. Bytes flow through the inline ANSI state machine
     // into here; the regex runs against this string.
     private readonly StringBuilder _buffer = new(BufferCap);
+
+    // Offsets in _buffer immediately after a wire row/control boundary. Kept
+    // separately instead of inserting sentinel characters into _buffer because
+    // custom statlines may use %n: their regex intentionally spans CR/LF after the
+    // scanner strips those controls. Offset 0 is a valid boundary for a fresh or
+    // fully-consumed buffer.
+    private readonly List<int> _promptBoundaries = new() { 0 };
 
     private StripState _state;
 
@@ -72,11 +83,15 @@ public sealed class WirePromptScanner
             {
                 case StripState.Normal:
                     if (b == 0x1B) { _state = StripState.EscSeen; }
+                    else if (b is (byte)'\r' or (byte)'\n')
+                    {
+                        MarkPromptBoundary();
+                    }
                     else if (b >= 0x20 && b < 0x7F)
                     {
                         // Printable ASCII. The statline regex only cares about
-                        // these. Drop CR / LF / other controls — between two
-                        // statlines they're just separators, never inside one.
+                        // these. CR / LF and row-rewrite CSI controls are recorded
+                        // as boundary offsets above/below; other controls are dropped.
                         _buffer.Append((char)b);
                     }
                     break;
@@ -88,7 +103,16 @@ public sealed class WirePromptScanner
                 case StripState.Csi:
                     // CSI final bytes are 0x40-0x7E. Parameter / intermediate
                     // bytes (0x20-0x3F) keep us in Csi.
-                    if (b >= 0x40 && b <= 0x7E) _state = StripState.Normal;
+                    if (b >= 0x40 && b <= 0x7E)
+                    {
+                        // MajorMUD commonly starts each rewritten row with
+                        // ESC[79D ESC[K rather than a literal CR. Record cursor-left /
+                        // cursor-position / erase-line finals as row boundaries, but
+                        // never SGR 'm' — colour changes occur inside a statline.
+                        if (b is (byte)'D' or (byte)'G' or (byte)'H' or (byte)'f' or (byte)'K')
+                            MarkPromptBoundary();
+                        _state = StripState.Normal;
+                    }
                     break;
             }
         }
@@ -98,9 +122,11 @@ public sealed class WirePromptScanner
         // once and the regex is compiled.
         string text = _buffer.ToString();
         int lastEnd = 0;
+        int previousAcceptedEnd = -1;
         bool activeMatched = false;
         foreach (Match m in _statusLine.Matches(text))
         {
+            if (!IsPromptBoundary(text, m.Index, previousAcceptedEnd)) continue;
             if (!int.TryParse(m.Groups["hp"].Value, out int hp)) continue;
             activeMatched = true;
 
@@ -130,6 +156,7 @@ public sealed class WirePromptScanner
 
             PromptObserved?.Invoke(new PromptObservation(hp, manaType, mana, position));
             lastEnd = m.Index + m.Length;
+            previousAcceptedEnd = lastEnd;
         }
 
         // Mismatch detection for the logon reconciler: if the active pattern
@@ -142,11 +169,14 @@ public sealed class WirePromptScanner
         if (!activeMatched && !ReferenceEquals(_statusLine, StatlinePromptRegexBuilder.Default))
         {
             bool defaultMatched = false;
+            int previousDefaultEnd = -1;
             foreach (Match d in StatlinePromptRegexBuilder.Default.Matches(text))
             {
+                if (!IsPromptBoundary(text, d.Index, previousDefaultEnd)) continue;
                 defaultMatched = true;
                 int end = d.Index + d.Length;
                 if (end > lastEnd) lastEnd = end;
+                previousDefaultEnd = end;
             }
             if (defaultMatched) PromptShapeUnmatched?.Invoke();
         }
@@ -156,7 +186,7 @@ public sealed class WirePromptScanner
         // completes in the next Append, so keep it.
         if (lastEnd > 0)
         {
-            _buffer.Remove(0, lastEnd);
+            RemovePrefix(lastEnd, establishStartBoundary: true);
         }
 
         // Hard cap so a long quiet stretch of non-statline text doesn't pin
@@ -164,14 +194,71 @@ public sealed class WirePromptScanner
         // legitimate in-flight partial match here.
         if (_buffer.Length > BufferCap)
         {
-            _buffer.Remove(0, _buffer.Length - BufferCap);
+            RemovePrefix(_buffer.Length - BufferCap, establishStartBoundary: false);
         }
+    }
+
+    private void MarkPromptBoundary()
+    {
+        int offset = _buffer.Length;
+        if (_promptBoundaries.Count == 0 || _promptBoundaries[^1] != offset)
+            _promptBoundaries.Add(offset);
+    }
+
+    // A candidate is valid when only spaces separate it from the nearest real
+    // wire boundary, or from the end of the previously accepted prompt (the
+    // chained-statline case). Any printable prefix — especially "X gossips: " —
+    // makes it ordinary text rather than our status line.
+    private bool IsPromptBoundary(string text, int candidateStart, int previousAcceptedEnd)
+    {
+        if (previousAcceptedEnd >= 0
+            && OnlySpaces(text, previousAcceptedEnd, candidateStart))
+            return true;
+
+        for (int i = _promptBoundaries.Count - 1; i >= 0; i--)
+        {
+            int boundary = _promptBoundaries[i];
+            if (boundary > candidateStart) continue;
+            return OnlySpaces(text, boundary, candidateStart);
+        }
+        return false;
+    }
+
+    private static bool OnlySpaces(string text, int start, int end)
+    {
+        if (start < 0 || end < start) return false;
+        for (int i = start; i < end; i++)
+            if (text[i] != ' ') return false;
+        return true;
+    }
+
+    private void RemovePrefix(int count, bool establishStartBoundary)
+    {
+        if (count <= 0) return;
+        _buffer.Remove(0, count);
+
+        int write = 0;
+        for (int read = 0; read < _promptBoundaries.Count; read++)
+        {
+            int shifted = _promptBoundaries[read] - count;
+            if (shifted < 0) continue;
+            if (write > 0 && _promptBoundaries[write - 1] == shifted) continue;
+            _promptBoundaries[write++] = shifted;
+        }
+        if (write < _promptBoundaries.Count)
+            _promptBoundaries.RemoveRange(write, _promptBoundaries.Count - write);
+
+        if (establishStartBoundary
+            && (_promptBoundaries.Count == 0 || _promptBoundaries[0] != 0))
+            _promptBoundaries.Insert(0, 0);
     }
 
     // Reset the scanner — drops carryover and any in-flight CSI escape.
     public void Reset()
     {
         _buffer.Clear();
+        _promptBoundaries.Clear();
+        _promptBoundaries.Add(0);
         _state = StripState.Normal;
     }
 
