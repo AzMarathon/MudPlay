@@ -6,6 +6,7 @@
 > - Boss-timer sync matches on the boss itself (its monster), never on room pins (which are user-editable), and carries only the identity + raw kill time — everything derived is recomputed locally. Adopting a timer for a boss you don't currently track adds it back to your list. Responding reuses the existing `@timer` permission and the standard reply-on-received-channel / channel-ignore rules
 > - Typing `@timer sync` by hand (a telepath or say request, not just the **Sync Timers…** button) auto-opens the merge window so the responders' replies are collected and shown
 > - Boss-timer sync only prompts on a real conflict — a timer for a boss you track but have no timer for is adopted automatically, a matching one is left alone, and the pick buttons appear only when someone's timer disagrees with one you already hold
+> - Boss-timer sync requests are clean — no random correlation code on `@timer sync` or its replies, since each reply already carries the responder's name
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -8,6 +8,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Boss-timer sync matches on the boss itself (its monster), never on room pins (which are user-editable), and carries only the identity + raw kill time — everything derived is recomputed locally. Adopting a timer for a boss you don't currently track adds it back to your list (recovering a catalog boss you'd removed). Responding reuses the existing `@timer` permission and the standard reply-on-received-channel / channel-ignore rules
 - Typing `@timer sync` by hand (a telepath or say request, not just the **Sync Timers…** button) now auto-opens the merge window so the responders' replies are collected and shown, instead of arriving with nothing listening
 - Boss-timer sync now only prompts you on a real conflict: a timer for a boss you track but have no timer for is adopted automatically, one that matches what you hold is left alone, and the pick buttons appear only when someone's timer disagrees with one you already have (an untracked boss still asks, since adopting it adds it to your list)
+- Boss-timer sync no longer tags requests with a random correlation code — `@timer sync` and the `@timerdata` replies are clean, since each reply already carries the responder's name and the merge table shows one column per responder
 - bug reports addressed: stock-20260824-001454, stock-20260824-001714
 
 ## 3.24.1

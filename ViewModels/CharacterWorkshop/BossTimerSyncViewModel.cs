@@ -50,12 +50,12 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     [ObservableProperty] private string _status = "Pick a channel and request timers.";
     [ObservableProperty] private bool _requested;
 
-    // preArmedToken is set when the window is auto-opened because the user just sent
-    // `@timer sync` from the terminal (rather than clicking Request here) — we begin
-    // collecting on that token immediately without re-sending the request.
+    // preArmed is set when the window is auto-opened because the user just sent `@timer
+    // sync` from the terminal (rather than clicking Request here) — we begin collecting
+    // immediately without re-sending the request.
     public BossTimerSyncViewModel(
         BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
-        string? preArmedToken = null)
+        bool preArmed = false)
     {
         ArgumentNullException.ThrowIfNull(bosses);
         ArgumentNullException.ThrowIfNull(timers);
@@ -75,9 +75,9 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         // Rows are created on demand as responders offer a timer — a boss nobody sent a
         // timer for has nothing to merge, so it never clutters the table.
 
-        if (preArmedToken is { Length: > 0 } token)
+        if (preArmed)
         {
-            _collector.Begin(token);
+            _collector.Begin();
             Requested = true;
             Status = "Collecting responses to your @timer sync — new timers fold in automatically; you only pick on a conflict…";
         }
@@ -86,11 +86,10 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     [RelayCommand]
     private void SendRequest()
     {
-        string token = Guid.NewGuid().ToString("N")[..4];
-        _collector.Begin(token);
+        _collector.Begin();
         Requested = true;
 
-        string request = $"@timer sync {token}";
+        const string request = "@timer sync";
         string wire = ChannelIndex switch
         {
             1 => $"/{TelepathTarget.Trim()} {request}",   // telepath to a named player

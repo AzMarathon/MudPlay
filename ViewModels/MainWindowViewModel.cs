@@ -2963,19 +2963,11 @@ public partial class MainWindowViewModel : ObservableObject
         bool outgoing = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing
                      || (e.Channel == MudPlay.Game.ChatChannel.Local && e.Speaker is null);
         if (!outgoing) return;
-
-        const string verb = "@timer sync";
-        string msg = e.Message.TrimStart();
-        if (!msg.StartsWith(verb, StringComparison.OrdinalIgnoreCase)) return;
-
-        // Token is the word after the verb; a bare "@timer sync" (the natural hand-typed
-        // form) gets the "-" the responders reply with when no token is supplied.
-        string rest = msg[verb.Length..].Trim();
-        string token = rest.Length == 0 ? "-" : rest.Split(' ', 2)[0];
-        OpenTimerSyncWindowForToken(token);
+        if (!e.Message.TrimStart().StartsWith("@timer sync", StringComparison.OrdinalIgnoreCase)) return;
+        OpenTimerSyncWindow();
     }
 
-    private async void OpenTimerSyncWindowForToken(string token)
+    private async void OpenTimerSyncWindow()
     {
         if (AppServices.Current.TimerSyncWindowActive) return;   // already collecting
         var vm = new ViewModels.CharacterWorkshop.BossTimerSyncViewModel(
@@ -2984,7 +2976,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.GameData,
             AppServices.Current.Chat,
             AppServices.Current.SendTypedInput,
-            preArmedToken: token);
+            preArmed: true);
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.CharacterWorkshop.BossTimerSyncViewModel, bool>(vm);
     }

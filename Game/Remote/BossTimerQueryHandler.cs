@@ -26,7 +26,7 @@ public sealed class BossTimerQueryHandler : IDisposable
 
     // @timer sync flood guard: at most this many timers per sync response, and a
     // conservative per-line character budget for the compressed blob so the wrapped
-    // wire line ("/name {@timerdata TOK i/n <blob>}") stays well under the game's
+    // wire line ("/name {@timerdata i/n <blob>}") stays well under the game's
     // chat-line limit. (120 is deliberately safe; can be raised once the exact limit
     // is confirmed.)
     private const int MaxSyncRecords = 60;
@@ -75,9 +75,9 @@ public sealed class BossTimerQueryHandler : IDisposable
 
     private void OnTimer(RemoteCommandContext ctx)
     {
-        // `@timer sync [TOK]` is a distinct verb: reply with this client's active
-        // timers, compressed, for the requester to fold in — not the human-readable
-        // report. Gated by the same QueryBossTimers permission as the rest of @timer.
+        // `@timer sync` is a distinct verb: reply with this client's active timers,
+        // compressed, for the requester to fold in — not the human-readable report.
+        // Gated by the same QueryBossTimers permission as the rest of @timer.
         if (ctx.Args.Count > 0 && ctx.Args[0].Equals("sync", StringComparison.OrdinalIgnoreCase))
         {
             OnSyncRequest(ctx);
@@ -113,16 +113,14 @@ public sealed class BossTimerQueryHandler : IDisposable
                 : $"{extra} more active timers - add a keyword to filter");
     }
 
-    // Reply to `@timer sync [TOK]` with this client's active timers, encoded compactly
-    // and chunked to fit the wire: `@timerdata <TOK> <i>/<n> <blob>`. Only the raw
-    // identity + killed-at travels — the requester recomputes windows locally. The
-    // token (opaque, requester-generated) is echoed back so only the requester that
-    // issued <TOK> collects these, even on a shared gang/local channel; a missing
-    // token is echoed as "-". Reply routes back on the channel the request arrived on.
+    // Reply to `@timer sync` with this client's active timers, encoded compactly and
+    // chunked to fit the wire: `@timerdata <i>/<n> <blob>`. Only the raw identity +
+    // killed-at travels — the requester recomputes windows locally. No correlation token:
+    // every reply line carries the responder's name, so a shared gang/local channel just
+    // yields one set per responder. Reply routes back on the channel the request arrived on.
     private void OnSyncRequest(RemoteCommandContext ctx)
     {
         RealmType realm = _gameData.ActiveRealm;
-        string token = ctx.Args.Count > 1 && ctx.Args[1].Length > 0 ? ctx.Args[1] : "-";
 
         List<BossTimerSyncRecord> records = new();
         foreach ((BossDef def, _) in _timers.ActiveTimers(realm))
@@ -135,7 +133,7 @@ public sealed class BossTimerQueryHandler : IDisposable
         string payload = BossTimerSyncCodec.Encode(records);
         IReadOnlyList<string> chunks = BossTimerSyncCodec.Chunk(payload, MaxBlobCharsPerLine);
         for (int i = 0; i < chunks.Count; i++)
-            ctx.Reply($"{SyncResponseToken} {token} {i + 1}/{chunks.Count} {chunks[i]}");
+            ctx.Reply($"{SyncResponseToken} {i + 1}/{chunks.Count} {chunks[i]}");
         _log?.Info("BossTimerSync",
             $"answered @timer sync from {ctx.Sender} on {ctx.Channel}: {records.Count} timer(s), {chunks.Count} line(s)");
     }

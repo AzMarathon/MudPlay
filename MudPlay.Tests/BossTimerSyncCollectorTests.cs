@@ -27,13 +27,13 @@ public sealed class BossTimerSyncCollectorTests
     // Feed a responder's timers as chunked @timerdata lines (as the responder emits
     // them, wrapped in {} the way the remote reply path does).
     private static void FeedResponse(
-        BossTimerSyncCollector c, string sender, string token,
+        BossTimerSyncCollector c, string sender,
         IReadOnlyList<BossTimerSyncRecord> records, int chunkChars, ChatChannel channel = ChatChannel.Gangpath)
     {
         IReadOnlyList<string> chunks = BossTimerSyncCodec.Chunk(BossTimerSyncCodec.Encode(records), chunkChars);
         for (int i = 0; i < chunks.Count; i++)
         {
-            string msg = $"{{{BossTimerQueryHandler.SyncResponseToken} {token} {i + 1}/{chunks.Count} {chunks[i]}}}";
+            string msg = $"{{{BossTimerQueryHandler.SyncResponseToken} {i + 1}/{chunks.Count} {chunks[i]}}}";
             c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, channel, sender, msg, msg));
         }
     }
@@ -42,14 +42,14 @@ public sealed class BossTimerSyncCollectorTests
     public void ReassemblesChunks_Decodes_RaisesOncePerSender()
     {
         BossTimerSyncCollector c = NewCollector(out var got);
-        c.Begin("tok9");
+        c.Begin();
         List<BossTimerSyncRecord> bob = new()
         {
             new(101, "gate guardian", T("2026-08-22T10:00:00Z")),
             new(102, "vault wyrm",    T("2026-08-22T09:30:00Z")),
         };
 
-        FeedResponse(c, "Bob", "tok9", bob, chunkChars: 8); // small chunks → multi-line
+        FeedResponse(c, "Bob", bob, chunkChars: 8); // small chunks → multi-line
 
         Assert.Single(got);
         Assert.Equal("Bob", got[0].Sender);
@@ -62,22 +62,13 @@ public sealed class BossTimerSyncCollectorTests
     public void KeepsRespondersSeparate_OneEventEach()
     {
         BossTimerSyncCollector c = NewCollector(out var got);
-        c.Begin("t");
-        FeedResponse(c, "Bob", "t", new[] { new BossTimerSyncRecord(1, "a", T("2026-08-22T01:00:00Z")) }, 6);
-        FeedResponse(c, "Sue", "t", new[] { new BossTimerSyncRecord(2, "b", T("2026-08-22T02:00:00Z")) }, 6);
+        c.Begin();
+        FeedResponse(c, "Bob", new[] { new BossTimerSyncRecord(1, "a", T("2026-08-22T01:00:00Z")) }, 6);
+        FeedResponse(c, "Sue", new[] { new BossTimerSyncRecord(2, "b", T("2026-08-22T02:00:00Z")) }, 6);
 
         Assert.Equal(2, got.Count);
         Assert.Contains(got, r => r.Sender == "Bob");
         Assert.Contains(got, r => r.Sender == "Sue");
-    }
-
-    [Fact]
-    public void IgnoresResponsesForAnotherToken()
-    {
-        BossTimerSyncCollector c = NewCollector(out var got);
-        c.Begin("mine");
-        FeedResponse(c, "Bob", "theirs", new[] { new BossTimerSyncRecord(1, "a", T("2026-08-22T01:00:00Z")) }, 100);
-        Assert.Empty(got);
     }
 
     [Fact]
@@ -86,12 +77,12 @@ public sealed class BossTimerSyncCollectorTests
         BossTimerSyncCollector c = NewCollector(out var got);
         var recs = new[] { new BossTimerSyncRecord(1, "a", T("2026-08-22T01:00:00Z")) };
 
-        FeedResponse(c, "Bob", "t", recs, 100);   // no Begin yet
+        FeedResponse(c, "Bob", recs, 100);   // no Begin yet
         Assert.Empty(got);
 
-        c.Begin("t");
+        c.Begin();
         c.Stop();
-        FeedResponse(c, "Bob", "t", recs, 100);   // after Stop
+        FeedResponse(c, "Bob", recs, 100);   // after Stop
         Assert.Empty(got);
     }
 
@@ -99,8 +90,8 @@ public sealed class BossTimerSyncCollectorTests
     public void MalformedBlob_IsDiscarded_NoThrow()
     {
         BossTimerSyncCollector c = NewCollector(out var got);
-        c.Begin("t");
-        string msg = $"{{{BossTimerQueryHandler.SyncResponseToken} t 1/1 not-a-valid-blob!!!}}";
+        c.Begin();
+        string msg = $"{{{BossTimerQueryHandler.SyncResponseToken} 1/1 not-a-valid-blob!!!}}";
         c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.Gangpath, "Bob", msg, msg));
         Assert.Empty(got);
     }
