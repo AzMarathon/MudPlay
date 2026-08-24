@@ -349,6 +349,13 @@ public static class BugReportBuilder
         // "DrainSpell" here means the drain override is currently taking the round.
         Kv(sb, "Round spell action", combat.LastCastAction ?? "(weapon / idle)");
         Kv(sb, "Announced spell", combat.AnnouncedSpell ?? "(none)");
+        // The attack-spell cascade's own latch, surfaced separately — it can go
+        // stale relative to CurrentTarget/AnnouncedSpell above (report
+        // paradigm-20260824-012300). A CastingSpellTarget the current room
+        // doesn't hold, or SpellAttackOwed=true with no live fight, means every
+        // automatic heal/cure/bless is being silently suppressed.
+        Kv(sb, "Casting spell target", combat.CastingSpellTarget ?? "(none)");
+        Kv(sb, "Spell attack owed", combat.SpellAttackOwed.ToString());
         // Alternating action-order phase — pairs with the resolved Combat "ActionOrder"
         // setting below to explain why an alternate-order character is casting or
         // swinging this round (even rounds open on the mode's first phase).
@@ -475,6 +482,27 @@ public static class BugReportBuilder
 
         StringBuilder sb = new();
         Kv(sb, "Current mana", $"{svc.PlayerState.Ma}/{svc.PlayerState.MaxMa}");
+
+        // Buff-duration timers CastingDirector believes are still running, straight
+        // from its own tracking (not re-derived) — a timer surviving past a real
+        // death is the direct symptom of report paradigm-20260824-012300 (the
+        // server clears every buff on death, but nothing told CastingDirector, so
+        // it declines to recast a buff that's actually long gone).
+        IReadOnlyList<Game.Spells.ActiveBuffTimer> buffs = svc.CastDirector.SnapshotActiveBuffs();
+        sb.Append("\n**Active buff timers (CastingDirector)**\n\n");
+        if (buffs.Count == 0)
+        {
+            sb.Append("(none)\n");
+        }
+        else
+        {
+            foreach (Game.Spells.ActiveBuffTimer b in buffs)
+            {
+                string target = string.IsNullOrEmpty(b.Target) ? "self" : b.Target;
+                System.TimeSpan remaining = b.Until - System.DateTime.UtcNow;
+                sb.Append($"- {b.Short} on {target}: {(remaining > System.TimeSpan.Zero ? $"{remaining.TotalSeconds:F0}s remaining" : "expired, not yet cleared")} (of {b.TotalSec}s)\n");
+            }
+        }
         sb.Append('\n');
 
         int shown = 0;

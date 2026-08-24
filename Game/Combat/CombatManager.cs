@@ -755,7 +755,16 @@ public sealed partial class CombatManager : IDisposable
         // Passive neutrals the user hand-engaged (turned hostile), which the engine is
         // now finishing like enemies. A "why isn't it fighting the neutral I attacked?"
         // report needs to see whether the instance actually got marked.
-        IReadOnlyList<string> UserEngagedInstances);
+        IReadOnlyList<string> UserEngagedInstances,
+        // The attack-spell cascade's own latched state — surfaced separately from
+        // CurrentTarget/AnnouncedSpell because these two can legitimately go stale
+        // relative to it (report paradigm-20260824-012300: a spellTarget on a
+        // monster long gone, with IsSpellAttackOwed stuck true, silently blocked
+        // every automatic heal/cure/bless). A report showing a CastingSpellTarget
+        // that doesn't match CurrentTarget, or SpellAttackOwed=true with no live
+        // fight, is this bug re-occurring.
+        string? CastingSpellTarget,
+        bool SpellAttackOwed);
 
     // UI-thread only (router handlers + the capture both run there), so no lock.
     public DebugState Snapshot() => new(
@@ -763,7 +772,8 @@ public sealed partial class CombatManager : IDisposable
         _awaitingBackstabResolution, _pendingBackstabSpecies,
         _guardBlockedTarget, _alternationRound,
         _lastCastAction?.ToString(), _announcedSpellCode,
-        _userEngagedInstances.ToArray());
+        _userEngagedInstances.ToArray(),
+        _castingSpellTarget, _spellAttackOwed);
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
     // holds any stealth that opens a backstab — sneaking OR (optimistically) hidden
@@ -1064,6 +1074,14 @@ public sealed partial class CombatManager : IDisposable
         if (!_isEnabled() && !seeHiddenOverride)
         {
             _currentTarget = null;
+            // AutoCombat going off mid-fight must drop the attack-spell cascade
+            // too, not just the target — CastingDirector's IsSpellAttackOwed gate
+            // (armed by NoteBetweenRoundCast while _castingSpellTarget is live)
+            // otherwise survives the toggle and silently blocks every automatic
+            // heal/cure/bless until something else happens to clear it (report
+            // paradigm-20260824-012300: a stale spellTarget on a monster long
+            // gone suppressed grhe for the rest of the session).
+            ClearAttackSpellCascadeState();
             return;
         }
 
@@ -1474,18 +1492,7 @@ public sealed partial class CombatManager : IDisposable
         _speciesByNumber.Clear();
         _cannotAttackAnnounced.Clear();
         ClearBackstabResolution();
-
-        // Reset the combat-spell room economy — per-room debuff-once /
-        // cast-cap / multi-attack counters + the damage-immunity map all
-        // start fresh next room.
-        _castingSpellTarget = null;
-        _lastCastAction = null;
-        _alternationRound = 0;
-        _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
-        _lastAttackTallyAt = DateTimeOffset.MinValue;
-        _spellAttackOwed = false;
-        _attackSpellImmuneSpecies.Clear();
-        _spellChooser.ResetForNewRoom();
+        ClearAttackSpellCascadeState();
 
         // Revert an alt-weapon swap so the next fight opens on the normal
         // weapon — but skip it when backstab is active, since the pre-move
@@ -1496,6 +1503,42 @@ public sealed partial class CombatManager : IDisposable
         if (!backstabActive && _usingAlternateWeapon)
             _swapWeapon?.Invoke(settings.NormalWeapon, settings.NormalOffHand, false);
         _usingAlternateWeapon = false;
+    }
+
+    // Reset the attack-spell cascade's per-target/per-room economy — the
+    // announced spell, the round-owed latch CastingDirector gates every
+    // survival cast on (IsSpellAttackOwed), the alternation/tally clocks, the
+    // observed-immunity set, and the chooser's own cast-cap counters. Shared by
+    // OnRoomCleared (a genuine end-of-fight), the AutoCombat-disabled early
+    // return (toggling combat off must not leave the round latched to a target
+    // that's no longer being fought), and OnPlayerDeath (the corpse/respawn
+    // room has nothing to do with whatever spell was mid-flight). Report
+    // paradigm-20260824-012300: a stale spellTarget on a monster long gone
+    // left IsSpellAttackOwed permanently true, silently blocking every
+    // automatic heal/cure/bless for the rest of the session.
+    private void ClearAttackSpellCascadeState()
+    {
+        _castingSpellTarget = null;
+        _lastCastAction = null;
+        _alternationRound = 0;
+        _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
+        _lastAttackTallyAt = DateTimeOffset.MinValue;
+        _spellAttackOwed = false;
+        _attackSpellImmuneSpecies.Clear();
+        _spellChooser.ResetForNewRoom();
+    }
+
+    // Player death: the corpse room and whatever comes after (recovery walk,
+    // respawn) share nothing with the fight that just ended. Clears the same
+    // attack-spell cascade state OnRoomCleared does, plus the current target —
+    // OnRoomCleared alone isn't reached here since the room the fight was IN
+    // doesn't necessarily go through its own clear path on a death mid-fight.
+    // Wired to RoomTracker.PlayerDeathObserved in AppServices, alongside the
+    // existing Conditions.ClearAll("death") wire.
+    public void OnPlayerDeath()
+    {
+        _currentTarget = null;
+        ClearAttackSpellCascadeState();
     }
 
     // Pre-move backstab prep — invoked from the walker / loop-runner pre-move
