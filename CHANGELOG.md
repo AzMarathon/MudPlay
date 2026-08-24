@@ -6,6 +6,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - New feature: **boss-timer sync** — share respawn timers between clients over chat. On the Player Workshop → Bosses tab, **Sync Timers…** requests timers from other clients (`@timer sync` on gang / telepath / local); each responder answers with its timers compressed onto a couple of chat lines, and a merge table lets you pick, per boss, whether to keep yours or adopt a responder's — folding is always manual, so a stale timer can't silently overwrite yours
 - Boss-timer sync matches on the boss itself (its monster), never on room pins (which are user-editable), and carries only the identity + raw kill time — everything derived is recomputed locally. Adopting a timer for a boss you don't currently track adds it back to your list (recovering a catalog boss you'd removed). Responding reuses the existing `@timer` permission and the standard reply-on-received-channel / channel-ignore rules
+- Typing `@timer sync` by hand (a telepath or say request, not just the **Sync Timers…** button) now auto-opens the merge window so the responders' replies are collected and shown, instead of arriving with nothing listening
+- bug reports addressed: stock-20260824-001454, stock-20260824-001714
 
 ## 3.24.1
 

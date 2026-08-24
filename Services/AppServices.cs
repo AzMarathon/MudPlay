@@ -213,6 +213,11 @@ public sealed class AppServices
     // subscribe to EntryClassified.
     public Game.ChatRouter Chat { get; }
 
+    // True while a boss-timer-sync merge window is open. Set by BossTimerSyncViewModel
+    // (ctor/Dispose); read by the main window's auto-open so a user-typed `@timer sync`
+    // doesn't spawn a second window when one is already collecting.
+    public bool TimerSyncWindowActive { get; set; }
+
     // App-singleton chat history. Survives profile swap / connect /
     // disconnect; cleared only on app exit or explicit
     // Game.ChatHistoryStore.Clear.

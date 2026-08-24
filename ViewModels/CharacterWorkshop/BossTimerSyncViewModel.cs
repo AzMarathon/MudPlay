@@ -46,8 +46,12 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     [ObservableProperty] private string _status = "Pick a channel and request timers.";
     [ObservableProperty] private bool _requested;
 
+    // preArmedToken is set when the window is auto-opened because the user just sent
+    // `@timer sync` from the terminal (rather than clicking Request here) — we begin
+    // collecting on that token immediately without re-sending the request.
     public BossTimerSyncViewModel(
-        BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send)
+        BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
+        string? preArmedToken = null)
     {
         ArgumentNullException.ThrowIfNull(bosses);
         ArgumentNullException.ThrowIfNull(timers);
@@ -62,11 +66,19 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
 
         _collector = new BossTimerSyncCollector(chat);
         _collector.ResponseReceived += OnResponse;
+        AppServices.Current.TimerSyncWindowActive = true;   // suppress a duplicate auto-open
 
         // Seed the table with our own active timers so there's something to compare
         // against the moment responses arrive.
         foreach ((BossDef def, _) in _timers.ActiveTimers(_realm))
             EnsureRow(def.MonsterNumber, def.Name);
+
+        if (preArmedToken is { Length: > 0 } token)
+        {
+            _collector.Begin(token);
+            Requested = true;
+            Status = "Collecting responses to your @timer sync — pick which timers to fold in…";
+        }
     }
 
     [RelayCommand]
@@ -209,5 +221,6 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _disposed = true;
         _collector.ResponseReceived -= OnResponse;
         _collector.Dispose();
+        AppServices.Current.TimerSyncWindowActive = false;
     }
 }

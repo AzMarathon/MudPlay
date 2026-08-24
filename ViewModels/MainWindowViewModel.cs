@@ -966,6 +966,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Settings → Talk reactive-look — needs the wire-sender to emit
         // look-back / look-on-arrival at other players.
         AppServices.Current.PlayerLook.SetWireSender(engineSend);
+        // A user-typed `@timer sync` (instead of the Bosses-tab "Sync Timers…" button)
+        // should still surface the responses — auto-open the merge window when we see
+        // our own request go out on chat. See OnChatForTimerSync.
+        AppServices.Current.Chat.EntryClassified += OnChatForTimerSync;
         // Poller needs the same wire-sender to send @health round-trip
         // requests and the periodic par poll.
         AppServices.Current.PartyPoller.SetWireSender(engineSend);
@@ -2944,6 +2948,45 @@ public partial class MainWindowViewModel : ObservableObject
         {
             AppServices.Current.Log.Error("Telnet", $"Unexpected send failure: {ex.Message}");
         }
+    }
+
+    // Auto-open the boss-timer merge window when the user sends `@timer sync` by hand
+    // (rather than via the Bosses-tab "Sync Timers…" button) — otherwise nothing is
+    // collecting and the responders' `@timerdata` replies vanish, the "I got a string
+    // back but nothing happened" report. Only our own outbound request should trigger
+    // it: TelepathOutgoing is always ours, and a Local "You say" line has a null speaker
+    // (the self-say form), so an inbound request we're merely responding to is excluded.
+    // A hand-typed gang request ("You gangpath:" — unclassified) isn't caught; that path
+    // uses the button.
+    private void OnChatForTimerSync(MudPlay.Game.ChatLogEntry e)
+    {
+        bool outgoing = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing
+                     || (e.Channel == MudPlay.Game.ChatChannel.Local && e.Speaker is null);
+        if (!outgoing) return;
+
+        const string verb = "@timer sync";
+        string msg = e.Message.TrimStart();
+        if (!msg.StartsWith(verb, StringComparison.OrdinalIgnoreCase)) return;
+
+        // Token is the word after the verb; a bare "@timer sync" (the natural hand-typed
+        // form) gets the "-" the responders reply with when no token is supplied.
+        string rest = msg[verb.Length..].Trim();
+        string token = rest.Length == 0 ? "-" : rest.Split(' ', 2)[0];
+        OpenTimerSyncWindowForToken(token);
+    }
+
+    private async void OpenTimerSyncWindowForToken(string token)
+    {
+        if (AppServices.Current.TimerSyncWindowActive) return;   // already collecting
+        var vm = new ViewModels.CharacterWorkshop.BossTimerSyncViewModel(
+            AppServices.Current.Bosses,
+            AppServices.Current.BossTimers,
+            AppServices.Current.GameData,
+            AppServices.Current.Chat,
+            AppServices.Current.SendTypedInput,
+            preArmedToken: token);
+        await AppServices.Current.Dialogs
+            .OpenWindowAsync<ViewModels.CharacterWorkshop.BossTimerSyncViewModel, bool>(vm);
     }
 
     // Convenience: encode a text line (Latin-1 + CRLF) and send it to the
