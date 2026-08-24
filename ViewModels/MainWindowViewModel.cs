@@ -966,6 +966,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Settings → Talk reactive-look — needs the wire-sender to emit
         // look-back / look-on-arrival at other players.
         AppServices.Current.PlayerLook.SetWireSender(engineSend);
+        // A user-typed `@timer sync` (instead of the Bosses-tab "Sync Timers…" button)
+        // should still surface the responses — auto-open the merge window when we see
+        // our own request go out on chat. See OnChatForTimerSync.
+        AppServices.Current.Chat.EntryClassified += OnChatForTimerSync;
         // Poller needs the same wire-sender to send @health round-trip
         // requests and the periodic par poll.
         AppServices.Current.PartyPoller.SetWireSender(engineSend);
@@ -2944,6 +2948,52 @@ public partial class MainWindowViewModel : ObservableObject
         {
             AppServices.Current.Log.Error("Telnet", $"Unexpected send failure: {ex.Message}");
         }
+    }
+
+    // Auto-open the boss-timer merge window when the user sends `@timer sync` by hand
+    // (rather than via the Bosses-tab "Sync Timers…" button) — otherwise nothing is
+    // collecting and the responders' `@timerdata` replies vanish, the "I got a string
+    // back but nothing happened" report. Only our own outbound request should trigger
+    // it: TelepathOutgoing is always ours, and a Local "You say" line has a null speaker
+    // (the self-say form), so an inbound request we're merely responding to is excluded.
+    // A hand-typed gang request ("You gangpath:" — unclassified) isn't caught; that path
+    // uses the button.
+    private void OnChatForTimerSync(MudPlay.Game.ChatLogEntry e)
+    {
+        // Our own outbound request looks different per channel: a directed telepath is its
+        // own TelepathOutgoing echo, a say echoes as "You say" (null speaker), and a gang
+        // (or say) line on some boards echoes tagged with our character name — so treat a
+        // self-named Gangpath / Local line as outgoing too. An inbound request we'd merely
+        // respond to has someone else's name and is excluded.
+        bool selfSpoke = e.Speaker is null || IsSelfName(e.Speaker);
+        bool outgoing = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing
+                     || ((e.Channel == MudPlay.Game.ChatChannel.Gangpath
+                          || e.Channel == MudPlay.Game.ChatChannel.Local) && selfSpoke);
+        if (!outgoing) return;
+        if (!e.Message.TrimStart().StartsWith("@timer sync", StringComparison.OrdinalIgnoreCase)) return;
+        OpenTimerSyncWindow();
+    }
+
+    private static bool IsSelfName(string speaker)
+    {
+        string? self = AppServices.Current.Party.LocalCharacterName;
+        if (string.IsNullOrEmpty(self)) return false;
+        static string Given(string n) { int s = n.IndexOf(' '); return s >= 0 ? n[..s] : n; }
+        return Given(self).Equals(Given(speaker), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async void OpenTimerSyncWindow()
+    {
+        if (AppServices.Current.TimerSyncWindowActive) return;   // already collecting
+        var vm = new ViewModels.CharacterWorkshop.BossTimerSyncViewModel(
+            AppServices.Current.Bosses,
+            AppServices.Current.BossTimers,
+            AppServices.Current.GameData,
+            AppServices.Current.Chat,
+            AppServices.Current.SendTypedInput,
+            preArmed: true);
+        await AppServices.Current.Dialogs
+            .OpenWindowAsync<ViewModels.CharacterWorkshop.BossTimerSyncViewModel, bool>(vm);
     }
 
     // Convenience: encode a text line (Latin-1 + CRLF) and send it to the

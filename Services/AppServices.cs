@@ -213,6 +213,11 @@ public sealed class AppServices
     // subscribe to EntryClassified.
     public Game.ChatRouter Chat { get; }
 
+    // True while a boss-timer-sync merge window is open. Set by BossTimerSyncViewModel
+    // (ctor/Dispose); read by the main window's auto-open so a user-typed `@timer sync`
+    // doesn't spawn a second window when one is already collecting.
+    public bool TimerSyncWindowActive { get; set; }
+
     // App-singleton chat history. Survives profile swap / connect /
     // disconnect; cleared only on app exit or explicit
     // Game.ChatHistoryStore.Clear.
@@ -1897,6 +1902,10 @@ public sealed class AppServices
         // its own ChatRouter subscription.
         foreach (string token in Game.Conditions.PartyAilmentTracker.AnnounceTokens)
             RemoteCommands.RegisterIgnored(token);
+        // Boss-timer sync responses ride the chat as `@timerdata …` lines the requester
+        // scrapes itself (BossTimerSyncCollector); reserve the token so the engine
+        // swallows it instead of bouncing "{command invalid}" at each responder.
+        RemoteCommands.RegisterIgnored(Game.Remote.BossTimerQueryHandler.SyncResponseToken);
         // Stat-screen parser ahead of LivesProvider hookup below so
         // both the engine's @suicide hard-block and the @lives reply
         // path share the same "unknown until first stat poll" source.
@@ -2036,6 +2045,11 @@ public sealed class AppServices
         // Stats itself is constructed above where PartyEssentials needs
         // PlayerStats injected.
         RemoteCommands.LivesProvider = () => Stats.HasParsed ? PlayerStats.Lives : (int?)null;
+        // SelfNameProvider — lets the engine recognise its own gangpath echo (public
+        // channels tag the sender's real name, not "You") and skip it instead of bouncing
+        // a denial at the gang. Party.LocalCharacterName tracks PlayerStats.Name, falling
+        // back to the profile name.
+        RemoteCommands.SelfNameProvider = () => Party.LocalCharacterName;
 
         // Persist stat captures onto the loaded profile so the next
         // session starts hydrated with the last-observed values
@@ -3813,7 +3827,7 @@ public sealed class AppServices
 
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
-        BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData);
+        BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
         DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
 
         // Write-side inventory / cash actions — @get-all / @drop-all /

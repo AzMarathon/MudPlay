@@ -16,6 +16,8 @@
         <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Center">
             <Button Content="Manage Bosses…" Margin="0,0,6,6" Command="{Binding ManageBossesCommand}"
                     ToolTip.Tip="Add, edit, or remove bosses in this realm's list."/>
+            <Button Content="Sync Timers…" Margin="0,0,6,6" Command="{Binding SyncTimersCommand}"
+                    ToolTip.Tip="Request boss timers from other clients over chat (@timer sync) and merge chosen ones into your table."/>
             <Button Content="Import…" Margin="0,0,6,6" Command="{Binding ImportCommand}"
                     ToolTip.Tip="Load a shared boss table (JSON). Imported entries overlay yours; anything not in the file is kept."/>
             <Button Content="Export…" Margin="0,0,6,6" Command="{Binding ExportCommand}"

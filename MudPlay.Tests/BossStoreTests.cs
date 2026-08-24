@@ -123,4 +123,20 @@ public sealed class BossStoreTests : IDisposable
         BossDef reroom = seed.Clone(); reroom.Rooms = new() { "1/2" };
         Assert.False(reroom.MatchesSeed(seed));
     }
+
+    // Timer-sync adoption relies on recovering a boss the user REMOVED from their list
+    // (the case they care about) — by MDB number or name — even though Resolve() hides
+    // it. A genuine non-match returns null.
+    [Fact]
+    public void FindInCatalog_RecoversRemovedSeedBoss_ByNumberOrName()
+    {
+        WriteSeed(new BossDef { Name = "shadow lord", MonsterNumber = 412, InStock = true, InParadigm = true });
+        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        s.Save(Array.Empty<BossDef>());          // remove it (Removed tombstone)
+        Assert.Empty(s.Resolve());               // hidden from the normal list
+
+        Assert.Equal("shadow lord", s.FindInCatalog(412, null)?.Name);
+        Assert.Equal("shadow lord", s.FindInCatalog(null, "shadow lord")?.Name);
+        Assert.Null(s.FindInCatalog(999, "nobody"));
+    }
 }

@@ -2,6 +2,19 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.25.0
+
+- New feature: **boss-timer sync** — share respawn timers between clients over chat. On the Player Workshop → Bosses tab, **Sync Timers…** requests timers from other clients (`@timer sync` on gang / telepath / local); each responder answers with its timers compressed onto a couple of chat lines, and a merge table lets you pick, per boss, whether to keep yours or adopt a responder's — folding is always manual, so a stale timer can't silently overwrite yours
+- Boss-timer sync matches on the boss itself (its monster), never on room pins (which are user-editable), and carries only the identity + raw kill time — everything derived is recomputed locally. Adopting a timer for a boss you don't currently track adds it back to your list (recovering a catalog boss you'd removed). Responding reuses the existing `@timer` permission and the standard reply-on-received-channel / channel-ignore rules
+- Typing `@timer sync` by hand (a telepath or say request, not just the **Sync Timers…** button) now auto-opens the merge window so the responders' replies are collected and shown, instead of arriving with nothing listening
+- Boss-timer sync now only prompts you on a real conflict: a timer for a boss you track but have no timer for is adopted automatically, one that matches what you hold is left alone, and the pick buttons appear only when someone's timer disagrees with one you already have (an untracked boss still asks, since adopting it adds it to your list)
+- Boss-timer sync no longer tags requests with a random correlation code — `@timer sync` and the `@timerdata` replies are clean, since each reply already carries the responder's name and the merge table shows one column per responder
+- Remote commands no longer treat your own public-channel echo as an incoming command: a gangpath'd `@timer sync` (or any `@`-command over gang) used to be read back from your own "You gangpath" echo — which the server tags with your character name, not "You" — and bounce a "command invalid or not allowed" reply at the whole gang; the engine now recognizes its own name and skips it
+- Sending `@timer sync` over gang now auto-opens the merge window (previously only telepath / say did), so a gang broadcast collects its responses
+- The sync merge list keeps a buffer below the last row, so a scrolled list always reveals its final entry instead of clipping it
+- Timer-sync now logs the exchange to the program log: which timers were received from whom and over how many response lines, what was done with each set (adopted / already in sync / left for you to resolve), and — on the answering side — which timers were sent (the requester-side log had been silently disabled)
+- bug reports addressed: stock-20260824-001454, stock-20260824-001714, stock-20260824-092811
+
 ## 3.24.1
 
 - Combat: a capped single-target attack spell (e.g. `MaxCasts 1`) no longer fires past its cap against a fast caster — MaxCasts now counts directly off each observed cast-result line (grouping a multi-projectile spell's own damage lines into one cast) instead of RoundDamageTracker's 5s-ish round window, which could bundle more than one real cast into a single tally before it ever closed
