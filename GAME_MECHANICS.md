@@ -2546,6 +2546,15 @@ fresh `@level` lands ≥ 10.)
   feature (Settings → Talk) keys on this exact phrase; if a realm's wording differs it's a
   one-line regex tweak (`DefaultPatterns.PlayerLooksAtYou`). Not present in any imported MDB
   table — it's a live interaction line, so the wording is user-supplied, not data-derived.
+- **[CONFIRMED] 2026-08-24, user** — on a **public / broadcast channel (gangpath, gossip,
+  auction, broadcast)** the server echoes **our own** message back tagged with our **character
+  name**, e.g. `Raijin gangpaths: <msg>` — it does **NOT** use `You`. Only the directed/room
+  channels (say → `You say "…"`, telepath echo → `--- Telepath sent to X ---`) use the `You`
+  form. Consequence for `RemoteCommandManager`: the null-/`You`-speaker self-echo guard can't
+  catch a public-channel self-echo, so it must compare the speaker against our own name
+  (`SelfNameProvider` → `PartyManager.LocalCharacterName`, given-name form) — otherwise our own
+  gangpath'd `@`-command (e.g. `@timer sync`) is read back as an inbound command and bounces a
+  denial at the whole gang.
 
 ## Shop prices — buy & sell *([CONFIRMED] — extracted from the reference client)*
 
