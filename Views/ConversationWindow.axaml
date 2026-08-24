@@ -127,7 +127,7 @@
                  Background="{StaticResource ChromeBgSunkenBrush}"
                  BorderThickness="0"
                  Padding="4"
-                 SelectionMode="Multiple"
+                 SelectionMode="Multiple,Toggle"
                  KeyDown="OnRowsKeyDown">
             <ListBox.Styles>
                 <Style Selector="ListBoxItem">

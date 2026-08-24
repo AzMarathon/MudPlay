@@ -4,7 +4,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.25.2
 
-- Conversation window: press Escape to clear a selected line, so a clicked row no longer stays highlighted until it scrolls off
+- Conversation window: click a highlighted line again to unselect it (or press Escape to clear the whole selection), so a clicked row no longer stays highlighted until it scrolls off
 - Conversation window: copy now works on the whole line — select a line and press Ctrl+C, or right-click → Copy (multi-select copies every highlighted line in order); the message is a plain label again, so right-click Copy no longer copied nothing unless you'd first drag-selected text
 
 ## 3.25.0
