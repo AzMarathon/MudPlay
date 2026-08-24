@@ -31,7 +31,7 @@
 
         <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource ChromeFgMutedBrush}"
-                       Text="Request boss timers from other clients on a channel, then pick which timer to fold into your table per boss. Only the rows you pick are applied — nothing else overwrites your timers."/>
+                       Text="Request boss timers from other clients on a channel. A timer for a boss you're not tracking yet is folded in automatically, and one that matches yours is left alone — only a boss where someone's timer conflicts with one you already hold needs a pick. Nothing overwrites a timer you hold unless you choose it."/>
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <ComboBox ItemsSource="{Binding Channels}" SelectedIndex="{Binding ChannelIndex}" Width="150"/>
                 <TextBox Text="{Binding TelepathTarget}" PlaceholderText="player" Width="120"
@@ -59,7 +59,12 @@
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="{Binding BossName}" FontWeight="SemiBold"
                                                Foreground="{StaticResource ChromeFgBrush}"/>
-                                    <WrapPanel Orientation="Horizontal">
+                                    <!-- A resolved row (auto-adopted / already in sync) just shows its status. -->
+                                    <TextBlock Text="{Binding ResolvedStatus}" FontSize="12"
+                                               IsVisible="{Binding !HasConflict}"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                    <!-- A conflict row shows keep-ours plus a pick per differing responder. -->
+                                    <WrapPanel Orientation="Horizontal" IsVisible="{Binding HasConflict}">
                                         <Button Classes="pick" Classes.selected="{Binding KeepOursSelected}"
                                                 Command="{Binding KeepOursCommand}">
                                             <StackPanel>

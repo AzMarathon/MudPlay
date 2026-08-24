@@ -28,6 +28,10 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     private readonly RealmType _realm;
     private readonly Dictionary<string, BossTimerSyncRowViewModel> _rowsByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _responders = new(StringComparer.OrdinalIgnoreCase);
+    // True once an offer has been written to a timer store — via an auto-merge as it
+    // arrived or an explicit Apply pick — so closing signals the Bosses tab to refresh
+    // even when the user never clicks Apply.
+    private bool _wroteAny;
     private bool _disposed;
 
     public event Action<bool>? CloseRequested;
@@ -68,16 +72,14 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _collector.ResponseReceived += OnResponse;
         AppServices.Current.TimerSyncWindowActive = true;   // suppress a duplicate auto-open
 
-        // Seed the table with our own active timers so there's something to compare
-        // against the moment responses arrive.
-        foreach ((BossDef def, _) in _timers.ActiveTimers(_realm))
-            EnsureRow(def.MonsterNumber, def.Name);
+        // Rows are created on demand as responders offer a timer — a boss nobody sent a
+        // timer for has nothing to merge, so it never clutters the table.
 
         if (preArmedToken is { Length: > 0 } token)
         {
             _collector.Begin(token);
             Requested = true;
-            Status = "Collecting responses to your @timer sync — pick which timers to fold in…";
+            Status = "Collecting responses to your @timer sync — new timers fold in automatically; you only pick on a conflict…";
         }
     }
 
@@ -105,24 +107,66 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     {
         // ChatRouter events are already on the UI thread, but marshal defensively —
         // this touches the observable Rows collection.
-        if (Dispatcher.UIThread.CheckAccess()) Apply(response);
-        else Dispatcher.UIThread.Post(() => Apply(response));
+        if (Dispatcher.UIThread.CheckAccess()) Handle(response);
+        else Dispatcher.UIThread.Post(() => Handle(response));
 
-        void Apply(BossTimerSyncResponse r)
+        void Handle(BossTimerSyncResponse r)
         {
             _responders.Add(r.Sender);
             foreach (BossTimerSyncRecord rec in r.Records)
-            {
-                BossTimerSyncRowViewModel row = EnsureRow(rec.MonsterNumber, rec.Name);
-                // One option per responder per boss; a re-send from the same sender
-                // replaces (drop any prior cell of theirs on this row).
-                foreach (BossTimerSyncCellViewModel dup in
-                    row.Responders.Where(c => string.Equals(c.Responder, r.Sender, StringComparison.OrdinalIgnoreCase)).ToList())
-                    row.Responders.Remove(dup);
-                row.AddResponder(r.Sender, rec.KilledAt, FormatKilled(rec.KilledAt));
-            }
-            Status = $"{_responders.Count} responder(s), {Rows.Count(x => x.Responders.Count > 0)} boss(es) offered.";
+                IngestOffer(EnsureRow(rec.MonsterNumber, rec.Name), r.Sender, rec.KilledAt);
+            UpdateStatus();
         }
+    }
+
+    // Route one responder's timer for a boss row. A timer for a boss we track but hold no
+    // timer for is adopted outright (nothing of ours to overwrite); one that matches what
+    // we hold is a no-op; only a genuine disagreement — or a boss we don't track yet, whose
+    // adoption adds it to our list — becomes a pickable conflict the user resolves manually.
+    private void IngestOffer(BossTimerSyncRowViewModel row, string sender, DateTimeOffset offer)
+    {
+        switch (Classify(row.OursKilledAt, row.Tracked, offer))
+        {
+            case TimerMergeKind.AutoMerge:
+                _timers.MarkKilled(row.MatchName!, offer);   // AutoMerge only fires for tracked bosses
+                _wroteAny = true;
+                row.MarkAutoMerged(sender, offer, FormatKilled(offer));
+                break;
+            case TimerMergeKind.InSync:
+                row.MarkInSync(sender);
+                break;
+            default:
+                row.AddConflict(sender, offer, FormatKilled(offer));
+                break;
+        }
+    }
+
+    internal enum TimerMergeKind { AutoMerge, InSync, Conflict }
+
+    // Untracked bosses are always a manual pick (adopting one adds it back to your list); a
+    // tracked boss with no timer auto-merges; a held timer that agrees with the offer (co-
+    // kills land seconds apart, so within-a-minute counts as the same event) is in sync; a
+    // held timer that disagrees is a conflict.
+    internal static TimerMergeKind Classify(DateTimeOffset? ours, bool tracked, DateTimeOffset offer)
+    {
+        if (!tracked) return TimerMergeKind.Conflict;
+        if (ours is null) return TimerMergeKind.AutoMerge;
+        return SameTimer(ours.Value, offer) ? TimerMergeKind.InSync : TimerMergeKind.Conflict;
+    }
+
+    // A different kill of the same boss is at least a respawn interval (hours) away, so a
+    // one-minute window never conflates two respawns — it only absorbs the few-second
+    // spread between party members who marked the same kill and the codec's second rounding.
+    private const double SameTimerToleranceSeconds = 60;
+    internal static bool SameTimer(DateTimeOffset a, DateTimeOffset b)
+        => Math.Abs((a - b).TotalSeconds) <= SameTimerToleranceSeconds;
+
+    private void UpdateStatus()
+    {
+        int conflicts = Rows.Count(r => r.HasConflict);
+        int adopted = Rows.Count(r => !r.HasConflict && r.WasAutoMerged);
+        int inSync = Rows.Count(r => !r.HasConflict && !r.WasAutoMerged && r.ResolvedStatus.Length > 0);
+        Status = $"{_responders.Count} responder(s): {conflicts} to resolve, {adopted} adopted, {inSync} already in sync.";
     }
 
     // Find our boss for an incoming identity (by MDB number first, else name) so the
@@ -185,8 +229,9 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
                 applied++;
             }
         }
+        if (applied > 0) _wroteAny = true;
         Status = $"Applied {applied} timer update(s).";
-        CloseRequested?.Invoke(applied > 0);
+        CloseRequested?.Invoke(_wroteAny);   // auto-merges may have written even if no picks
     }
 
     // Adopt a timer for a boss not currently in our list: recover its real def from the
@@ -212,8 +257,10 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         return true;
     }
 
+    // Closing without applying still keeps any auto-merges already written, so tell the
+    // Bosses tab to refresh if one landed.
     [RelayCommand]
-    private void Cancel() => CloseRequested?.Invoke(false);
+    private void Cancel() => CloseRequested?.Invoke(_wroteAny);
 
     public void Dispose()
     {
