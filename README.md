@@ -1,15 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.25.0**
-> - New feature: **boss-timer sync** — share respawn timers between clients over chat. On the Player Workshop → Bosses tab, **Sync Timers…** requests timers from other clients (`@timer sync` on gang / telepath / local); each responder answers with its timers compressed onto a couple of chat lines, and a merge table lets you pick, per boss, whether to keep yours or adopt a responder's — folding is always manual, so a stale timer can't silently overwrite yours
-> - Boss-timer sync matches on the boss itself (its monster), never on room pins (which are user-editable), and carries only the identity + raw kill time — everything derived is recomputed locally. Adopting a timer for a boss you don't currently track adds it back to your list. Responding reuses the existing `@timer` permission and the standard reply-on-received-channel / channel-ignore rules
-> - Typing `@timer sync` by hand (a telepath or say request, not just the **Sync Timers…** button) auto-opens the merge window so the responders' replies are collected and shown
-> - Boss-timer sync only prompts on a real conflict — a timer for a boss you track but have no timer for is adopted automatically, a matching one is left alone, and the pick buttons appear only when someone's timer disagrees with one you already hold
-> - Boss-timer sync requests are clean — no random correlation code on `@timer sync` or its replies, since each reply already carries the responder's name
-> - Fixed remote commands treating your own public-channel echo as an inbound command: a gangpath'd `@timer sync` no longer bounces "command invalid or not allowed" at the gang, and now auto-opens the merge window like telepath / say already did
-> - The sync merge list keeps a buffer below the last row so a scrolled list always reveals its final entry
-> - Timer-sync now logs the exchange — which timers came from whom over how many lines, what was done with each (adopted / in sync / to resolve), and which timers were sent when answering
+> **Version 3.25.3**
+> - Conversation window: click a highlighted line again to unselect it (or press Escape to clear the whole selection), so a clicked row no longer stays highlighted until it scrolls off
+> - Conversation window: click-hold and drag across lines to select (or deselect) a run of them at once
+> - Conversation window: copy now works on the whole line — select a line and press Ctrl+C, or right-click → Copy (multi-select copies every highlighted line in order)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

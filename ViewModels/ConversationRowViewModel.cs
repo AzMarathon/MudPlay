@@ -19,6 +19,14 @@ public sealed class ConversationRowViewModel
     public IBrush MessageBrush { get; }
     public bool IsDaySeparator => Entry.Channel == ChatChannel.DaySeparator;
 
+    // Plain-text form of the row for clipboard copy — the line as it reads on screen
+    // (time + who + message), or just the date for a day separator.
+    public string CopyText => IsDaySeparator
+        ? MessageText
+        : string.IsNullOrEmpty(SpeakerText)
+            ? $"{TimestampText}  {MessageText}"
+            : $"{TimestampText}  {SpeakerText} {MessageText}";
+
     public ConversationRowViewModel(ChatLogEntry entry, Func<ChatChannel, IBrush> brushLookup, Func<ChatChannel, IBrush> textBrushLookup)
     {
         Entry = entry;
