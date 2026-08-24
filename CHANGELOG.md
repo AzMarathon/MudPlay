@@ -11,6 +11,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Boss-timer sync no longer tags requests with a random correlation code — `@timer sync` and the `@timerdata` replies are clean, since each reply already carries the responder's name and the merge table shows one column per responder
 - Remote commands no longer treat your own public-channel echo as an incoming command: a gangpath'd `@timer sync` (or any `@`-command over gang) used to be read back from your own "You gangpath" echo — which the server tags with your character name, not "You" — and bounce a "command invalid or not allowed" reply at the whole gang; the engine now recognizes its own name and skips it
 - Sending `@timer sync` over gang now auto-opens the merge window (previously only telepath / say did), so a gang broadcast collects its responses
+- The sync merge list keeps a buffer below the last row, so a scrolled list always reveals its final entry instead of clipping it
 - bug reports addressed: stock-20260824-001454, stock-20260824-001714, stock-20260824-092811
 
 ## 3.24.1

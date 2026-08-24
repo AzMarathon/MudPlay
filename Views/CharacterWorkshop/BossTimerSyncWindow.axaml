@@ -50,7 +50,10 @@
         <Border Background="{StaticResource ChromeBgSunkenBrush}"
                 BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1" CornerRadius="4">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
-                <ItemsControl ItemsSource="{Binding Rows}">
+                <!-- Bottom margin is part of the scroll extent (unlike the ScrollViewer's
+                     own padding, which the viewport can clip), so the last row always
+                     scrolls fully into view instead of sitting flush against the edge. -->
+                <ItemsControl ItemsSource="{Binding Rows}" Margin="0,0,0,12">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:BossTimerSyncRowViewModel">
                             <Border Padding="6" Margin="0,0,0,6"
