@@ -1,6 +1,10 @@
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -150,6 +154,69 @@ public partial class ConversationWindow : Window
         {
             vm.SendInputCommand.Execute(null);
             e.Handled = true;
+        }
+    }
+
+    // Row-list keys: Escape clears the selection (so a clicked line doesn't stay
+    // highlighted until it scrolls off), Ctrl+C copies the selected line(s) as text.
+    private void OnRowsKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            _rowsList?.UnselectAll();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.C && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            CopyRows(SelectedRows());
+            e.Handled = true;
+        }
+    }
+
+    // Right-click → Copy. Copies the whole selection when the clicked row is part of
+    // it, else just the row under the cursor — the intuitive "copy what I clicked".
+    private void OnCopyRow(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { DataContext: ConversationRowViewModel row }) return;
+        List<ConversationRowViewModel> selected = SelectedRows().ToList();
+        CopyRows(selected.Contains(row) ? selected : new List<ConversationRowViewModel> { row });
+    }
+
+    private IEnumerable<ConversationRowViewModel> SelectedRows()
+        => _rowsList?.SelectedItems?.OfType<ConversationRowViewModel>()
+           ?? Enumerable.Empty<ConversationRowViewModel>();
+
+    // Copy rows in on-screen order (SelectedItems is in click order), newest-first
+    // stays as displayed — one line per entry.
+    private void CopyRows(IEnumerable<ConversationRowViewModel> rows)
+    {
+        if (DataContext is not ConversationViewModel vm) return;
+        List<ConversationRowViewModel> ordered = rows.Distinct().OrderBy(vm.Rows.IndexOf).ToList();
+        if (ordered.Count == 0) return;
+        string text = string.Join(System.Environment.NewLine, ordered.Select(r => r.CopyText));
+        if (text.Length == 0) return;
+
+        TopLevel? top = TopLevel.GetTopLevel(this);
+        if (top?.Clipboard is not { } cb)
+        {
+            MudPlay.Services.AppServices.Current.Log.Warn("Conversation",
+                "Clipboard unavailable; nothing copied.");
+            return;
+        }
+        _ = CopyAsync(cb, text);
+    }
+
+    private static async Task CopyAsync(Avalonia.Input.Platform.IClipboard cb, string text)
+    {
+        try
+        {
+            await cb.SetTextAsync(text).ConfigureAwait(false);
+        }
+        catch (System.Exception ex)
+        {
+            MudPlay.Services.AppServices.Current.Log.Warn("Conversation",
+                $"Clipboard copy failed: {ex.Message}");
         }
     }
 }

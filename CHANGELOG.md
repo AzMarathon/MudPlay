@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.25.2
+
+- Conversation window: press Escape to clear a selected line, so a clicked row no longer stays highlighted until it scrolls off
+- Conversation window: copy now works on the whole line — select a line and press Ctrl+C, or right-click → Copy (multi-select copies every highlighted line in order); the message is a plain label again, so right-click Copy no longer copied nothing unless you'd first drag-selected text
+
 ## 3.25.0
 
 - New feature: **boss-timer sync** — share respawn timers between clients over chat. On the Player Workshop → Bosses tab, **Sync Timers…** requests timers from other clients (`@timer sync` on gang / telepath / local); each responder answers with its timers compressed onto a couple of chat lines, and a merge table lets you pick, per boss, whether to keep yours or adopt a responder's — folding is always manual, so a stale timer can't silently overwrite yours
