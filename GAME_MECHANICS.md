@@ -872,6 +872,20 @@ route resolver never counted.
   spawn before you leave (`× (1 + summonChance)`), scaled by laps/hr. A simplification of the true
   per-tick loop, but it lands close and stops the under-report.
 
+### What makes a room-entry spell a movement HAZARD *([CONFIRMED] 2026-08-25, user)*
+
+For the navigation router's purposes, a room's entry spell (`Rooms.Spell`) is a **hazard** — something to
+route around, gate behind a counter item, or warn on — **only when its unprotected effect actually
+damages the player, kills the player, or forces/prevents their movement** (a teleport/transfer out).
+**A monster summon on entry is NOT a hazard**, and neither is an alignment shift (`addevil`/`addgood`),
+a flavor `message`, or quest-item placement — you can still walk in freely, so the router must treat the
+room as ordinary. This holds **even when the room-entry spell carries a `failitem` "counter"**: e.g.
+Blackwood Forest (`Spell 1040`) only summons a monster + shifts alignment + prints a message, so despite
+its `failitem 185` ("manhole"), it is **not** a movement hazard. Real hazards damage (a `Damage`/`EndCast`
+ability, or a TextBlock `cast` of a damaging spell), gate on a survival buff (`checkspell`/`failspell` — the
+desert heat, the drown chain), or `teleport`/`transfer` you out (the sea/ice/pit rooms). *(Encoded in
+`RoomHazardIndex` — see the harm gate in `BuildHazard`.)*
+
 ## Mana regeneration & the ManaRgn breakpoints *([CONFIRMED] 2026-08-08, against the engine's own reference formula)*
 
 Passive (non-resting, non-meditating) mana regen ticks **every 30 s** (6 rounds) and adds a whole-MP amount computed by one integer formula. `CharacterCalculator.CalcManaRegen` implements it; the Level Projection grid already relies on it.
