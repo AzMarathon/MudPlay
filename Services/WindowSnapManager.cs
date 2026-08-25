@@ -156,10 +156,7 @@ public sealed class WindowSnapManager
         // re-snap a member once the main drag has settled.
         if (_clusterOffsets is not null && _clusterOffsets.ContainsKey(id)
             && (DateTime.UtcNow - _lastClusterMoveAt).TotalMilliseconds < DragGapMs)
-        {
-            _log?.Debug("WindowSnap", $"suppress {id} mid-drag @ {newPos}");
-            return;
-        }
+            return;   // (per-step suppress log removed — it flooded out the START capture)
 
         // On a snap, MoveTo already recorded the SNAPPED position as LastPos — don't
         // clobber it with the raw drop position, or the cluster offset later captured
@@ -214,10 +211,7 @@ public sealed class WindowSnapManager
             _log?.Debug("WindowSnap",
                 $"  cluster=[{string.Join(", ", _clusterOffsets.Select(kv => $"{kv.Key}@{kv.Value}"))}]");
         }
-        else
-        {
-            _log?.Debug("WindowSnap", $"drag-move: live={newMainPos} members={_clusterOffsets!.Count}");
-        }
+        // (per-step drag-move log removed — it flooded out the START capture above)
 
         foreach ((string cid, PixelPoint offset) in _clusterOffsets!)
             if (_open.TryGetValue(cid, out Panel? m))
