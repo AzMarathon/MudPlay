@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.25.5**
-> - Combat: disabling AutoCombat mid-fight, or dying, no longer strands the attack-spell cascade latched to a target that's no longer being fought — this was silently blocking all automatic healing, curing, and blessing until the next profile reload
-> - CastingDirector's buff-duration timers are now cleared on death, so a dead-and-gone buff can't suppress a legitimate recast
-> - Auto Bless now re-evaluates immediately when toggled on, matching Auto Heal/Rest
-> - Fixed a prompt-in-chat poisoning bug: another player's own status line quoted inside a chat message could be mistaken for the local character's prompt, corrupting MaxHp and triggering a spurious healing/mana-drain spiral
+> **Version 3.26.0**
+> - New feature: **window snapping** — MudPlay's panel windows (Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats) snap flush to each other's edges as you drag them near, on every platform. Dragging the **main** window carries the whole snapped cluster with it; grab any other panel to pull it off freely. Toggle it in **Settings → General → "Snap windows together"** (on by default)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
