@@ -61,6 +61,11 @@ public sealed class WindowSnapManager
     // Consecutive main-window moves within this gap are treated as one drag; a longer
     // pause ends it, and the next main move recaptures the cluster.
     private const double DragGapMs = 300;
+    // Cluster membership is captured off main's PRE-move rect (flush with the children,
+    // so a fast first drag step can't outrun it), with this generous tolerance so a
+    // title-bar-sized stale-LastPos offset on the main window can't drop a below-main
+    // panel out of the cluster. Non-snapped panels sit far past it.
+    private const int DragAdjacencyTolerance = 40;
     // The snapped cluster captured at the START of the current main drag: member id →
     // its fixed offset from the main window. Held rigid for the whole drag so async WM
     // lag (setting Position is a request the WM fulfils later) can't shake a member
@@ -162,21 +167,22 @@ public sealed class WindowSnapManager
 
         if (newDrag)
         {
-            // Capture from LIVE positions, with offsets relative to main's live position
-            // (== newMainPos). We deliberately avoid main.LastPos as the base: a window
-            // manager can settle a window's frame a title-bar's height off its mapped
-            // position WITHOUT firing a PositionChanged, leaving the main window's LastPos
-            // stale — which shifted the whole cluster and dropped a below-main panel out
-            // of it (its vertical adjacency broke on the stale bottom edge). At drag start
-            // the children are at rest, so their live positions are exactly where they
-            // sit; main has moved only this first step, so a threshold-sized adjacency
-            // tolerance still catches them, and the offset makes THIS move a no-op —
+            // MEMBERSHIP: measure adjacency against main's PRE-move rect (LastPos — it's
+            // still pre-move here; OnMoved updates it after us) so a fast first drag step
+            // can't leave main sitting past the child before we capture. The generous
+            // DragAdjacencyTolerance also absorbs a title-bar-sized stale-LastPos offset
+            // on main (a WM can settle its frame without a PositionChanged) so a below-
+            // main panel isn't dropped. Children use their LIVE at-rest rect.
+            //
+            // OFFSET: relative to main's LIVE position (newMainPos), never LastPos — so
+            // the stale offset never shifts the cluster. The capturing move is a no-op;
             // members then track main precisely for the rest of the drag.
             Dictionary<string, PixelRect> rects = new(StringComparer.OrdinalIgnoreCase);
-            foreach (Panel p in _open.Values) rects[p.Id] = RectOf(p);
+            foreach (Panel p in _open.Values)
+                rects[p.Id] = p.IsMain ? RectAt(p, p.LastPos) : RectOf(p);
 
             _clusterOffsets = new(StringComparer.OrdinalIgnoreCase);
-            foreach (string cid in ConnectedFrom(MainId, rects, SnapThreshold))
+            foreach (string cid in ConnectedFrom(MainId, rects, DragAdjacencyTolerance))
             {
                 if (string.Equals(cid, MainId, StringComparison.OrdinalIgnoreCase)) continue;
                 if (_open.TryGetValue(cid, out Panel? m))
