@@ -1823,7 +1823,7 @@ public sealed class AppServices
         // DataMigration entries from before AppServices was constructed.
         Panels = new FloatingPanelHost();
         // Window snapping reads its master on/off live from the Global setting.
-        WindowSnap = new WindowSnapManager(() => Settings.Current.SnapWindows);
+        WindowSnap = new WindowSnapManager(() => Settings.Current.SnapWindows, Log);
         WindowLayouts = new WindowLayoutStore(Profile, WindowSnap);
         SplitterLayouts = new SplitterLayoutStore(Profile);
         SessionStatsLayout = new SessionStatsLayoutStore(Profile);

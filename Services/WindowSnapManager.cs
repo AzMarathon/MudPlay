@@ -43,6 +43,7 @@ public sealed class WindowSnapManager
     };
 
     private readonly Func<bool> _enabled;
+    private readonly LogService? _log;
 
     private sealed class Panel
     {
@@ -73,11 +74,17 @@ public sealed class WindowSnapManager
     private Dictionary<string, PixelPoint>? _clusterOffsets;
     private DateTime _lastClusterMoveAt;
 
-    public WindowSnapManager(Func<bool> enabled)
+    public WindowSnapManager(Func<bool> enabled, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(enabled);
         _enabled = enabled;
+        _log = log;
     }
+
+    // TEMP diagnostic — remove once snapping is confirmed working. One-line geometry
+    // dump for a panel: live position, tracked (intended) position, and physical rect.
+    private static string Geo(Panel p)
+        => $"live={p.Window.Position} last={p.LastPos} frame={p.Window.FrameSize} rect={RectOf(p)}";
 
     // Called by WindowLayoutStore.AttachWindow for every window; non-participants
     // are ignored. Registration is per Window instance (toggle windows re-open as a
@@ -89,13 +96,15 @@ public sealed class WindowSnapManager
 
         window.Opened += (_, _) =>
         {
-            _open[id] = new Panel
+            Panel panel = new()
             {
                 Window = window,
                 Id = id,
                 IsMain = string.Equals(id, MainId, StringComparison.OrdinalIgnoreCase),
                 LastPos = window.Position,
             };
+            _open[id] = panel;
+            _log?.Debug("WindowSnap", $"track {id} (main={panel.IsMain}) {Geo(panel)}");
         };
         window.Closed += (_, _) =>
         {
@@ -122,6 +131,7 @@ public sealed class WindowSnapManager
         // restore that called ExpectMove) — record and swallow.
         if (p.Expected is { } exp && IsClose(exp, newPos))
         {
+            _log?.Debug("WindowSnap", $"swallow {id} own-move exp={exp} got={newPos}");
             p.Expected = null;
             p.LastPos = newPos;
             return;
@@ -135,7 +145,7 @@ public sealed class WindowSnapManager
 
         if (p.IsMain)
         {
-            DragCluster(newPos);
+            DragCluster(newPos, p.LastPos);
             p.LastPos = newPos;
             return;
         }
@@ -146,7 +156,10 @@ public sealed class WindowSnapManager
         // re-snap a member once the main drag has settled.
         if (_clusterOffsets is not null && _clusterOffsets.ContainsKey(id)
             && (DateTime.UtcNow - _lastClusterMoveAt).TotalMilliseconds < DragGapMs)
+        {
+            _log?.Debug("WindowSnap", $"suppress {id} mid-drag @ {newPos}");
             return;
+        }
 
         // On a snap, MoveTo already recorded the SNAPPED position as LastPos — don't
         // clobber it with the raw drop position, or the cluster offset later captured
@@ -158,7 +171,7 @@ public sealed class WindowSnapManager
     // and each member's offset from main; then hold every member at that fixed offset
     // for the rest of the drag. Offsets (not per-step adjacency) keep the cluster rigid
     // even while the WM lags behind our position requests.
-    private void DragCluster(PixelPoint newMainPos)
+    private void DragCluster(PixelPoint newMainPos, PixelPoint mainLastPos)
     {
         DateTime now = DateTime.UtcNow;
         bool newDrag = _clusterOffsets is null
@@ -181,6 +194,16 @@ public sealed class WindowSnapManager
             foreach (Panel p in _open.Values)
                 rects[p.Id] = p.IsMain ? RectAt(p, p.LastPos) : RectOf(p);
 
+            _log?.Debug("WindowSnap",
+                $"drag-START: main last={mainLastPos} live={newMainPos} delta={newMainPos - mainLastPos}");
+            PixelRect mainRect = rects[MainId];
+            foreach ((string pid, PixelRect r) in rects)
+            {
+                if (string.Equals(pid, MainId, StringComparison.OrdinalIgnoreCase)) continue;
+                _log?.Debug("WindowSnap",
+                    $"  cand {pid}: rect={r} adjMain={Adjacent(mainRect, r, DragAdjacencyTolerance)}");
+            }
+
             _clusterOffsets = new(StringComparer.OrdinalIgnoreCase);
             foreach (string cid in ConnectedFrom(MainId, rects, DragAdjacencyTolerance))
             {
@@ -188,6 +211,12 @@ public sealed class WindowSnapManager
                 if (_open.TryGetValue(cid, out Panel? m))
                     _clusterOffsets[cid] = m.Window.Position - newMainPos;
             }
+            _log?.Debug("WindowSnap",
+                $"  cluster=[{string.Join(", ", _clusterOffsets.Select(kv => $"{kv.Key}@{kv.Value}"))}]");
+        }
+        else
+        {
+            _log?.Debug("WindowSnap", $"drag-move: live={newMainPos} members={_clusterOffsets!.Count}");
         }
 
         foreach ((string cid, PixelPoint offset) in _clusterOffsets!)
@@ -209,11 +238,17 @@ public sealed class WindowSnapManager
         }
 
         (int axis, int shift) = ComputeSnap(cr, others, SnapThreshold);
-        if (axis == 0) return false;
+        if (axis == 0)
+        {
+            _log?.Debug("WindowSnap", $"drag {c.Id} raw={newPos} rect={cr} → no-snap");
+            return false;
+        }
 
         PixelPoint snapped = axis == 1
             ? new PixelPoint(newPos.X + shift, newPos.Y)
             : new PixelPoint(newPos.X, newPos.Y + shift);
+        _log?.Debug("WindowSnap",
+            $"drag {c.Id} raw={newPos} → snap axis{axis} shift{shift} = {snapped}");
         if (snapped == newPos) return false;
         MoveTo(c, snapped);
         return true;
