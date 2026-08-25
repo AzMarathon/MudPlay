@@ -129,9 +129,10 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private void RefreshStatus()
     {
         IsRunning = _sweep.Phase != GhSweepManager.SweepPhase.Idle;
+        bool inventoryOnly = _sweep.Mode == GhSweepManager.SweepMode.InventoryOnly;
         PhaseText = _sweep.Phase switch
         {
-            GhSweepManager.SweepPhase.Reconning => "Scanning rooms…",
+            GhSweepManager.SweepPhase.Reconning => inventoryOnly ? "Inventorying rooms…" : "Scanning rooms…",
             GhSweepManager.SweepPhase.Sorting => $"Sorting ({_sweep.MovedSoFar.Count} moved so far)",
             GhSweepManager.SweepPhase.FinalRecon => "Final scan…",
             _ => "Idle",
@@ -156,7 +157,19 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private void Start()
     {
         RoomContentsTitle = null;
-        if (_sweep.Start()) { StartHint = null; CompletionSummary = null; }
+        if (_sweep.Start(GhSweepManager.SweepMode.Sort)) { StartHint = null; CompletionSummary = null; }
+        else StartHint = _sweep.LastStartError;
+    }
+
+    // Walks the same labeled circuit as Start (recon + hidden-item search per
+    // the same settings) but never dispatches a get/drop — for a player who
+    // wants @roomba's item-location log kept fresh without Roomba touching
+    // (and potentially undoing) their own manual gang-house organization.
+    [RelayCommand]
+    private void StartInventory()
+    {
+        RoomContentsTitle = null;
+        if (_sweep.Start(GhSweepManager.SweepMode.InventoryOnly)) { StartHint = null; CompletionSummary = null; }
         else StartHint = _sweep.LastStartError;
     }
 
@@ -164,9 +177,10 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     // so setting the observables directly is safe.
     private void OnSweepCompleted(GhSweepReport report)
     {
-        CompletionSummary =
-            $"Sweep complete — {report.Moved.Count} move(s), {report.LeftInPlace.Count} left in place, "
-            + $"{report.Stranded.Count} still carried.";
+        CompletionSummary = _sweep.Mode == GhSweepManager.SweepMode.InventoryOnly
+            ? $"Inventory scan complete — {_sweep.CircuitRoomCount} room(s) logged, nothing moved."
+            : $"Sweep complete — {report.Moved.Count} move(s), {report.LeftInPlace.Count} left in place, "
+              + $"{report.Stranded.Count} still carried.";
         RefreshRoomStatuses();
     }
 

@@ -8,6 +8,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Roomba: every room floor Roomba observes during a scan now feeds a persistent BBS-tier item-location log backing `@roomba`, independent of the current sweep's own state
 - Roomba: room labels, hidden-search settings, and the new item-location log all moved from per-character to **per-BBS** storage — every character on a BBS now shares one gang house instead of re-labeling rooms per character; existing per-character labels are migrated automatically the first time each BBS loads post-upgrade
 - Roomba: new `@roomba sync` replies with a client's whole item-location log, compressed, for another MudPlay user to merge straight in — no import/export files, same idea as `@timer sync` but without a merge-review window (a sighting has no meaningful "conflict"; newest wins silently)
+- Roomba: new **Start Inventory** mode — walks the same labeled circuit and feeds the item-location log exactly like a sweep's scan, but never dispatches a single get/drop; for logging a gang house without disturbing an existing manual sort
 
 ## 3.27.7
 

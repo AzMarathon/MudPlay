@@ -86,6 +86,16 @@ public sealed class GhSweepManager : IDisposable
 
     public enum SweepPhase { Idle, Reconning, Sorting, FinalRecon }
 
+    // Sort (the original, default behavior) walks the circuit, then moves
+    // misplaced items into their labeled rooms. InventoryOnly walks the exact
+    // same circuit — observing, and searching per SearchForHidden/
+    // SearchesPerRoom exactly like Sort's recon does — but never builds a sort
+    // queue or dispatches a single get/drop; it finishes the moment its one
+    // recon lap completes. For a player who wants @roomba's item-location log
+    // kept fresh without Roomba touching (and potentially undoing) their own
+    // manual organization.
+    public enum SweepMode { Sort, InventoryOnly }
+
     private sealed class PendingSortMove
     {
         public required RoomKey From { get; init; }
@@ -184,6 +194,11 @@ public sealed class GhSweepManager : IDisposable
 
     public SweepPhase Phase { get; private set; } = SweepPhase.Idle;
     public int CompletedReconLaps { get; private set; }
+
+    // Which mode the current (or most recently finished) run is/was — set
+    // fresh on every Start(). Idle default is Sort so a bug report captured
+    // before any run ever started still prints something meaningful.
+    public SweepMode Mode { get; private set; } = SweepMode.Sort;
 
     // Why the last Start() attempt refused (null when the last Start succeeded or
     // none has run). The GH Management tab shows this so a refused Start isn't a
@@ -304,11 +319,14 @@ public sealed class GhSweepManager : IDisposable
         _wireSender = sender;
     }
 
-    // Start a sweep over the current label set. Refuses when fewer than two
-    // rooms are labeled (LoopRunner's own ≥2-waypoint cycle requirement),
-    // another sweep is already running, or another movement engine (walk /
-    // loop / auto-lair) is active.
-    public bool Start()
+    // Start a sweep over the current label set. mode defaults to Sort (the
+    // original behavior); pass InventoryOnly to walk the exact same circuit
+    // and feed the item-location log without ever dispatching a get/drop —
+    // see SweepMode. Refuses when fewer than two rooms are labeled
+    // (LoopRunner's own ≥2-waypoint cycle requirement), another sweep is
+    // already running, or another movement engine (walk / loop / auto-lair)
+    // is active.
+    public bool Start(SweepMode mode = SweepMode.Sort)
     {
         LastStartError = null;
         if (Phase != SweepPhase.Idle)
@@ -331,6 +349,7 @@ public sealed class GhSweepManager : IDisposable
             return false;
         }
 
+        Mode = mode;
         _observedByRoom.Clear();
         _visibleByRoom.Clear();
         _hiddenByRoom.Clear();
@@ -367,7 +386,7 @@ public sealed class GhSweepManager : IDisposable
 
         Phase = SweepPhase.Reconning;
         _log?.Info(LogCategory,
-            $"sweep started: {_labels.Labels.Count} labeled destination(s), "
+            $"sweep started ({Mode}): {_labels.Labels.Count} labeled destination(s), "
             + $"{_sweepRooms.Count} circuit room(s), recon phase begins");
         PhaseChanged?.Invoke();
         return true;
@@ -420,10 +439,20 @@ public sealed class GhSweepManager : IDisposable
                 {
                     // One recon lap is enough — walk the circuit once, observe every
                     // room, then sort. (No configurable lap count: a second lap of the
-                    // same rooms tells us nothing new.)
+                    // same rooms tells us nothing new — Sort mode never touches anything
+                    // between laps that recon itself didn't already see.)
                     CompletedReconLaps = _loopRunner.CompletedLaps;
                     _log?.Info(LogCategory, $"recon lap {CompletedReconLaps} complete");
                     PhaseChanged?.Invoke();
+                    if (Mode == SweepMode.InventoryOnly)
+                    {
+                        // Nothing to sort, nothing to re-verify — the recon lap just
+                        // taken IS the freshest state, so finish immediately rather
+                        // than walking a redundant final-recon lap.
+                        _log?.Info(LogCategory, "inventory-only recon complete; finishing (nothing sorted)");
+                        FinishSweep();
+                        return;
+                    }
                     BeginSortPhase();
                     return;
                 }
@@ -1312,14 +1341,16 @@ public sealed class GhSweepManager : IDisposable
 
     private void FinishSweep()
     {
-        // Normal completion reaches this only after every PendingSortMove is
-        // Delivered. Stop() and an external LoopRunner failure build their own
-        // abnormal report, including anything still carried as Stranded.
+        // Normal Sort-mode completion reaches this only after every
+        // PendingSortMove is Delivered; InventoryOnly reaches it straight off
+        // its one recon lap, having never queued a move. Stop() and an
+        // external LoopRunner failure build their own abnormal report,
+        // including anything still carried as Stranded.
         GhSweepReport report = BuildFinalReport();
         _log?.Info(LogCategory,
-            $"sweep complete: moved={_movedSoFar.Count} left-in-place={_leftInPlace.Count}"
+            $"{Mode} complete: moved={_movedSoFar.Count} left-in-place={_leftInPlace.Count}"
             + (_stranded.Count > 0 ? $" stranded={_stranded.Count}" : string.Empty));
-        ResetToIdle("roomba sweep complete");
+        ResetToIdle(Mode == SweepMode.InventoryOnly ? "roomba inventory scan complete" : "roomba sweep complete");
         SweepCompleted?.Invoke(report);
     }
 

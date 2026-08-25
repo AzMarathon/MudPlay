@@ -548,4 +548,122 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             handler(new LineExtractor.EmittedLine(text, Array.Empty<CellAttributes>(),
                 DateTimeOffset.UtcNow, IsPromptLine: false));
     }
+
+    // InventoryOnly walks the same recon circuit and feeds the item-location
+    // log exactly like Sort does, but must never dispatch a single get/drop
+    // and must finish the moment its one recon lap completes — no Sorting
+    // phase, no final-recon lap.
+    [Fact]
+    public void InventoryOnlyMode_ObservesAndLogs_ButNeverMovesAnything()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "A", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "1/3", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 2, "Name": "B", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "1/3", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 3, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "1/2", "S": "1/1", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), """
+            [
+              { "Number": 1, "Name": "war hammer", "ItemType": 1, "Encum": 10 },
+              { "Number": 2, "Name": "chain shirt", "ItemType": 0, "Encum": 1 }
+            ]
+            """);
+
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        ItemNameStore names = new(cache);
+        names.OnActiveSetChanged("alpha");
+
+        ProfileService profile = new();
+        profile.LoadBlank();
+        GhRoomLabelStore labels = new(profile);
+        labels.OnBbsPinApplied(_scratchBbs);
+        // Both rooms labeled as sortable destinations — proves InventoryOnly
+        // still refuses to act on them, not just that it has nowhere to sort to.
+        labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
+        labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
+
+        GhItemLocationStore locations = new(names);
+        locations.OnBbsPinApplied(_scratchBbs);
+
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        GroundItemTracker ground = new(router, new CurrencyNaming(),
+            entry => names.FindByName(entry) is not null);
+        InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
+        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
+        inventory.AttachLineExtractor(inventoryLines);
+        FeedInventory(inventoryLines, "nothing");
+
+        RoomTracker tracker = new(graph);
+        MovementCoordinator coordinator = new();
+        GhSweepManager? sweep = null;
+        tracker.StateChanged += transition =>
+        {
+            if (transition.NewRoom is null) return;
+            if (transition.PreviousRoom is { } previous
+                && previous.Key.Equals(transition.NewRoom.Key)) return;
+            ground.OnRoomChanged();
+            sweep?.OnRoomChanged(transition);
+        };
+
+        BfsMapper bfs = new(graph);
+        LoopRunner runner = new(tracker, coordinator, graph: graph, bfs: bfs,
+            postToUi: action => action());
+        sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
+            router, coordinator, isOtherEngineBusy: () => false,
+            isParadigm: () => true, inventory: inventory, itemLocations: locations);
+
+        var sent = new List<string>();
+        sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
+        runner.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
+
+        int completions = 0;
+        sweep.SweepCompleted += _ => completions++;
+
+        tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(sweep.Start(GhSweepManager.SweepMode.InventoryOnly));
+        Assert.Equal(GhSweepManager.SweepMode.InventoryOnly, sweep.Mode);
+
+        // Walk the full recon lap — a war hammer visible at A, a chain shirt at B.
+        FeedRouter(router, "You notice a war hammer here.");
+        tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
+            DateTimeOffset.UtcNow.AddSeconds(1));
+        FeedRouter(router, "You notice a chain shirt here.");
+        tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
+            DateTimeOffset.UtcNow.AddSeconds(2));
+        tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
+            DateTimeOffset.UtcNow.AddSeconds(3));
+        tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
+            DateTimeOffset.UtcNow.AddSeconds(4));   // completes the lap
+
+        // Finished on its own — no Sorting, no final recon — the moment recon closed.
+        Assert.Equal(GhSweepManager.SweepPhase.Idle, sweep.Phase);
+        Assert.Equal(1, completions);
+        Assert.Empty(sweep.MovedSoFar);
+        Assert.Empty(sweep.LeftInPlace);
+        Assert.Empty(sweep.Stranded);
+        Assert.DoesNotContain(sent, s => s.StartsWith("get ", StringComparison.Ordinal));
+        Assert.DoesNotContain(sent, s => s.StartsWith("drop ", StringComparison.Ordinal));
+
+        // But the item-location log IS fed, same as a Sort-mode recon would.
+        // The staged arrival survey attaches to the room being entered when the
+        // transition confirms — "war hammer" was fed before the C transition, so
+        // it lands on C (room 3); "chain shirt" before B, so it lands on B (room 2).
+        Assert.True(locations.TryFindLastSeen("war hammer", out GhItemSighting hammer));
+        Assert.Equal(3, hammer.Room);
+        Assert.True(locations.TryFindLastSeen("chain shirt", out GhItemSighting shirt));
+        Assert.Equal(2, shirt.Room);
+
+        sweep.Dispose();
+        ground.Dispose();
+        inventory.Dispose();
+    }
 }
