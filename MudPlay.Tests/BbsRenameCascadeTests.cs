@@ -84,6 +84,25 @@ public sealed class BbsRenameCascadeTests : IDisposable
     }
 
     [Fact]
+    public void Get_ReconcilesStaleName_ToFolder()
+    {
+        // A folder hand-duplicated to make a same-host sibling realm keeps the
+        // ORIGINAL Name inside its bbs.json. Get must heal that Name to the folder
+        // (the source of truth), or everything keyed off BbsProfile.Name — the
+        // BBS-scoped resource folders (blacklist/leaderboard) AND the per-BBS
+        // logon-step lookup — resolves to the wrong BBS: the "picked PVE, logged into
+        // PVP" bug (report paradigm-20260825-102259).
+        JsonStore.Save(AppPaths.BbsProfileFile(_newBbs),
+            new BbsProfile { Name = _oldBbs, Host = "shared.example", Port = 23 });
+
+        BbsProfile? loaded = new BbsProfileStore().Get(_newBbs);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(_newBbs, loaded!.Name);            // reconciled to the folder
+        Assert.Equal("shared.example", loaded.Host);    // other fields intact
+    }
+
+    [Fact]
     public void Rename_Throws_WhenDestinationExists()
     {
         SeedBbs(_oldBbs);

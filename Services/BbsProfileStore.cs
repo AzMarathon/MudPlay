@@ -16,7 +16,23 @@ public sealed class BbsProfileStore
     public BbsProfile? Get(string bbsName)
     {
         if (string.IsNullOrWhiteSpace(bbsName)) return null;
-        return JsonStore.Load<BbsProfile>(AppPaths.BbsProfileFile(bbsName));
+        BbsProfile? profile = JsonStore.Load<BbsProfile>(AppPaths.BbsProfileFile(bbsName));
+
+        // The FOLDER is the source of truth for a BBS's identity (ProfileService:
+        // "folder location is the source of truth"), and every caller passes the
+        // folder name here. Reconcile the loaded Name to it: a bbs.json whose Name
+        // drifted from its folder — a folder duplicated to make a same-host sibling
+        // realm, its Name left pointing at the original — otherwise mis-keys
+        // everything read off BbsProfile.Name. Both the BBS-scoped resource folders
+        // (blacklist, leaderboard) AND the per-BBS logon-step lookup key on it, so a
+        // "Paradigm PVE" profile whose json still said "Paradigm PVP" ran the PVP
+        // realm-select step and logged into the wrong realm (report
+        // paradigm-20260825-102259). Rename already keeps them in sync; a hand-copied
+        // folder doesn't, so heal it here on load.
+        if (profile is not null && !string.Equals(profile.Name, bbsName, StringComparison.Ordinal))
+            profile.Name = bbsName;
+
+        return profile;
     }
 
     // Persist a BBS profile to Data/BBS/{Name}/bbs.json, creating the folder on
