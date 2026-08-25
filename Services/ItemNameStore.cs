@@ -171,8 +171,9 @@ public sealed class ItemNameStore
     // Lower-case, trim, and strip a leading article / count token so a loose
     // room phrasing collapses to the canonical item name shape. Shared by the
     // reverse-index build and the FindByName lookup so both sides agree on
-    // the key.
-    private static string Normalize(string raw)
+    // the key — and by DeathRecoveryManager's stock ground-get matching, which
+    // compares a deathpile name against a "You notice"/"You took" phrasing.
+    internal static string Normalize(string raw)
     {
         string s = raw.Trim().ToLowerInvariant();
 

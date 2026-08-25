@@ -184,7 +184,10 @@ public sealed class GroundItemTracker : IDisposable
     // record is never cash. Currency isn't in the item table, so a genuine coin
     // pile won't resolve and still reads as cash. Unwired (tests without game
     // data) the heuristic stands alone and the "2 gold key" ambiguity resurfaces.
-    private bool IsCashEntry(string entry)
+    // Public so death recovery can tell whether a captured pile entry is currency
+    // (coins are recovered as cash, not `get`-ed as items — a pile left holding only
+    // coins still counts as fully recovered).
+    public bool IsCashEntry(string entry)
     {
         string[] words = entry.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length < 2) return false;

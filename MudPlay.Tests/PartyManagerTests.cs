@@ -151,20 +151,41 @@ public sealed class PartyManagerTests
     }
 
     [Fact]
-    public void YouNoLongerFollowing_RemovesLeader_FromFollowerView()
+    public void YouNoLongerFollowing_DissolvesFollowerPartyToSolo()
     {
-        // Follower scenario — we joined MudPlay's party, then MudPlay
-        // uninvites us. The follow-up line on our terminal is "You are
-        // no longer following MudPlay." which evicts MudPlay from the
-        // roster.
+        // Follower scenario — we joined MudPlay's party, then we leave it: the
+        // leader uninvited us, we unfollowed, or we died. "You are no longer
+        // following MudPlay." means we're solo now, so the WHOLE roster clears — not
+        // just the leader. Dropping only MudPlay leaves self in Members, IsInParty
+        // stays true, and @join/@invite keep replying "I'm following someone;
+        // denied." (reported: died via suicide, client still thought it followed).
         var (router, p) = Setup(localCharacterName: "Raijin");
         router.Dispatch(Line("You are now following MudPlay."));
         Assert.Equal(2, p.State.Members.Count);   // MudPlay leader + Raijin self
 
         router.Dispatch(Line("You are no longer following MudPlay."));
 
-        Assert.DoesNotContain(p.State.Members,
-            m => m.Name.Equals("MudPlay", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(p.State.Members);
+        Assert.False(p.State.IsInParty);
+        Assert.Null(p.State.LeaderName);
+        Assert.False(p.State.SelfIsLeader);
+    }
+
+    [Fact]
+    public void SelfDropped_WhileFollowing_ClearsToSolo()
+    {
+        // Instant death (`suicide`) skips the HP<=0 drop, so PlayerDeathObserved →
+        // NoteSelfDropped is the path that clears our party — including for a leader,
+        // who never sees a "no longer following" line.
+        var (router, p) = Setup(localCharacterName: "Raijin");
+        router.Dispatch(Line("You are now following MudPlay."));
+        Assert.True(p.State.IsInParty);
+
+        p.NoteSelfDropped();
+
+        Assert.Empty(p.State.Members);
+        Assert.False(p.State.IsInParty);
+        Assert.Null(p.State.LeaderName);
     }
 
     [Fact]

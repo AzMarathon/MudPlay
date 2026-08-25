@@ -541,15 +541,18 @@ public sealed partial class PartyManager : IDisposable
         RemoveMember(name);
     }
 
-    // "You are no longer following X." — fires on the FOLLOWER's side when the
-    // leader uninvites us, or when we issue our own `unfollow`. Drop X from the
-    // roster.
+    // "You are no longer following X." — the FOLLOWER's view of leaving the party
+    // outright: the leader uninvited us, we `unfollow`ed, or we died (death removes
+    // a follower from the party — including an instant `suicide` that skips the
+    // HP<=0 drop). We're solo now, so wipe the WHOLE roster, not just X: dropping
+    // only X leaves self in Members, so IsInParty stays true and @join/@invite keep
+    // replying "I'm following someone; denied." (reported: died via suicide, the
+    // client still thought it was following).
     private void OnYouNoLongerFollowing(MatchResult result)
     {
         if (result.Groups.Count == 0) return;
-        string name = result.Groups[0];
-        if (string.IsNullOrEmpty(name)) return;
-        RemoveMember(name);
+        if (string.IsNullOrEmpty(result.Groups[0])) return;
+        LeavePartySolo();
     }
 
     // "You are not in a party at the present time." — authoritative dissolution
@@ -616,6 +619,17 @@ public sealed partial class PartyManager : IDisposable
         State.IsInParty    = false;
     }
 
+    // Flush the par-block machine and wipe the roster to solo — the shared exit for
+    // any event that drops US from the party (HP<=0 drop, train-stats excursion, a
+    // "no longer following" leave line, self death). The par-state flush stops a
+    // trailing solo par row from re-adding us and flipping IsInParty back on.
+    private void LeavePartySolo()
+    {
+        _parState = ParState.Idle;
+        _parBlockNames.Clear();
+        ResetPartyMembership();
+    }
+
     // Hitting 0 HP drops the local character from the party on the game-engine side
     // (a follower is removed; a leader can't lead while mortally wounded). Being
     // dragged by a party member afterwards is physical relocation, not membership —
@@ -635,9 +649,7 @@ public sealed partial class PartyManager : IDisposable
         {
             return;
         }
-        _parState = ParState.Idle;
-        _parBlockNames.Clear();
-        ResetPartyMembership();
+        LeavePartySolo();
     }
 
     // Entering the train-stats screen is a realm excursion that breaks up our party
@@ -652,9 +664,7 @@ public sealed partial class PartyManager : IDisposable
     public void NoteTrainStatsExcursion()
     {
         if (!State.IsInParty || State.SelfIsLeader) return;   // followers only
-        _parState = ParState.Idle;
-        _parBlockNames.Clear();
-        ResetPartyMembership();
+        LeavePartySolo();
     }
 
     private void OnParHeader(MatchResult _)

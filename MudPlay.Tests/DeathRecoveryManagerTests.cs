@@ -37,6 +37,19 @@ public sealed class DeathRecoveryManagerTests
         public List<string> Sent { get; } = new();
         public InventorySnapshot Snapshot { get; set; } = InventorySnapshot.Empty;
 
+        // Combat-interleave spies: Hostiles drives the hostilesPresent probe,
+        // ResumeArmed counts NoteBetweenRoundCast nudges, GateHeld mirrors the
+        // CorpseRecovery gate, Ac backs the ArmourClass lookup.
+        public bool Hostiles { get; set; }
+        public int ResumeArmed { get; private set; }
+        public bool GateHeld { get; private set; }
+        public Dictionary<string, int> Ac { get; } = new();
+        // Realm probe: true = Paradigm (corpse), false = Stock (loose ground items).
+        // Defaults Paradigm so the existing corpse tests keep their behaviour.
+        public bool Paradigm { get; set; } = true;
+        public void CombatRound() => Recovery.OnRecoveryCombatRound();
+        public void Heartbeat() => Recovery.OnRecoveryHeartbeat();
+
         private const string GraphJson = """
             [
               { "Map Number": 1, "Room Number": 1, "Name": "Town Gates",
@@ -71,6 +84,13 @@ public sealed class DeathRecoveryManagerTests
             Recovery.AttachGroundItems(Ground);
             Recovery.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Recovery.AttachInventorySnapshot(() => Snapshot);
+            Recovery.AttachCombatInterleave(
+                () => Hostiles,
+                () => ResumeArmed++,
+                () => GateHeld = true,
+                () => GateHeld = false,
+                name => Ac.TryGetValue(name, out int v) ? v : 0);
+            Recovery.SetRealmProbe(() => Paradigm);
 
             Profile.LoadBlank();
             Profile.Current!.Name = characterName;
@@ -272,6 +292,276 @@ public sealed class DeathRecoveryManagerTests
         Assert.Contains("look", h.Sent);                   // re-look to re-render the survey
         h.FeedSurvey("corpse of Ermias");                  // the look's survey
         Assert.Contains("recover corpse Ermias", h.Sent);
+    }
+
+    [Fact]
+    public void OrderForReequip_WeaponFirst_ThenArmourByHighestAc()
+    {
+        var worn = new List<DeathItem>
+        {
+            new("cloth cap", "Head"),
+            new("plate mail", "Torso"),
+            new("platinum mace", "Weapon Hand"),
+            new("small shield", "Off-Hand"),
+            new("leather boots", "Feet"),
+        };
+        var ac = new Dictionary<string, int>
+        {
+            ["cloth cap"] = 2, ["plate mail"] = 30, ["leather boots"] = 5,
+        };
+        List<DeathItem> ordered =
+            DeathRecoveryManager.OrderForReequip(worn, n => ac.TryGetValue(n, out int v) ? v : 0);
+
+        // Weapon Hand, then Off-Hand, then armour highest-AC-first.
+        Assert.Equal(
+            new[] { "platinum mace", "small shield", "plate mail", "leather boots", "cloth cap" },
+            ordered.Select(i => i.Name).ToArray());
+    }
+
+    [Fact]
+    public void InCombat_Recovery_PacesReequipAcrossRounds_ThenFlushesOnRoomClear()
+    {
+        using GraphHarness h = new();
+        var worn = new[]
+        {
+            new EquippedItem("platinum mace", "Weapon Hand"),
+            new EquippedItem("plate mail", "Torso"),
+            new EquippedItem("steel helm", "Head"),
+            new EquippedItem("steel greaves", "Legs"),
+            new EquippedItem("leather boots", "Feet"),
+            new EquippedItem("silver ring", "Finger"),
+        };
+        Die(h, worn, Array.Empty<string>());
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+        h.Hostiles = true;                                 // a live hostile shares the death room
+
+        h.EnterGates();
+        h.FeedSurvey("corpse of Ermias");
+        Assert.Contains("recover corpse Ermias", h.Sent);  // recovery itself is unchanged (safe)
+
+        h.Sent.Clear();
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        Assert.Empty(h.Sent);                              // NOT fired all at once — paced
+        Assert.True(h.GateHeld);                           // walker held while pieces pend
+
+        h.CombatRound();                                   // first round-gap: 4 pieces + one re-attack
+        Assert.Equal(4, h.Sent.Count);
+        Assert.Equal("eq platinum mace", h.Sent[0]);       // weapon first
+        Assert.Equal(1, h.ResumeArmed);
+        Assert.True(h.GateHeld);                           // 2 still pending
+
+        h.Hostiles = false;                                // mob dies between rounds → room clears
+        h.Heartbeat();                                     // remainder flushes at once
+        Assert.Equal(6, h.Sent.Count);
+        Assert.False(h.GateHeld);                          // gate released
+    }
+
+    [Fact]
+    public void NoHostile_Recovery_EquipsAllAtOnce_WeaponFirst_NoGate()
+    {
+        using GraphHarness h = new();
+        Die(h, new[]
+        {
+            new EquippedItem("plate mail", "Torso"),
+            new EquippedItem("platinum mace", "Weapon Hand"),
+        }, Array.Empty<string>());
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+        // Hostiles defaults false — an empty room recovers exactly as before.
+
+        h.EnterGates();
+        h.FeedSurvey("corpse of Ermias");
+        h.Sent.Clear();
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+
+        Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
+        Assert.False(h.GateHeld);                          // no gate when there's no fight to pace against
+    }
+
+    [Fact]
+    public void Stock_Recovery_GetsFloorItems_NotCorpse_ThenReequipsOnceAllBack()
+    {
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("platinum mace", "Weapon Hand"), new EquippedItem("plate mail", "Torso") },
+            new[] { "torch" });
+        h.Paradigm = false;                 // Stock: items scattered loose on the floor
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+
+        h.EnterGates();
+        h.FeedSurvey("a platinum mace, a plate mail, and a torch");   // our pile on the floor
+
+        // `get` each present pile item (article-insensitive) — NOT `recover corpse`.
+        Assert.Contains("get platinum mace", h.Sent);
+        Assert.Contains("get plate mail", h.Sent);
+        Assert.Contains("get torch", h.Sent);
+        Assert.DoesNotContain(h.Sent, s => s.StartsWith("recover corpse"));
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+
+        h.Sent.Clear();
+        h.Recovery.FeedTestLine("You took a platinum mace.");
+        h.Recovery.FeedTestLine("You took a plate mail.");
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);   // torch still out → not done
+        h.Recovery.FeedTestLine("You took a torch.");
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        // Worn gear re-equipped once the whole pile is back — weapon first (no hostile → all at once).
+        Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
+    }
+
+    [Fact]
+    public void Stock_Recovery_OnlyGetsItemsPresentOnTheFloor_NoGetSpam()
+    {
+        // A worn helm spilled elsewhere — it is NOT in this room's survey, so we must
+        // not `get` it (that was the old spam). We grab what's here and hold Partial.
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
+            Array.Empty<string>());
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+
+        h.EnterGates();
+        h.FeedSurvey("an iron sword");       // only the sword is here; the helm spilled
+
+        Assert.Contains("get iron sword", h.Sent);
+        Assert.DoesNotContain("get steel helm", h.Sent);   // absent → never `get`-spammed
+        h.Recovery.FeedTestLine("You took an iron sword.");
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);   // helm still out → Partial
+    }
+
+    [Fact]
+    public void Stock_Recovery_StackedItem_GetsBareNamePerUnit_NotBatched()
+    {
+        using GraphHarness h = new();
+        Die(h, Array.Empty<EquippedItem>(), new[] { "3 torch" });   // captured as a stack
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+
+        h.EnterGates();
+        h.FeedSurvey("3 torch");
+
+        // Stock has no batched `get N item` — send bare `get torch`, once per unit.
+        Assert.Equal(3, h.Sent.Count(s => s == "get torch"));
+        Assert.DoesNotContain(h.Sent, s => s.Contains("get 3 torch"));
+
+        h.Recovery.FeedTestLine("You took torch.");
+        h.Recovery.FeedTestLine("You took torch.");
+        Assert.NotEqual(DeathRecoveryStatus.Recovered, h.Latest.Status);   // one still out
+        h.Recovery.FeedTestLine("You took torch.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
+    public void Stock_Recovery_YouTookOnPromptRow_StillDecrements()
+    {
+        using GraphHarness h = new();
+        Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+
+        h.EnterGates();
+        h.FeedSurvey("a torch");
+        Assert.Contains("get torch", h.Sent);
+
+        // The get confirmation is redrawn onto the prompt row (IsPromptLine=true) —
+        // recovery must still count it (else the pile never finalises).
+        h.Recovery.FeedTestLine("You took torch.", isPromptLine: true);
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
+    public void Stock_Recovery_OnlyCurrencyLeft_FinalisesRecovered()
+    {
+        // "If currency is the only thing not recovered, treat the death as recovered."
+        // Coins drop from the item survey (they recover as cash, never `get`-ed), so
+        // they linger in UnrecoveredItems — a pile down to pocket change still finalises.
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand") },
+            new[] { "1500 gold" });
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+
+        h.EnterGates();
+        h.FeedSurvey("an iron sword and 1500 gold");   // sword + coins on the floor
+
+        Assert.Contains("get iron sword", h.Sent);
+        Assert.DoesNotContain(h.Sent, s => s.Contains("gold"));   // coins never `get`-ed
+
+        h.Recovery.FeedTestLine("You took an iron sword.");        // sword back; only coins left
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
+    public void Stock_ManualReentry_SpilledItems_DoesNotFireLookSweep()
+    {
+        // Manual walk into a death room (walker idle → not a directed walk-to) must NOT
+        // fire the adjacent-room look sweep, even with Auto-Recover on. Grab the floor,
+        // hold Partial for the spilled piece — no `look <dir>` peeks.
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
+            Array.Empty<string>());
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+
+        h.EnterGates();
+        h.FeedSurvey("an iron sword");         // helm spilled to a neighbour, sword is here
+        h.Recovery.FeedTestLine("You took an iron sword.");
+        h.Sent.Clear();
+        h.Heartbeat();                         // settle the grab (StockSettleTicks = 2)
+        h.Heartbeat();
+
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.DoesNotContain(h.Sent, s => s.StartsWith("look "));   // no sweep on a manual walk-in
+    }
+
+    [Fact]
+    public void RecoverNow_Stock_SpilledItems_FiresLookSweep()
+    {
+        // Recover Now is a deliberate recovery — with a piece spilled to a neighbour it
+        // sweeps the death-room exits, peeking each with `look <dir>`.
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
+            Array.Empty<string>());
+        h.Paradigm = false;
+
+        h.EnterGates();                        // in the death room, Auto-Recover off
+        Assert.True(h.Recovery.RecoverNow(h.Latest));
+        h.FeedSurvey("an iron sword");         // the re-look's survey — helm spilled
+        h.Recovery.FeedTestLine("You took an iron sword.");
+        h.Sent.Clear();
+        h.Heartbeat();                         // settle → sweep the exits
+        h.Heartbeat();
+
+        Assert.Contains(h.Sent, s => s.StartsWith("look "));   // deliberate → look-sweep started
+    }
+
+    [Fact]
+    public void Stock_PassThrough_GrabsSpilloverFromAdjacentRoom()
+    {
+        using GraphHarness h = new();
+        Die(h, new[] { new EquippedItem("steel helm", "Head") }, Array.Empty<string>());
+        // Simulate a pile whose helm overflowed into the room next door.
+        h.Latest.UnrecoveredItems = new List<string> { "steel helm" };
+        h.Latest.Status = DeathRecoveryStatus.Partial;
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+
+        // Walk into North Square (1/3), which borders the death room (1/1).
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.FeedSurvey("a steel helm");                 // our overflow is on this floor
+        Assert.Contains("get steel helm", h.Sent);    // grabbed in-stride, no detour
+
+        h.Recovery.FeedTestLine("You took a steel helm.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Contains("wear steel helm", h.Sent);   // recovered gear re-worn
     }
 
     // North Square (1/3) — the adjacent room, used to leave and re-enter the death room.

@@ -3826,6 +3826,9 @@ public sealed class AppServices
         // Auto-recover reads the floor survey to confirm our corpse is in the room
         // before sending `recover corpse` (and arms off its SurveyUpdated event).
         DeathRecovery.AttachGroundItems(GroundItems);
+        // Realm picks the recovery mechanic: Paradigm packs the pile into a corpse
+        // (`recover corpse`), Stock scatters it loose on the floor (per-item `get`).
+        DeathRecovery.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
 
         // Read-only inventory queries — @wealth / @enc / @have report off the
         // InventoryManager snapshot; @what reports the GroundItems survey. No
@@ -4401,6 +4404,28 @@ public sealed class AppServices
         // through the walker — attached here since the walker is built
         // after the manager.
         DeathRecovery.AttachWalker(Walker);
+        // Combat-aware re-equip interleaving: recovering a corpse in a room with a
+        // live hostile paces the wear/eq burst across combat rounds (each equip
+        // breaks the round, same as a between-round cast) instead of firing it all
+        // at once. Probes the combat engine for hostiles, re-arms the attack via
+        // the same NoteBetweenRoundCast signal a cast uses, holds the walker on the
+        // CorpseRecovery gate while pieces are pending, and reads item ArmourClass
+        // for the highest-AC-first ordering. The tick drives the pacing/flush.
+        DeathRecovery.AttachCombatInterleave(
+            () => CombatTracker.HasEngageableHostiles,
+            () => Combat.NoteBetweenRoundCast(),
+            () => MovementCoordinator.AssertGate(
+                Game.Map.MovementCoordinator.CorpseRecoveryGate, "DeathRecovery",
+                "recovering — pacing re-equip across combat rounds"),
+            () => MovementCoordinator.ClearGate(
+                Game.Map.MovementCoordinator.CorpseRecoveryGate, "DeathRecovery",
+                "re-equip complete"),
+            name => GameData.FindRowByName("Items", name) is { } row
+                    && row.TryGetProperty("ArmourClass", out System.Text.Json.JsonElement ac)
+                    && ac.ValueKind == System.Text.Json.JsonValueKind.Number
+                    && ac.TryGetInt32(out int acv) ? acv : 0);
+        Tick.CombatTickElapsed += DeathRecovery.OnRecoveryCombatRound;
+        Tick.HeartbeatElapsed += DeathRecovery.OnRecoveryHeartbeat;
         // Route walker over trapped exits through the TrapDisarmManager. The
         // walker only enqueues on a RoomExitHint.Trap — it already knows a trap
         // sits on the exit, so it disarms directly (trapKnown: true) instead of
@@ -4912,6 +4937,14 @@ public sealed class AppServices
         // legitimate recast (report paradigm-20260824-012300).
         RoomTracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
         RoomTracker.PlayerDeathObserved += () => CastDirector.ResetBuffTracking();
+
+        // Death drops us from the party server-side — a follower is removed, a
+        // leader's party disbands. PlayerDroppedGate already clears our roster on the
+        // HP<=0 drop, but an INSTANT death (`suicide`) skips mortally-wounded, so that
+        // hook never fires and a leader gets no "no longer following" line either.
+        // Clear on the death event too, so `@join`/`@invite` don't keep replying
+        // "I'm following someone; denied." (report: died via suicide, still following).
+        RoomTracker.PlayerDeathObserved += () => Party.NoteSelfDropped();
 
         // Party-death roster-cleanup bridge. Leader-side: when an active party
         // member dies mid-route it lingers as an [Invited] par slot; we uninvite

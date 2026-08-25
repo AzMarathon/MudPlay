@@ -2,6 +2,16 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.27.0
+
+- New feature: **realm-complete, combat-aware death recovery** — recovery now works on both realms: Paradigm recovers your `corpse` in one command; Stock `get`s your items loose off the floor (previously Stock recovered nothing)
+- Recovering with a hostile present: engage first, grab the pile (which doesn't break combat), then pace the re-equip between rounds — weapon first, then armour heaviest-first — re-attacking after each burst; whatever's left goes on the instant the room clears
+- Stock spillover: a deliberate recovery (Recover Now, or an auto-recover walk-to that ends in the death room) sweeps each exit and walks to collect items that overflowed into adjacent rooms — disarming traps in the way (both directions), skipping an exit whose trap it can't get through; an auto-recover walk that passes through a death room grabs your overflow from the rooms right before and after it in-stride, no detour. Manually stepping into a death room grabs the floor but never fires the sweep
+- Stock: a deathpile down to only currency counts as fully recovered — coins recover as cash (never `get`-ed), so they no longer strand the pile at Partial
+- Bug report: new **Re-equip pieces pending** field (shown mid-recovery)
+- Party: dying — including an instant `suicide` (which skips the mortally-wounded drop) — now clears your party state (a follower is removed, a leader's party disbands), so `@join`/`@invite` stop replying "I'm following someone; denied." after a death
+- bug reports addressed: stock-20260825-101612, stock-20260825-104351, stock-20260825-105851, stock-20260825-112233
+
 ## 3.26.0
 
 - New feature: **window snapping** — MudPlay's panel windows (Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats) snap flush to each other's edges as you drag them near, on every platform. Dragging the **main** window carries the whole snapped cluster with it; grab any other panel to pull it off freely. Toggle it in **Settings → General → "Snap windows together"** (on by default); child windows opened from within a panel don't snap
