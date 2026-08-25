@@ -474,6 +474,75 @@ public sealed class DeathRecoveryManagerTests
     }
 
     [Fact]
+    public void Stock_Recovery_OnlyCurrencyLeft_FinalisesRecovered()
+    {
+        // "If currency is the only thing not recovered, treat the death as recovered."
+        // Coins drop from the item survey (they recover as cash, never `get`-ed), so
+        // they linger in UnrecoveredItems — a pile down to pocket change still finalises.
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand") },
+            new[] { "1500 gold" });
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+
+        h.EnterGates();
+        h.FeedSurvey("an iron sword and 1500 gold");   // sword + coins on the floor
+
+        Assert.Contains("get iron sword", h.Sent);
+        Assert.DoesNotContain(h.Sent, s => s.Contains("gold"));   // coins never `get`-ed
+
+        h.Recovery.FeedTestLine("You took an iron sword.");        // sword back; only coins left
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
+    public void Stock_ManualReentry_SpilledItems_DoesNotFireLookSweep()
+    {
+        // Manual walk into a death room (walker idle → not a directed walk-to) must NOT
+        // fire the adjacent-room look sweep, even with Auto-Recover on. Grab the floor,
+        // hold Partial for the spilled piece — no `look <dir>` peeks.
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
+            Array.Empty<string>());
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+
+        h.EnterGates();
+        h.FeedSurvey("an iron sword");         // helm spilled to a neighbour, sword is here
+        h.Recovery.FeedTestLine("You took an iron sword.");
+        h.Sent.Clear();
+        h.Heartbeat();                         // settle the grab (StockSettleTicks = 2)
+        h.Heartbeat();
+
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.DoesNotContain(h.Sent, s => s.StartsWith("look "));   // no sweep on a manual walk-in
+    }
+
+    [Fact]
+    public void RecoverNow_Stock_SpilledItems_FiresLookSweep()
+    {
+        // Recover Now is a deliberate recovery — with a piece spilled to a neighbour it
+        // sweeps the death-room exits, peeking each with `look <dir>`.
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
+            Array.Empty<string>());
+        h.Paradigm = false;
+
+        h.EnterGates();                        // in the death room, Auto-Recover off
+        Assert.True(h.Recovery.RecoverNow(h.Latest));
+        h.FeedSurvey("an iron sword");         // the re-look's survey — helm spilled
+        h.Recovery.FeedTestLine("You took an iron sword.");
+        h.Sent.Clear();
+        h.Heartbeat();                         // settle → sweep the exits
+        h.Heartbeat();
+
+        Assert.Contains(h.Sent, s => s.StartsWith("look "));   // deliberate → look-sweep started
+    }
+
+    [Fact]
     public void Stock_PassThrough_GrabsSpilloverFromAdjacentRoom()
     {
         using GraphHarness h = new();

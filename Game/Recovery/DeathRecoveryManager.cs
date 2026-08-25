@@ -473,21 +473,25 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         foreach (DeathRecord r in list)
         {
             if (r.Status is DeathRecoveryStatus.Recovered or DeathRecoveryStatus.Missing) continue;
-            if (r.UnrecoveredItems is not { Count: > 0 } || r.Room is not { } rr) continue;
+            // Nothing item-worthy left (empty or only coins) → nothing to grab in passing.
+            if (FullyRecovered(r) || r.Room is not { } rr) continue;
             bool borders = room.Exits.Values.Any(e => e.Target.Map == rr.Map && e.Target.Room == rr.Room);
             if (borders && (best is null || r.RecordNumber > best.RecordNumber)) best = r;
         }
         return best;
     }
 
-    // A recovery is "deliberate" (earns the adjacent-room sweep) when we didn't
-    // just pass through the death room en route somewhere else — i.e. the walker
-    // is idle/standing here, or the death room is its actual destination. A walk
-    // whose destination lies beyond this room is a pass-through.
+    // A recovery is "deliberate" (earns the adjacent-room sweep) ONLY when a
+    // directed walk-to targeted this death room — the walker's destination is this
+    // room. MANUAL movement into a death room (walker idle, destination null) is NOT
+    // deliberate: grab the floor, but don't fire the look-sweep. A walk whose
+    // destination lies beyond this room is a pass-through (also not deliberate).
+    // Recover Now is handled separately (the `force` path), so its walk-back arrival
+    // is deliberate regardless of what the walker reports.
     private bool WalkedToDeathRoom(DeathRecord rec)
     {
-        if (_walker is not { } w || w.Destination is not { } dest) return true;
-        return rec.Room is { } r && dest.Map == r.Map && dest.Room == r.Room;
+        return _walker is { Destination: { } dest }
+            && rec.Room is { } r && dest.Map == r.Map && dest.Room == r.Room;
     }
 
     // Newest un-recovered record whose death room matches key.
@@ -659,6 +663,17 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         ReequipAllWorn(record);   // wear the recovered half now (paced if a hostile's up)
 
+        // Only coins left on the floor — coins recover as cash, not as `get`-ed items,
+        // so the pile is effectively done. Finalise rather than sweeping adjacent rooms
+        // for pocket change.
+        if (FullyRecovered(record))
+        {
+            int total = PileNames(record).Count;
+            _log?.Info(LogCategory, "stock-recover: only currency left in the pile — treating as recovered");
+            FinalizeRecovered(record, $"Recovered the deathpile ({total} item(s)).");
+            return;
+        }
+
         bool hostile = _hostilesPresent?.Invoke() ?? false;
         _log?.Info(LogCategory,
             $"stock-recover: death-room grab settled, {left.Count} item(s) still missing "
@@ -717,7 +732,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // strand the walk-back.
         if (_collectPhase != CollectPhase.None) return;
 
-        if (record.UnrecoveredItems is { Count: 0 })
+        if (FullyRecovered(record))   // empty, or only coins left → done
         {
             _stockRecovering = false;
             int total = PileNames(record).Count;
@@ -733,6 +748,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private bool StartStockSweep(DeathRecord record)
     {
         if (record.UnrecoveredItems is not { Count: > 0 } remaining) return false;
+        // Only sweep for real items — coins recover as cash, never by walking to grab
+        // them, so a pile down to pocket change has nothing to chase into a neighbour.
+        var want = remaining.Where(n => _groundItems is not { } g || !g.IsCashEntry(n)).ToList();
+        if (want.Count == 0) return false;
         if (_roomTracker.State.CurrentRoom is not { } here) return false;
 
         var neighbours = new Dictionary<Direction, RoomKey>();
@@ -742,7 +761,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         _collectHome = here.Key;
         _collectRecord = record;
-        bool started = _sweep.Begin(neighbours, remaining, hits => OnSweepLookComplete(record, hits));
+        bool started = _sweep.Begin(neighbours, want, hits => OnSweepLookComplete(record, hits));
         if (started) _log?.Info(LogCategory, "stock-recover: spillover look-sweep started");
         return started;
     }
@@ -768,8 +787,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
     private void StartNextCollectLeg()
     {
-        // Everything's back (a neighbour completed the pile) or no more to visit → done.
-        if (_collectRecord is not { UnrecoveredItems: { Count: > 0 } } || _collectRoute.Count == 0)
+        // Everything's back (a neighbour completed the pile, or only coins remain) or
+        // no more neighbours to visit → done.
+        if (_collectRecord is not { } cr || FullyRecovered(cr) || _collectRoute.Count == 0)
         {
             CompleteCollect();
             return;
@@ -779,6 +799,16 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _collectTimeout = CollectWalkTimeoutTicks;
         _walker?.WalkTo(_collectTarget);
         _log?.Info(LogCategory, $"stock-sweep: walking to {_collectTarget.Map}/{_collectTarget.Room} to collect");
+    }
+
+    // Nothing left worth recovering as an ITEM — the unrecovered set is empty, or
+    // everything still in it is currency. Coins are recovered as cash (they're
+    // dropped from the ground survey, never `get`-ed like items), so a pile holding
+    // only coins counts as fully recovered rather than lingering at Partial.
+    private bool FullyRecovered(DeathRecord record)
+    {
+        if (record.UnrecoveredItems is not { Count: > 0 } remaining) return true;
+        return _groundItems is { } g && remaining.All(g.IsCashEntry);
     }
 
     // A confirmed room transition arrived while collecting. Arriving at the target
@@ -846,16 +876,17 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _collectRecord = null;
 
         ReequipAllWorn(record);
-        if (record.UnrecoveredItems is not { Count: > 0 } left)
+        if (FullyRecovered(record))   // pile empty, or only coins left
         {
             _log?.Info(LogCategory, "stock-sweep: recovered everything via the adjacent-room sweep");
             FinalizeRecovered(record, "Recovered the deathpile (adjacent-room sweep).");
         }
         else
         {
-            _log?.Info(LogCategory, $"stock-sweep: done — {left.Count} item(s) still missing, holding Partial");
+            int left = record.UnrecoveredItems?.Count ?? 0;
+            _log?.Info(LogCategory, $"stock-sweep: done — {left} item(s) still missing, holding Partial");
             SetStatus(record, DeathRecoveryStatus.Partial,
-                $"Adjacent-room sweep done — {left.Count} item(s) still missing.");
+                $"Adjacent-room sweep done — {left} item(s) still missing.");
             _activeRecovery = null;
         }
     }
@@ -888,7 +919,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private static string FirstToken(string? name) =>
         string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim().Split(' ')[0];
 
-    private static List<string> PileNames(DeathRecord record)
+    private List<string> PileNames(DeathRecord record)
     {
         var names = new List<string>();
         AddPileNames(names, record.EquippedAtDeath);
@@ -899,14 +930,18 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // Expand a captured stack ("15 torch") into per-unit bare names ("torch" ×15).
     // Stock has no batched `get N <item>` — it'd send a malformed `get 15 torch` —
     // so each unit needs its own `get torch` and matches its own "You took torch.".
-    // Worn gear is singular and passes through unchanged.
-    private static void AddPileNames(List<string> into, List<DeathItem>? items)
+    // Worn gear is singular and passes through unchanged. Currency ("1500 gold") is
+    // kept as ONE verbatim entry, never expanded per-coin: coins recover as cash (not
+    // `get`-ed), so the count must survive for IsCashEntry to still read it as cash.
+    private void AddPileNames(List<string> into, List<DeathItem>? items)
     {
         if (items is null) return;
         foreach (DeathItem item in items)
         {
             if (string.IsNullOrWhiteSpace(item.Name)) continue;
-            (int count, string bare) = CountedCommand.SplitLeadingCount(item.Name.Trim());
+            string name = item.Name.Trim();
+            if (_groundItems?.IsCashEntry(name) == true) { into.Add(name); continue; }
+            (int count, string bare) = CountedCommand.SplitLeadingCount(name);
             for (int i = 0; i < Math.Max(1, count); i++) into.Add(bare);
         }
     }
@@ -966,7 +1001,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         if (_spilloverPile is not { } pile || !RemoveRecoveredItem(pile, rawItem)) return;
         _log?.Info(LogCategory, $"stock-recover: grabbed spillover {rawItem} ({pile.UnrecoveredItems?.Count ?? 0} left)");
-        if (pile.UnrecoveredItems is not { Count: 0 }) return;
+        if (!FullyRecovered(pile)) return;   // real items still out — stay Partial
 
         _spilloverRecovering = false;
         _spilloverPile = null;
@@ -1086,12 +1121,20 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             && _activeRecovery is { } pending)
         {
             _stockSweepPending = false;
-            _log?.Info(LogCategory, "stock-recover: death room clear — starting the deferred spillover sweep");
-            if (!StartStockSweep(pending))
-                SetStatus(pending, DeathRecoveryStatus.Partial,
-                    pending.UnrecoveredItems is { Count: > 0 } l
-                        ? $"Recovered what was here — {l.Count} item(s) not in this room."
-                        : "Recovered the deathpile.");
+            if (FullyRecovered(pending))   // only currency left → done, no sweep
+            {
+                _log?.Info(LogCategory, "stock-recover: death room clear — only currency left, treating as recovered");
+                FinalizeRecovered(pending, "Recovered the deathpile.");
+            }
+            else
+            {
+                _log?.Info(LogCategory, "stock-recover: death room clear — starting the deferred spillover sweep");
+                if (!StartStockSweep(pending))
+                    SetStatus(pending, DeathRecoveryStatus.Partial,
+                        pending.UnrecoveredItems is { Count: > 0 } l
+                            ? $"Recovered what was here — {l.Count} item(s) not in this room."
+                            : "Recovered the deathpile.");
+            }
         }
     }
 
