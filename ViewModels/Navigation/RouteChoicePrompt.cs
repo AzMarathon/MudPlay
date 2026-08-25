@@ -269,18 +269,22 @@ public static class RouteChoicePrompt
                 // grabbed in place; the rest are forced through the acquire pipeline
                 // (give/shop/drop) even when unflagged — the explicit pick is the
                 // consent. The walk still plans gated (the counter isn't carried
-                // yet at plan time) and crosses safely once it's in hand.
+                // yet at plan time) and crosses safely once it's in hand. A SOLE
+                // route (the gate is unavoidable) also plans avoidTraps, so the
+                // forced crossing takes the fewest-traps approach the planner chose.
                 foreach (int id in floorCounters)
                     if (services.ItemNames.GetName(id) is { Length: > 0 } n)
                         services.SendGameCommand($"get {n}");
                 if (detourCounters.Count > 0)
                     services.ForcePathObtain(detourCounters);
-                CommitWalk(services, destination, gated: true);
+                CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
                 break;
             case RouteChoiceResult.GatedNoAcquire:
                 // "Send it": walk the gated route but don't arm acquisition — the
-                // user asserts they'll clear the gates without provisioning.
-                CommitWalk(services, destination, gated: true, armAcquisition: false);
+                // user asserts they'll clear the gates without provisioning. A sole
+                // route still avoids traps, matching the planner's chosen approach.
+                CommitWalk(services, destination, gated: true,
+                    armAcquisition: false, avoidTraps: !choice.HasFreeRoute);
                 break;
             // null → cancelled: walk nothing (and leave any manual pause intact —
             // the user backed out, so nothing changed).

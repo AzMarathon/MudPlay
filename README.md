@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.27.3**
+> **Version 3.27.4**
 > - Map: a trapped connection is drawn red only on the trapped **side** now — full red = trap both ways, half red (against the room whose exit is trapped) = a one-way trap — instead of the whole line, which falsely implied the return trip was trapped too
-> - Navigation: a walk-to whose shortest path crosses a trap now offers a **fewest-traps** alternate route in the picker (pre-selected) — it avoids every avoidable trap and crosses only the unavoidable ones, so it's offered whenever it beats the shortest route's trap count (not only when a fully trap-free route exists); both cards show their trap count
+> - Navigation: a walk-to whose shortest path crosses a trap now offers a **fewest-traps** alternate route in the picker (pre-selected) — it avoids every avoidable trap and crosses only the unavoidable ones; both cards show their trap count
+> - Navigation: when a route must cross an unavoidable gate/hazard, it takes the fewest-traps approach among the ways in
+> - Hazards: a room-entry spell only counts as a movement hazard when it actually **damages, kills, or forces movement** — benign room spells (a monster summon, an alignment shift, flavor text, quest-item placement) no longer gate or reroute travel
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

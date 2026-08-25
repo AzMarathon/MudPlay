@@ -646,6 +646,64 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    //  1/1 ──E(Trap)── 1/9 (Spell 700, hazard)   trapped 1-hop approach
+    //   │               │
+    //   S               E (from 1/2, clean)
+    //   └──── 1/2 ──────┘                         trap-free 2-hop approach
+    // The hazard gates EVERY entry to 1/9, so there's no free route — but one
+    // approach is trapped and the other isn't (report paradigm-20260825-125954,
+    // room 17/808: manhole-gated, one exit also a 250-damage trap).
+    private const string HazardTrapApproachRoomsJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/9 (Trap)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Detour", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/1", "S": "0", "E": "1/9", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Hazard Vault", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void HazardSoleRoute_PrefersTheTrapFreeApproach()
+    {
+        // The reported compound case: the destination is hazard-gated on every side
+        // (no free route), but one approach also crosses a trap. The forced hazard
+        // crossing must take the fewest-traps approach — the longer, trap-free one —
+        // not the shortest-by-hops approach that eats the trap.
+        WithGraph(HazardTrapApproachRoomsJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.False(choice!.HasFreeRoute);
+            Assert.Equal(2, choice.GatedStepCount);     // the trap-free detour, not the 1-hop trap
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 9) },
+                choice.GatedPath);
+            Assert.Equal(0, bfs.CountTrapsOnPath(new RoomKey(1, 1),
+                new[] { Direction.S, Direction.E }));    // chosen route crosses no trap
+            RouteRequirement req = Assert.Single(choice.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);   // still the manhole gate
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 9) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;   // no counter
+        });
+    }
+
     // The hazard-counter shop resolver scores dist(cur→shop→dest), but the dest
     // sits behind the very hazard the counter answers — so no shop qualifies with
     // the hazard live. Guards ResolveHazardCounter's suspend scope: without it a

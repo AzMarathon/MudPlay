@@ -114,14 +114,15 @@ public sealed class RoomHazardIndexTests : IDisposable
     }
 
     [Fact]
-    public void TextBlock_FailItem_IsHazard()
+    public void TextBlock_FailItem_GuardingHarm_IsHazard()
     {
         RoomHazardIndex idx = NewIndex(
             Room(700),
-            // Abil 148 = TextBlock → TBInfo #50.
+            // Abil 148 = TextBlock → TBInfo #50. The failitem guards a teleport
+            // outcome (a movement hazard) — holding item 55 aborts it.
             """ [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 50 } ] """,
             itemsJson: null,
-            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55" } ] """);
+            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55:teleport 12" } ] """);
 
         RoomHazardIndex.RoomHazard? h = idx.HazardForSpell(700);
         Assert.NotNull(h);
@@ -129,17 +130,37 @@ public sealed class RoomHazardIndexTests : IDisposable
     }
 
     [Fact]
+    public void TextBlock_FailItem_BenignBranch_NotIndexed()
+    {
+        // The blackwood-forest shape (report paradigm-20260825-125954): a room-entry
+        // spell with a `failitem` "counter" whose unprotected branch only summons a
+        // monster / shifts alignment / prints a message — no damage, death, or forced
+        // movement. That is NOT a hazard even though it ships a counter item, so the
+        // router must not gate movement into the room.
+        RoomHazardIndex idx = NewIndex(
+            Room(700),
+            """ [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 50 } ] """,
+            itemsJson: null,
+            tbInfoJson: """
+            [ { "Number": 50, "Action": "failitem 55:random 51" },
+              { "Number": 51, "Action": "50:addevil 0\n100:summon 815" } ]
+            """);
+
+        Assert.Null(idx.HazardForSpell(700));
+    }
+
+    [Fact]
     public void TextBlock_MinBaseEncodedTb_IsHazard()
     {
         // The ice-cavern shape (spells 1144/1145): a TextBlock spell whose
-        // AbilVal-0 is 0 — the TBInfo number lives in MinBase/MaxBase instead. The
-        // failitem counter (there, the rope+grapple) must still be indexed, or the
-        // route picker never offers it (report paradigm-20260810-202239).
+        // AbilVal-0 is 0 — the TBInfo number lives in MinBase/MaxBase instead. Its
+        // failitem counter (the rope+grapple) guards a teleport, so it must still be
+        // indexed, or the route picker never offers it (report paradigm-20260810-202239).
         RoomHazardIndex idx = NewIndex(
             Room(700),
             """ [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 0, "MinBase": 50, "MaxBase": 50 } ] """,
             itemsJson: null,
-            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55" } ] """);
+            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55:teleport 12" } ] """);
 
         RoomHazardIndex.RoomHazard? h = idx.HazardForSpell(700);
         Assert.NotNull(h);

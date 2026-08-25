@@ -2,10 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.27.3
+## 3.27.4
 
 - Map: a trapped connection is drawn red only on the trapped **side** now — full red = trap both ways, half red (against the room whose exit is trapped) = a one-way trap — instead of the whole line, which falsely implied the return trip was trapped too
-- Navigation: a walk-to whose shortest path crosses a trap now offers a **fewest-traps** alternate route in the picker (pre-selected) — it avoids every avoidable trap and crosses only the unavoidable ones, so it's offered whenever it beats the shortest route's trap count (not only when a fully trap-free route exists); both cards show their trap count, and the walker disarms any unavoidable trap en route
+- Navigation: a walk-to whose shortest path crosses a trap now offers a **fewest-traps** alternate route in the picker (pre-selected) — it avoids every avoidable trap and crosses only the unavoidable ones, so it's offered whenever it beats the shortest route's trap count; both cards show their trap count, and the walker disarms any unavoidable trap en route
+- Navigation: when a route must cross an unavoidable gate/hazard, it now takes the fewest-traps approach among the ways in, so a forced crossing no longer also eats a trap it could have skirted
+- Hazards: a room-entry spell is only treated as a movement hazard when it actually **damages, kills, or forces movement** — benign room spells (a monster summon, an alignment shift, a flavor message, quest-item placement: blackwood forest, the area triggers, the class quest-item rooms) no longer gate or reroute travel, even when they carry a counter item
 - bug reports addressed: paradigm-20260825-125954
 
 ## 3.27.0

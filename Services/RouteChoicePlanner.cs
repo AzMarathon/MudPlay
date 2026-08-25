@@ -127,10 +127,28 @@ public static class RouteChoicePlanner
             gated = bfs.FindPath(source, destination, filter);
         if (gated is null || gated.Count == 0) return null;
 
+        bool hasFree = free is { Count: > 0 };
+
+        // A SOLE route (no gate-free way there) must cross the gate/hazard, but a
+        // trap on one approach may be dodgeable by taking another (e.g. a hazard room
+        // reachable from several sides, only one of which is trapped). Prefer the
+        // fewest-traps approach so the forced crossing doesn't also eat a trap it
+        // could have avoided — the walk commits this route with avoidTraps to match.
+        // A genuine shortcut (a free route exists) keeps the shortest-by-hops gated
+        // route so the step-saving comparison below stays meaningful.
+        if (!hasFree)
+            using (filter.SuspendAcquirableGates())
+            {
+                IReadOnlyList<Direction>? fewestTrap =
+                    bfs.FindPath(source, destination, filter, avoidTraps: true);
+                if (fewestTrap is { Count: > 0 }
+                    && bfs.CountTrapsOnPath(source, fewestTrap) < bfs.CountTrapsOnPath(source, gated))
+                    gated = fewestTrap;
+            }
+
         List<RouteRequirement> reqs = CollectRequirements(graph, filter, source, gated);
         if (reqs.Count == 0) return null;   // needs nothing acquirable → not a gated choice
 
-        bool hasFree = free is { Count: > 0 };
         if (!hasFree)
         {
             // No gate-free route at all — surface the sole route (HasFreeRoute
