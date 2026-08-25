@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.25.7
+
+- CastingDirector: a self-buff/heal (e.g. `vlwa`) no longer gets spammed every few seconds after it's already landed — the server's "You have already cast a spell this round!" line never says which cast it's rejecting, and an unrelated attack-spell cast losing the same round's slot was being mistaken for the pending buff itself failing, dropping its just-armed timer and forcing an immediate spurious recast
+- CastCoordinator's `CastFailed` event now carries the cast code the rejection actually applies to, so callers sharing the coordinator (CastingDirector's between-round casts, CombatManager's attack-spell cascade) can tell their own cast failing from an unrelated collision
+- bug reports addressed: paradigm-20260824-233439
+
 ## 3.25.6
 
 - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast (a heal/buff sent moments earlier) left the engine's `_combatOff` latch stuck true, which permanently blocked the spell-mode retry heartbeat since only a successful cast used to clear it

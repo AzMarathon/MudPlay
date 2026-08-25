@@ -866,8 +866,8 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("harm giant rat", h.LastSent);
         int sentAtEngage = h.Sent.Count;
 
-        List<(CastFailureReason Reason, string Detail)> failures = new();
-        h.Cast.CastFailed += (reason, detail) => failures.Add((reason, detail));
+        List<(CastFailureReason Reason, string Detail, string? Spell)> failures = new();
+        h.Cast.CastFailed += (reason, detail, spell) => failures.Add((reason, detail, spell));
 
         // A survival cast (heal/buff) just went out, same instant.
         h.Cast.NotifyExternalCastSent();

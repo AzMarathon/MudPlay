@@ -1387,6 +1387,42 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void UnrelatedCastRejection_DoesNotDropPendingSelfBuffTimer()
+    {
+        // Report paradigm-20260824-233439 ("spamming vlwa"): CastCoordinator is
+        // shared with CombatManager's attack-spell cascade, and the server's "You
+        // have already cast a spell this round!" line never names which cast it's
+        // rejecting. A collision from an UNRELATED cast (an attack-spell resume,
+        // simulated here directly via Cast.TryCast) must not be mistaken for the
+        // pending self-buff failing — otherwise a buff that already landed gets its
+        // timer dropped and re-casts again within seconds, over and over.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = false;
+
+        h.Director.Evaluate();                 // casts bles → arms a 300s optimistic timer,
+                                                // still pending (no applied-line confirm yet)
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+
+        // An unrelated attack-spell cast goes out and loses the round's slot — the
+        // same race an interrupt-resume's bypassRecastInterval:true send hits in
+        // production.
+        Assert.True(h.Cast.TryCast("turn", "shade",
+            bypassRoundCooldown: true, bypassRecastInterval: true));
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You have already cast a spell this round!", Array.Empty<CellAttributes>(),
+            DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        // bles's timer must survive — the rejection was about "turn", not "bles".
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("bles", e.Short);
+    }
+
+    [Fact]
     public void NoteManualBuffCast_ArmsTimerByCastCode_WithSlotMargin()
     {
         // A hand-typed buff cast code arms its recast timer anchored on the code — so the

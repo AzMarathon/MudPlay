@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.25.6**
+> **Version 3.25.7**
+> - CastingDirector: a self-buff/heal no longer gets spammed every few seconds after it's already landed — an unrelated cast losing the same round's slot was being mistaken for the buff itself failing, resetting its just-armed timer
 > - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — a between-round survival cast winning the round's cast slot right as a fresh engage tried to attack could permanently stall the fight's retry logic
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
