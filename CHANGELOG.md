@@ -9,7 +9,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Stock spillover: a deliberate recovery (Recover Now / walked to the death room) sweeps each exit and walks to collect items that overflowed into adjacent rooms — disarming traps in the way (both directions), skipping an exit whose trap it can't get through; an auto-recover walk that passes through a death room grabs your overflow from the rooms right before and after it in-stride, no detour
 - Bug report: new **Re-equip pieces pending** field (shown mid-recovery)
 - Party: dying — including an instant `suicide` (which skips the mortally-wounded drop) — now clears your party state (a follower is removed, a leader's party disbands), so `@join`/`@invite` stop replying "I'm following someone; denied." after a death
-- bug reports addressed: stock-20260825-101612, stock-20260825-104351, stock-20260825-105851
+- bug reports addressed: stock-20260825-101612, stock-20260825-104351, stock-20260825-105851, stock-20260825-112233
 
 ## 3.26.0
 

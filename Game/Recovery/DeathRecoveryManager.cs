@@ -756,6 +756,13 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _collectRoute.Clear();
         foreach (RoomKey k in hits) _collectRoute.Enqueue(k);
         if (_collectRoute.Count == 0) { CompleteCollect(); return; }
+
+        // The `look <dir>` peeks can leave the position tracker desynced — a peek
+        // render gets mistaken for a real move (especially when a post-login stat/i
+        // refresh interleaves into the sweep, and worse when the room name is
+        // ambiguous). Force-anchor back to the death room before we start walking, so
+        // WalkTo routes from where we actually are (report stock-20260825-112233).
+        _roomTracker.SetLocated(_collectHome);
         StartNextCollectLeg();
     }
 
