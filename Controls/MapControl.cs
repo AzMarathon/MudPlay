@@ -1393,12 +1393,18 @@ public sealed class MapControl : Control
                 // routing info ("needs a command/action — a lever, an
                 // ask-door, or a `go path`-style named exit");
                 // hidden-cyan is reveal info ("needs sea <dir>").
-                bool isTrap = IsTrapEdge(source, dir)
-                           || IsTrapEdge(bCoord, Opposite(dir));
-                bool isAction = !isTrap
-                    && (IsActionRequiredEdge(source, dir)
-                     || IsActionRequiredEdge(bCoord, Opposite(dir)));
-                bool isHidden = !isTrap && !isAction
+                // Traps are DIRECTIONAL — a trap on A's exit toward B does not imply
+                // B's exit back is trapped. Track each side separately: the connector
+                // is split at its midpoint so only the trapped HALF is red. Full red =
+                // trapped both ways; half red (against the room whose exit is trapped)
+                // = a one-way trap; no red = clean both ways. Painting the whole line
+                // red for a one-way trap wrongly implied the return trip was dangerous.
+                bool srcTrap = IsTrapEdge(source, dir);
+                bool tgtTrap = IsTrapEdge(bCoord, Opposite(dir));
+                bool isTrap = srcTrap || tgtTrap;
+                bool isAction = IsActionRequiredEdge(source, dir)
+                             || IsActionRequiredEdge(bCoord, Opposite(dir));
+                bool isHidden = !isAction
                     && (IsHiddenEdge(source, dir)
                      || IsHiddenEdge(bCoord, Opposite(dir)));
 
@@ -1414,10 +1420,10 @@ public sealed class MapControl : Control
                     case ConnectionKind.Adjacent:
                     {
                         // Grid-adjacent — clean continuous connector.
-                        IPen pen = isTrap ? TrapPen : isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;
+                        IPen basePen = isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;
                         Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
-                        ctx.DrawLine(pen, srcPt, tgtPt);
-                        if (oneWay) DrawOneWayArrow(ctx, pen, srcPt, tgtPt, tilePixels);
+                        DrawExitConnector(ctx, srcPt, tgtPt, basePen, TrapPen, srcTrap, tgtTrap);
+                        if (oneWay) DrawOneWayArrow(ctx, isTrap ? TrapPen : basePen, srcPt, tgtPt, tilePixels);
                         if (isSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, tgtPt), dir, tilePixels);
                         break;
                     }
@@ -1426,11 +1432,11 @@ public sealed class MapControl : Control
                         // Connected but not grid-adjacent — dashed direct
                         // line between the two room centres, angled along
                         // the real connection instead of a stub into space.
-                        IPen pen = isTrap ? TrapBridgePen : isAction ? ActionBridgePen
+                        IPen baseBridge = isAction ? ActionBridgePen
                                  : isHidden ? HiddenBridgePen : ExitBridgePen;
                         Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
-                        ctx.DrawLine(pen, srcPt, tgtPt);
-                        if (oneWay) DrawOneWayArrow(ctx, pen, srcPt, tgtPt, tilePixels);
+                        DrawExitConnector(ctx, srcPt, tgtPt, baseBridge, TrapBridgePen, srcTrap, tgtTrap);
+                        if (oneWay) DrawOneWayArrow(ctx, isTrap ? TrapBridgePen : baseBridge, srcPt, tgtPt, tilePixels);
                         if (isSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, tgtPt), dir, tilePixels);
                         break;
                     }
@@ -1457,6 +1463,24 @@ public sealed class MapControl : Control
                 }
             }
         }
+    }
+
+    // Draw one room-to-room connector, colouring each HALF by whether the exit
+    // leaving that end is trapped. Both trapped → one solid trap line; neither →
+    // one base line; exactly one → split at the midpoint so only the trapped half
+    // (the half against the room whose exit is trapped) is red. Keeps a one-way trap
+    // from reading as a two-way one.
+    private static void DrawExitConnector(DrawingContext ctx, Point srcPt, Point tgtPt,
+        IPen basePen, IPen trapPen, bool srcTrap, bool tgtTrap)
+    {
+        if (srcTrap == tgtTrap)
+        {
+            ctx.DrawLine(srcTrap ? trapPen : basePen, srcPt, tgtPt);
+            return;
+        }
+        Point mid = Midpoint(srcPt, tgtPt);
+        ctx.DrawLine(srcTrap ? trapPen : basePen, srcPt, mid);
+        ctx.DrawLine(tgtTrap ? trapPen : basePen, mid, tgtPt);
     }
 
     // How a single exit connection should be rendered.

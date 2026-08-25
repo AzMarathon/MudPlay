@@ -30,6 +30,9 @@ public enum RouteChoiceKind
 {
     ItemGate,
     Teleport,
+    TrapAvoid, // the shortest route crosses a trap; a trap-free detour exists — offered
+               // because the walker would otherwise disarm at step time, and the user
+               // may prefer the longer clean route to risking the disarm.
     Blocked,   // no route at all — offer to walk as far as possible, up to the block.
 }
 
@@ -207,6 +210,48 @@ public static class RouteChoicePlanner
             BuildKeyPath(graph, source, tele),
             RouteChoiceKind.Teleport,
             landing);
+    }
+
+    // Compares the shortest route (traps allowed — the walker's default plan, which
+    // disarms at step time) against a trap-free route (trapped exits refused).
+    // Returns a TrapAvoid RouteChoice when the shortest route crosses at least one
+    // trap AND a trap-free route to the same room exists, so the user can choose the
+    // clean detour instead of trusting the disarm. The trap-free route is the "free"
+    // (safe, pre-selected) side; the trapped shortcut is the "gated" side. No savings
+    // floor — a trap-free alternative is always worth surfacing when one exists (the
+    // user asked to see it), even if it's the same length or longer. Null when the
+    // shortest route crosses no trap (nothing to weigh) or no trap-free route exists
+    // (the walker must cross and disarm — unchanged behaviour, no fork).
+    public static RouteChoice? EvaluateTrapAvoid(
+        BfsMapper bfs,
+        MovementFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+
+        // Shortest route: traps allowed (what the walker would otherwise take).
+        IReadOnlyList<Direction>? shortest = bfs.FindPath(source, destination, filter);
+        if (shortest is null || shortest.Count == 0) return null;
+
+        // Nothing to weigh unless the shortest route actually crosses a trap.
+        if (!bfs.PathCrossesTrap(source, shortest)) return null;
+
+        // Trap-free route: trapped exits refused. None → the only way there crosses a
+        // trap, so there's no clean alternative to offer (walker crosses + disarms).
+        IReadOnlyList<Direction>? clean =
+            bfs.FindPath(source, destination, filter, avoidTraps: true);
+        if (clean is null || clean.Count == 0) return null;
+
+        return new RouteChoice(
+            clean.Count, shortest.Count,
+            Array.Empty<RouteRequirement>(),
+            BuildKeyPath(graph, source, clean),
+            BuildKeyPath(graph, source, shortest),
+            RouteChoiceKind.TrapAvoid);
     }
 
     // When every route to the destination is blocked — no gate-free route, and

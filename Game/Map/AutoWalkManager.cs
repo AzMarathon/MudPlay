@@ -722,6 +722,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // shortcut) across the tracker-Pending deferral.
     private bool _deferredWalkAvoidTeleports;
 
+    // Carries the route picker's "avoid traps" choice (true only when the user chose
+    // the trap-free route over the shorter trapped one) across the deferral.
+    private bool _deferredWalkAvoidTraps;
+
     // One-shot watchdog for the tracker-Pending deferral. A move the server
     // refuses with no room redisplay leaves the tracker stuck Pending, so the
     // Confirmed transition the deferral waits on never arrives and the walk would
@@ -742,6 +746,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // must re-issue WalkTo with these, or a no-teleport (or gate-planned) walk
     // silently reverts to the defaults and takes a teleport it was told to avoid.
     private bool _activeAvoidTeleports;
+    private bool _activeAvoidTraps;
     private bool _activeThroughGates;
     private bool _activeArmAcquisition = true;
 
@@ -761,6 +766,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // teleport route picker's "walk it, don't teleport" choice passes true;
     // every other caller keeps the default (false), which lets BFS take a
     // teleport hop as a normal short edge when it's the shortest route.
+    //
+    // avoidTraps: when true, BFS refuses trapped exits, so the planned route never
+    // crosses a trap. The trap route picker's "avoid traps" choice passes true; every
+    // other caller keeps the default (false), which lets BFS cross a trap as a normal
+    // edge (the walker then disarms it at step time via TrapDisarmManager).
     // supersedeSilently: when this WalkTo interrupts an in-progress walk, clear
     // the old walk with a silent Reset instead of a loud Stopped. The path-item
     // acquisition routers pass true when they redirect the walk to a shop / giver /
@@ -773,6 +783,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool planThroughAcquirableGates = false,
         bool armItemAcquisition = true,
         bool avoidTeleports = false,
+        bool avoidTraps = false,
         bool supersedeSilently = false)
     {
         if (State is WalkState.Walking or WalkState.Paused)
@@ -802,6 +813,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _deferredWalkThroughGates = planThroughAcquirableGates;
             _deferredWalkArmAcquisition = armItemAcquisition;
             _deferredWalkAvoidTeleports = avoidTeleports;
+            _deferredWalkAvoidTraps = avoidTraps;
             _destination = destination;       // populated so status surfaces show the target
             State = WalkState.Walking;
             // Watchdog: if the tracker never settles (the in-flight move was
@@ -815,14 +827,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return true;
         }
 
-        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports);
+        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps);
     }
 
     private bool WalkToImmediate(
         RoomKey destination,
         bool planThroughAcquirableGates = false,
         bool armItemAcquisition = true,
-        bool avoidTeleports = false)
+        bool avoidTeleports = false,
+        bool avoidTraps = false)
     {
         // Callers may arrive here from the WalkTo entry (Idle) OR from
         // the deferred dispatch in OnTrackerStateChanged (Walking with
@@ -885,7 +898,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         BoatRoutePlan? boatPlan = null;
         try
         {
-            path = _bfs.FindPath(source.Key, destination, _filter, refuseTeleports: avoidTeleports);
+            path = _bfs.FindPath(source.Key, destination, _filter,
+                refuseTeleports: avoidTeleports, avoidTraps: avoidTraps);
 
             // A sea-captain sailing can beat (or replace) the land route. Weigh
             // the boat's stitched land-legs against the pure land route; the
@@ -977,6 +991,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _index = 0;
         _destination = destination;
         _activeAvoidTeleports = avoidTeleports;
+        _activeAvoidTraps = avoidTraps;
         _activeThroughGates = planThroughAcquirableGates;
         _activeArmAcquisition = armItemAcquisition;
         _origin = source.Key;
@@ -1857,13 +1872,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool throughGates = _deferredWalkThroughGates;
         bool armAcquisition = _deferredWalkArmAcquisition;
         bool avoidTeleports = _deferredWalkAvoidTeleports;
+        bool avoidTraps = _deferredWalkAvoidTraps;
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
+        _deferredWalkAvoidTraps = false;
         _deferredWalkTimer?.Dispose();
         _deferredWalkTimer = null;
-        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports);
+        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps);
     }
 
     // Watchdog fire for a deferral whose Confirmed transition never arrived (the
@@ -2025,7 +2042,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
             WalkTo(dest,
                 planThroughAcquirableGates: _activeThroughGates,
                 armItemAcquisition: _activeArmAcquisition,
-                avoidTeleports: _activeAvoidTeleports);
+                avoidTeleports: _activeAvoidTeleports,
+                avoidTraps: _activeAvoidTraps);
         }
         finally
         {
@@ -2326,7 +2344,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
+        _deferredWalkAvoidTraps = false;
         _activeAvoidTeleports = false;
+        _activeAvoidTraps = false;
         _activeThroughGates = false;
         _activeArmAcquisition = true;
         _retryCount = 0;

@@ -516,4 +516,39 @@ public sealed class RouteChoiceDialogViewModelTests
             new RouteChoiceResult?[] { RouteChoiceResult.Free, RouteChoiceResult.Gated },
             previews);
     }
+
+    // ----- Trap-avoid fork -----------------------------------------------
+
+    private static RouteChoice TrapAvoidChoice() =>
+        new(FreeStepCount: 3, GatedStepCount: 1,
+            System.Array.Empty<RouteRequirement>(), FreeLine, GatedLine,
+            RouteChoiceKind.TrapAvoid);
+
+    [Fact]
+    public void TrapAvoid_PreSelectsFreeRoute_HidesSendIt_ShowsTrapCaveat()
+    {
+        var vm = new RouteChoiceDialogViewModel(TrapAvoidChoice(), "Deep Cavern (1/9)", id => "");
+
+        Assert.True(vm.IsTrapAvoidChoice);
+        Assert.False(vm.ShowSendItCard);                         // plain two-way fork
+        Assert.Equal(RouteChoiceResult.Free, vm.SelectedRoute);  // trap-free pre-selected
+        Assert.True(vm.IsFreeSelected);
+        Assert.True(vm.GoCommand.CanExecute(null));              // Go enabled on open
+        Assert.Equal(vm.TrapCaveat, vm.GatedDetail);            // gated sub-line = trap caveat
+        Assert.Contains("trap", vm.GatedDetail);
+    }
+
+    [Fact]
+    public void TrapAvoid_RaiseSelectionPreview_FiresFreePreview()
+    {
+        var vm = new RouteChoiceDialogViewModel(TrapAvoidChoice(), "Deep Cavern (1/9)", id => "");
+        RouteChoiceResult? previewed = null;
+        bool fired = false;
+        vm.PreviewRequested += r => { previewed = r; fired = true; };
+
+        vm.RaiseSelectionPreview();
+
+        Assert.True(fired);
+        Assert.Equal(RouteChoiceResult.Free, previewed);
+    }
 }

@@ -1,13 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.27.0**
-> - New feature: **realm-complete, combat-aware death recovery** — recovery now works on both realms: Paradigm recovers your `corpse` in one command; Stock `get`s your items loose off the floor (previously Stock recovered nothing)
-> - Recovering with a hostile present: engage first, grab the pile (which doesn't break combat), then pace the re-equip between rounds — weapon first, then armour heaviest-first — re-attacking after each burst; whatever's left goes on the instant the room clears
-> - Stock spillover: a deliberate recovery (Recover Now, or an auto-recover walk-to that ends in the death room) sweeps each exit and walks to collect items that overflowed into adjacent rooms (disarming traps in the way, skipping an exit it can't get through); an auto-recover walk that passes through a death room grabs your overflow from the rooms right before and after it in-stride. Manually stepping into a death room grabs the floor but never fires the sweep
-> - Stock: a deathpile down to only currency counts as fully recovered — coins recover as cash, so they no longer strand the pile at Partial
-> - Bug report: new **Re-equip pieces pending** field
-> - Party: dying (including an instant `suicide`) now clears your party state — a follower is removed, a leader's party disbands — so `@join`/`@invite` stop replying "I'm following someone; denied." after a death
+> **Version 3.27.2**
+> - Map: a trapped connection is drawn red only on the trapped **side** now — full red = trap both ways, half red (against the room whose exit is trapped) = a one-way trap — instead of the whole line, which falsely implied the return trip was trapped too
+> - Navigation: a walk-to whose shortest path crosses a trap now offers a **trap-free alternate route** in the picker (pre-selected) when one exists — take the clean detour, or the trapped shortcut (disarmed en route)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

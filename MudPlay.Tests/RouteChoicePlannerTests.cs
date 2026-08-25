@@ -768,4 +768,107 @@ public sealed class RouteChoicePlannerTests
             Assert.Equal(3, walk!.Count);   // the 3-hop walking detour
         });
     }
+
+    // ----- EvaluateTrapAvoid: avoid-traps fork -----------------------
+    //
+    //  1/1 ──N (Trap)── 1/2 (goal)   trapped 1-hop shortcut
+    //   │                │
+    //   E                W
+    //   └──── 1/3 ──N────┘           clean 2-hop detour
+    //
+    private const string TrapForkJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Fork",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Trap)", "S": "0", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Detour",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // No trap anywhere — a plain two-hop corridor.
+    private const string NoTrapJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // The trapped exit is the ONLY way to the goal — no clean alternative.
+    private const string TrapOnlyJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Trap)", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void OffersTrapAvoidChoice_WhenShortestCrossesTrap_AndCleanRouteExists()
+    {
+        WithGraph(TrapForkJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 2));
+
+            Assert.NotNull(choice);
+            Assert.Equal(RouteChoiceKind.TrapAvoid, choice!.Kind);
+            Assert.Equal(2, choice.FreeStepCount);      // trap-free detour
+            Assert.Equal(1, choice.GatedStepCount);     // trapped shortcut
+            Assert.Empty(choice.Requirements);
+            Assert.True(choice.HasFreeRoute);
+
+            // Free path is the clean detour; gated path is the trapped shortcut.
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 3), new RoomKey(1, 2) },
+                choice.FreePath);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 2) },
+                choice.GatedPath);
+        });
+    }
+
+    [Fact]
+    public void NoTrapAvoidChoice_WhenRouteCrossesNoTrap()
+    {
+        WithGraph(NoTrapJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 2));
+
+            // Nothing to weigh — the shortest route is already trap-free.
+            Assert.Null(choice);
+        });
+    }
+
+    [Fact]
+    public void NoTrapAvoidChoice_WhenTrapIsTheOnlyRoute()
+    {
+        WithGraph(TrapOnlyJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 2));
+
+            // No clean alternative — the walker must cross and disarm, no fork.
+            Assert.Null(choice);
+        });
+    }
 }

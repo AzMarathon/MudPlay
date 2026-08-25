@@ -1422,4 +1422,78 @@ public sealed class BfsMapperTests : IDisposable
         Assert.DoesNotContain(new RoomKey(1, 5), layout.Positions.Keys);
         Assert.DoesNotContain(new RoomKey(1, 8), layout.Positions.Keys);
     }
+
+    // ----- avoidTraps routing ----------------------------------------
+    //
+    //  1/1 ──N (Trap)── 1/2 (goal)      trapped 1-hop shortcut
+    //   │                │
+    //   E                W
+    //   │                │
+    //  1/3 ──────N────── (to 1/2)       clean 2-hop detour
+    //
+    private const string TrapForkJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Fork",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Trap)", "S": "0", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Detour",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void FindPath_Default_TakesTrappedShortcut()
+    {
+        var (bfs, _) = NewMapper(TrapForkJson);
+        // Traps are traversable to the planner (disarmed at step time) — the 1-hop
+        // trapped exit is the shortest route.
+        var path = bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 2));
+        Assert.Equal(new[] { Direction.N }, path);
+    }
+
+    [Fact]
+    public void FindPath_AvoidTraps_RoutesAroundTheTrap()
+    {
+        var (bfs, _) = NewMapper(TrapForkJson);
+        // avoidTraps refuses the trapped N exit, so BFS takes the clean E→N detour.
+        var path = bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 2), avoidTraps: true);
+        Assert.Equal(new[] { Direction.E, Direction.N }, path);
+    }
+
+    [Fact]
+    public void FindPath_AvoidTraps_NoCleanRoute_ReturnsNull()
+    {
+        // Only route to the goal is the trapped exit — avoiding traps disconnects it.
+        const string Json = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "A",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "1/2 (Trap)", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 2, "Name": "B",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "1/1", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        var (bfs, _) = NewMapper(Json);
+        Assert.NotNull(bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 2)));   // reachable normally
+        Assert.Null(bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 2), avoidTraps: true));
+    }
+
+    [Fact]
+    public void PathCrossesTrap_DetectsOnlyTheTrappedStep()
+    {
+        var (bfs, _) = NewMapper(TrapForkJson);
+        Assert.True(bfs.PathCrossesTrap(new RoomKey(1, 1), new[] { Direction.N }));
+        Assert.False(bfs.PathCrossesTrap(new RoomKey(1, 1), new[] { Direction.E, Direction.N }));
+        Assert.False(bfs.PathCrossesTrap(new RoomKey(1, 1), System.Array.Empty<Direction>()));
+    }
 }

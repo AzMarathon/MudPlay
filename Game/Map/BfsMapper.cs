@@ -141,13 +141,21 @@ public sealed class BfsMapper
     //   teleport" choice — a teleport is often a much shorter but far more
     //   dangerous crossing (it can drop you in a lethal zone, or past a
     //   hazard only a specific build survives), so the user picks.
+    // avoidTraps: when true, trapped exits (RoomExitHint.Trap) are treated as
+    //   non-traversable, so the search returns a route that never crosses a trap.
+    //   Backs the route picker's "avoid traps" choice — the shortest path may
+    //   cross a trap the walker would disarm at step time, so we also compute a
+    //   trap-free alternative and let the user pick which to walk. Directional:
+    //   only the trapped OUTGOING exit is refused, so a room whose reverse exit
+    //   is clean still routes through in that safe direction.
     public IReadOnlyList<Direction>? FindPath(
         RoomKey source,
         RoomKey destination,
         IRoomFilter? filter = null,
         bool returnEmptyWhenAtDestination = false,
         bool ignoreExitGates = false,
-        bool refuseTeleports = false)
+        bool refuseTeleports = false,
+        bool avoidTraps = false)
     {
         if (_graph.GetRoom(source) is null) return null;
         if (_graph.GetRoom(destination) is null) return null;
@@ -163,8 +171,8 @@ public sealed class BfsMapper
         // walker never routes through the portal and loops; from the overworld,
         // where the only way up is the portal, the fallback pass takes it and the
         // walker re-plans from wherever the cast drops it.
-        return FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: false)
-            ?? FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: true);
+        return FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, avoidTraps, allowGateway: false)
+            ?? FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, avoidTraps, allowGateway: true);
     }
 
     private IReadOnlyList<Direction>? FindPathCore(
@@ -173,6 +181,7 @@ public sealed class BfsMapper
         IRoomFilter? filter,
         bool ignoreExitGates,
         bool refuseTeleports,
+        bool avoidTraps,
         bool allowGateway)
     {
         // Per-node parent + direction-from-parent, replayed on hit.
@@ -225,6 +234,13 @@ public sealed class BfsMapper
                 // returns the pure-walking route the picker offers alongside
                 // the teleport.
                 if (refuseTeleports && (exit.Hint == RoomExitHint.Teleport || exit.GatewayTeleport))
+                    continue;
+
+                // "Avoid traps" pass: refuse a trapped outgoing exit so the search
+                // returns a trap-free route (the picker offers it alongside the
+                // trapped shortcut). Directional — only this exit's own Trap hint is
+                // refused, never the reciprocal, so a clean reverse edge stays usable.
+                if (avoidTraps && exit.Hint == RoomExitHint.Trap)
                     continue;
 
                 // Avoid filter applies to intermediates AND to the
@@ -387,6 +403,27 @@ public sealed class BfsMapper
             if (room is null) return false;
             if (!room.Exits.TryGetValue(dir, out RoomExit exit)) return false;
             if (exit.HasLevelGate) return true;
+            cursor = exit.Target;
+        }
+        return false;
+    }
+
+    // True when walking `path` from `source` crosses at least one trapped exit
+    // (RoomExitHint.Trap). Directional — checks the exit actually stepped, so a
+    // clean reverse edge on a two-way corridor never counts. Backs the route
+    // picker's decision to offer a trap-free alternative: only worth surfacing
+    // when the route the walker would otherwise take actually hits a trap.
+    public bool PathCrossesTrap(RoomKey source, IReadOnlyList<Direction>? path)
+    {
+        if (path is null || path.Count == 0) return false;
+
+        RoomKey cursor = source;
+        foreach (Direction dir in path)
+        {
+            Room? room = _graph.GetRoom(cursor);
+            if (room is null) return false;
+            if (!room.Exits.TryGetValue(dir, out RoomExit exit)) return false;
+            if (exit.Hint == RoomExitHint.Trap) return true;
             cursor = exit.Target;
         }
         return false;

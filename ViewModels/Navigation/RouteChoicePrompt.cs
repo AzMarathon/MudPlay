@@ -54,6 +54,18 @@ public static class RouteChoicePrompt
             return;
         }
 
+        // Trap-avoid fork: the shortest route crosses a trap and a trap-free route to
+        // the same room exists. Surface the clean detour so the user can take it
+        // instead of trusting the step-time disarm — a disarm can fail (no picks, no
+        // party disarmer) and some traps aren't worth the hit even when disarmable.
+        RouteChoice? trapAvoid = RouteChoicePlanner.EvaluateTrapAvoid(
+            services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
+        if (trapAvoid is not null)
+        {
+            await RunPickerAsync(services, destination, source.Key, trapAvoid, previewSink);
+            return;
+        }
+
         RouteChoice? choice = RouteChoicePlanner.Evaluate(
             services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
         if (choice is null)
@@ -178,6 +190,7 @@ public static class RouteChoicePrompt
         // the picker closes so a committed walk's live path isn't double-drawn and
         // a cancel leaves no stale preview behind.
         if (previewSink is not null)
+        {
             vm.PreviewRequested += r => previewSink(r switch
             {
                 RouteChoiceResult.Free => choice.FreePath,
@@ -186,6 +199,10 @@ public static class RouteChoicePrompt
                 RouteChoiceResult.GatedNoAcquire => choice.GatedPath,
                 _ => null,
             });
+            // A pre-selected route (trap-avoid defaults to the trap-free line) draws
+            // its preview on open, now that the sink is subscribed.
+            vm.RaiseSelectionPreview();
+        }
 
         RouteChoiceResult? result;
         try
@@ -218,6 +235,23 @@ public static class RouteChoicePrompt
                     break;
                 case RouteChoiceResult.Gated:
                     // "Teleport" — allow the shortcut, the walker's default.
+                    CommitWalk(services, destination, gated: false);
+                    break;
+                // null → cancelled: walk nothing.
+            }
+            return;
+        }
+
+        if (choice.Kind == RouteChoiceKind.TrapAvoid)
+        {
+            switch (result)
+            {
+                case RouteChoiceResult.Free:
+                    // "Avoid traps" — plan the trap-free route (refuse trapped exits).
+                    CommitWalk(services, destination, gated: false, avoidTraps: true);
+                    break;
+                case RouteChoiceResult.Gated:
+                    // "Cross traps" — the walker's default plan, disarming at step time.
                     CommitWalk(services, destination, gated: false);
                     break;
                 // null → cancelled: walk nothing.
@@ -261,7 +295,7 @@ public static class RouteChoicePrompt
     // rest / party) are left asserted and re-pause on their own if still relevant.
     private static void CommitWalk(
         AppServices services, RoomKey destination, bool gated,
-        bool armAcquisition = true, bool avoidTeleports = false)
+        bool armAcquisition = true, bool avoidTeleports = false, bool avoidTraps = false)
     {
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
@@ -277,7 +311,8 @@ public static class RouteChoicePrompt
             destination,
             planThroughAcquirableGates: gated,
             armItemAcquisition: armAcquisition,
-            avoidTeleports: avoidTeleports);
+            avoidTeleports: avoidTeleports,
+            avoidTraps: avoidTraps);
     }
 
     private static string DestinationLabel(AppServices services, RoomKey destination) =>
