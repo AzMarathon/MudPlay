@@ -130,7 +130,7 @@ public sealed class WindowSnapManager
 
         if (p.IsMain)
         {
-            DragCluster(p, newPos);
+            DragCluster(newPos);
             p.LastPos = newPos;
             return;
         }
@@ -153,7 +153,7 @@ public sealed class WindowSnapManager
     // and each member's offset from main; then hold every member at that fixed offset
     // for the rest of the drag. Offsets (not per-step adjacency) keep the cluster rigid
     // even while the WM lags behind our position requests.
-    private void DragCluster(Panel main, PixelPoint newMainPos)
+    private void DragCluster(PixelPoint newMainPos)
     {
         DateTime now = DateTime.UtcNow;
         bool newDrag = _clusterOffsets is null
@@ -162,18 +162,25 @@ public sealed class WindowSnapManager
 
         if (newDrag)
         {
-            // Adjacency + offsets are measured off intended positions (LastPos), which
-            // stay in sync with what we've asked the WM for — never the lagging live
-            // Position. At rest (drag start) they're identical anyway.
+            // Capture from LIVE positions, with offsets relative to main's live position
+            // (== newMainPos). We deliberately avoid main.LastPos as the base: a window
+            // manager can settle a window's frame a title-bar's height off its mapped
+            // position WITHOUT firing a PositionChanged, leaving the main window's LastPos
+            // stale — which shifted the whole cluster and dropped a below-main panel out
+            // of it (its vertical adjacency broke on the stale bottom edge). At drag start
+            // the children are at rest, so their live positions are exactly where they
+            // sit; main has moved only this first step, so a threshold-sized adjacency
+            // tolerance still catches them, and the offset makes THIS move a no-op —
+            // members then track main precisely for the rest of the drag.
             Dictionary<string, PixelRect> rects = new(StringComparer.OrdinalIgnoreCase);
             foreach (Panel p in _open.Values) rects[p.Id] = RectOf(p);
 
             _clusterOffsets = new(StringComparer.OrdinalIgnoreCase);
-            foreach (string cid in ConnectedFrom(MainId, rects, AdjacencyTolerance))
+            foreach (string cid in ConnectedFrom(MainId, rects, SnapThreshold))
             {
                 if (string.Equals(cid, MainId, StringComparison.OrdinalIgnoreCase)) continue;
                 if (_open.TryGetValue(cid, out Panel? m))
-                    _clusterOffsets[cid] = m.LastPos - main.LastPos;
+                    _clusterOffsets[cid] = m.Window.Position - newMainPos;
             }
         }
 
@@ -285,9 +292,10 @@ public sealed class WindowSnapManager
     private static bool IsClose(PixelPoint a, PixelPoint b)
         => Math.Abs(a.X - b.X) <= 2 && Math.Abs(a.Y - b.Y) <= 2;
 
-    // A panel's rect at its INTENDED position (LastPos) — what we've asked the WM for,
-    // which stays coherent even while the live Window.Position lags a drag.
-    private static PixelRect RectOf(Panel p) => RectAt(p, p.LastPos);
+    // A panel's rect at its LIVE position. Used for snap references and the drag-start
+    // cluster capture — both happen while the panel is at rest, so live is exactly where
+    // it sits (and, unlike LastPos, can't be left stale by a silent WM frame settle).
+    private static PixelRect RectOf(Panel p) => RectAt(p, p.Window.Position);
 
     private static PixelRect RectAt(Panel p, PixelPoint pos)
     {
