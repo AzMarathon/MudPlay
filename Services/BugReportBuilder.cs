@@ -360,6 +360,12 @@ public static class BugReportBuilder
         // automatic heal/cure/bless is being silently suppressed.
         Kv(sb, "Casting spell target", combat.CastingSpellTarget ?? "(none)");
         Kv(sb, "Spell attack owed", combat.SpellAttackOwed.ToString());
+        // True here alongside a live CastingSpellTarget/CurrentTarget means the
+        // spell-mode heartbeat is gated shut and nothing will ever retry the attack
+        // (report paradigm-20260824-215802: an engage whose cast lost the round to a
+        // recast-interval block left this stuck, and the character never attacked
+        // again for the rest of the fight).
+        Kv(sb, "Combat off (stuck?)", svc.Combat.CombatOff.ToString());
         // Alternating action-order phase — pairs with the resolved Combat "ActionOrder"
         // setting below to explain why an alternate-order character is casting or
         // swinging this round (even rounds open on the mode's first phase).

@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.27.7
+
+- Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast (a heal/buff sent moments earlier) left the engine's `_combatOff` latch stuck true, which permanently blocked the spell-mode retry heartbeat since only a successful cast used to clear it; it's now cleared unconditionally the moment the engine commits to engaging
+- Combat: a locally blocked initial attack spell now seeds the five-second combat heartbeat on a fresh session where no prior combat line has anchored the cadence (`LastCombatTick` null) and the monster only shows non-generic armour-block wording such as "reaches out for you" — and marks its round as owed immediately, so a startup self-buff can't steal the deterministic retry round before the attack goes out
+- CastingDirector: a self-buff/heal (e.g. `vlwa`) no longer gets spammed every few seconds after it's already landed — the server's "already cast this round" rejection names no spell, and an unrelated attack-spell cast losing the same round's slot was mistaken for the pending buff failing, dropping its just-armed timer; `CastCoordinator.CastFailed` now carries the cast code the rejection applies to, so shared callers tell their own failure from a collision
+- Bug report: new **Combat off (stuck?)** field (Combat weapon state) — true alongside a live target means the fight is permanently stalled
+- bug reports addressed: paradigm-20260824-215802, paradigm-20260824-233439, paradigm-20260824-235607
+
 ## 3.27.4
 
 - Map: a trapped connection is drawn red only on the trapped **side** now — full red = trap both ways, half red (against the room whose exit is trapped) = a one-way trap — instead of the whole line, which falsely implied the return trip was trapped too

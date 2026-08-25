@@ -648,12 +648,24 @@ public sealed class CastingDirector : IDisposable
     // "active" un-cast. Local Blocked rejections fire before the send / inside the
     // same-round cooldown (the buff never went out), so clearing on them would defeat
     // the optimistic double-cast guard the timer exists for.
-    private void OnCastFailed(CastFailureReason reason, string detail)
+    //
+    // CastCoordinator is shared with CombatManager's attack-spell cascade, and the
+    // server's rejection line never names which cast it's about — spell carries
+    // CastCoordinator's best guess (the cast code actually sent). Only drop the
+    // pending buff's timer when it MATCHES: an attack-spell resume racing the same
+    // round slot and losing is a real, unrelated rejection, not evidence the buff
+    // (which may have already landed) needs recasting. Getting this wrong drops a
+    // live buff's timer on every unrelated collision, forcing an immediate spurious
+    // recast — report paradigm-20260824-233439 ("spamming vlwa"): the attack-spell
+    // resume's own rejections kept killing vile ward's just-armed timer every few
+    // seconds even though the original cast had already landed.
+    private void OnCastFailed(CastFailureReason reason, string detail, string? spell)
     {
         if (reason == CastFailureReason.Blocked) return;
         if (reason == CastFailureReason.AlreadyCastThisRound)
             _betweenRoundSlotUsed = true;
         if (_pendingSelfBuffShort is not { } shortCode) return;
+        if (!string.Equals(spell, shortCode, StringComparison.OrdinalIgnoreCase)) return;
         _activeUntil.Remove(("", shortCode));
         _pendingSelfBuffShort = null;
         _log?.Combat(LogCategory,

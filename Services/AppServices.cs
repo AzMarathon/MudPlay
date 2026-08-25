@@ -3063,6 +3063,13 @@ public sealed class AppServices
         Combat.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
         CombatTracker.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
 
+        // A combat-spell engage can lose its initial send to a self-buff that just
+        // spent the cast slot. On a fresh process there may be no combat-tick anchor
+        // yet, and because no attack reached the server there is no engagement output
+        // guaranteed to create one. Seed TickEngine's timer fallback so the owed
+        // attack gets a deterministic next-round retry.
+        Combat.SetCombatTickAnchor(Tick.EnsureCombatTickAnchor);
+
         // Simultaneous-arrival settle: a UI-thread one-shot so a burst of "strides
         // in" arrivals + the room re-display resolve to one engage decision on the
         // full group (rooms nuke-first instead of pecking single-target). Same shape

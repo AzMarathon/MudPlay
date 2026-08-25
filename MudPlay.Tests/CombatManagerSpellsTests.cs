@@ -866,8 +866,8 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("harm giant rat", h.LastSent);
         int sentAtEngage = h.Sent.Count;
 
-        List<(CastFailureReason Reason, string Detail)> failures = new();
-        h.Cast.CastFailed += (reason, detail) => failures.Add((reason, detail));
+        List<(CastFailureReason Reason, string Detail, string? Spell)> failures = new();
+        h.Cast.CastFailed += (reason, detail, spell) => failures.Add((reason, detail, spell));
 
         // A survival cast (heal/buff) just went out, same instant.
         h.Cast.NotifyExternalCastSent();
@@ -2011,5 +2011,88 @@ public sealed class CombatManagerSpellsTests
         Assert.False(h.Combat.IsSpellAttackOwed);
         Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
+    }
+
+    // Report paradigm-20260824-215802: engaged a fresh shade after a kill left
+    // _combatOff stuck true, but the attack spell lost the round's cast slot to a
+    // self-buff sent moments earlier (blocked by CastCoordinator's MinRecastInterval
+    // guard — a genuine, correct block, not a bug on its own). DispatchRoundAction's
+    // default case only cleared _combatOff inside the TryCast-succeeded branch, so a
+    // blocked engage left it stuck — OnCombatTick's spell-mode heartbeat gates on
+    // !_combatOff, so nothing ever retried the attack for the rest of the fight (the
+    // character sat there getting hit with no offense at all). _combatOff must clear
+    // as soon as the engine commits to engaging this round, whether or not the send
+    // itself succeeds, so the very next tick gets a chance to retry.
+    [Fact]
+    public void EngageBlockedByRecastInterval_ClearsCombatOff_RetriesNextTick()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "shade");
+
+        // A prior kill's *Combat Off* leaves _combatOff true, same as production.
+        h.Feed("*Combat Off*");
+
+        // A cast just went out (e.g. a self-buff) — stamps CastCoordinator's
+        // recast-interval clock.
+        Assert.True(h.Cast.TryCast("vlwa"));
+        Assert.Equal("vlwa", h.LastSent);
+
+        // A fresh engage arrives immediately after — well within MinRecastInterval
+        // (500ms) — so the attack-spell TryCast is synchronously blocked. Before the
+        // fix, _combatOff stayed stuck true here and nothing ever retried.
+        h.Feed("Also here: shade.");
+        Assert.Equal("vlwa", h.LastSent);              // still blocked — nothing new sent
+        Assert.False(h.Combat.CombatOff);              // the fix: cleared regardless of the block
+        Assert.Equal("shade", h.Combat.Snapshot().CastingSpellTarget);
+
+        // Past the recast-interval guard, the next tick must retry and actually attack.
+        h.AdvanceClock(TimeSpan.FromMilliseconds(600));
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+
+        Assert.Equal("turn shade", h.LastSent);
+    }
+
+    // Follow-up report paradigm-20260824-235607 reproduced the same visible stall
+    // after the _combatOff fix, but from a fresh process. With no prior hit/miss,
+    // TickEngine.LastCombatTick was null. The initial attack lost the burst guard to
+    // a login self-buff, no attack reached the server, and the shade's armour-block
+    // wording ("reaches out for you") matched none of TickEngine's generic patterns.
+    // The timer fallback therefore never started, so the "retry next tick" promised
+    // by the earlier fix had no tick to run on. A blocked attack must seed the real
+    // fallback and reserve that next round from CastingDirector.
+    [Fact]
+    public void FreshSession_BlockedEngage_SeedsTickFallbackAndReservesRetryRound()
+    {
+        using Harness h = new();
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        using TickEngine tick = new(h.Router, () => now);
+        h.Combat.SetCombatTickAnchor(tick.EnsureCombatTickAnchor);
+        // Production subscription order: CastCoordinator clears the spent round,
+        // then CombatManager retries the attack. CastingDirector sits between them
+        // and observes IsSpellAttackOwed=true, asserted below.
+        tick.CombatTickElapsed += h.Cast.OnCombatTick;
+        tick.CombatTickElapsed += h.Combat.OnCombatTick;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "shade");
+
+        Assert.Null(tick.LastCombatTick); // brand-new process: no prior combat cadence
+        Assert.True(h.Cast.TryCast("vlwa"));
+
+        h.Feed("Also here: shade.");
+
+        Assert.Equal("vlwa", h.LastSent); // attack was locally burst-blocked
+        Assert.False(h.Combat.CombatOff);
+        Assert.True(h.Combat.IsSpellAttackOwed); // no second buff may steal the retry
+        Assert.NotNull(tick.LastCombatTick);      // production timer fallback can now fire
+
+        // The seeded timer reaches the projected next round without any recognized
+        // combat line—the exact production event that was missing in the report.
+        now += TickEngine.CombatTickInterval;
+        tick.PollTimersForTests();
+
+        Assert.Equal("turn shade", h.LastSent);
+        Assert.False(h.Combat.IsSpellAttackOwed);
     }
 }

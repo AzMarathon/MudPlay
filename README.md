@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.27.4**
-> - Map: a trapped connection is drawn red only on the trapped **side** now — full red = trap both ways, half red (against the room whose exit is trapped) = a one-way trap — instead of the whole line, which falsely implied the return trip was trapped too
-> - Navigation: a walk-to whose shortest path crosses a trap now offers a **fewest-traps** alternate route in the picker (pre-selected) — it avoids every avoidable trap and crosses only the unavoidable ones; both cards show their trap count
-> - Navigation: when a route must cross an unavoidable gate/hazard, it takes the fewest-traps approach among the ways in
-> - Hazards: a room-entry spell only counts as a movement hazard when it actually **damages, kills, or forces movement** — benign room spells (a monster summon, an alignment shift, flavor text, quest-item placement) no longer gate or reroute travel
+> **Version 3.27.7**
+> - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast left the engine's combat-off latch stuck true, permanently blocking the retry heartbeat; it's now cleared the moment the engine commits to engaging
+> - Combat: a locally blocked initial attack spell now seeds the five-second combat heartbeat on a fresh session where no prior combat line anchored the cadence, and reserves that retry round from automatic buffs so offense gets its turn back
+> - Combat: a self-buff/heal (e.g. `vlwa`) no longer gets spammed after it already landed — an unrelated attack-spell cast losing the same round's slot was mistaken for the buff failing and dropping its timer; rejections now carry the cast code they apply to
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

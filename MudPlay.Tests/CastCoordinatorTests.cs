@@ -20,7 +20,7 @@ public sealed class CastCoordinatorTests
         public LogService Log { get; } = new();
         public CastCoordinator Cast { get; }
         public List<byte[]> Sent { get; } = new();
-        public List<(CastFailureReason Reason, string Detail)> Failures { get; } = new();
+        public List<(CastFailureReason Reason, string Detail, string? Spell)> Failures { get; } = new();
         public List<string> Casts { get; } = new();
 
         public Harness()
@@ -29,7 +29,7 @@ public sealed class CastCoordinatorTests
             Cast = new CastCoordinator(Router, Log);
             Cast.SetWireSender(b => Sent.Add(b));
             Cast.CastSent += line => Casts.Add(line);
-            Cast.CastFailed += (r, d) => Failures.Add((r, d));
+            Cast.CastFailed += (r, d, s) => Failures.Add((r, d, s));
         }
 
         public void Feed(string line)

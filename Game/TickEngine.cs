@@ -40,6 +40,7 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
 
     private readonly DispatcherTimer _timer;
     private readonly List<IDisposable> _patternSubs = new();
+    private readonly Func<DateTimeOffset> _now;
     private DateTimeOffset? _lastHeartbeat;
     private bool _disposed;
 
@@ -85,9 +86,10 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     // Fired at ManaRegenInterval when configured.
     public event Action? ManaRegenTickElapsed;
 
-    public TickEngine(MessageRouter router)
+    public TickEngine(MessageRouter router, Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(router);
+        _now = now ?? (() => DateTimeOffset.Now);
 
         // Damage-driven combat tick stamping. Any combat-round line —
         // hit, miss, or otherwise — anchors the cycle; the server beats
@@ -109,6 +111,23 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         _timer.Start();
     }
 
+    // Ensure the timer fallback has a combat-cycle anchor even when no generic
+    // hit/miss pattern has matched yet. CombatManager uses this after a fresh
+    // engage's attack spell is locally blocked by a cast that already spent the
+    // round: no attack reached the server, so there is no *Combat Engaged* marker,
+    // and some monsters' armour-block wording does not match UserHits / MobHits /
+    // MobMisses. Without an anchor, the fallback loop below never starts because
+    // LastCombatTick remains null, leaving the pending attack with no retry event.
+    //
+    // Do not move an existing anchor. Once a real combat line has established the
+    // server's cadence, that observation remains more authoritative than the local
+    // blocked-engage timestamp.
+    public void EnsureCombatTickAnchor()
+    {
+        if (_disposed || LastCombatTick is not null) return;
+        LastCombatTick = _now();
+    }
+
     // Damage-line callback. Stamps LastCombatTick at now and fires
     // CombatTickElapsed the first time per debounce window. Subsequent damage
     // hits for the same physical line (the UserHits regex is broad enough to
@@ -116,7 +135,7 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     // line) refresh the timestamp without firing again.
     private void RecordCombatTick()
     {
-        DateTimeOffset now = DateTimeOffset.Now;
+        DateTimeOffset now = _now();
         bool fresh = LastCombatTick is null
             || now - LastCombatTick.Value >= TimeSpan.FromMilliseconds(250);
         LastCombatTick = now;
@@ -125,7 +144,7 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
 
     private void OnTimerTick()
     {
-        DateTimeOffset now = DateTimeOffset.Now;
+        DateTimeOffset now = _now();
 
         // Combat tick fallback. The server's cycle is "like clockwork"
         // — every 5 s from the observed anchor — so we project forward
@@ -187,6 +206,10 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         OnPropertyChanged(nameof(TimeToNextHpRegenTick));
         OnPropertyChanged(nameof(TimeToNextManaRegenTick));
     }
+
+    // Deterministic test seam for the DispatcherTimer callback. Production only
+    // reaches OnTimerTick through the live 100ms timer above.
+    internal void PollTimersForTests() => OnTimerTick();
 
     private static TimeSpan? RemainingFor(DateTimeOffset? last, TimeSpan interval)
     {

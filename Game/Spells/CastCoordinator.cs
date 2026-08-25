@@ -64,8 +64,27 @@ public sealed class CastCoordinator : IDisposable
     // Fires whenever a cast attempt was rejected — either by our local gates or by
     // a server failure line. Reason carries the classification; the second arg is a
     // free-text detail (spell name from the fizzle regex, "cooldown" for local
-    // gating, etc.).
-    public event Action<CastFailureReason, string>? CastFailed;
+    // gating, etc.); the third is the cast code the rejection applies to — the
+    // spell just attempted for a local-gate block, or the last spell actually sent
+    // to the wire for a server-line rejection (null if nothing's gone out yet).
+    // MUST be checked against a pending cast's own code before reacting: multiple
+    // callers (CastingDirector's between-round casts, CombatManager's attack-spell
+    // cascade) share this coordinator, and the server's "already cast this round"
+    // line never says which spell it's rejecting — treating every rejection as
+    // "my pending cast failed" regardless of which cast it actually was drops a
+    // landed buff's timer on an unrelated collision (report paradigm-20260824-233439:
+    // an attack-spell resume racing the round slot repeatedly killed vlwa's just-armed
+    // timer, forcing an immediate spurious recast every few seconds).
+    public event Action<CastFailureReason, string, string?>? CastFailed;
+
+    // The cast code most recently written to the wire via TryCast — what a
+    // server-line rejection (fizzle / no-mana / already-cast-this-round /
+    // interrupted) is presumably about, since those arrive asynchronously with no
+    // spell identity of their own. Not updated by NotifyExternalCastSent (callers
+    // outside TryCast don't report a spell code); a rejection landing while this is
+    // stale from an external send is the same ambiguity the server's own message
+    // already carries, not something this coordinator can resolve further.
+    private string? _lastSpellSent;
 
     public CastCoordinator(MessageRouter router, LogService? log = null)
     {
@@ -140,7 +159,7 @@ public sealed class CastCoordinator : IDisposable
         if (ItemCastToken.IsToken(spellName))
         {
             _log?.Debug(LogCategory, $"ignored item-cast token via TryCast: {spellName.Trim()}");
-            CastFailed?.Invoke(CastFailureReason.Blocked, "item-cast-token");
+            CastFailed?.Invoke(CastFailureReason.Blocked, "item-cast-token", spellName.Trim());
             return false;
         }
 
@@ -151,18 +170,18 @@ public sealed class CastCoordinator : IDisposable
         // bypass — the last cast didn't take, so an instant retry would just re-fail.
         if (_castBlocked)
         {
-            CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked");
+            CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked", spellName.Trim());
             return false;
         }
         // The once-per-round cooldown gates re-casts; the initial engage bypasses it.
         if (!bypassRoundCooldown && now - _lastCastSentAt < CastCommandCooldown)
         {
-            CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked");
+            CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked", spellName.Trim());
             return false;
         }
         if (!bypassRecastInterval && now - _lastCastSentAt < MinRecastInterval)
         {
-            CastFailed?.Invoke(CastFailureReason.Blocked, "recast-interval");
+            CastFailed?.Invoke(CastFailureReason.Blocked, "recast-interval", spellName.Trim());
             return false;
         }
 
@@ -177,6 +196,7 @@ public sealed class CastCoordinator : IDisposable
             : $"{spell} {target.Trim()}";
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         _lastCastSentAt = now;
+        _lastSpellSent = spell;
         _log?.Info(LogCategory, $"cast spell={spell} target={target ?? "<self>"}");
         CastSent?.Invoke(line);
         return true;
@@ -226,8 +246,8 @@ public sealed class CastCoordinator : IDisposable
     {
         _castBlocked = true;
         _castBlockedSince = DateTimeOffset.Now;
-        _log?.Info(LogCategory, $"cast failed reason={reason} {detail}");
-        CastFailed?.Invoke(reason, detail);
+        _log?.Info(LogCategory, $"cast failed reason={reason} {detail} spell={_lastSpellSent ?? "<unknown>"}");
+        CastFailed?.Invoke(reason, detail, _lastSpellSent);
     }
 
     public void Dispose()
