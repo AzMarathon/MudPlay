@@ -10,9 +10,10 @@ namespace MudPlay.ViewModels.GameData.Edit;
 
 // Per-record edit dialog for the Game Data Browser → Players tab. Surfaces the
 // engine-observed fields (Given / Family name + Last Seen timestamp displayed read-only)
-// plus the user-editable behavior toggles and the 12 MegaMUD-grouped Allowed Remote
-// Control checkboxes. Save produces a fresh PlayerRecord the caller writes back through
-// PlayerDatabase.EditRecord.
+// plus the user-editable behavior toggles and the 15 Allowed Remote Control
+// checkboxes (the MegaMUD-documented categories plus MudPlay's own app-specific
+// extensions — boss timers, deaths, item location). Save produces a fresh
+// PlayerRecord the caller writes back through PlayerDatabase.EditRecord.
 public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialogViewModel<PlayerEditResult>
 {
     public event Action<PlayerEditResult?>? CloseRequested;
@@ -29,7 +30,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     // so the disconnect-watcher can map the captured name back to this player.
     [ObservableProperty] private string? _accountName;
 
-    // ----- 13 remote-control checkboxes (mirror PlayerRemoteControls flags) -----
+    // ----- 15 remote-control checkboxes (mirror PlayerRemoteControls flags) -----
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryVersion;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryExperience;
@@ -45,13 +46,14 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcSysopCommands;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryBossTimers;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryDeaths;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryItemLocation;
 
     // True when every remote-control checkbox is checked — drives the master toggle's IsChecked.
     public bool AllowsAll =>
         RcQueryVersion && RcQueryExperience && RcQueryHealthStatus && RcQueryLocation &&
         RcQueryInventory && RcRequestInvite && RcMovePlayer && RcExecuteCommands &&
         RcHangupDisconnect && RcAlterSettings && RcDivertConversations && RcSysopCommands &&
-        RcQueryBossTimers && RcQueryDeaths;
+        RcQueryBossTimers && RcQueryDeaths && RcQueryItemLocation;
 
     // ----- Tooltips per checkbox ----------------------------------------
     // Precomputed once from RemoteCommandCatalog so the checkbox tooltip
@@ -74,6 +76,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     public string RcSysopCommandsTip       { get; } = BuildTip(PlayerRemoteControls.SysopCommands);
     public string RcQueryBossTimersTip     { get; } = BuildTip(PlayerRemoteControls.QueryBossTimers);
     public string RcQueryDeathsTip         { get; } = BuildTip(PlayerRemoteControls.QueryDeaths);
+    public string RcQueryItemLocationTip   { get; } = BuildTip(PlayerRemoteControls.QueryItemLocation);
 
     // Build the per-category tooltip text. Lists every @-command the catalog maps to
     // category, sorted, with a clear "ticked → grants / unticked → denies" framing so the
@@ -198,6 +201,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         RcSysopCommands       = rc.HasFlag(PlayerRemoteControls.SysopCommands);
         RcQueryBossTimers     = rc.HasFlag(PlayerRemoteControls.QueryBossTimers);
         RcQueryDeaths         = rc.HasFlag(PlayerRemoteControls.QueryDeaths);
+        RcQueryItemLocation   = rc.HasFlag(PlayerRemoteControls.QueryItemLocation);
     }
 
     // Toggle every remote-control checkbox in one shot (the "All" button).
@@ -208,7 +212,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         RcQueryVersion = RcQueryExperience = RcQueryHealthStatus = RcQueryLocation =
         RcQueryInventory = RcRequestInvite = RcMovePlayer = RcExecuteCommands =
         RcHangupDisconnect = RcAlterSettings = RcDivertConversations = RcSysopCommands =
-        RcQueryBossTimers = RcQueryDeaths = target;
+        RcQueryBossTimers = RcQueryDeaths = RcQueryItemLocation = target;
     }
 
     [RelayCommand]
@@ -229,6 +233,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         if (RcSysopCommands)       rc |= PlayerRemoteControls.SysopCommands;
         if (RcQueryBossTimers)     rc |= PlayerRemoteControls.QueryBossTimers;
         if (RcQueryDeaths)         rc |= PlayerRemoteControls.QueryDeaths;
+        if (RcQueryItemLocation)   rc |= PlayerRemoteControls.QueryItemLocation;
 
         PlayerRecord updated = _original with
         {

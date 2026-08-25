@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.0
+
+- Roomba: new `@roomba <item name>` remote command replies with the gang-house room an item was last seen in (and how long ago), gated by its own "Query item location" permission and an opt-in **Enable @roomba responses** checkbox on the Roomba tab
+- Roomba: every room floor Roomba observes during a scan now feeds a persistent BBS-tier item-location log backing `@roomba`, independent of the current sweep's own state
+- Roomba: room labels, hidden-search settings, and the new item-location log all moved from per-character to **per-BBS** storage — every character on a BBS now shares one gang house instead of re-labeling rooms per character; existing per-character labels are migrated automatically the first time each BBS loads post-upgrade
+
 ## 3.27.7
 
 - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast (a heal/buff sent moments earlier) left the engine's `_combatOff` latch stuck true, which permanently blocked the spell-mode retry heartbeat since only a successful cast used to clear it; it's now cleared unconditionally the moment the engine commits to engaging

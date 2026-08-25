@@ -63,7 +63,7 @@
                                     Padding="8,2" Margin="0,2,0,4"
                                     ToolTip.Tip="Toggle every category at once."/>
                         </Grid>
-                        <!-- ScrollViewer + tighter padding so all 12 categories
+                        <!-- ScrollViewer + tighter padding so all 15 categories
                              stay reachable even if a future addition pushes the
                              content past the dialog's natural height. -->
                         <ScrollViewer Grid.Row="1"
@@ -84,6 +84,8 @@
                                           ToolTip.Tip="{Binding RcQueryBossTimersTip}"/>
                                 <CheckBox Content="Query deaths"         IsChecked="{Binding RcQueryDeaths, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcQueryDeathsTip}"/>
+                                <CheckBox Content="Query item location"  IsChecked="{Binding RcQueryItemLocation, Mode=TwoWay}"
+                                          ToolTip.Tip="{Binding RcQueryItemLocationTip}"/>
                                 <CheckBox Content="Request invite"       IsChecked="{Binding RcRequestInvite, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcRequestInviteTip}"/>
                                 <CheckBox Content="Move player"          IsChecked="{Binding RcMovePlayer, Mode=TwoWay}"

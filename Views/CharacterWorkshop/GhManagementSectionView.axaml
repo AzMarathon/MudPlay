@@ -51,6 +51,10 @@
                       IsEnabled="{Binding !IsRunning}"
                       VerticalAlignment="Center" Margin="12,0,6,6"
                       ToolTip.Tip="Off: sort only items visible on the floor. On: send `sea` in each room during recon to reveal and sort hidden items too."/>
+            <CheckBox Content="Enable @roomba responses"
+                      IsChecked="{Binding ResponsesEnabled}"
+                      VerticalAlignment="Center" Margin="12,0,6,6"
+                      ToolTip.Tip="When a gang member with the Query item location permission gangpaths '@roomba &lt;item name&gt;', reply with the last gang-house room that item was seen in. Shared by every character on this BBS."/>
             <TextBlock Classes="FieldLabel" Text="Searches per room" VerticalAlignment="Center" Margin="6,0,6,6"
                        IsEnabled="{Binding SearchesEditable}"/>
             <NumericUpDown Value="{Binding SearchesPerRoom}" Minimum="1" Maximum="20" Increment="1"

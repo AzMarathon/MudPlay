@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.27.7**
-> - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast left the engine's combat-off latch stuck true, permanently blocking the retry heartbeat; it's now cleared the moment the engine commits to engaging
-> - Combat: a locally blocked initial attack spell now seeds the five-second combat heartbeat on a fresh session where no prior combat line anchored the cadence, and reserves that retry round from automatic buffs so offense gets its turn back
-> - Combat: a self-buff/heal (e.g. `vlwa`) no longer gets spammed after it already landed — an unrelated attack-spell cast losing the same round's slot was mistaken for the buff failing and dropping its timer; rejections now carry the cast code they apply to
+> **Version 3.28.0**
+> - Roomba: new `@roomba <item name>` remote command replies with the gang-house room an item was last seen in (and how long ago), gated by its own permission and an opt-in **Enable @roomba responses** checkbox on the Roomba tab
+> - Roomba: every scan now feeds a persistent item-location log backing `@roomba`
+> - Roomba: room labels, hidden-search settings, and the item-location log are now shared **per BBS** rather than per character — every character on a BBS shares one gang house
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

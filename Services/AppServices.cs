@@ -761,6 +761,10 @@ public sealed class AppServices
     // recovery log. App-lifetime, like the other query handlers.
     public Game.Remote.DeathQueryHandler DeathQuery { get; private set; } = null!;
 
+    // @roomba read-only query handler — reports an item's last-seen gang-house
+    // room from GhItemLocations. App-lifetime, like the other query handlers.
+    public Game.Remote.RoombaQueryHandler RoombaQuery { get; private set; } = null!;
+
     // Runtime keystroke → macro → wire-send bridge. Constructed up-
     // front; MacroDispatcher.SetSender gets bound from
     // MainWindowViewModel after the telnet client is
@@ -1519,9 +1523,14 @@ public sealed class AppServices
     // it into Bfs without further wiring.
     public MovementFilter Movement { get; private set; } = null!;
 
-    // Per-character gang-house room labels for Roomba Mode (right-click map
-    // labeling + the GH Management workshop tab read/write through this).
+    // Per-BBS gang-house room labels for Roomba Mode (right-click map labeling +
+    // the GH Management workshop tab read/write through this) — shared by every
+    // character on the BBS.
     public Game.Map.GhRoomLabelStore GhRoomLabels { get; private set; } = null!;
+
+    // Per-BBS "last seen this item in this room" log, fed by GhSweep and read by
+    // RoombaQuery's @roomba handler.
+    public Game.Map.GhItemLocationStore GhItemLocations { get; private set; } = null!;
 
     // Per-character favourite-room bookmarks. Wires Navigation's
     // GOTO pane + the map's "Add to favorites" context menu;
@@ -2707,7 +2716,15 @@ public sealed class AppServices
         // Constructor subscribes ProfileLoaded / ProfileClosed and
         // hydrates from the currently-loaded profile if there is one.
         Movement = new MovementFilter(Profile, Log);
+        // GH room labels + the Roomba item-sighting log are BBS-tier (not
+        // per-character) — every character on a BBS shares the same gang house.
+        // Loaded/reloaded via OnBbsPinApplied, same pattern as RoomBlacklist.
         GhRoomLabels = new Game.Map.GhRoomLabelStore(Profile, Log);
+        GhItemLocations = new Game.Map.GhItemLocationStore(ItemNames, Log);
+        Profile.ProfileLoaded += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.ProfileLoaded += _ => GhItemLocations.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => GhItemLocations.OnBbsPinApplied(ResolveActiveBbs()?.Name);
         // Feed the player's level into Form-A exit level-gate evaluation.
         // null until a stat screen parses — IsExitBlocked never gates on
         // an unknown level, so an unparsed character walks unrestricted.
@@ -3846,6 +3863,7 @@ public sealed class AppServices
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
         DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
+        RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels, RoomGraph);
 
         // Write-side inventory / cash actions — @get-all / @drop-all /
         // @deposit-all / @share emit get / drop / dep / with / give on the wire.
@@ -4859,7 +4877,8 @@ public sealed class AppServices
             isOtherEngineBusy: () => MovementControl.IsActive,
             log: Log,
             isParadigm: onParadigm,
-            inventory: Inventory);
+            inventory: Inventory,
+            itemLocations: GhItemLocations);
 
         // A manually-typed movement step (one the walker / loop / auto-lair didn't
         // send — RoomTracker's echo-claim tells them apart) pauses the active nav

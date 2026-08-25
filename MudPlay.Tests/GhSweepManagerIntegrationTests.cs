@@ -15,12 +15,22 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 {
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), "mudplay-ghsweep-manager-" + Path.GetRandomFileName());
+    // GhRoomLabelStore is BBS-tier now — each test pins this scratch BBS name
+    // so its labels/settings persist somewhere real but isolated (cleaned up
+    // in Dispose alongside _root).
+    private readonly string _scratchBbs = "ghsweep-test-" + Path.GetRandomFileName();
 
     public GhSweepManagerIntegrationTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); }
+        catch { /* best effort */ }
+        try
+        {
+            string bbsFolder = AppPaths.BbsFolder(_scratchBbs);
+            if (Directory.Exists(bbsFolder)) Directory.Delete(bbsFolder, recursive: true);
+        }
         catch { /* best effort */ }
     }
 
@@ -56,6 +66,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
+        labels.OnBbsPinApplied(_scratchBbs);
         labels.SetLabel(new RoomKey(1, 1),
             new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2),
@@ -224,6 +235,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
+        labels.OnBbsPinApplied(_scratchBbs);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
         // SearchForHidden left at its default (off) — the point of this test.
@@ -318,6 +330,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
+        labels.OnBbsPinApplied(_scratchBbs);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
         labels.SetSearchesPerRoom(1);
@@ -426,6 +439,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
+        labels.OnBbsPinApplied(_scratchBbs);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
         labels.SetSearchesPerRoom(1);

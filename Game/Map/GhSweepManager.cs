@@ -39,6 +39,11 @@ namespace MudPlay.Game.Map;
 // That's a hard invariant, not an incidental side effect: a sweep must never
 // treat something the player was already carrying before it started as
 // sortable.
+//
+// Every _observedByRoom merge (recon and the post-sort final-recon pass alike)
+// also feeds GhItemLocationStore, a BBS-tier "last seen here" log independent
+// of this manager's own per-sweep state — see RoombaQueryHandler for the
+// @roomba remote command it backs.
 public sealed class GhSweepManager : IDisposable
 {
     public const string LogCategory = "GhSweep";
@@ -103,6 +108,7 @@ public sealed class GhSweepManager : IDisposable
     private readonly Func<bool> _isOtherEngineBusy;
     private readonly Func<bool> _isParadigm;
     private readonly InventoryManager? _inventory;
+    private readonly GhItemLocationStore? _itemLocations;
     private readonly LogService? _log;
     private readonly IDisposable _getSub;
     private readonly IDisposable _dropSub;
@@ -235,7 +241,8 @@ public sealed class GhSweepManager : IDisposable
         Func<bool> isOtherEngineBusy,
         LogService? log = null,
         Func<bool>? isParadigm = null,
-        InventoryManager? inventory = null)
+        InventoryManager? inventory = null,
+        GhItemLocationStore? itemLocations = null)
     {
         ArgumentNullException.ThrowIfNull(labels);
         ArgumentNullException.ThrowIfNull(loopRunner);
@@ -257,6 +264,7 @@ public sealed class GhSweepManager : IDisposable
         _isOtherEngineBusy = isOtherEngineBusy;
         _isParadigm = isParadigm ?? (static () => false);
         _inventory = inventory;
+        _itemLocations = itemLocations;
         _log = log;
 
         _reconSearchSettle = new DispatcherTimer { Interval = ReconSearchSettle };
@@ -694,6 +702,7 @@ public sealed class GhSweepManager : IDisposable
             || !_sweepRooms.Contains(current.Key)) return;
 
         GhSurveyMerger.Merge(_observedByRoom, current.Key, snapshot, _itemNames);
+        _itemLocations?.RecordRoom(current.Key, _observedByRoom[current.Key]);
         if (_reconSearchRoom is { } searchRoom && searchRoom.Equals(current.Key)
             && _reconSearchesSent > 0)
         {
@@ -750,6 +759,7 @@ public sealed class GhSweepManager : IDisposable
             {
                 GhSurveyMerger.Merge(_observedByRoom, here, arrivalSurvey, _itemNames);
                 GhSurveyMerger.Merge(_visibleByRoom, here, arrivalSurvey, _itemNames);
+                _itemLocations?.RecordRoom(here, _observedByRoom[here]);
             }
             _pendingArrivalSurvey = null;
         }

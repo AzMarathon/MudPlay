@@ -59,10 +59,15 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     [ObservableProperty] private int _searchesPerRoom;
 
     // Whether recon searches (`sea`) each room for hidden items. Off by default —
-    // Roomba sorts the visible floor only unless the user opts in. Per-character.
+    // Roomba sorts the visible floor only unless the user opts in. BBS-wide
+    // (shared by every character on this BBS).
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchesEditable))]
     private bool _searchForHidden;
+
+    // Whether @roomba <item> replies with the item's last-seen room. Off by
+    // default — opt-in per BBS, shared by every character on it.
+    [ObservableProperty] private bool _responsesEnabled;
 
     // The searches-per-room count only matters while hidden-item search is on and
     // the sweep isn't running — grey the ticker out otherwise.
@@ -79,6 +84,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
 
         SearchesPerRoom = _labels.SearchesPerRoom;
         SearchForHidden = _labels.SearchForHidden;
+        ResponsesEnabled = _labels.ResponsesEnabled;
         _suppressSettingsWrite = false;
 
         _labels.Changed += RebuildRooms;
@@ -98,6 +104,12 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     {
         if (_suppressSettingsWrite) return;
         _labels.SetSearchForHidden(value);
+    }
+
+    partial void OnResponsesEnabledChanged(bool value)
+    {
+        if (_suppressSettingsWrite) return;
+        _labels.SetResponsesEnabled(value);
     }
 
     private void RebuildRooms()
