@@ -538,6 +538,18 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // Paradigm recovers the `corpse of <name>`, Stock `get`s the loose items.
     private void OnSurveyUpdated()
     {
+        // Spillover sweep LOOK phase: each `look <dir>` re-parses the PEEKED room's
+        // floor into GroundItemTracker (it doesn't skip look-direction peeks), and
+        // its Items are already multi-line-stitched — so hand those to the sweep for
+        // the exit we're currently peeking. Reusing the tracker's parser is what
+        // makes a crowded, line-wrapped "You notice" survey match (a naive single-line
+        // parse missed it, so the sweep never walked — report stock-20260825-101612).
+        if (_sweep.Active && _groundItems is { } ground)
+        {
+            _sweep.OnPeekedNotice(ground.Items);
+            return;
+        }
+
         // Pass-through: grab our overflow off an adjacent-death-room's neighbour we
         // just walked into (Stock only; armed by TryArmSpillover).
         if (_spilloverGrabOnSurvey && _spilloverPile is { } sp)
@@ -675,7 +687,17 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // re-equip the worn half (paced by the combat interleave, same as the corpse path).
     private void OnStockItemTaken(string rawItem)
     {
-        if (_activeRecovery is not { } record || !RemoveRecoveredItem(record, rawItem)) return;
+        if (_activeRecovery is not { } record) return;
+        if (!RemoveRecoveredItem(record, rawItem))
+        {
+            // We `get`-ed a floor item but it matched no unrecovered pile entry —
+            // shouldn't happen (we only `get` pile items), so trace the mismatch for
+            // diagnosis rather than silently leaving the pile count wrong.
+            _log?.Debug(LogCategory,
+                $"stock-recover: 'You took {rawItem}' matched no unrecovered pile item "
+                + $"(remaining: {(record.UnrecoveredItems is { } r ? string.Join(", ", r) : "none")})");
+            return;
+        }
         _stockSettleTicks = StockSettleTicks;   // more may still be arriving — keep waiting
         _log?.Info(LogCategory, $"stock-recover: got {rawItem} ({record.UnrecoveredItems?.Count ?? 0} left)");
 
@@ -779,13 +801,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         if (line.IsPromptLine) return;
 
-        // Spillover sweep owns the wire while it runs: peeked "You notice" lines
-        // (which exit holds our items) during LOOK, "You took" during COLLECT.
+        // While the sweep runs, its peeked-floor surveys arrive through
+        // GroundItemTracker → OnSurveyUpdated (multi-line-safe); here we only need
+        // the "You took" confirmations from the sweep's own neighbour grabs.
         if (_sweep.Active)
         {
-            if (YouNoticeRegex().Match(line.Text) is { Success: true } notice)
-                _sweep.OnPeekedNotice(SplitNotice(notice.Groups["list"].Value));
-            else if (YouTookRegex().Match(line.Text) is { Success: true } grabbed)
+            if (YouTookRegex().Match(line.Text) is { Success: true } grabbed)
                 _sweep.OnItemTaken(grabbed.Groups["item"].Value);
             return;
         }
@@ -832,17 +853,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         ReequipAllWorn(pile);
         pile.UnrecoveredItems = null;
         SetStatus(pile, DeathRecoveryStatus.Recovered, "Recovered — overflow grabbed in passing.");
-    }
-
-    // Split a "You notice <list> here." body into item phrases. The game joins with
-    // commas and a trailing " and " ("a, b, and c" / "a and b"); cash is dropped by
-    // the item-name match downstream, so no cash filtering is needed here.
-    private static IReadOnlyList<string> SplitNotice(string list)
-    {
-        string flat = list
-            .Replace(", and ", ", ", StringComparison.OrdinalIgnoreCase)
-            .Replace(" and ", ", ", StringComparison.OrdinalIgnoreCase);
-        return flat.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
     }
 
     // Re-equip the worn half we've RECOVERED (Auto-Equip). Paradigm gets the whole
@@ -1207,10 +1217,4 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // deathpile decrement.
     [GeneratedRegex(@"^You took (?<item>.+?)\.$", RegexOptions.CultureInvariant)]
     private static partial Regex YouTookRegex();
-
-    // "You notice <list> here." — a room's floor survey. During the spillover sweep
-    // this is the peeked neighbour's floor (a `look <dir>` reply); we scan <list>
-    // for our still-missing items to decide which exits to walk.
-    [GeneratedRegex(@"^You notice (?<list>.+) here\.$", RegexOptions.CultureInvariant)]
-    private static partial Regex YouNoticeRegex();
 }
