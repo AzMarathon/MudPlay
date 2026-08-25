@@ -6,10 +6,10 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - New feature: **realm-complete, combat-aware death recovery** — recovery now works on both realms: Paradigm recovers your `corpse` in one command; Stock `get`s your items loose off the floor (previously Stock recovered nothing)
 - Recovering with a hostile present: engage first, grab the pile (which doesn't break combat), then pace the re-equip between rounds — weapon first, then armour heaviest-first — re-attacking after each burst; whatever's left goes on the instant the room clears
-- Stock spillover: a deliberate recovery (Recover Now / walked to the death room) sweeps each exit and walks to collect items that overflowed into adjacent rooms; an auto-recover walk that passes through a death room grabs your overflow from the rooms right before and after it in-stride, no detour
+- Stock spillover: a deliberate recovery (Recover Now / walked to the death room) sweeps each exit and walks to collect items that overflowed into adjacent rooms — disarming traps in the way (both directions), skipping an exit whose trap it can't get through; an auto-recover walk that passes through a death room grabs your overflow from the rooms right before and after it in-stride, no detour
 - Bug report: new **Re-equip pieces pending** field (shown mid-recovery)
 - Party: dying — including an instant `suicide` (which skips the mortally-wounded drop) — now clears your party state (a follower is removed, a leader's party disbands), so `@join`/`@invite` stop replying "I'm following someone; denied." after a death
-- bug reports addressed: stock-20260825-101612, stock-20260825-104351
+- bug reports addressed: stock-20260825-101612, stock-20260825-104351, stock-20260825-105851
 
 ## 3.26.0
 

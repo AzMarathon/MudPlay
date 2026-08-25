@@ -108,9 +108,28 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private bool _spilloverRecovering;
     private readonly DeathGroundSweep _sweep;
 
+    // Spillover COLLECT: after the LOOK sweep names the neighbours holding our items,
+    // we visit each — WalkTo (trap-aware; a trap we can't disarm halts us → skip),
+    // grab on CONFIRMED arrival, walk back — keyed off room arrivals, not walker
+    // events. _collectRoute is the neighbour queue; _collectRecord/_collectHome pin
+    // the pile + the death room to return to.
+    private enum CollectPhase { None, WalkingOut, Grabbing, WalkingBack }
+    private CollectPhase _collectPhase;
+    private readonly Queue<RoomKey> _collectRoute = new();
+    private RoomKey _collectTarget;
+    private RoomKey _collectHome;
+    private DeathRecord? _collectRecord;
+    private int _collectSettle;
+    private int _collectTimeout;
+
     // Heartbeats (1 s) of quiet after the death-room `get` burst before it counts
     // as settled and the sweep can start on the leftovers.
     private const int StockSettleTicks = 2;
+    // Heartbeats to let a neighbour grab confirm before walking back.
+    private const int CollectSettleTicks = 2;
+    // Heartbeats to reach a neighbour / return before giving up on that leg — a
+    // trap we can't disarm (or any stall) halts the walker, so we skip and move on.
+    private const int CollectWalkTimeoutTicks = 20;
 
     public DeathRecoveryManager(
         DeathLineWatcher deathWatcher,
@@ -125,9 +144,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _profile = profile;
         _roomTracker = roomTracker;
         _log = log;
-        // The spillover sweep drives `look`/`get` through our own Send and the
-        // walker (bound later via AttachWalker) for its adjacent-room detours.
-        _sweep = new DeathGroundSweep(Send, key => { _walker?.WalkTo(key); }, log);
+        // The spillover LOOK sweep just peeks exits via our Send; the walk-collect is
+        // driven here off confirmed room arrivals (OnRoomChanged), not by the sweep.
+        _sweep = new DeathGroundSweep(Send, log);
 
         _deathWatcher.PlayerDied += OnPlayerDied;
         // Re-entering a room that holds one of our deathpiles drives the
@@ -148,23 +167,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Records));
     }
 
-    // Wire the walker used by WalkToDeathRoom / RecoverNow. Set post-construction
-    // because the AutoWalkManager is built after this manager in AppServices. The
-    // spillover sweep also needs the walker's arrival events to advance its
-    // collect-and-return legs.
-    public void AttachWalker(AutoWalkManager walker)
-    {
-        if (ReferenceEquals(_walker, walker)) return;
-        if (_walker is not null) _walker.Event -= OnWalkEvent;
-        _walker = walker;
-        _walker.Event += OnWalkEvent;
-    }
-
-    private void OnWalkEvent(WalkEvent evt)
-    {
-        if (_sweep.Active && evt.Kind == WalkEventKind.Finished && evt.Destination is { } arrived)
-            _sweep.OnWalkerArrived(arrived);
-    }
+    // Wire the walker used by WalkToDeathRoom / RecoverNow and the spillover
+    // collect legs. Set post-construction because the AutoWalkManager is built after
+    // this manager in AppServices. The collect keys off confirmed room arrivals
+    // (OnRoomChanged), not walker events, so a `look` peek that momentarily desyncs
+    // the position can't fire a premature "arrived" that grabs in the wrong room.
+    public void AttachWalker(AutoWalkManager walker) => _walker = walker;
 
     // Bind the gate-wrapped wire sender so auto-recover can send get / wear /
     // hold commands. Bound by MainWindowViewModel on connect; unbound, the grab +
@@ -391,11 +399,14 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // return and finish).
     private void OnRoomChanged(RoomTransition t)
     {
-        // The spillover sweep drives its own room-to-room detours (out to a
-        // neighbour, back to the death room) — let it own every transition while
-        // it runs, so a mid-sweep hop doesn't drop _activeRecovery or re-arm a
-        // different pile. The sweep advances off the walker's arrival events.
+        // The LOOK sweep is peeking exits (no real movement) — ignore transitions so a
+        // peek that momentarily desyncs the tracker can't drop _activeRecovery or
+        // re-arm a different pile.
         if (_sweep.Active) return;
+
+        // The COLLECT walk owns every transition while it runs (out to a neighbour,
+        // back to the death room) and advances off these confirmed arrivals.
+        if (_collectPhase != CollectPhase.None) { HandleCollectArrival(t); return; }
 
         // Fresh room — any prior pass-through spillover grab is done or abandoned.
         _spilloverGrabOnSurvey = false;
@@ -701,6 +712,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _stockSettleTicks = StockSettleTicks;   // more may still be arriving — keep waiting
         _log?.Info(LogCategory, $"stock-recover: got {rawItem} ({record.UnrecoveredItems?.Count ?? 0} left)");
 
+        // Mid-collect (grabbing at a neighbour): just decrement — CompleteCollect
+        // finalises once every neighbour's been visited, so we don't finish early and
+        // strand the walk-back.
+        if (_collectPhase != CollectPhase.None) return;
+
         if (record.UnrecoveredItems is { Count: 0 })
         {
             _stockRecovering = false;
@@ -710,11 +726,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         }
     }
 
-    // Sweep the death room's exits for spillover: peek each neighbour, then walk to
-    // the ones holding our still-missing items, grab them, and return. Returns false
-    // (caller holds Partial) when the sweep can't run — no current room / exits, or
-    // nothing left to find. The record's UnrecoveredItems list is handed in by
-    // reference so the sweep decrements it as items come back.
+    // Start the spillover LOOK sweep: peek each death-room exit for our still-missing
+    // items. On completion (OnSweepLookComplete) we walk to the neighbours that hold
+    // them. Returns false (caller holds Partial) when it can't run — no current room /
+    // exits, or nothing left to find.
     private bool StartStockSweep(DeathRecord record)
     {
         if (record.UnrecoveredItems is not { Count: > 0 } remaining) return false;
@@ -725,21 +740,104 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             neighbours[dir] = exit.Target;
         if (neighbours.Count == 0) return false;
 
-        // NOTE: do NOT assert the CorpseRecovery gate here — it pauses movement, so
-        // it would block the sweep's own WalkTo out to a neighbour (the sweep "looked,
-        // saw items, and sat"). The sweep drives the walker directly; the _sweep.Active
-        // guard in OnRoomChanged already stops recovery re-arming while it runs.
-        bool started = _sweep.Begin(here.Key, neighbours, remaining, () => OnStockSweepComplete(record));
-        if (started) _log?.Info(LogCategory, "stock-recover: spillover sweep started");
+        _collectHome = here.Key;
+        _collectRecord = record;
+        bool started = _sweep.Begin(neighbours, remaining, hits => OnSweepLookComplete(record, hits));
+        if (started) _log?.Info(LogCategory, "stock-recover: spillover look-sweep started");
         return started;
     }
 
-    // The spillover sweep finished. Whatever it recovered is now in the pack — wear
-    // the recovered worn half and finalise: Recovered if the sweep emptied the pile,
-    // else Partial (the sweep ran; some items are truly gone).
-    private void OnStockSweepComplete(DeathRecord record)
+    // The LOOK sweep named the neighbours holding our items. Queue them and start
+    // walking — the collect is driven off confirmed arrivals (HandleCollectArrival)
+    // and the heartbeat (OnCollectHeartbeat), routing through the normal trap-aware
+    // walker. No neighbours → nothing spilled reachably, so finalise now.
+    private void OnSweepLookComplete(DeathRecord record, IReadOnlyList<RoomKey> hits)
     {
+        _collectRoute.Clear();
+        foreach (RoomKey k in hits) _collectRoute.Enqueue(k);
+        if (_collectRoute.Count == 0) { CompleteCollect(); return; }
+        StartNextCollectLeg();
+    }
+
+    private void StartNextCollectLeg()
+    {
+        // Everything's back (a neighbour completed the pile) or no more to visit → done.
+        if (_collectRecord is not { UnrecoveredItems: { Count: > 0 } } || _collectRoute.Count == 0)
+        {
+            CompleteCollect();
+            return;
+        }
+        _collectTarget = _collectRoute.Dequeue();
+        _collectPhase = CollectPhase.WalkingOut;
+        _collectTimeout = CollectWalkTimeoutTicks;
+        _walker?.WalkTo(_collectTarget);
+        _log?.Info(LogCategory, $"stock-sweep: walking to {_collectTarget.Map}/{_collectTarget.Room} to collect");
+    }
+
+    // A confirmed room transition arrived while collecting. Arriving at the target
+    // neighbour starts its grab; arriving back at the death room moves to the next.
+    private void HandleCollectArrival(RoomTransition t)
+    {
+        if (t.NewRoom is not { } room || t.NewConfidence != RoomConfidence.Confirmed) return;
+
+        if (_collectPhase == CollectPhase.WalkingOut
+            && room.Key.Map == _collectTarget.Map && room.Key.Room == _collectTarget.Room
+            && _collectRecord is { } rec)
+        {
+            _collectPhase = CollectPhase.Grabbing;
+            _collectSettle = CollectSettleTicks;
+            _stockRecovering = true;   // route the neighbour's "You took" to the decrement
+            int got = GetOurItemsHere(rec);
+            _log?.Info(LogCategory, $"stock-sweep: arrived {room.Key.Map}/{room.Key.Room} — get {got} item(s)");
+        }
+        else if (_collectPhase == CollectPhase.WalkingBack
+            && room.Key.Map == _collectHome.Map && room.Key.Room == _collectHome.Room)
+        {
+            StartNextCollectLeg();
+        }
+    }
+
+    // Heartbeat pump for the collect: settle a neighbour grab then head home, and
+    // give up on a leg that never arrives (a trap we can't disarm, or any stall).
+    private void OnCollectHeartbeat()
+    {
+        switch (_collectPhase)
+        {
+            case CollectPhase.Grabbing:
+                if (--_collectSettle > 0) return;
+                _stockRecovering = false;
+                _collectPhase = CollectPhase.WalkingBack;
+                _collectTimeout = CollectWalkTimeoutTicks;
+                _walker?.WalkTo(_collectHome);
+                break;
+            case CollectPhase.WalkingOut:
+                if (--_collectTimeout > 0) return;
+                _log?.Info(LogCategory,
+                    $"stock-sweep: couldn't reach {_collectTarget.Map}/{_collectTarget.Room} "
+                    + "(trapped / blocked?) — skipping, heading back");
+                _collectPhase = CollectPhase.WalkingBack;
+                _collectTimeout = CollectWalkTimeoutTicks;
+                _walker?.WalkTo(_collectHome);
+                break;
+            case CollectPhase.WalkingBack:
+                if (--_collectTimeout > 0) return;
+                _log?.Info(LogCategory, "stock-sweep: couldn't return to the death room — ending the sweep");
+                CompleteCollect();
+                break;
+        }
+    }
+
+    // The collect is done (all neighbours visited, or we couldn't get home). Wear the
+    // recovered worn half and finalise: Recovered if the pile's empty, else Partial.
+    private void CompleteCollect()
+    {
+        _collectPhase = CollectPhase.None;
+        _collectRoute.Clear();
+        _stockRecovering = false;
         _stockSweepPending = false;
+        if (_collectRecord is not { } record) return;
+        _collectRecord = null;
+
         ReequipAllWorn(record);
         if (record.UnrecoveredItems is not { Count: > 0 } left)
         {
@@ -748,7 +846,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         }
         else
         {
-            _log?.Info(LogCategory, $"stock-sweep: done — {left.Count} item(s) truly gone, holding Partial");
+            _log?.Info(LogCategory, $"stock-sweep: done — {left.Count} item(s) still missing, holding Partial");
             SetStatus(record, DeathRecoveryStatus.Partial,
                 $"Adjacent-room sweep done — {left.Count} item(s) still missing.");
             _activeRecovery = null;
@@ -820,15 +918,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // / -104351). The content regexes below never match a bare prompt, so it's
         // safe to run them regardless.
 
-        // While the sweep runs, its peeked-floor surveys arrive through
-        // GroundItemTracker → OnSurveyUpdated (multi-line-safe); here we only need
-        // the "You took" confirmations from the sweep's own neighbour grabs.
-        if (_sweep.Active)
-        {
-            if (YouTookRegex().Match(line.Text) is { Success: true } grabbed)
-                _sweep.OnItemTaken(grabbed.Groups["item"].Value);
-            return;
-        }
+        // While the LOOK sweep runs we're only peeking exits — its floors arrive via
+        // GroundItemTracker → OnSurveyUpdated (multi-line-safe), and no `get` fires, so
+        // there's nothing to do with lines here. (The COLLECT walk isn't sweep-active;
+        // its neighbour "You took" flows through the normal stock path below, since
+        // _stockRecovering is set while grabbing.)
+        if (_sweep.Active) return;
 
         // Pass-through spillover "You took" is independent of any death-room
         // recovery (we're standing in a NEIGHBOUR of the death room, not it), so it
@@ -971,7 +1066,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (_pendingEquip.Count > 0 && _hostilesPresent?.Invoke() != true)
             FlushEquipQueue();
 
-        if (_sweep.Active) { _sweep.OnHeartbeat(); return; }
+        if (_sweep.Active) { _sweep.OnHeartbeat(); return; }          // LOOK phase paces looks
+        if (_collectPhase != CollectPhase.None) { OnCollectHeartbeat(); return; }   // COLLECT paces walks
 
         // Death-room grab quieted down with items still out → decide sweep vs Partial.
         if (_stockRecovering && _stockSettleTicks > 0 && --_stockSettleTicks == 0
@@ -1211,8 +1307,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _lines = null;
         if (_groundItems is not null) _groundItems.SurveyUpdated -= OnSurveyUpdated;
         _groundItems = null;
-        if (_walker is not null) _walker.Event -= OnWalkEvent;
         _sweep.Cancel();
+        _collectPhase = CollectPhase.None;
+        _collectRoute.Clear();
         AbandonPendingEquip();   // never strand the CorpseRecovery gate asserted
     }
 
