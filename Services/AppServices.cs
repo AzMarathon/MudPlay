@@ -3922,6 +3922,12 @@ public sealed class AppServices
             log: Log);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
 
+        // Hold auto-rest while a gear-set swap streams its paced wear/rem commands —
+        // each stands the character up, and without this the rest engine re-sends
+        // `rest` between every command (the rest/stand thrash of a pre-rest gear swap,
+        // report paradigm-20260825-103537).
+        Health.SetEquipmentApplyingProbe(() => Equipment.IsApplyingSet);
+
         // EquipmentManager is the sole gear actuator: the combat engine decides
         // which weapon it wants and hands the act off here. The backstab-set
         // armor (deltas only, synchronous) and the weapon swap both fire from the

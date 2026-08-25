@@ -106,6 +106,7 @@ public sealed class HealthManager : IDisposable
     private Action? _onRecoveryComplete;        // any rest gate topped off — resume a held neutral engage
     private bool _wasRecovering;                // falling-edge latch for _onRecoveryComplete
     private Func<bool>? _shouldSkipRestHere;    // running loop's current room is a "do not rest" waypoint
+    private Func<bool>? _equipmentApplying;     // a gear-set swap is streaming wear/rem — hold rest so we don't thrash it
     private bool _skipRestDeferredRecovery;     // a do-not-rest room made us skip a needed rest; re-arm on the next room change
     private bool _partyWaitSignaled;            // @wait sent, awaiting @ok
     private bool _hpGateAsserted;
@@ -353,6 +354,16 @@ public sealed class HealthManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(shouldSkipRestHere);
         _shouldSkipRestHere = shouldSkipRestHere;
+    }
+
+    // Wire the "gear swap in flight" probe (EquipmentManager.IsApplyingSet). While a
+    // set applies, its paced `wear`/`rem` commands each stand the character up; hold
+    // the rest re-issue so we don't fire `rest` between every command (the rest/stand
+    // thrash of report paradigm-20260825-103537). The one rest lands after the swap.
+    public void SetEquipmentApplyingProbe(Func<bool> equipmentApplying)
+    {
+        ArgumentNullException.ThrowIfNull(equipmentApplying);
+        _equipmentApplying = equipmentApplying;
     }
 
     // Wire ShadowRest (Paradigm): classes with the ability can rest while
@@ -814,6 +825,15 @@ public sealed class HealthManager : IDisposable
         // the cycle (kill → rest → kill → rest), as per user direction.
         bool hostilesPresent = _hasEngageableHostiles?.Invoke() ?? false;
 
+        // A gear-set swap in flight streams paced `wear`/`rem` commands, each of which
+        // stands the character up. Hold the rest re-issue until the swap finishes, or
+        // we fire `rest` between every command and thrash the whole burst (report
+        // paradigm-20260825-103537). The single rest lands once the swap completes and
+        // the character is standing with the (e.g. pre-rest mana) loadout on.
+        bool equipmentApplying = _equipmentApplying?.Invoke() ?? false;
+        if (equipmentApplying && shouldRest && !_state.InCombat && !_restInFlight)
+            _log?.Combat(LogCategory, "rest held — a gear-set swap is in flight (avoiding rest/stand thrash)");
+
         // ShadowRest relaxes the hostiles guard: a solo, stealthed ShadowRest
         // character rests in place even with a monster in the room — the game
         // keeps it un-attacked while stealthed, and combat stands down (reading
@@ -849,7 +869,8 @@ public sealed class HealthManager : IDisposable
                 $"rest held — combat force-cleared, awaiting room re-confirm " +
                 $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
         }
-        else if (shouldRest && !_state.InCombat && !_restInFlight && (!hostilesPresent || shadowRest))
+        else if (shouldRest && !_state.InCombat && !_restInFlight && !equipmentApplying
+            && (!hostilesPresent || shadowRest))
         {
             // Pick rest vs meditate based on user settings + which
             // pool is the proximate trigger.
