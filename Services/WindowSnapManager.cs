@@ -143,8 +143,10 @@ public sealed class WindowSnapManager
             && (DateTime.UtcNow - _lastClusterMoveAt).TotalMilliseconds < DragGapMs)
             return;
 
-        SnapAndSettle(p, newPos);
-        p.LastPos = newPos;
+        // On a snap, MoveTo already recorded the SNAPPED position as LastPos — don't
+        // clobber it with the raw drop position, or the cluster offset later captured
+        // from it would be off by the snap correction (a jump on the next main drag).
+        if (!SnapAndSettle(p, newPos)) p.LastPos = newPos;
     }
 
     // Main moved by the user. On the first move of a drag, capture the snapped cluster
@@ -181,8 +183,9 @@ public sealed class WindowSnapManager
     }
 
     // A non-main panel was dragged: snap its nearest edge to another panel if one is
-    // within reach, else leave it where the user dropped it.
-    private void SnapAndSettle(Panel c, PixelPoint newPos)
+    // within reach. Returns true (and records the snapped position as LastPos via
+    // MoveTo) when it snapped; false when it stays where the user dropped it.
+    private bool SnapAndSettle(Panel c, PixelPoint newPos)
     {
         PixelRect cr = RectAt(c, newPos);
         List<PixelRect> others = new();
@@ -193,12 +196,14 @@ public sealed class WindowSnapManager
         }
 
         (int axis, int shift) = ComputeSnap(cr, others, SnapThreshold);
-        if (axis == 0) return;
+        if (axis == 0) return false;
 
         PixelPoint snapped = axis == 1
             ? new PixelPoint(newPos.X + shift, newPos.Y)
             : new PixelPoint(newPos.X, newPos.Y + shift);
-        if (snapped != newPos) MoveTo(c, snapped);
+        if (snapped == newPos) return false;
+        MoveTo(c, snapped);
+        return true;
     }
 
     private void MoveTo(Panel p, PixelPoint pos)
