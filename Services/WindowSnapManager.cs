@@ -177,16 +177,14 @@ public sealed class WindowSnapManager
 
         if (newDrag)
         {
-            // MEMBERSHIP: measure adjacency against main's PRE-move rect (LastPos — it's
-            // still pre-move here; OnMoved updates it after us) so a fast first drag step
-            // can't leave main sitting past the child before we capture. The generous
-            // DragAdjacencyTolerance also absorbs a title-bar-sized stale-LastPos offset
-            // on main (a WM can settle its frame without a PositionChanged) so a below-
-            // main panel isn't dropped. Children use their LIVE at-rest rect.
-            //
-            // OFFSET: relative to main's LIVE position (newMainPos), never LastPos — so
-            // the stale offset never shifts the cluster. The capturing move is a no-op;
-            // members then track main precisely for the rest of the drag.
+            // Membership + offsets are both measured against main's PRE-move position
+            // (mainLastPos == where main sat while the children were snapped to it; it's
+            // still pre-move here, OnMoved updates it after us). Capturing the offset from
+            // the pre-move base — not the already-moved live position — means the first
+            // drag step is applied to the members like every other step, so they stay
+            // exactly flush instead of lagging (and drifting) by that first step. Children
+            // use their live at-rest rect; the generous DragAdjacencyTolerance keeps a
+            // snapped panel in even if a frame edge is a few px off.
             Dictionary<string, PixelRect> rects = new(StringComparer.OrdinalIgnoreCase);
             foreach (Panel p in _open.Values)
                 rects[p.Id] = p.IsMain ? RectAt(p, p.LastPos) : RectOf(p);
@@ -206,7 +204,7 @@ public sealed class WindowSnapManager
             {
                 if (string.Equals(cid, MainId, StringComparison.OrdinalIgnoreCase)) continue;
                 if (_open.TryGetValue(cid, out Panel? m))
-                    _clusterOffsets[cid] = m.Window.Position - newMainPos;
+                    _clusterOffsets[cid] = m.Window.Position - mainLastPos;
             }
             _log?.Debug("WindowSnap",
                 $"  cluster=[{string.Join(", ", _clusterOffsets.Select(kv => $"{kv.Key}@{kv.Value}"))}]");
