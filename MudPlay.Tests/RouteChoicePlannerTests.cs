@@ -646,6 +646,64 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    //  1/1 ──E(Trap)── 1/9 (Spell 700, hazard)   trapped 1-hop approach
+    //   │               │
+    //   S               E (from 1/2, clean)
+    //   └──── 1/2 ──────┘                         trap-free 2-hop approach
+    // The hazard gates EVERY entry to 1/9, so there's no free route — but one
+    // approach is trapped and the other isn't (report paradigm-20260825-125954,
+    // room 17/808: manhole-gated, one exit also a 250-damage trap).
+    private const string HazardTrapApproachRoomsJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/9 (Trap)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Detour", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/1", "S": "0", "E": "1/9", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Hazard Vault", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void HazardSoleRoute_PrefersTheTrapFreeApproach()
+    {
+        // The reported compound case: the destination is hazard-gated on every side
+        // (no free route), but one approach also crosses a trap. The forced hazard
+        // crossing must take the fewest-traps approach — the longer, trap-free one —
+        // not the shortest-by-hops approach that eats the trap.
+        WithGraph(HazardTrapApproachRoomsJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.False(choice!.HasFreeRoute);
+            Assert.Equal(2, choice.GatedStepCount);     // the trap-free detour, not the 1-hop trap
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 9) },
+                choice.GatedPath);
+            Assert.Equal(0, bfs.CountTrapsOnPath(new RoomKey(1, 1),
+                new[] { Direction.S, Direction.E }));    // chosen route crosses no trap
+            RouteRequirement req = Assert.Single(choice.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);   // still the manhole gate
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 9) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;   // no counter
+        });
+    }
+
     // The hazard-counter shop resolver scores dist(cur→shop→dest), but the dest
     // sits behind the very hazard the counter answers — so no shop qualifies with
     // the hazard live. Guards ResolveHazardCounter's suspend scope: without it a
@@ -766,6 +824,159 @@ public sealed class RouteChoicePlannerTests
                 new RoomKey(1, 1), new RoomKey(1, 9), null, refuseTeleports: true);
             Assert.NotNull(walk);
             Assert.Equal(3, walk!.Count);   // the 3-hop walking detour
+        });
+    }
+
+    // ----- EvaluateTrapAvoid: avoid-traps fork -----------------------
+    //
+    //  1/1 ──N (Trap)── 1/2 (goal)   trapped 1-hop shortcut
+    //   │                │
+    //   E                W
+    //   └──── 1/3 ──N────┘           clean 2-hop detour
+    //
+    private const string TrapForkJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Fork",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Trap)", "S": "0", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Detour",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // No trap anywhere — a plain two-hop corridor.
+    private const string NoTrapJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // The trapped exit is the ONLY way to the goal — no clean alternative.
+    private const string TrapOnlyJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Trap)", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    //  1/1 ──N(Trap)── 1/2 ──N(Trap)── 1/4 (goal)   shortest 2 traps; the 1/2→1/4
+    //   └──── E,1/3 ──N────┘                         trap is unavoidable, the other isn't
+    private const string MultiTrapJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Fork",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Trap)", "S": "0", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Mid",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4 (Trap)", "S": "1/1", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Detour",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void OffersTrapAvoidChoice_WhenShortestCrossesTrap_AndCleanRouteExists()
+    {
+        WithGraph(TrapForkJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 2));
+
+            Assert.NotNull(choice);
+            Assert.Equal(RouteChoiceKind.TrapAvoid, choice!.Kind);
+            Assert.Equal(2, choice.FreeStepCount);      // trap-free detour
+            Assert.Equal(1, choice.GatedStepCount);     // trapped shortcut
+            Assert.Equal(0, choice.FreeTrapCount);      // detour is fully clean
+            Assert.Equal(1, choice.GatedTrapCount);     // shortcut crosses the trap
+            Assert.Empty(choice.Requirements);
+            Assert.True(choice.HasFreeRoute);
+
+            // Free path is the clean detour; gated path is the trapped shortcut.
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 3), new RoomKey(1, 2) },
+                choice.FreePath);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 2) },
+                choice.GatedPath);
+        });
+    }
+
+    [Fact]
+    public void OffersTrapAvoidChoice_WhenFewerButNotZeroTraps()
+    {
+        // The reported case: a route with an avoidable AND an unavoidable trap. The
+        // fork must still fire, offering the fewest-traps route (1 trap) over the
+        // shortest (2 traps) — not give up because it can't be made fully clean.
+        WithGraph(MultiTrapJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 4));
+
+            Assert.NotNull(choice);
+            Assert.Equal(RouteChoiceKind.TrapAvoid, choice!.Kind);
+            Assert.Equal(3, choice.FreeStepCount);      // longer detour
+            Assert.Equal(2, choice.GatedStepCount);     // shortest
+            Assert.Equal(1, choice.FreeTrapCount);      // dodged one, kept the unavoidable
+            Assert.Equal(2, choice.GatedTrapCount);     // shortest crosses both
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 3), new RoomKey(1, 2), new RoomKey(1, 4) },
+                choice.FreePath);
+        });
+    }
+
+    [Fact]
+    public void NoTrapAvoidChoice_WhenRouteCrossesNoTrap()
+    {
+        WithGraph(NoTrapJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 2));
+
+            // Nothing to weigh — the shortest route is already trap-free.
+            Assert.Null(choice);
+        });
+    }
+
+    [Fact]
+    public void NoTrapAvoidChoice_WhenTrapIsUnavoidable()
+    {
+        WithGraph(TrapOnlyJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 2));
+
+            // The fewest-traps route crosses the same one trap as the shortest — it
+            // can't dodge any, so there's nothing better to offer. Walker crosses and
+            // disarms, no fork.
+            Assert.Null(choice);
         });
     }
 }
