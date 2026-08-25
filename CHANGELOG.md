@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.25.8
+
+- Combat: a locally blocked initial attack spell now seeds the five-second combat heartbeat when MudPlay has just started and no prior combat line has established its cadence; previously `_combatOff` was correctly cleared by 3.25.6, but the promised retry still never ran when `LastCombatTick` was null and the monster only produced non-generic armour-block wording such as "reaches out for you"
+- A blocked attack spell now marks its round as owed immediately, preventing another startup self-buff from taking the deterministic retry round before the attack can go out
+- bug report addressed: paradigm-20260824-235607
+
 ## 3.25.7
 
 - CastingDirector: a self-buff/heal (e.g. `vlwa`) no longer gets spammed every few seconds after it's already landed — the server's "You have already cast a spell this round!" line never says which cast it's rejecting, and an unrelated attack-spell cast losing the same round's slot was being mistaken for the pending buff itself failing, dropping its just-armed timer and forcing an immediate spurious recast

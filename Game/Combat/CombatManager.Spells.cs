@@ -437,6 +437,22 @@ public sealed partial class CombatManager
                     // stale room view and the CR-reverify net must recover.
                     NoteAttackSent();
                 }
+                else
+                {
+                    // The attack never reached the server. Hold CastingDirector out
+                    // of the next round and make that round exist even in a freshly
+                    // started session whose TickEngine has not seen a generic combat
+                    // line yet. The old retry assumed CombatTickElapsed would arrive,
+                    // but its timer fallback is intentionally inert while its anchor
+                    // is null; a shade's "reaches out for you" armour-block line is
+                    // outside the generic tick patterns, so the pending attack could
+                    // otherwise remain here forever with CombatOff=false.
+                    _spellAttackOwed = true;
+                    _ensureCombatTickAnchor?.Invoke();
+                    _log?.Combat(LogCategory,
+                        $"attack-spell {decision.Spell} vs {picked.RawName} blocked before send — "
+                        + "attack owed; ensuring combat-tick retry anchor");
+                }
                 _currentTarget = picked.RawName;
                 break;
         }

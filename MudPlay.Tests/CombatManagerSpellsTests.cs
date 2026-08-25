@@ -2053,4 +2053,46 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal("turn shade", h.LastSent);
     }
+
+    // Follow-up report paradigm-20260824-235607 reproduced the same visible stall
+    // after the _combatOff fix, but from a fresh process. With no prior hit/miss,
+    // TickEngine.LastCombatTick was null. The initial attack lost the burst guard to
+    // a login self-buff, no attack reached the server, and the shade's armour-block
+    // wording ("reaches out for you") matched none of TickEngine's generic patterns.
+    // The timer fallback therefore never started, so the "retry next tick" promised
+    // by the earlier fix had no tick to run on. A blocked attack must seed the real
+    // fallback and reserve that next round from CastingDirector.
+    [Fact]
+    public void FreshSession_BlockedEngage_SeedsTickFallbackAndReservesRetryRound()
+    {
+        using Harness h = new();
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        using TickEngine tick = new(h.Router, () => now);
+        h.Combat.SetCombatTickAnchor(tick.EnsureCombatTickAnchor);
+        // Production subscription order: CastCoordinator clears the spent round,
+        // then CombatManager retries the attack. CastingDirector sits between them
+        // and observes IsSpellAttackOwed=true, asserted below.
+        tick.CombatTickElapsed += h.Cast.OnCombatTick;
+        tick.CombatTickElapsed += h.Combat.OnCombatTick;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "shade");
+
+        Assert.Null(tick.LastCombatTick); // brand-new process: no prior combat cadence
+        Assert.True(h.Cast.TryCast("vlwa"));
+
+        h.Feed("Also here: shade.");
+
+        Assert.Equal("vlwa", h.LastSent); // attack was locally burst-blocked
+        Assert.False(h.Combat.CombatOff);
+        Assert.True(h.Combat.IsSpellAttackOwed); // no second buff may steal the retry
+        Assert.NotNull(tick.LastCombatTick);      // production timer fallback can now fire
+
+        // The seeded timer reaches the projected next round without any recognized
+        // combat line—the exact production event that was missing in the report.
+        now += TickEngine.CombatTickInterval;
+        tick.PollTimersForTests();
+
+        Assert.Equal("turn shade", h.LastSent);
+        Assert.False(h.Combat.IsSpellAttackOwed);
+    }
 }

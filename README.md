@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.25.7**
-> - CastingDirector: a self-buff/heal no longer gets spammed every few seconds after it's already landed — an unrelated cast losing the same round's slot was being mistaken for the buff itself failing, resetting its just-armed timer
-> - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — a between-round survival cast winning the round's cast slot right as a fresh engage tried to attack could permanently stall the fight's retry logic
+> **Version 3.25.8**
+> - Combat: a blocked initial attack spell now starts the combat heartbeat even in a fresh session, so its next-round retry cannot disappear when no earlier combat line established the five-second cadence
+> - The blocked attack reserves that retry round from automatic buffs, ensuring offense gets its turn back instead of being displaced again
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

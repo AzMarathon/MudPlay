@@ -63,6 +63,42 @@ public sealed class TickEngineTests
     }
 
     [Fact]
+    public void EnsureCombatTickAnchor_SeedsFreshFallbackAndFiresProjectedRound()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        using TickEngine tick = new(router, () => now);
+        int fires = 0;
+        tick.CombatTickElapsed += () => fires++;
+
+        Assert.Null(tick.LastCombatTick);
+        tick.EnsureCombatTickAnchor();
+
+        Assert.Equal(now, tick.LastCombatTick);
+        Assert.Equal(0, fires); // the projected round, not the current one, retries
+
+        now += TickEngine.CombatTickInterval;
+        tick.PollTimersForTests();
+
+        Assert.Equal(1, fires);
+        Assert.Equal(now, tick.LastCombatTick);
+    }
+
+    [Fact]
+    public void EnsureCombatTickAnchor_DoesNotMoveObservedCombatCadence()
+    {
+        var (router, tick) = Setup();
+        router.Dispatch(Line("The Goblin slashes you for 4 damage!"));
+        DateTimeOffset observed = Assert.IsType<DateTimeOffset>(tick.LastCombatTick);
+
+        tick.EnsureCombatTickAnchor();
+
+        Assert.Equal(observed, tick.LastCombatTick);
+        tick.Dispose();
+    }
+
+    [Fact]
     public void CombatTickInterval_IsFiveSeconds()
     {
         // Pinning the universal MajorMUD combat-tick value so a stray

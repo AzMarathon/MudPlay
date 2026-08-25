@@ -237,6 +237,12 @@ public sealed partial class CombatManager : IDisposable
     private static readonly TimeSpan SwitchDispatchDelay = TimeSpan.FromMilliseconds(200);
     private Action<TimeSpan, Action>? _scheduleSwitchDispatch;
 
+    // Starts TickEngine's timer fallback when a combat-spell engage is locally
+    // blocked before any attack reaches the server. Optional injection keeps the
+    // combat layer UI/timer-free; production wires TickEngine.EnsureCombatTickAnchor.
+    // Once a real combat line has anchored the cycle, the callback is a no-op.
+    private Action? _ensureCombatTickAnchor;
+
     // Backstab flee-on-failure action, bound in AppServices to
     // HealthManager.RunFromBackstabFailure. null until wired; even when wired it
     // fires only on a detected failure AND when CombatSettings.RunIfBackstabFails
@@ -694,6 +700,15 @@ public sealed partial class CombatManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(now);
         _now = now;
+    }
+
+    // Wire the recovery anchor for a blocked initial combat-spell dispatch. The
+    // next projected combat round then drives OnCombatTick even in a fresh session
+    // where no hit/miss line has seeded TickEngine yet.
+    public void SetCombatTickAnchor(Action ensureAnchor)
+    {
+        ArgumentNullException.ThrowIfNull(ensureAnchor);
+        _ensureCombatTickAnchor = ensureAnchor;
     }
 
     // Wire the dark-room probe (RoomTracker.IsInDarkRoom). With it set, the CR
